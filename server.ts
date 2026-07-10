@@ -367,21 +367,46 @@ Return your response in structured JSON format matching the schema provided.`;
       throw new Error('Gemini model returned empty response.');
     }
 
-    const parsedData = JSON.parse(responseText);
+    const cleanedJson = responseText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    let parsedData: any;
+    try {
+      parsedData = JSON.parse(cleanedJson);
+    } catch {
+      throw new Error('AI returned invalid JSON. Please try uploading again.');
+    }
     res.json(parsedData);
   } catch (error: any) {
     console.error('Error parsing order with Gemini:', error);
+    const msg = String(error?.message || error || '');
+    if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
+      res.status(500).json({
+        error: 'GEMINI_API_KEY is missing on the server. Add it in Railway → Variables, then redeploy.',
+        details: msg
+      });
+      return;
+    }
     const statusCode = getApiStatusCode(error);
     if (statusCode === 429 || statusCode === 503) {
       res.status(503).json({
         error: 'AI service is temporarily busy. Please try again in a few seconds.',
-        details: error.message || error
+        details: msg
+      });
+      return;
+    }
+    if (statusCode === 401 || statusCode === 403 || msg.toLowerCase().includes('api key')) {
+      res.status(500).json({
+        error: 'Gemini API key was rejected. Check GEMINI_API_KEY in Railway Variables.',
+        details: msg
       });
       return;
     }
     res.status(500).json({
       error: 'Failed to process order document.',
-      details: error.message || error
+      details: msg
     });
   }
 });

@@ -115,7 +115,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           response.status === 503
             ? 'AI service is temporarily busy. Please wait 10 seconds and try again.'
             : errorData.error || 'Failed to parse order with Gemini.';
-        throw new Error(friendly);
+        const details =
+          typeof errorData.details === 'string' && errorData.details.trim()
+            ? ` ${errorData.details}`
+            : '';
+        throw new Error(`${friendly}${details}`);
       }
 
       const result = await response.json();

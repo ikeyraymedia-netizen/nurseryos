@@ -412,7 +412,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 }}
                 className="px-3 py-1.5 bg-white hover:bg-sky-50 text-sky-900 border border-sky-200 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
               >
-                <DollarSign className="h-3.5 w-3.5" />
+                <FileText className="h-3.5 w-3.5" />
                 <span>Create Estimate</span>
               </button>
               <button
@@ -422,7 +422,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 }}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
               >
-                <FileText className="h-3.5 w-3.5" />
+                <DollarSign className="h-3.5 w-3.5" />
                 <span>Create Invoice</span>
               </button>
             </>

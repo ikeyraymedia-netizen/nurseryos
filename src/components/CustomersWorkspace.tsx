@@ -1,17 +1,30 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Upload, Users, Search, FileText } from 'lucide-react';
-import { Customer, CustomerOrder } from '../types';
+import { Upload, Users, Search, FileText, DollarSign } from 'lucide-react';
+import { Customer, CustomerOrder, CustomerDocument, CustomerDocumentType } from '../types';
 import { addCustomer, bulkImportCustomers, deleteAllCustomers, parseCsvCustomers, updateCustomer } from '../lib/customers';
+import { subscribeToCustomerDocuments } from '../lib/documents';
 import { AppPermissions } from '../lib/permissions';
 
 interface CustomersWorkspaceProps {
   customers: Customer[];
   orders: CustomerOrder[];
   permissions: AppPermissions;
+  nurseryName?: string;
   onOpenOrder?: (orderId: string) => void;
+  onOpenDocument?: (
+    orderId: string,
+    type: CustomerDocumentType,
+    existingDocument?: CustomerDocument | null
+  ) => void;
 }
 
-export function CustomersWorkspace({ customers, orders, permissions, onOpenOrder }: CustomersWorkspaceProps) {
+export function CustomersWorkspace({
+  customers,
+  orders,
+  permissions,
+  onOpenOrder,
+  onOpenDocument
+}: CustomersWorkspaceProps) {
   const NET_TERM_OPTIONS = ['NET 10', 'NET 15', 'NET 30', 'NET 45', 'NET 60', 'NET 90'] as const;
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,6 +50,7 @@ export function CustomersWorkspace({ customers, orders, permissions, onOpenOrder
   const [editNotes, setEditNotes] = useState('');
   const [editPaymentTermsType, setEditPaymentTermsType] = useState<string>('NET 30');
   const [editCustomPaymentTerms, setEditCustomPaymentTerms] = useState('');
+  const [customerDocuments, setCustomerDocuments] = useState<CustomerDocument[]>([]);
 
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -89,6 +103,14 @@ export function CustomersWorkspace({ customers, orders, permissions, onOpenOrder
     }
     return map;
   }, [customers, orders]);
+
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setCustomerDocuments([]);
+      return;
+    }
+    return subscribeToCustomerDocuments(selectedCustomerId, setCustomerDocuments);
+  }, [selectedCustomerId]);
 
   useEffect(() => {
     if (!selectedCustomerId) return;
@@ -621,6 +643,56 @@ export function CustomersWorkspace({ customers, orders, permissions, onOpenOrder
                   </button>
                 </div>
               )}
+
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+                  Estimates & Invoices ({customerDocuments.length})
+                </p>
+                {customerDocuments.length === 0 ? (
+                  <p className="text-xs text-gray-500 mb-3">
+                    No estimates or invoices yet. Create one after uploading an order, or from an open
+                    order.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1 mb-3">
+                    {customerDocuments.map((doc) => (
+                      <div key={doc.id} className="border border-gray-100 rounded-xl p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate">
+                              {doc.documentNumber}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(doc.documentDate).toLocaleDateString()} • $
+                              {doc.grandTotal.toFixed(2)}
+                              {doc.orderNumber ? ` • Order #${doc.orderNumber}` : ''}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase shrink-0 ${
+                              doc.type === 'invoice'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-sky-100 text-sky-800'
+                            }`}
+                          >
+                            {doc.type}
+                          </span>
+                        </div>
+                        {permissions.canViewInvoices && onOpenDocument && doc.orderId && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenDocument(doc.orderId!, doc.type, doc)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                          >
+                            <DollarSign className="h-3.5 w-3.5" />
+                            Open {doc.type}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="border-t border-gray-100 pt-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">

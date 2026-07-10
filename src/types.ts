@@ -88,6 +88,45 @@ export interface Customer {
   updatedAt: string;
 }
 
+export type CustomerDocumentType = 'estimate' | 'invoice';
+
+export interface CustomerDocumentLineItem {
+  id: string;
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  unitPrice: number;
+  notes?: string;
+}
+
+/** Estimate or invoice saved under a customer record. */
+export interface CustomerDocument {
+  id: string;
+  customerId: string;
+  customerName: string;
+  orderId?: string;
+  orderNumber?: string;
+  type: CustomerDocumentType;
+  documentNumber: string;
+  documentDate: string;
+  dueDate?: string;
+  paymentTerms?: string;
+  taxRate?: number;
+  freightCharge?: number;
+  discount?: number;
+  notes?: string;
+  billToName: string;
+  billToAddress?: string;
+  customerEmail?: string;
+  items: CustomerDocumentLineItem[];
+  subtotal: number;
+  salesTax: number;
+  grandTotal: number;
+  emailSentAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Truck {
   id: string;
   name: string; // e.g. "Truck A - Lafayette Delivery"

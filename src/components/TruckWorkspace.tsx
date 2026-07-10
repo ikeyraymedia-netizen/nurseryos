@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CustomerOrder, Truck, ContainerWeight } from '../types';
+import { CustomerOrder, Truck, ContainerWeight, Customer } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { notifyInventorySyncIssue } from '../lib/inventory';
 import {
@@ -44,6 +44,8 @@ interface TruckWorkspaceProps {
   orders: CustomerOrder[];
   containerWeights: ContainerWeight[];
   permissions: AppPermissions;
+  customers?: Customer[];
+  nurseryName?: string;
   onEditTruck: () => void;
   onSelectOrder: (orderId: string) => void;
 }
@@ -53,6 +55,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   orders,
   containerWeights,
   permissions,
+  customers = [],
+  nurseryName = 'NurseryOS',
   onEditTruck,
   onSelectOrder
 }) => {
@@ -1376,6 +1380,15 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           isOpen={invoiceOrder !== null}
           onClose={() => setInvoiceOrder(null)}
           order={invoiceOrder}
+          customer={
+            customers.find((c) => c.id === invoiceOrder.customerId) ||
+            customers.find(
+              (c) =>
+                c.name.trim().toLowerCase() === invoiceOrder.customerName.trim().toLowerCase()
+            ) ||
+            null
+          }
+          nurseryName={nurseryName}
         />
       )}
     </div>

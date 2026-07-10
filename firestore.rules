@@ -120,6 +120,11 @@ service cloud.firestore {
         allow read: if canReadOps(tenantId);
         allow create, update, delete: if canWriteOps(tenantId);
       }
+
+      match /documents/{docId} {
+        allow read: if canReadOps(tenantId);
+        allow create, update, delete: if canWriteOps(tenantId);
+      }
     }
   }
 }

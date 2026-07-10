@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { CustomerOrder, PlantOrderItem, InvoiceDetails } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  CustomerOrder,
+  PlantOrderItem,
+  InvoiceDetails,
+  Customer,
+  CustomerDocumentType,
+  CustomerDocument
+} from '../types';
 import { 
   X, 
   Printer, 
@@ -17,43 +24,48 @@ import {
   Mail,
   Send,
   AlertTriangle,
-  Info
+  Info,
+  Download
 } from 'lucide-react';
 import { updateCustomerOrder } from '../lib/db';
+import {
+  addCustomerDocument,
+  updateCustomerDocument,
+  defaultDocumentNumber
+} from '../lib/documents';
+import { getDefaultPriceForSize } from '../lib/pricing';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface InvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: CustomerOrder;
+  /** Create as estimate or invoice (default invoice). */
+  documentType?: CustomerDocumentType;
+  /** Linked CRM customer — used for bill-to defaults and saving under the customer. */
+  customer?: Customer | null;
+  /** Existing saved document to update (from Customers tab). */
+  existingDocument?: CustomerDocument | null;
+  nurseryName?: string;
 }
-
-// Sensible default nursery wholesale pricing based on container size
-const getDefaultPriceForSize = (size: string): number => {
-  const cleanSize = size.toLowerCase().trim();
-  if (cleanSize.includes('#1') || cleanSize.includes('1-gallon') || cleanSize.includes('1g')) {
-    return 6.50;
-  }
-  if (cleanSize.includes('#3') || cleanSize.includes('3-gallon') || cleanSize.includes('3g')) {
-    return 16.50;
-  }
-  if (cleanSize.includes('#7') || cleanSize.includes('7-gallon') || cleanSize.includes('7g')) {
-    return 38.00;
-  }
-  if (cleanSize.includes('#15') || cleanSize.includes('15-gallon') || cleanSize.includes('15g')) {
-    return 85.00;
-  }
-  if (cleanSize.includes('#30') || cleanSize.includes('30-gallon') || cleanSize.includes('30g')) {
-    return 195.00;
-  }
-  // Generic fallback if not matched
-  return 15.00;
-};
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   isOpen,
   onClose,
   order,
+  documentType: initialDocumentType = 'invoice',
+  customer = null,
+  existingDocument = null,
+  nurseryName = 'NurseryOS'
 }) => {
+  const printRef = useRef<HTMLDivElement | null>(null);
+  const [documentType, setDocumentType] = useState<CustomerDocumentType>(
+    existingDocument?.type || initialDocumentType
+  );
+  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(
+    existingDocument?.id || null
+  );
   // State for quantity basis: 'ordered' | 'pulled' | 'loaded'
   const [qtyBasis, setQtyBasis] = useState<'ordered' | 'pulled' | 'loaded'>('ordered');
 
@@ -86,38 +98,103 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [showEmailPanel, setShowEmailPanel] = useState(false);
 
-  // Initialize or reload states when order changes
+  // Initialize or reload states when order / document type changes
   useEffect(() => {
-    if (order) {
-      setBillToName(order.customerName);
-      
-      // Determine if there are already saved invoiceDetails on the order
-      const details = order.invoiceDetails;
-      setInvoiceNumber(details?.invoiceNumber || `INV-${order.orderNumber}`);
-      setInvoiceDate(details?.invoiceDate || new Date().toISOString().split('T')[0]);
-      setPaymentTerms(details?.paymentTerms || 'Net 30');
-      setDueDate(details?.dueDate || '');
-      setTaxRate(details?.taxRate !== undefined ? details.taxRate : 4.45);
-      setFreightCharge(details?.freightCharge !== undefined ? details.freightCharge : 0);
-      setDiscount(details?.discount !== undefined ? details.discount : 0);
-      setInvoiceNotes(details?.notes || 'Thank you for choosing Bayou State Plant Co. for your foliage and landscape liner needs. Balance due is payable in full. All shipments are subject to safe transportation and loading conditions.');
+    if (!order || !isOpen) return;
 
-      // Load prices: use existing item.unitPrice, or map to container defaults
-      const pricesMap: Record<string, number> = {};
-      order.items.forEach((item) => {
-        pricesMap[item.id] = item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
+    const type = existingDocument?.type || initialDocumentType;
+    setDocumentType(type);
+    setSavedDocumentId(existingDocument?.id || null);
+
+    setBillToName(existingDocument?.billToName || customer?.name || order.customerName);
+    setBillToAddress(
+      existingDocument?.billToAddress ||
+        customer?.billingAddress ||
+        customer?.shippingAddress ||
+        ''
+    );
+
+    const details = order.invoiceDetails;
+    const prefix = type === 'estimate' ? 'EST' : 'INV';
+    setInvoiceNumber(
+      existingDocument?.documentNumber ||
+        details?.invoiceNumber ||
+        defaultDocumentNumber(type, order.orderNumber)
+    );
+    setInvoiceDate(
+      existingDocument?.documentDate ||
+        details?.invoiceDate ||
+        new Date().toISOString().split('T')[0]
+    );
+    setPaymentTerms(
+      existingDocument?.paymentTerms ||
+        details?.paymentTerms ||
+        customer?.paymentTerms ||
+        'Net 30'
+    );
+    setDueDate(existingDocument?.dueDate || details?.dueDate || '');
+    setTaxRate(
+      existingDocument?.taxRate !== undefined
+        ? existingDocument.taxRate
+        : details?.taxRate !== undefined
+          ? details.taxRate
+          : 4.45
+    );
+    setFreightCharge(
+      existingDocument?.freightCharge !== undefined
+        ? existingDocument.freightCharge
+        : details?.freightCharge !== undefined
+          ? details.freightCharge
+          : 0
+    );
+    setDiscount(
+      existingDocument?.discount !== undefined
+        ? existingDocument.discount
+        : details?.discount !== undefined
+          ? details.discount
+          : 0
+    );
+    setInvoiceNotes(
+      existingDocument?.notes ||
+        details?.notes ||
+        (type === 'estimate'
+          ? 'This estimate is valid for 30 days. Prices subject to availability.'
+          : 'Thank you for your business. Balance due is payable in full per the terms above.')
+    );
+
+    const pricesMap: Record<string, number> = {};
+    if (existingDocument?.items?.length) {
+      existingDocument.items.forEach((item) => {
+        pricesMap[item.id] = item.unitPrice;
       });
-      setItemPrices(pricesMap);
-      setSaveSuccess(false);
-
-      // Initialize email fields
-      setCustomerEmail(order.customerEmail || '');
-      setEmailSubject(`Invoice ${details?.invoiceNumber || `INV-${order.orderNumber}`} from Bayou State Plant Co.`);
-      setEmailSentStatus('idle');
-      setEmailErrorMessage('');
-      setShowEmailPanel(false);
+      // Also map any order items not in the saved doc
+      order.items.forEach((item) => {
+        if (pricesMap[item.id] === undefined) {
+          pricesMap[item.id] =
+            item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
+        }
+      });
+    } else {
+      order.items.forEach((item) => {
+        pricesMap[item.id] =
+          item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
+      });
     }
-  }, [order, isOpen]);
+    setItemPrices(pricesMap);
+    setSaveSuccess(false);
+
+    setCustomerEmail(
+      existingDocument?.customerEmail || order.customerEmail || customer?.contactEmail || ''
+    );
+    setEmailSubject(
+      `${type === 'estimate' ? 'Estimate' : 'Invoice'} ${
+        existingDocument?.documentNumber || `${prefix}-${order.orderNumber}`
+      } from ${nurseryName}`
+    );
+    setEmailSentStatus('idle');
+    setEmailErrorMessage('');
+    setShowEmailPanel(false);
+  }, [order, isOpen, customer, existingDocument, initialDocumentType, nurseryName]);
 
   // Handle default due date auto-calculation when date or terms change
   useEffect(() => {
@@ -128,22 +205,27 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     if (paymentTerms === 'Due on Receipt' || paymentTerms === 'COD') {
       setDueDate(invoiceDate);
-    } else if (paymentTerms === 'Net 15') {
+    } else if (paymentTerms === 'Net 15' || paymentTerms === 'NET 15') {
       baseDate.setDate(baseDate.getDate() + 15);
       setDueDate(baseDate.toISOString().split('T')[0]);
-    } else if (paymentTerms === 'Net 30') {
+    } else if (paymentTerms === 'Net 30' || paymentTerms === 'NET 30') {
       baseDate.setDate(baseDate.getDate() + 30);
       setDueDate(baseDate.toISOString().split('T')[0]);
-    } else if (paymentTerms === 'Net 45') {
+    } else if (paymentTerms === 'Net 45' || paymentTerms === 'NET 45') {
       baseDate.setDate(baseDate.getDate() + 45);
       setDueDate(baseDate.toISOString().split('T')[0]);
     }
   }, [invoiceDate, paymentTerms]);
 
-  // Synchronize email subject when invoice number is edited
+  // Synchronize email subject when document number / type changes
   useEffect(() => {
-    setEmailSubject(`Invoice ${invoiceNumber} from Bayou State Plant Co.`);
-  }, [invoiceNumber]);
+    setEmailSubject(
+      `${documentType === 'estimate' ? 'Estimate' : 'Invoice'} ${invoiceNumber} from ${nurseryName}`
+    );
+  }, [invoiceNumber, documentType, nurseryName]);
+
+  const docLabel = documentType === 'estimate' ? 'Estimate' : 'Invoice';
+  const docLabelUpper = documentType === 'estimate' ? 'ESTIMATE' : 'INVOICE';
 
   // Compute Active Item Quantity based on Qty Basis
   const getItemQty = (item: PlantOrderItem): number => {
@@ -187,14 +269,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-        <h1 style="color: #064e3b; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">Bayou State Plant Co.</h1>
-        <p style="font-size: 11px; color: #047857; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Foliage & Landscape Liners</p>
+        <h1 style="color: #064e3b; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
+        <p style="font-size: 11px; color: #047857; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
         
         <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
-          <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">Invoice ${invoiceNumber}</h2>
+          <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumber}</h2>
           <table style="width: 100%; font-size: 13px; font-family: Arial, sans-serif;">
             <tr>
-              <td style="padding: 2px 0; color: #475569;"><strong>Invoice Date:</strong></td>
+              <td style="padding: 2px 0; color: #475569;"><strong>${docLabel} Date:</strong></td>
               <td style="padding: 2px 0; text-align: right; color: #0f172a;">${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</td>
             </tr>
             <tr>
@@ -251,7 +333,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${salesTax.toFixed(2)}</td>
             </tr>` : ''}
             <tr style="border-top: 1px solid #cbd5e1;">
-              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #064e3b; text-transform: uppercase;">Total Due:</td>
+              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #064e3b; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Total Due'}:</td>
               <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #064e3b;">$${grandTotal.toFixed(2)}</td>
             </tr>
           </table>
@@ -264,7 +346,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>` : ''}
 
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
-          <p style="margin: 0;">Bayou State Plant Co. • 11428 US 165 • Forest Hill, LA 71430</p>
+          <p style="margin: 0;">${nurseryName}</p>
           <p style="margin: 5px 0 0 0; font-weight: bold; color: #047857;">Thank you for your business!</p>
         </div>
       </div>
@@ -281,11 +363,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }).join('\n');
 
     return `
-BAYOU STATE PLANT CO.
-Wholesale Foliage & Landscape Liners
-Forest Hill, LA
+${nurseryName.toUpperCase()}
+Wholesale Nursery
 
-INVOICE: ${invoiceNumber}
+${docLabelUpper}: ${invoiceNumber}
 Date: ${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
 Terms: ${paymentTerms}
 Due Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}
@@ -301,10 +382,10 @@ ${itemsText}
 --------------------------------------------------------------------------------
 
 Subtotal: $${subtotal.toFixed(2)}
-${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}GRAND TOTAL (USD): $${grandTotal.toFixed(2)}
+${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${documentType === 'estimate' ? 'ESTIMATE TOTAL' : 'GRAND TOTAL'} (USD): $${grandTotal.toFixed(2)}
 
-${invoiceNotes ? `NOTES & DELIVERY INSTRUCTIONS:\n${invoiceNotes}\n` : ''}
-Thank you for choosing Bayou State Plant Co.!
+${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}
+Thank you for choosing ${nurseryName}!
 `;
   };
 
@@ -426,19 +507,20 @@ Thank you for choosing Bayou State Plant Co.!
     setSaveSuccess(false);
   };
 
-  // Persist prices and custom settings to Firestore database
+  // Persist prices to order + save estimate/invoice under the customer
   const handleSaveInvoice = async () => {
     setIsSaving(true);
     setSaveSuccess(false);
 
     try {
-      // Build the updated items with updated unitPrice fields
       const updatedItems = order.items.map((item) => ({
         ...item,
-        unitPrice: itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize)
+        unitPrice:
+          itemPrices[item.id] !== undefined
+            ? itemPrices[item.id]
+            : getDefaultPriceForSize(item.containerSize)
       }));
 
-      // Build the invoiceDetails payload
       const invoiceDetailsPayload: InvoiceDetails = {
         invoiceNumber,
         invoiceDate,
@@ -450,18 +532,66 @@ Thank you for choosing Bayou State Plant Co.!
         notes: invoiceNotes
       };
 
-      // Create full updated order object
       const updatedOrder: CustomerOrder = {
         ...order,
         items: updatedItems,
-        invoiceDetails: invoiceDetailsPayload
+        invoiceDetails: invoiceDetailsPayload,
+        customerEmail: customerEmail || order.customerEmail
       };
 
-      // Call database update
       await updateCustomerOrder(updatedOrder);
+
+      const lineItems = updatedItems.map((item) => ({
+        id: item.id,
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        quantity: getItemQty(item),
+        unitPrice: item.unitPrice ?? 0,
+        notes: item.notes
+      }));
+
+      const customerId = customer?.id || order.customerId;
+      if (customerId) {
+        const docPayload = {
+          customerId,
+          customerName: billToName || customer?.name || order.customerName,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          type: documentType,
+          documentNumber: invoiceNumber,
+          documentDate: invoiceDate,
+          dueDate: dueDate || undefined,
+          paymentTerms,
+          taxRate,
+          freightCharge,
+          discount,
+          notes: invoiceNotes,
+          billToName,
+          billToAddress: billToAddress || undefined,
+          customerEmail: customerEmail || undefined,
+          items: lineItems,
+          subtotal,
+          salesTax,
+          grandTotal
+        };
+
+        if (savedDocumentId) {
+          await updateCustomerDocument({
+            id: savedDocumentId,
+            ...docPayload,
+            createdAt: existingDocument?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          const newId = await addCustomerDocument(docPayload);
+          setSavedDocumentId(newId);
+        }
+      }
+
       setSaveSuccess(true);
     } catch (err) {
-      console.error('Failed to save invoice info:', err);
+      console.error('Failed to save document:', err);
+      alert('Could not save. Make sure a customer is linked, then try again.');
     } finally {
       setIsSaving(false);
     }
@@ -469,6 +599,45 @@ Thank you for choosing Bayou State Plant Co.!
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPdf = async () => {
+    const el = printRef.current;
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth - 16;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 8;
+
+      pdf.addImage(imgData, 'PNG', 8, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight - 16;
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + 8;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 8, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight - 16;
+      }
+      pdf.save(`${invoiceNumber || docLabel}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('PDF export failed. You can still use Print → Save as PDF.');
+    }
+  };
+
+  const handleDocumentTypeChange = (type: CustomerDocumentType) => {
+    setDocumentType(type);
+    setInvoiceNumber(defaultDocumentNumber(type, order.orderNumber));
+    setSaveSuccess(false);
   };
 
   return (
@@ -482,7 +651,7 @@ Thank you for choosing Bayou State Plant Co.!
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
               <FileCheck className="h-4 w-4 mr-2 text-emerald-800" />
-              Invoice Settings
+              {docLabel} Settings
             </h3>
             <button
               onClick={onClose}
@@ -493,10 +662,38 @@ Thank you for choosing Bayou State Plant Co.!
           </div>
 
           <div className="space-y-3.5 text-xs">
+            {/* Estimate vs Invoice */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
+                Document Type
+              </label>
+              <div className="grid grid-cols-2 gap-1 bg-gray-200/60 p-1 rounded-lg">
+                {(['estimate', 'invoice'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleDocumentTypeChange(type)}
+                    className={`py-1.5 text-[10px] font-bold rounded-md capitalize transition-all ${
+                      documentType === type
+                        ? 'bg-emerald-700 text-white shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
+                    }`}
+                  >
+                    {type === 'estimate' ? 'Estimate' : 'Invoice'}
+                  </button>
+                ))}
+              </div>
+              {!customer?.id && !order.customerId && (
+                <p className="text-[10px] text-amber-700 mt-1.5 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                  Link a customer on the order to save this under their account.
+                </p>
+              )}
+            </div>
+
             {/* Quantity Basis Toggle */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
-                Invoiced Quantity Basis
+                Quantity Basis
               </label>
               <div className="grid grid-cols-3 gap-1 bg-gray-200/60 p-1 rounded-lg">
                 {(['ordered', 'pulled', 'loaded'] as const).map((basis) => (
@@ -522,7 +719,7 @@ Thank you for choosing Bayou State Plant Co.!
             {/* Invoice Number */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Invoice Number
+                {docLabel} Number
               </label>
               <input
                 type="text"
@@ -652,7 +849,7 @@ Thank you for choosing Bayou State Plant Co.!
             {/* Invoice Notes */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Invoice Footer Terms
+                {docLabel} Footer Notes
               </label>
               <textarea
                 rows={3}
@@ -688,14 +885,28 @@ Thank you for choosing Bayou State Plant Co.!
               {saveSuccess ? (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>Invoice Pricing Saved!</span>
+                  <span>Pricing Saved!</span>
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4" />
-                  <span>{isSaving ? 'Saving...' : 'Save Pricing to Order'}</span>
+                  <span>
+                    {isSaving
+                      ? 'Saving...'
+                      : customer?.id || order.customerId
+                        ? `Save ${docLabel} to Customer`
+                        : 'Save Pricing to Order'}
+                  </span>
                 </>
               )}
+            </button>
+
+            <button
+              onClick={handleExportPdf}
+              className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+            >
+              <Download className="h-4 w-4" />
+              <span>Export PDF</span>
             </button>
 
             <button
@@ -703,7 +914,7 @@ Thank you for choosing Bayou State Plant Co.!
               className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Printer className="h-4 w-4" />
-              <span>Print Invoice Document</span>
+              <span>Print {docLabel}</span>
             </button>
 
             {/* Email Invoice Panel */}
@@ -718,7 +929,7 @@ Thank you for choosing Bayou State Plant Co.!
                 }`}
               >
                 <Mail className="h-4 w-4" />
-                <span>{showEmailPanel ? 'Hide Email Options' : 'Email Invoice to Customer'}</span>
+                <span>{showEmailPanel ? 'Hide Email Options' : `Email ${docLabel} to Customer`}</span>
               </button>
 
               {showEmailPanel && (
@@ -757,8 +968,8 @@ Thank you for choosing Bayou State Plant Co.!
 
                   {emailSentStatus === 'success' && (
                     <div className="p-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl text-[10px] leading-normal font-medium">
-                      <p className="font-bold flex items-center mb-0.5 text-teal-900"><Check className="h-3.5 w-3.5 mr-1 text-teal-700" /> Invoice Sent Successfully!</p>
-                      <p className="text-[9px] text-teal-700">The customer was emailed a high-quality, formatted HTML version of this invoice.</p>
+                      <p className="font-bold flex items-center mb-0.5 text-teal-900"><Check className="h-3.5 w-3.5 mr-1 text-teal-700" /> {docLabel} Sent Successfully!</p>
+                      <p className="text-[9px] text-teal-700">The customer was emailed a formatted HTML version of this {docLabel.toLowerCase()}.</p>
                     </div>
                   )}
 
@@ -856,7 +1067,10 @@ Thank you for choosing Bayou State Plant Co.!
 
           {/* Printable Document Sheet */}
           <div className="flex-1 overflow-y-auto pr-2 print:overflow-visible print:pr-0">
-            <div className="border border-gray-300 p-8 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal">
+            <div
+              ref={printRef}
+              className="border border-gray-300 p-8 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal"
+            >
               
               {/* STYLE TAG FOR PRINT WORKAROUNDS */}
               <style dangerouslySetInnerHTML={{__html: `
@@ -894,23 +1108,17 @@ Thank you for choosing Bayou State Plant Co.!
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
                 <div>
                   <h1 className="text-2xl font-black tracking-tight text-emerald-950 uppercase leading-none">
-                    Bayou State Plant Co.
+                    {nurseryName}
                   </h1>
                   <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-widest">
-                    Wholesale Foliage & Landscape Liners
-                  </p>
-                  <p className="text-[11px] text-gray-600 mt-4 leading-normal">
-                    11428 US 165<br />
-                    Forest Hill, LA 71430<br />
-                    Phone: (318) 748-0190<br />
-                    Email: sales@bayoustateplantco.com
+                    Wholesale Nursery
                   </p>
                 </div>
                 
                 <div className="sm:text-right flex flex-col justify-between items-start sm:items-end">
                   <div className="border-2 border-emerald-900/10 rounded-xl p-3 px-4 bg-emerald-50/20 inline-block text-left sm:text-right">
                     <span className="block text-[10px] font-black text-emerald-800 font-mono uppercase tracking-widest mb-0.5">
-                      INVOICE
+                      {docLabelUpper}
                     </span>
                     <span className="text-xl font-mono font-black text-gray-950 block">
                       {invoiceNumber}
@@ -918,7 +1126,7 @@ Thank you for choosing Bayou State Plant Co.!
                   </div>
                   
                   <div className="mt-4 text-left sm:text-right font-mono text-[11px] space-y-0.5">
-                    <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">Invoice Logistics</p>
+                    <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">{docLabel} Details</p>
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Date:</span> {new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
                     </p>
@@ -962,7 +1170,7 @@ Thank you for choosing Bayou State Plant Co.!
                     Shipping Origin & Carrier:
                   </h3>
                   <div className="text-xs text-gray-800 space-y-1 font-mono">
-                    <p><span className="font-bold text-gray-400">Shipper:</span> Bayou State Plant Co.</p>
+                    <p><span className="font-bold text-gray-400">Shipper:</span> {nurseryName}</p>
                     <p><span className="font-bold text-gray-400">Origin:</span> Forest Hill Facility, LA</p>
                     <p>
                       <span className="font-bold text-gray-400">Cargo Basis:</span>{' '}
@@ -1051,7 +1259,7 @@ Thank you for choosing Bayou State Plant Co.!
                       <Landmark className="h-3.5 w-3.5 mr-1" /> Payment instructions:
                     </p>
                     <p className="text-gray-600 leading-normal">
-                      Please make check payable to <span className="font-bold text-gray-950">Bayou State Plant Co.</span> and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.
+                      Please make check payable to <span className="font-bold text-gray-950">{nurseryName}</span> and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.
                     </p>
                   </div>
                 </div>
@@ -1135,7 +1343,7 @@ Thank you for choosing Bayou State Plant Co.!
 
               {/* Page Number / Footer */}
               <div className="pt-10 text-center text-[9px] text-gray-400 font-mono">
-                Bayou State Plant Co. • Forest Hill wholesale operations • Thank you for your business!
+                {nurseryName} • Thank you for your business!
               </div>
 
             </div>

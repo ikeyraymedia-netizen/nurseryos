@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { Upload, FileText, AlertCircle, RefreshCw, CheckCircle2, Users, Sprout, Plus } from 'lucide-react';
+import { Upload, FileText, AlertCircle, RefreshCw, CheckCircle2, Users, Sprout, Plus, DollarSign } from 'lucide-react';
 import { addCustomerOrder } from '../lib/db';
 import { findMatchingCustomers } from '../lib/customerMatch';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../lib/inventory';
 import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
 import { AppPermissions } from '../lib/permissions';
-import { ContainerWeight, Customer, InventoryPlant, PlantOrderItem } from '../types';
+import { ContainerWeight, Customer, InventoryPlant, PlantOrderItem, CustomerDocumentType } from '../types';
 
 interface OrderUploaderProps {
   containerWeights: ContainerWeight[];
@@ -18,6 +18,7 @@ interface OrderUploaderProps {
   tenantId: string;
   permissions: AppPermissions;
   onUploadSuccess: (orderId: string) => void;
+  onCreateDocument?: (orderId: string, type: CustomerDocumentType) => void;
 }
 
 interface ParsedOrderDraft {
@@ -36,7 +37,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   customers,
   tenantId,
   permissions,
-  onUploadSuccess
+  onUploadSuccess,
+  onCreateDocument
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<ParsedOrderDraft | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
   const [linkedInventoryByItemId, setLinkedInventoryByItemId] = useState<
     Record<string, { plantId: string; plantName: string; containerSize: string }>
@@ -78,6 +81,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setPendingDraft(null);
     setSelectedCustomerId('');
     setLinkedInventoryByItemId({});
+    setSavedOrderId(null);
     setStatusMessage('Reading file content...');
 
     try {
@@ -224,6 +228,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setPendingDraft(null);
       setSelectedCustomerId('');
       setLinkedInventoryByItemId({});
+      setSavedOrderId(orderId);
       onUploadSuccess(orderId);
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to save order.');
@@ -274,7 +279,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         possible — or you can pick the right one before saving.
       </p>
 
-      {!loading && !pendingDraft && (
+      {!loading && !pendingDraft && !savedOrderId && (
         <div
           onClick={triggerFileInput}
           onDragOver={handleDragOver}
@@ -303,6 +308,52 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             className="mt-4 px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow transition-colors"
           >
             Choose File
+          </button>
+        </div>
+      )}
+
+      {savedOrderId && !loading && !pendingDraft && (
+        <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/40 space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+            <p className="text-sm font-bold text-gray-900">Order saved</p>
+          </div>
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Set line pricing and save as an estimate or invoice under the customer. You can email or
+            export a PDF from the next screen.
+          </p>
+          {permissions.canViewInvoices && onCreateDocument ? (
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onCreateDocument(savedOrderId, 'estimate');
+                  setSavedOrderId(null);
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 text-xs font-bold hover:bg-emerald-50"
+              >
+                <DollarSign className="h-4 w-4" />
+                Create estimate (set pricing)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onCreateDocument(savedOrderId, 'invoice');
+                  setSavedOrderId(null);
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+              >
+                <FileText className="h-4 w-4" />
+                Create invoice (set pricing)
+              </button>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setSavedOrderId(null)}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50"
+          >
+            Done — skip for now
           </button>
         </div>
       )}

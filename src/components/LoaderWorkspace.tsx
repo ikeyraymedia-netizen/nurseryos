@@ -38,13 +38,15 @@ interface LoaderWorkspaceProps {
   containerWeights: ContainerWeight[];
   customers: Customer[];
   permissions: AppPermissions;
+  nurseryName?: string;
 }
 
 export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   order,
   containerWeights,
   customers,
-  permissions
+  permissions,
+  nurseryName = 'NurseryOS'
 }) => {
   const [activeTab, setActiveTab] = useState<'checklist' | 'plaintext'>('checklist');
   const [copied, setCopied] = useState(false);
@@ -1126,6 +1128,14 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
         order={order}
+        customer={
+          customers.find((c) => c.id === order.customerId) ||
+          customers.find(
+            (c) => c.name.trim().toLowerCase() === order.customerName.trim().toLowerCase()
+          ) ||
+          null
+        }
+        nurseryName={nurseryName}
       />
       )}
     </div>

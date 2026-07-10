@@ -13,6 +13,7 @@ import { InventoryWorkspace } from './components/InventoryWorkspace';
 import { InventoryMatchProvider } from './components/InventoryMatchProvider';
 import { TeamManager } from './components/TeamManager';
 import { CustomersWorkspace } from './components/CustomersWorkspace';
+import { InvoiceModal } from './components/InvoiceModal';
 import {
   subscribeToOrders,
   subscribeToWeights,
@@ -21,7 +22,16 @@ import {
 } from './lib/db';
 import { subscribeToCustomers } from './lib/customers';
 import { getPermissionsForRole } from './lib/permissions';
-import { CustomerOrder, ContainerWeight, Truck as TruckType, Tenant, TenantMember, Customer } from './types';
+import {
+  CustomerOrder,
+  ContainerWeight,
+  Truck as TruckType,
+  Tenant,
+  TenantMember,
+  Customer,
+  CustomerDocumentType,
+  CustomerDocument
+} from './types';
 import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft } from 'lucide-react';
 
 type WorkspaceTab = 'orders' | 'trucks' | 'inventory' | 'customers';
@@ -53,6 +63,11 @@ function NurseryApp({
   const [loading, setLoading] = useState(true);
   const [showTeamManager, setShowTeamManager] = useState(false);
   const [showWeightsEditor, setShowWeightsEditor] = useState(false);
+  const [documentModal, setDocumentModal] = useState<{
+    orderId: string;
+    type: CustomerDocumentType;
+    existingDocument?: CustomerDocument | null;
+  } | null>(null);
   const mainPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -140,6 +155,17 @@ function NurseryApp({
   });
 
   const selectedOrder = dynamicOrders.find((o) => o.id === selectedOrderId);
+  const documentModalOrder = documentModal
+    ? dynamicOrders.find((o) => o.id === documentModal.orderId) || null
+    : null;
+  const documentModalCustomer = documentModalOrder
+    ? customers.find((c) => c.id === documentModalOrder.customerId) ||
+      customers.find(
+        (c) =>
+          c.name.trim().toLowerCase() === documentModalOrder.customerName.trim().toLowerCase()
+      ) ||
+      null
+    : null;
   const activeTruck = trucks.find((t) => t.id === selectedTruckId);
 
   const isBuildingTruck = selectedTruckId === 'new' || isEditingTruck;
@@ -342,11 +368,15 @@ function NurseryApp({
               customers={customers}
               orders={dynamicOrders}
               permissions={permissions}
+              nurseryName={tenant.name}
               onOpenOrder={(orderId) => {
                 setSelectedOrderId(orderId);
                 setSelectedTruckId(null);
                 setIsEditingTruck(false);
                 setActiveTab('orders');
+              }}
+              onOpenDocument={(orderId, type, existingDocument) => {
+                setDocumentModal({ orderId, type, existingDocument });
               }}
             />
           ) : selectedTruckId === 'new' && permissions.canBuildTrucks ? (
@@ -378,6 +408,8 @@ function NurseryApp({
               orders={dynamicOrders}
               containerWeights={containerWeights}
               permissions={permissions}
+              customers={customers}
+              nurseryName={tenant.name}
               onEditTruck={() => {
                 setActiveTab('trucks');
                 setIsEditingTruck(true);
@@ -396,6 +428,7 @@ function NurseryApp({
               containerWeights={containerWeights}
               customers={customers}
               permissions={permissions}
+              nurseryName={tenant.name}
             />
           ) : (
             <div className="bg-white rounded-2xl border border-emerald-100 p-12 text-center min-h-[400px] flex flex-col items-center justify-center">
@@ -423,10 +456,25 @@ function NurseryApp({
                 setIsEditingTruck(false);
                 setActiveTab('orders');
               }}
+              onCreateDocument={(orderId, type) => {
+                setDocumentModal({ orderId, type });
+              }}
             />
           </div>
         )}
       </main>
+
+      {permissions.canViewInvoices && documentModalOrder && documentModal && (
+        <InvoiceModal
+          isOpen
+          onClose={() => setDocumentModal(null)}
+          order={documentModalOrder}
+          documentType={documentModal.type}
+          customer={documentModalCustomer}
+          existingDocument={documentModal.existingDocument || null}
+          nurseryName={tenant.name}
+        />
+      )}
 
       {showTeamManager && (
         <TeamManager

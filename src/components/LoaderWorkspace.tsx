@@ -19,7 +19,7 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import { CustomerOrder, ContainerWeight, Customer } from '../types';
+import { CustomerOrder, ContainerWeight, Customer, CustomerDocumentType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   updateOrderItemProgress,
@@ -32,6 +32,7 @@ import {
 import { notifyInventorySyncIssue } from '../lib/inventory';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { InvoiceModal } from './InvoiceModal';
+import { DollarSign } from 'lucide-react';
 
 interface LoaderWorkspaceProps {
   order: CustomerOrder;
@@ -53,6 +54,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showLoadAllConfirm, setShowLoadAllConfirm] = useState(false);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [documentType, setDocumentType] = useState<CustomerDocumentType>('invoice');
   const [editingVendorItemId, setEditingVendorItemId] = useState<string | null>(null);
   const [tempVendorName, setTempVendorName] = useState('');
 
@@ -400,15 +402,30 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         </div>
 
         {/* Global Loading Stepper Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {permissions.canViewInvoices && (
-            <button
-              onClick={() => setIsInvoiceOpen(true)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              <span>Create Invoice</span>
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setDocumentType('estimate');
+                  setIsInvoiceOpen(true);
+                }}
+                className="px-3 py-1.5 bg-white hover:bg-sky-50 text-sky-900 border border-sky-200 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
+              >
+                <DollarSign className="h-3.5 w-3.5" />
+                <span>Create Estimate</span>
+              </button>
+              <button
+                onClick={() => {
+                  setDocumentType('invoice');
+                  setIsInvoiceOpen(true);
+                }}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Create Invoice</span>
+              </button>
+            </>
           )}
 
           {permissions.canEditOrders && showResetConfirm ? (
@@ -1128,6 +1145,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         isOpen={isInvoiceOpen}
         onClose={() => setIsInvoiceOpen(false)}
         order={order}
+        documentType={documentType}
         customer={
           customers.find((c) => c.id === order.customerId) ||
           customers.find(

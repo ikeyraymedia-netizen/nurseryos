@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberDoc(tenantId) {
+      return get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid));
+    }
+
+    function isMember(tenantId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid));
+    }
+
+    function memberRole(tenantId) {
+      return memberDoc(tenantId).data.role;
+    }
+
+    function isOwner(tenantId) {
+      return isMember(tenantId) && memberRole(tenantId) == 'owner';
+    }
+
+    function isAdminOrOwner(tenantId) {
+      return isMember(tenantId) && memberRole(tenantId) in ['owner', 'admin'];
+    }
+
+    function isField(tenantId) {
+      return isMember(tenantId) && memberRole(tenantId) == 'field';
+    }
+
+    function isLoader(tenantId) {
+      return isMember(tenantId) && memberRole(tenantId) == 'loader';
+    }
+
+    function canReadOps(tenantId) {
+      return isAdminOrOwner(tenantId) || isLoader(tenantId);
+    }
+
+    function canWriteOps(tenantId) {
+      return isAdminOrOwner(tenantId);
+    }
+
+    function canWriteLoadingProgress(tenantId) {
+      return canReadOps(tenantId);
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /inviteCodes/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['tenantId', 'inviteId', 'role', 'tenantName', 'active', 'createdAt'])
+        && isAdminOrOwner(request.resource.data.tenantId);
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']);
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if isMember(tenantId);
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['name', 'createdAt', 'ownerId']);
+      allow update, delete: if isOwner(tenantId);
+
+      match /members/{memberId} {
+        allow read: if isMember(tenantId);
+        // Owner bootstrap on nursery creation, admin invites, or self-join via invite code
+        allow create: if signedIn()
+          && (
+            memberId == request.auth.uid
+            || isAdminOrOwner(tenantId)
+          );
+        allow update, delete: if isAdminOrOwner(tenantId);
+      }
+
+      match /invites/{inviteId} {
+        allow read: if isAdminOrOwner(tenantId);
+        allow create: if isAdminOrOwner(tenantId);
+        // Allow one-time invite redemption when joining a nursery
+        allow update: if isAdminOrOwner(tenantId)
+          || (
+            signedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+            && request.resource.data.active == false
+          );
+      }
+
+      match /orders/{docId} {
+        allow read: if canReadOps(tenantId);
+        allow create, delete: if canWriteOps(tenantId);
+        allow update: if canWriteOps(tenantId) || isLoader(tenantId);
+      }
+
+      match /trucks/{docId} {
+        allow read: if canReadOps(tenantId);
+        allow create, delete: if canWriteOps(tenantId);
+        allow update: if canWriteOps(tenantId) || isLoader(tenantId);
+      }
+
+      match /containerWeights/{docId} {
+        allow read: if canReadOps(tenantId) || isField(tenantId);
+        allow write: if canWriteOps(tenantId);
+      }
+
+      match /inventory/{docId} {
+        allow read: if isAdminOrOwner(tenantId) || isField(tenantId) || isLoader(tenantId);
+        allow create, delete: if isAdminOrOwner(tenantId) || isField(tenantId);
+        allow update: if isAdminOrOwner(tenantId) || isField(tenantId)
+          || (
+            isLoader(tenantId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantityAvailable', 'dateUpdated'])
+          );
+      }
+
+      match /customers/{docId} {
+        allow read: if canReadOps(tenantId);
+        allow create, update, delete: if canWriteOps(tenantId);
+      }
+    }
+  }
+}

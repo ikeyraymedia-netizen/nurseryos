@@ -1,0 +1,1150 @@
+import React, { useState, useEffect } from 'react';
+import { CustomerOrder, PlantOrderItem, InvoiceDetails } from '../types';
+import { 
+  X, 
+  Printer, 
+  FileText, 
+  DollarSign, 
+  Percent, 
+  Save, 
+  Calendar, 
+  Landmark, 
+  Check, 
+  RefreshCw, 
+  FileCheck,
+  PercentIcon,
+  Tag,
+  Mail,
+  Send,
+  AlertTriangle,
+  Info
+} from 'lucide-react';
+import { updateCustomerOrder } from '../lib/db';
+
+interface InvoiceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  order: CustomerOrder;
+}
+
+// Sensible default nursery wholesale pricing based on container size
+const getDefaultPriceForSize = (size: string): number => {
+  const cleanSize = size.toLowerCase().trim();
+  if (cleanSize.includes('#1') || cleanSize.includes('1-gallon') || cleanSize.includes('1g')) {
+    return 6.50;
+  }
+  if (cleanSize.includes('#3') || cleanSize.includes('3-gallon') || cleanSize.includes('3g')) {
+    return 16.50;
+  }
+  if (cleanSize.includes('#7') || cleanSize.includes('7-gallon') || cleanSize.includes('7g')) {
+    return 38.00;
+  }
+  if (cleanSize.includes('#15') || cleanSize.includes('15-gallon') || cleanSize.includes('15g')) {
+    return 85.00;
+  }
+  if (cleanSize.includes('#30') || cleanSize.includes('30-gallon') || cleanSize.includes('30g')) {
+    return 195.00;
+  }
+  // Generic fallback if not matched
+  return 15.00;
+};
+
+export const InvoiceModal: React.FC<InvoiceModalProps> = ({
+  isOpen,
+  onClose,
+  order,
+}) => {
+  // State for quantity basis: 'ordered' | 'pulled' | 'loaded'
+  const [qtyBasis, setQtyBasis] = useState<'ordered' | 'pulled' | 'loaded'>('ordered');
+
+  // Customer billing details (inline editable)
+  const [billToName, setBillToName] = useState(order.customerName);
+  const [billToAddress, setBillToAddress] = useState('Forest Hill Nursery Distributor\nPickup Facility');
+
+  // Custom invoice properties (saved in invoiceDetails)
+  const [invoiceNumber, setInvoiceNumber] = useState(`INV-${order.orderNumber}`);
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentTerms, setPaymentTerms] = useState('Net 30');
+  const [dueDate, setDueDate] = useState('');
+  const [taxRate, setTaxRate] = useState<number>(4.45); // Default Louisiana local tax or typical nursery tax
+  const [freightCharge, setFreightCharge] = useState<number>(0);
+  const [discount, setDiscount] = useState<number>(0);
+  const [invoiceNotes, setInvoiceNotes] = useState('Thank you for choosing Bayou State Plant Co. for your foliage and landscape liner needs. Balance due is payable in full. All shipments are subject to safe transportation and loading conditions.');
+
+  // Store editable item prices
+  const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
+
+  // Database saving status
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Email state variables
+  const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
+  const [emailSubject, setEmailSubject] = useState(`Invoice INV-${order.orderNumber} from Bayou State Plant Co.`);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
+  const [emailErrorMessage, setEmailErrorMessage] = useState('');
+  const [showEmailPanel, setShowEmailPanel] = useState(false);
+
+  // Initialize or reload states when order changes
+  useEffect(() => {
+    if (order) {
+      setBillToName(order.customerName);
+      
+      // Determine if there are already saved invoiceDetails on the order
+      const details = order.invoiceDetails;
+      setInvoiceNumber(details?.invoiceNumber || `INV-${order.orderNumber}`);
+      setInvoiceDate(details?.invoiceDate || new Date().toISOString().split('T')[0]);
+      setPaymentTerms(details?.paymentTerms || 'Net 30');
+      setDueDate(details?.dueDate || '');
+      setTaxRate(details?.taxRate !== undefined ? details.taxRate : 4.45);
+      setFreightCharge(details?.freightCharge !== undefined ? details.freightCharge : 0);
+      setDiscount(details?.discount !== undefined ? details.discount : 0);
+      setInvoiceNotes(details?.notes || 'Thank you for choosing Bayou State Plant Co. for your foliage and landscape liner needs. Balance due is payable in full. All shipments are subject to safe transportation and loading conditions.');
+
+      // Load prices: use existing item.unitPrice, or map to container defaults
+      const pricesMap: Record<string, number> = {};
+      order.items.forEach((item) => {
+        pricesMap[item.id] = item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
+      });
+      setItemPrices(pricesMap);
+      setSaveSuccess(false);
+
+      // Initialize email fields
+      setCustomerEmail(order.customerEmail || '');
+      setEmailSubject(`Invoice ${details?.invoiceNumber || `INV-${order.orderNumber}`} from Bayou State Plant Co.`);
+      setEmailSentStatus('idle');
+      setEmailErrorMessage('');
+      setShowEmailPanel(false);
+    }
+  }, [order, isOpen]);
+
+  // Handle default due date auto-calculation when date or terms change
+  useEffect(() => {
+    if (!invoiceDate) return;
+    
+    const baseDate = new Date(invoiceDate);
+    if (isNaN(baseDate.getTime())) return;
+
+    if (paymentTerms === 'Due on Receipt' || paymentTerms === 'COD') {
+      setDueDate(invoiceDate);
+    } else if (paymentTerms === 'Net 15') {
+      baseDate.setDate(baseDate.getDate() + 15);
+      setDueDate(baseDate.toISOString().split('T')[0]);
+    } else if (paymentTerms === 'Net 30') {
+      baseDate.setDate(baseDate.getDate() + 30);
+      setDueDate(baseDate.toISOString().split('T')[0]);
+    } else if (paymentTerms === 'Net 45') {
+      baseDate.setDate(baseDate.getDate() + 45);
+      setDueDate(baseDate.toISOString().split('T')[0]);
+    }
+  }, [invoiceDate, paymentTerms]);
+
+  // Synchronize email subject when invoice number is edited
+  useEffect(() => {
+    setEmailSubject(`Invoice ${invoiceNumber} from Bayou State Plant Co.`);
+  }, [invoiceNumber]);
+
+  // Compute Active Item Quantity based on Qty Basis
+  const getItemQty = (item: PlantOrderItem): number => {
+    if (qtyBasis === 'pulled') {
+      return item.pulledQuantity ?? 0;
+    }
+    if (qtyBasis === 'loaded') {
+      return item.loadedQuantity;
+    }
+    return item.quantity;
+  };
+
+  // Calculate Order Totals
+  const subtotal = order.items.reduce((sum, item) => {
+    const qty = getItemQty(item);
+    const price = itemPrices[item.id] ?? 0;
+    return sum + (qty * price);
+  }, 0);
+
+  const discountAmount = Math.min(subtotal, discount);
+  const taxableAmount = Math.max(0, subtotal - discountAmount);
+  const salesTax = Number(((taxableAmount * taxRate) / 100).toFixed(2));
+  const grandTotal = subtotal - discountAmount + salesTax + freightCharge;
+
+  // HTML Email Layout Builder
+  const generateEmailHTML = (): string => {
+    const itemsRows = order.items.map((item) => {
+      const qty = getItemQty(item);
+      const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
+      const total = qty * price;
+      return `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}</td>
+          <td style="padding: 10px 0; text-align: center; color: #64748b; font-family: sans-serif;">${item.containerSize}</td>
+          <td style="padding: 10px 0; text-align: center; font-weight: bold; color: #0f172a; font-family: sans-serif;">${qty}</td>
+          <td style="padding: 10px 0; text-align: right; color: #047857; font-family: sans-serif;">$${price.toFixed(2)}</td>
+          <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #0f172a; font-family: sans-serif;">$${total.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <h1 style="color: #064e3b; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">Bayou State Plant Co.</h1>
+        <p style="font-size: 11px; color: #047857; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Foliage & Landscape Liners</p>
+        
+        <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
+          <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">Invoice ${invoiceNumber}</h2>
+          <table style="width: 100%; font-size: 13px; font-family: Arial, sans-serif;">
+            <tr>
+              <td style="padding: 2px 0; color: #475569;"><strong>Invoice Date:</strong></td>
+              <td style="padding: 2px 0; text-align: right; color: #0f172a;">${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</td>
+            </tr>
+            <tr>
+              <td style="padding: 2px 0; color: #475569;"><strong>Terms:</strong></td>
+              <td style="padding: 2px 0; text-align: right; color: #047857; font-weight: bold;">${paymentTerms}</td>
+            </tr>
+            <tr>
+              <td style="padding: 2px 0; color: #475569;"><strong>Due Date:</strong></td>
+              <td style="padding: 2px 0; text-align: right; color: #0f172a; font-weight: bold;">${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="margin-bottom: 25px; font-size: 13px; font-family: Arial, sans-serif;">
+          <h3 style="color: #047857; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bill To Customer:</h3>
+          <p style="margin: 0; font-weight: bold; font-size: 14px; color: #0f172a;">${billToName}</p>
+          <p style="margin: 5px 0 0 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${billToAddress}</p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 25px; font-family: Arial, sans-serif;">
+          <thead>
+            <tr style="border-bottom: 2px solid #cbd5e1; color: #475569; text-align: left; font-size: 11px; text-transform: uppercase;">
+              <th style="padding-bottom: 8px;">Plant Name</th>
+              <th style="padding-bottom: 8px; text-align: center; width: 80px;">Size</th>
+              <th style="padding-bottom: 8px; text-align: center; width: 60px;">Qty</th>
+              <th style="padding-bottom: 8px; text-align: right; width: 90px;">Price</th>
+              <th style="padding-bottom: 8px; text-align: right; width: 90px;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+          </tbody>
+        </table>
+
+        <div style="width: 280px; margin-left: auto; font-size: 13px; border-top: 2px solid #e2e8f0; padding-top: 10px; font-family: Arial, sans-serif;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 4px 0; color: #475569;">Subtotal:</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${subtotal.toFixed(2)}</td>
+            </tr>
+            ${freightCharge > 0 ? `
+            <tr>
+              <td style="padding: 4px 0; color: #475569;">Freight / Shipping:</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${freightCharge.toFixed(2)}</td>
+            </tr>` : ''}
+            ${discount > 0 ? `
+            <tr>
+              <td style="padding: 4px 0; color: #b91c1c;">Discount:</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #b91c1c;">-$${discountAmount.toFixed(2)}</td>
+            </tr>` : ''}
+            ${taxRate > 0 ? `
+            <tr>
+              <td style="padding: 4px 0; color: #475569;">Sales Tax (${taxRate}%):</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${salesTax.toFixed(2)}</td>
+            </tr>` : ''}
+            <tr style="border-top: 1px solid #cbd5e1;">
+              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #064e3b; text-transform: uppercase;">Total Due:</td>
+              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #064e3b;">$${grandTotal.toFixed(2)}</td>
+            </tr>
+          </table>
+        </div>
+
+        ${invoiceNotes ? `
+        <div style="margin-top: 30px; padding: 15px; background-color: #f8fafc; border-radius: 8px; font-size: 12px; color: #475569; border: 1px solid #e2e8f0; font-family: Arial, sans-serif;">
+          <strong style="display: block; margin-bottom: 5px; color: #0f172a; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;">Notes & Delivery Instructions:</strong>
+          <p style="margin: 0; line-height: 1.5; white-space: pre-wrap;">${invoiceNotes}</p>
+        </div>` : ''}
+
+        <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
+          <p style="margin: 0;">Bayou State Plant Co. • 11428 US 165 • Forest Hill, LA 71430</p>
+          <p style="margin: 5px 0 0 0; font-weight: bold; color: #047857;">Thank you for your business!</p>
+        </div>
+      </div>
+    `;
+  };
+
+  // Plain Text Email Builder
+  const generateEmailText = (): string => {
+    const itemsText = order.items.map((item) => {
+      const qty = getItemQty(item);
+      const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
+      const total = qty * price;
+      return `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: $${price.toFixed(2).padEnd(6)} | Total: $${total.toFixed(2)}`;
+    }).join('\n');
+
+    return `
+BAYOU STATE PLANT CO.
+Wholesale Foliage & Landscape Liners
+Forest Hill, LA
+
+INVOICE: ${invoiceNumber}
+Date: ${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
+Terms: ${paymentTerms}
+Due Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}
+
+BILL TO:
+${billToName}
+${billToAddress}
+
+--------------------------------------------------------------------------------
+PLANT ITEMS:
+--------------------------------------------------------------------------------
+${itemsText}
+--------------------------------------------------------------------------------
+
+Subtotal: $${subtotal.toFixed(2)}
+${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}GRAND TOTAL (USD): $${grandTotal.toFixed(2)}
+
+${invoiceNotes ? `NOTES & DELIVERY INSTRUCTIONS:\n${invoiceNotes}\n` : ''}
+Thank you for choosing Bayou State Plant Co.!
+`;
+  };
+
+  // Direct Server Email Dispatch
+  const handleSendEmailServer = async () => {
+    if (!customerEmail || !customerEmail.includes('@')) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage('Please enter a valid customer email address.');
+      return;
+    }
+
+    setIsSendingEmail(true);
+    setEmailSentStatus('idle');
+    setEmailErrorMessage('');
+
+    try {
+      const emailHtml = generateEmailHTML();
+      const emailText = generateEmailText();
+
+      const response = await fetch('/api/send-invoice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: customerEmail,
+          subject: emailSubject,
+          text: emailText,
+          html: emailHtml,
+        }),
+      });
+
+      let result;
+      try {
+        result = await response.json();
+      } catch (e) {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        throw new Error('Failed to parse server response.');
+      }
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || `HTTP error! status: ${response.status}`);
+      }
+
+      if (result.success) {
+        // Successfully dispatched via SMTP
+        // Save the updated email and the timestamp on the CustomerOrder
+        const updatedOrder: CustomerOrder = {
+          ...order,
+          customerEmail,
+          emailSentAt: new Date().toISOString(),
+        };
+
+        await updateCustomerOrder(updatedOrder);
+        setEmailSentStatus('success');
+      } else if (result.code === 'SMTP_NOT_CONFIGURED') {
+        setEmailSentStatus('error_smtp');
+        setEmailErrorMessage(result.message || 'SMTP settings are not configured on the server.');
+      } else {
+        setEmailSentStatus('error_general');
+        setEmailErrorMessage(result.error || 'Failed to dispatch email.');
+      }
+    } catch (err: any) {
+      console.error('Email sending error:', err);
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage(err.message || 'An unexpected error occurred while sending the email.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  // Fallback: Open Default Mail Client
+  const handleOpenMailClient = () => {
+    if (!customerEmail) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage('Please enter a customer email address first.');
+      return;
+    }
+    const textBody = generateEmailText();
+    const mailtoUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(textBody)}`;
+    window.open(mailtoUrl, '_blank');
+    
+    // Save email only tracking
+    const saveEmailTracking = async () => {
+      try {
+        const updatedOrder: CustomerOrder = {
+          ...order,
+          customerEmail,
+          emailSentAt: new Date().toISOString() + ' (opened in mail client)',
+        };
+        await updateCustomerOrder(updatedOrder);
+      } catch (e) {
+        console.error('Error tracking email event:', e);
+      }
+    };
+    saveEmailTracking();
+  };
+
+  if (!isOpen) return null;
+
+  // Pricing edit change handler
+  const handlePriceChange = (itemId: string, newPrice: number) => {
+    setItemPrices((prev) => ({
+      ...prev,
+      [itemId]: Math.max(0, newPrice),
+    }));
+    setSaveSuccess(false);
+  };
+
+  // Restore Default Wholesale Prices
+  const handleResetPrices = () => {
+    const defaultPrices: Record<string, number> = {};
+    order.items.forEach((item) => {
+      defaultPrices[item.id] = getDefaultPriceForSize(item.containerSize);
+    });
+    setItemPrices(defaultPrices);
+    setSaveSuccess(false);
+  };
+
+  // Persist prices and custom settings to Firestore database
+  const handleSaveInvoice = async () => {
+    setIsSaving(true);
+    setSaveSuccess(false);
+
+    try {
+      // Build the updated items with updated unitPrice fields
+      const updatedItems = order.items.map((item) => ({
+        ...item,
+        unitPrice: itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize)
+      }));
+
+      // Build the invoiceDetails payload
+      const invoiceDetailsPayload: InvoiceDetails = {
+        invoiceNumber,
+        invoiceDate,
+        dueDate,
+        paymentTerms,
+        taxRate,
+        freightCharge,
+        discount,
+        notes: invoiceNotes
+      };
+
+      // Create full updated order object
+      const updatedOrder: CustomerOrder = {
+        ...order,
+        items: updatedItems,
+        invoiceDetails: invoiceDetailsPayload
+      };
+
+      // Call database update
+      await updateCustomerOrder(updatedOrder);
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error('Failed to save invoice info:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-50 print:p-0 print:bg-white print:backdrop-blur-none">
+      
+      {/* Modal Container */}
+      <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">
+        
+        {/* Left Side: Customize Form (Hidden during print) */}
+        <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-4 shrink-0 print:hidden overflow-y-auto max-h-[90vh] md:max-h-[85vh] lg:max-h-none">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
+              <FileCheck className="h-4 w-4 mr-2 text-emerald-800" />
+              Invoice Settings
+            </h3>
+            <button
+              onClick={onClose}
+              className="md:hidden p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-900 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-3.5 text-xs">
+            {/* Quantity Basis Toggle */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
+                Invoiced Quantity Basis
+              </label>
+              <div className="grid grid-cols-3 gap-1 bg-gray-200/60 p-1 rounded-lg">
+                {(['ordered', 'pulled', 'loaded'] as const).map((basis) => (
+                  <button
+                    key={basis}
+                    type="button"
+                    onClick={() => setQtyBasis(basis)}
+                    className={`py-1 text-[10px] font-bold rounded-md capitalize transition-all ${
+                      qtyBasis === basis
+                        ? 'bg-emerald-700 text-white shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
+                    }`}
+                  >
+                    {basis === 'ordered' ? 'Ordered' : basis === 'pulled' ? 'Pulled' : 'Loaded'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1 italic">
+                Invoicing based on {qtyBasis === 'ordered' ? 'original customer order counts' : qtyBasis === 'pulled' ? 'items delivered/pulled from nursery' : 'items loaded onto the truck'}.
+              </p>
+            </div>
+
+            {/* Invoice Number */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                Invoice Number
+              </label>
+              <input
+                type="text"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
+              />
+            </div>
+
+            {/* Date and Terms */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                  Invoice Date
+                </label>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                  Terms
+                </label>
+                <select
+                  value={paymentTerms}
+                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                >
+                  <option value="Due on Receipt">Due on Receipt</option>
+                  <option value="COD">COD (Pickup)</option>
+                  <option value="Net 15">Net 15</option>
+                  <option value="Net 30">Net 30</option>
+                  <option value="Net 45">Net 45</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                Due Date
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+              />
+            </div>
+
+            {/* Financial Adjustments */}
+            <div className="bg-slate-100 p-2.5 rounded-xl space-y-2 border border-slate-200">
+              <span className="block font-mono font-bold text-[9px] text-gray-400 uppercase tracking-widest">Charges & Adjustments</span>
+              
+              {/* Freight Charge */}
+              <div>
+                <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
+                  <span>Freight / Shipping ($)</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
+                    <DollarSign className="h-3 w-3" />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={freightCharge || ''}
+                    placeholder="0.00"
+                    onChange={(e) => setFreightCharge(Number(e.target.value) || 0)}
+                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white font-mono font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Tax Rate */}
+              <div>
+                <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
+                  <span>Tax Rate (%)</span>
+                  <button 
+                    onClick={() => setTaxRate(taxRate === 0 ? 4.45 : 0)}
+                    className="text-[9px] text-emerald-700 hover:underline"
+                  >
+                    {taxRate === 0 ? 'Use 4.45%' : 'Exempt (0%)'}
+                  </button>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
+                    <Percent className="h-3 w-3" />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
+                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white font-mono font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Discount */}
+              <div>
+                <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
+                  <span>Flat Discount ($)</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
+                    <DollarSign className="h-3 w-3" />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={discount || ''}
+                    placeholder="0.00"
+                    onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white font-mono font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Notes */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                Invoice Footer Terms
+              </label>
+              <textarea
+                rows={3}
+                value={invoiceNotes}
+                onChange={(e) => setInvoiceNotes(e.target.value)}
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white text-[11px] leading-relaxed"
+              />
+            </div>
+
+            {/* Quick Actions */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleResetPrices}
+                className="text-emerald-700 hover:text-emerald-950 font-bold flex items-center gap-1 hover:underline text-[10px]"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>Reset to Standard Wholesale Prices</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-gray-200 flex flex-col space-y-2">
+            <button
+              onClick={handleSaveInvoice}
+              disabled={isSaving}
+              className={`w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 ${
+                saveSuccess
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-slate-800 hover:bg-slate-900 text-white'
+              }`}
+            >
+              {saveSuccess ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>Invoice Pricing Saved!</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>{isSaving ? 'Saving...' : 'Save Pricing to Order'}</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handlePrint}
+              className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Print Invoice Document</span>
+            </button>
+
+            {/* Email Invoice Panel */}
+            <div className="border-t border-gray-200 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowEmailPanel(!showEmailPanel)}
+                className={`w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 border ${
+                  showEmailPanel
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    : 'bg-white border-gray-200 hover:bg-slate-50 text-gray-700'
+                }`}
+              >
+                <Mail className="h-4 w-4" />
+                <span>{showEmailPanel ? 'Hide Email Options' : 'Email Invoice to Customer'}</span>
+              </button>
+
+              {showEmailPanel && (
+                <div className="mt-3 p-3 bg-emerald-50/45 border border-emerald-100 rounded-2xl space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                      Customer Email
+                    </label>
+                    <input
+                      type="email"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="e.g. buyer@wholesale.com"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                      Email Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800 text-xs"
+                    />
+                  </div>
+
+                  {order.emailSentAt && (
+                    <div className="bg-emerald-100/40 p-2.5 rounded-xl text-[10px] text-emerald-800 font-medium flex items-center space-x-1.5 border border-emerald-200/30">
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Last sent: {new Date(order.emailSentAt.split(' (')[0]).toLocaleDateString()} {new Date(order.emailSentAt.split(' (')[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  )}
+
+                  {emailSentStatus === 'success' && (
+                    <div className="p-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl text-[10px] leading-normal font-medium">
+                      <p className="font-bold flex items-center mb-0.5 text-teal-900"><Check className="h-3.5 w-3.5 mr-1 text-teal-700" /> Invoice Sent Successfully!</p>
+                      <p className="text-[9px] text-teal-700">The customer was emailed a high-quality, formatted HTML version of this invoice.</p>
+                    </div>
+                  )}
+
+                  {emailSentStatus === 'error_smtp' && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[10px] leading-normal">
+                      <p className="font-bold flex items-center mb-1 text-amber-900"><AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" /> Server SMTP Not Configured</p>
+                      <p className="text-[9px] text-amber-700 mb-2 leading-relaxed">
+                        To send directly from the server, configure SMTP variables (<code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>) in your secrets manager.
+                      </p>
+                      <button
+                        onClick={handleOpenMailClient}
+                        className="w-full py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-[9px] font-black transition-all flex items-center justify-center space-x-1"
+                      >
+                        <Mail className="h-3 w-3" />
+                        <span>Open in Default Mail Client (Mailto)</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {emailSentStatus === 'error_general' && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-[10px] leading-normal">
+                      <p className="font-bold flex items-center mb-0.5 text-rose-900"><AlertTriangle className="h-3.5 w-3.5 mr-1 text-rose-600" /> Error Dispatching Email</p>
+                      <p className="text-[9px] text-rose-700 mb-2">{emailErrorMessage}</p>
+                      <button
+                        onClick={handleOpenMailClient}
+                        className="w-full py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-[9px] font-bold transition-all flex items-center justify-center space-x-1"
+                      >
+                        <span>Fallback: Open in Mail Client</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={handleSendEmailServer}
+                      disabled={isSendingEmail}
+                      className="py-2 px-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
+                    >
+                      <Send className="h-3 w-3" />
+                      <span>{isSendingEmail ? 'Sending...' : 'Send Direct'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleOpenMailClient}
+                      className="py-2 px-2.5 bg-white border border-gray-200 hover:bg-slate-100 text-gray-700 rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
+                    >
+                      <Mail className="h-3 w-3" />
+                      <span>Use Mail App</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <button
+              onClick={onClose}
+              className="w-full py-2 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center"
+            >
+              Close Window
+            </button>
+          </div>
+        </div>
+
+        {/* Right Side / Document Preview (Becomes full-page on print) */}
+        <div className="flex-1 bg-white p-6 md:p-10 flex flex-col min-h-0 print:p-0">
+          
+          {/* Action header inside modal (Hidden during print) */}
+          <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
+            <div>
+              <h2 className="text-base font-black text-gray-900 flex items-center">
+                <FileCheck className="h-5 w-5 mr-1.5 text-emerald-700" />
+                Invoice Preview
+              </h2>
+              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
+                Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handlePrint}
+                className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 hover:bg-emerald-100 transition-colors"
+                title="Print Invoice"
+              >
+                <Printer className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
+                title="Close Window"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Printable Document Sheet */}
+          <div className="flex-1 overflow-y-auto pr-2 print:overflow-visible print:pr-0">
+            <div className="border border-gray-300 p-8 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal">
+              
+              {/* STYLE TAG FOR PRINT WORKAROUNDS */}
+              <style dangerouslySetInnerHTML={{__html: `
+                @media print {
+                  body {
+                    color: #000000 !important;
+                    background: #ffffff !important;
+                  }
+                  .print\\:hidden {
+                    display: none !important;
+                  }
+                  .print\\:border-none {
+                    border: none !important;
+                  }
+                  .print\\:p-0 {
+                    padding: 0 !important;
+                  }
+                  .print\\:shadow-none {
+                    box-shadow: none !important;
+                  }
+                  .price-input {
+                    border: none !important;
+                    background: transparent !important;
+                    padding: 0 !important;
+                    width: auto !important;
+                    text-align: right !important;
+                  }
+                  .price-input-prefix {
+                    display: none !important;
+                  }
+                }
+              `}} />
+
+              {/* Document Header */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
+                <div>
+                  <h1 className="text-2xl font-black tracking-tight text-emerald-950 uppercase leading-none">
+                    Bayou State Plant Co.
+                  </h1>
+                  <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-widest">
+                    Wholesale Foliage & Landscape Liners
+                  </p>
+                  <p className="text-[11px] text-gray-600 mt-4 leading-normal">
+                    11428 US 165<br />
+                    Forest Hill, LA 71430<br />
+                    Phone: (318) 748-0190<br />
+                    Email: sales@bayoustateplantco.com
+                  </p>
+                </div>
+                
+                <div className="sm:text-right flex flex-col justify-between items-start sm:items-end">
+                  <div className="border-2 border-emerald-900/10 rounded-xl p-3 px-4 bg-emerald-50/20 inline-block text-left sm:text-right">
+                    <span className="block text-[10px] font-black text-emerald-800 font-mono uppercase tracking-widest mb-0.5">
+                      INVOICE
+                    </span>
+                    <span className="text-xl font-mono font-black text-gray-950 block">
+                      {invoiceNumber}
+                    </span>
+                  </div>
+                  
+                  <div className="mt-4 text-left sm:text-right font-mono text-[11px] space-y-0.5">
+                    <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">Invoice Logistics</p>
+                    <p className="text-gray-800">
+                      <span className="font-bold text-gray-500">Date:</span> {new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                    </p>
+                    <p className="text-gray-800">
+                      <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-emerald-800">{paymentTerms}</span>
+                    </p>
+                    <p className="text-gray-800">
+                      <span className="font-bold text-gray-500">Due Date:</span> <span className="font-bold">{dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bill To & Ship To section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6 border-b border-gray-300">
+                <div>
+                  <h3 className="text-xs font-black font-mono uppercase text-emerald-800 tracking-wider mb-2">
+                    Bill To Customer:
+                  </h3>
+                  <div className="text-xs text-gray-800 space-y-1">
+                    {/* Inline Editable Customer Name */}
+                    <input
+                      type="text"
+                      value={billToName}
+                      onChange={(e) => setBillToName(e.target.value)}
+                      className="font-bold text-sm text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-emerald-600 focus:bg-white focus:outline-none w-full p-0.5 rounded transition-all print:border-none print:p-0 print:font-black"
+                      placeholder="Customer Name"
+                    />
+                    <textarea
+                      rows={2}
+                      value={billToAddress}
+                      onChange={(e) => setBillToAddress(e.target.value)}
+                      className="w-full text-xs text-gray-600 bg-transparent hover:bg-slate-50 border border-transparent focus:border-emerald-600 focus:bg-white focus:outline-none p-0.5 rounded leading-normal resize-none font-sans font-medium mt-1 print:border-none print:p-0"
+                      placeholder="Billing Address"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-xs font-black font-mono uppercase text-emerald-800 tracking-wider mb-2">
+                    Shipping Origin & Carrier:
+                  </h3>
+                  <div className="text-xs text-gray-800 space-y-1 font-mono">
+                    <p><span className="font-bold text-gray-400">Shipper:</span> Bayou State Plant Co.</p>
+                    <p><span className="font-bold text-gray-400">Origin:</span> Forest Hill Facility, LA</p>
+                    <p>
+                      <span className="font-bold text-gray-400">Cargo Basis:</span>{' '}
+                      <span className="font-bold text-emerald-900 uppercase">
+                        {qtyBasis === 'ordered' ? 'Ordered Quantities' : qtyBasis === 'pulled' ? 'Delivered/Pulled Counts' : 'Loaded Counts'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="py-6">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
+                      <th className="pb-2 text-left">Plant Variety Name</th>
+                      <th className="pb-2 text-center w-28">Pot Size</th>
+                      <th className="pb-2 text-center w-20">Quantity</th>
+                      <th className="pb-2 text-right w-28">Unit Price</th>
+                      <th className="pb-2 text-right w-24">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.items.map((item) => {
+                      const qty = getItemQty(item);
+                      const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
+                      const total = qty * price;
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className="border-b border-gray-200 text-xs font-medium text-gray-800"
+                        >
+                          <td className="py-3">
+                            <span className="font-black text-gray-950">{item.plantName}</span>
+                            {item.notes && (
+                              <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5">
+                                Note: {item.notes}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 text-center font-mono font-bold text-gray-500">
+                            {item.containerSize}
+                          </td>
+                          <td className="py-3 text-center font-mono font-bold text-gray-900">
+                            {qty}
+                          </td>
+                          <td className="py-3 text-right">
+                            {/* Inline editable price */}
+                            <div className="inline-flex items-center justify-end">
+                              <span className="price-input-prefix text-[10px] text-slate-400 font-mono font-bold mr-0.5">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={price}
+                                onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
+                                className="price-input w-20 font-mono font-bold text-right text-emerald-800 focus:text-emerald-950 focus:outline-none focus:ring-1 focus:ring-emerald-600 bg-emerald-50/40 hover:bg-emerald-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
+                              />
+                            </div>
+                          </td>
+                          <td className="py-3 text-right font-mono font-black text-gray-950">
+                            ${total.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary and Totals Area */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2 pb-6 border-b border-gray-300">
+                {/* Payment terms notes */}
+                <div className="md:col-span-7 space-y-4">
+                  <div className="text-[10px] leading-relaxed text-gray-500 font-sans">
+                    <p className="font-black uppercase text-gray-400 tracking-wider mb-1">Customer Terms & Guarantee:</p>
+                    <p className="italic">
+                      "All plant materials are guaranteed to be robust, healthy, and up to nursery grade standards upon delivery. Any claims or discrepancies on quantity or grade must be filed in writing with our office within 48 hours of shipment receipt. Returns are not accepted unless authorized in writing."
+                    </p>
+                  </div>
+                  
+                  <div className="border border-gray-200 rounded-xl p-3 bg-slate-50 text-[10px] font-sans">
+                    <p className="font-bold text-emerald-800 uppercase tracking-wider mb-1 flex items-center">
+                      <Landmark className="h-3.5 w-3.5 mr-1" /> Payment instructions:
+                    </p>
+                    <p className="text-gray-600 leading-normal">
+                      Please make check payable to <span className="font-bold text-gray-950">Bayou State Plant Co.</span> and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Subtotal table */}
+                <div className="md:col-span-5 flex flex-col space-y-1.5 text-xs text-right font-mono">
+                  
+                  {/* Subtotal */}
+                  <div className="flex justify-between py-1 border-b border-gray-150">
+                    <span className="text-gray-500 font-medium">Subtotal:</span>
+                    <span className="font-bold text-gray-950">${subtotal.toFixed(2)}</span>
+                  </div>
+
+                  {/* Freight */}
+                  {freightCharge > 0 && (
+                    <div className="flex justify-between py-1 border-b border-gray-150">
+                      <span className="text-gray-500 font-medium">Freight / Delivery:</span>
+                      <span className="font-bold text-gray-950">${freightCharge.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {/* Discount */}
+                  {discount > 0 && (
+                    <div className="flex justify-between py-1 border-b border-gray-150 text-rose-700">
+                      <span className="font-medium text-rose-600">Discount:</span>
+                      <span className="font-bold">-${discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {/* Sales Tax */}
+                  {taxRate > 0 && (
+                    <div className="flex justify-between py-1 border-b border-gray-150">
+                      <span className="text-gray-500 font-medium">Sales Tax ({taxRate}%):</span>
+                      <span className="font-bold text-gray-950">${salesTax.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {/* Grand Total */}
+                  <div className="flex justify-between py-2 border-b-4 border-double border-emerald-800 bg-emerald-50/35 p-1.5 rounded-lg">
+                    <span className="font-sans font-black text-emerald-800 text-sm uppercase tracking-wide">Total Due (USD):</span>
+                    <span className="text-base font-black text-emerald-950">${grandTotal.toFixed(2)}</span>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Terms and Signature */}
+              <div className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-8 text-[11px] font-mono leading-relaxed">
+                <div>
+                  <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">
+                    Customer Acknowledgment
+                  </p>
+                  <p className="text-[10px] text-gray-500 leading-normal mb-4 font-sans">
+                    Customer representative signature acknowledges complete receipt of specified plants in acceptable condition at the agreed contract unit prices.
+                  </p>
+                  <div className="flex items-end pt-5 border-b border-gray-300">
+                    <span className="text-[10px] text-gray-400 mr-2 shrink-0">Signed By:</span>
+                    <span className="flex-1"></span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="flex items-end border-b border-gray-300">
+                      <span className="text-[10px] text-gray-400 mr-2 shrink-0">Print Name:</span>
+                      <span className="flex-1"></span>
+                    </div>
+                    <div className="flex items-end border-b border-gray-300">
+                      <span className="text-[10px] text-gray-400 mr-2 shrink-0">Date:</span>
+                      <span className="flex-1"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-gray-250 p-4 rounded-xl font-sans">
+                  <p className="text-gray-500 font-bold uppercase text-[9px] tracking-wider font-mono mb-1.5">
+                    Invoice Notes / Delivery Instructions
+                  </p>
+                  <p className="text-xs text-gray-700 italic leading-relaxed whitespace-pre-wrap">
+                    {invoiceNotes}
+                  </p>
+                </div>
+              </div>
+
+              {/* Page Number / Footer */}
+              <div className="pt-10 text-center text-[9px] text-gray-400 font-mono">
+                Bayou State Plant Co. • Forest Hill wholesale operations • Thank you for your business!
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+};

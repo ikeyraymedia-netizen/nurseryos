@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Bayou State Plant Co.">
+  <rect width="200" height="200" rx="28" fill="#ffffff"/>
+  <circle cx="100" cy="100" r="78" fill="#d8f3dc"/>
+  <path d="M100 150c-28-18-42-38-42-62 0-18 12-30 28-30 8 0 14 3 18 8 4-5 10-8 18-8 16 0 28 12 28 30 0 24-14 44-42 62z" fill="#2d6a4f"/>
+  <path d="M100 58c-6 14-10 28-10 40h20c0-12-4-26-10-40z" fill="#40916c"/>
+  <path d="M82 92c10-8 18-12 18-22 6 8 10 14 18 18-12 2-22 6-36 4z" fill="#52b788"/>
+</svg>

@@ -1,0 +1,6 @@
+{
+  "name": "NurseryOS",
+  "description": "NurseryOS — upload customer plant orders (PDFs, images), calculate weights, track loading, manage trucks, customers, and invoices for wholesale nurseries.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

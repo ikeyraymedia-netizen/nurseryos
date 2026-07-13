@@ -65,10 +65,11 @@ function NurseryApp({
   const [showTeamManager, setShowTeamManager] = useState(false);
   const [showWeightsEditor, setShowWeightsEditor] = useState(false);
   const [documentModal, setDocumentModal] = useState<{
-    orderId: string;
+    orderId: string | null;
     type: CustomerDocumentType;
     existingDocument?: CustomerDocument | null;
   } | null>(null);
+  const [focusCustomerId, setFocusCustomerId] = useState<string | null>(null);
   const mainPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -156,9 +157,45 @@ function NurseryApp({
   });
 
   const selectedOrder = dynamicOrders.find((o) => o.id === selectedOrderId);
-  const documentModalOrder = documentModal
-    ? dynamicOrders.find((o) => o.id === documentModal.orderId) || null
-    : null;
+  const documentModalOrder = useMemo(() => {
+    if (!documentModal) return null;
+    if (documentModal.orderId) {
+      return dynamicOrders.find((o) => o.id === documentModal.orderId) || null;
+    }
+    const doc = documentModal.existingDocument;
+    if (!doc) return null;
+    // Synthetic order so estimate-only documents can open in InvoiceModal
+    return {
+      id: `preview-${doc.id}`,
+      customerName: doc.customerName,
+      customerId: doc.customerId,
+      orderNumber: doc.orderNumber || doc.documentNumber,
+      items: (doc.items || []).map((item) => ({
+        id: item.id,
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        quantity: item.quantity,
+        loadedQuantity: 0,
+        unitPrice: item.unitPrice,
+        notes: item.notes
+      })),
+      originalText: '',
+      dateCreated: doc.createdAt,
+      status: 'pending' as const,
+      totalWeightLbs: 0,
+      customerEmail: doc.customerEmail,
+      invoiceDetails: {
+        invoiceNumber: doc.documentNumber,
+        invoiceDate: doc.documentDate,
+        dueDate: doc.dueDate,
+        paymentTerms: doc.paymentTerms,
+        taxRate: doc.taxRate,
+        freightCharge: doc.freightCharge,
+        discount: doc.discount,
+        notes: doc.notes
+      }
+    } satisfies CustomerOrder;
+  }, [documentModal, dynamicOrders]);
   const documentModalCustomer = documentModalOrder
     ? customers.find((c) => c.id === documentModalOrder.customerId) ||
       customers.find(
@@ -389,8 +426,11 @@ function NurseryApp({
             <CustomersWorkspace
               customers={customers}
               orders={dynamicOrders}
+              trucks={trucks}
               permissions={permissions}
               nurseryName={tenant.name}
+              containerWeights={containerWeights}
+              initialSelectedCustomerId={focusCustomerId}
               onOpenOrder={(orderId) => {
                 setSelectedOrderId(orderId);
                 setSelectedTruckId(null);
@@ -492,6 +532,10 @@ function NurseryApp({
               }}
               onCreateDocument={(orderId, type) => {
                 setDocumentModal({ orderId, type });
+              }}
+              onEstimateSaved={(customerId) => {
+                setFocusCustomerId(customerId);
+                setActiveTab('customers');
               }}
             />
           </div>

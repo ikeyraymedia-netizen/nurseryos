@@ -11,7 +11,7 @@ import {
   addCustomerOrder,
   updateTruck
 } from '../lib/db';
-import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
+import { getTruckWeightCapacity, calculateWeightPercentage, getCapacitySeverity } from '../lib/capacity';
 import { 
   Truck as TruckIcon, 
   Weight, 
@@ -133,6 +133,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   // Truck weight limits calculations
   const capacity = getTruckWeightCapacity(truck.truckType);
   const overallWeightPercentage = calculateWeightPercentage(totalWeight, truck.truckType);
+  const weightSeverity = getCapacitySeverity(totalWeight, truck.truckType);
+  const isOverweight = weightSeverity === 'critical';
 
   // Handlers for adjusting plant loading increments inside an individual order
   const handleQuantityAdjust = async (
@@ -635,19 +637,43 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             <p className="leading-normal"><span className="font-bold font-mono text-emerald-300 uppercase">Load Instructions:</span> {truck.notes}</p>
           </div>
         )}
+
+        {isOverweight && (
+          <div className="mt-4 bg-red-600 border border-red-700 rounded-xl p-3 text-sm text-white flex items-start space-x-2 shadow-md">
+            <AlertCircle className="h-5 w-5 text-red-100 shrink-0 mt-0.5" />
+            <div className="leading-snug">
+              <p className="font-black uppercase tracking-wide text-xs text-red-100">Overweight — do not load as-is</p>
+              <p className="mt-1 text-red-50 text-xs">
+                {totalWeight.toLocaleString()} lbs on a {capacity.toLocaleString()} lb{' '}
+                {truck.truckType || 'trailer'} ({overallWeightPercentage}% capacity). Remove or split
+                orders, or switch to a larger truck type.
+              </p>
+            </div>
+          </div>
+        )}
+        {weightSeverity === 'warn' && !isOverweight && (
+          <div className="mt-4 bg-amber-100 border border-amber-300 rounded-xl p-3 text-xs text-amber-950 flex items-start space-x-2">
+            <AlertCircle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+            <p className="leading-normal font-semibold">
+              Near capacity: {overallWeightPercentage}% ({totalWeight.toLocaleString()} /{' '}
+              {capacity.toLocaleString()} lbs). Double-check before loading.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Stats KPI Ribbon */}
       <div className="grid grid-cols-1 sm:grid-cols-3 border-b border-emerald-500/20 bg-emerald-100/35 shadow-inner">
-        <div className="p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-emerald-500/20">
-          <Weight className="h-5 w-5 text-emerald-800 shrink-0" />
+        <div className={`p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-emerald-500/20 ${isOverweight ? 'bg-red-100/80' : ''}`}>
+          <Weight className={`h-5 w-5 shrink-0 ${isOverweight ? 'text-red-700' : 'text-emerald-800'}`} />
           <div>
-            <p className="text-[10px] font-bold text-emerald-900/60 font-mono uppercase leading-tight">Total Truckload Weight</p>
-            <p className="text-base font-black text-gray-900 font-mono mt-0.5">
+            <p className={`text-[10px] font-bold font-mono uppercase leading-tight ${isOverweight ? 'text-red-800' : 'text-emerald-900/60'}`}>Total Truckload Weight</p>
+            <p className={`text-base font-black font-mono mt-0.5 ${isOverweight ? 'text-red-900' : 'text-gray-900'}`}>
               {totalWeight.toLocaleString()}
               {capacity > 0 ? (
-                <span className="text-xs font-normal text-emerald-950 font-sans block sm:inline sm:ml-2">
-                  / {capacity.toLocaleString()} lbs ({overallWeightPercentage}% capacity)
+                <span className={`text-xs font-normal font-sans block sm:inline sm:ml-2 ${isOverweight ? 'text-red-800 font-bold' : 'text-emerald-950'}`}>
+                  / {capacity.toLocaleString()} lbs ({overallWeightPercentage}%
+                  {isOverweight ? ' — OVER' : ' capacity'})
                 </span>
               ) : (
                 <span className="text-xs font-semibold text-emerald-900"> lbs</span>
@@ -1372,6 +1398,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         truck={truck}
         orders={orders}
         containerWeights={containerWeights}
+        nurseryName={nurseryName}
       />
       )}
 

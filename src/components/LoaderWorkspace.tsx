@@ -380,9 +380,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const totalQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
   const loadedQuantity = order.items.reduce((sum, item) => sum + item.loadedQuantity, 0);
   const pulledQuantity = order.items.reduce((sum, item) => sum + (item.pulledQuantity ?? 0), 0);
+  const remainingToPull = Math.max(0, totalQuantity - pulledQuantity);
+  const remainingToLoad = Math.max(0, totalQuantity - loadedQuantity);
 
   return (
-    <div id="loader-workspace-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
+    <div id="loader-workspace-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full relative pb-24 sm:pb-6">
       
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 mb-5 gap-3">
@@ -1025,9 +1027,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               <button
                                 onClick={() => handlePulledQuantityChange(item.id, false)}
                                 disabled={(item.pulledQuantity ?? 0) === 0 || !permissions.canCheckOffLoading}
-                                className="p-1.5 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all"
+                                className="p-2.5 sm:p-1.5 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                               >
-                                <Minus className="h-4 w-4" />
+                                <Minus className="h-5 w-5 sm:h-4 sm:w-4" />
                               </button>
                               <span className="text-xs font-mono font-bold text-gray-900 w-11 text-center select-none">
                                 {item.pulledQuantity ?? 0} <span className="text-gray-400">/ {item.quantity}</span>
@@ -1035,9 +1037,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               <button
                                 onClick={() => handlePulledQuantityChange(item.id, true)}
                                 disabled={(item.pulledQuantity ?? 0) === item.quantity || !permissions.canCheckOffLoading}
-                                className="p-1.5 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all"
+                                className="p-2.5 sm:p-1.5 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
                               </button>
                             </div>
                           </div>
@@ -1060,9 +1062,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               <button
                                 onClick={() => handleQuantityChange(item.id, false)}
                                 disabled={item.loadedQuantity === 0 || !permissions.canCheckOffLoading}
-                                className="p-1.5 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-30 transition-all"
+                                className="p-2.5 sm:p-1.5 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                               >
-                                <Minus className="h-4 w-4" />
+                                <Minus className="h-5 w-5 sm:h-4 sm:w-4" />
                               </button>
                               <span className="text-xs font-mono font-bold text-gray-900 w-11 text-center select-none">
                                 {item.loadedQuantity} <span className="text-gray-400">/ {item.quantity}</span>
@@ -1070,9 +1072,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               <button
                                 onClick={() => handleQuantityChange(item.id, true)}
                                 disabled={item.loadedQuantity === item.quantity || !permissions.canCheckOffLoading}
-                                className="p-1.5 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-30 transition-all"
+                                className="p-2.5 sm:p-1.5 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
                               </button>
                             </div>
                           </div>
@@ -1155,6 +1157,27 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         }
         nurseryName={nurseryName}
       />
+      )}
+
+      {permissions.canCheckOffLoading && activeTab === 'checklist' && (
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-emerald-200 bg-white/95 backdrop-blur px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-800">Checkoff</p>
+              <p className="text-xs font-bold text-gray-900 truncate">
+                Pull {remainingToPull} · Load {remainingToLoad} left
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-2 py-1">
+                {pulledQuantity}/{totalQuantity}
+              </span>
+              <span className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1">
+                {loadedQuantity}/{totalQuantity}
+              </span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

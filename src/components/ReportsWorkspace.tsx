@@ -6,12 +6,14 @@ import {
   AlertCircle,
   Sparkles,
   Copy,
-  Check
+  Check,
+  History
 } from 'lucide-react';
 import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
 import { listAllDocuments } from '../lib/documents';
+import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
 
 interface ReportsWorkspaceProps {
   orders: CustomerOrder[];
@@ -22,6 +24,7 @@ interface ReportsWorkspaceProps {
 }
 
 const SUGGESTED_REPORTS = [
+  'Sales for this month from saved invoices.',
   'Total sales from all saved invoices (grand totals).',
   'Sales by customer from saved invoices, ranked highest to lowest.',
   'List every saved invoice with date, customer, and amount.',
@@ -33,6 +36,31 @@ const SUGGESTED_REPORTS = [
   'List plants pulled but not yet loaded on trucks.',
   'What needs attention this week for loading, inventory, and sales?'
 ];
+
+function monthKeyFromDate(raw?: string | null): string | null {
+  if (!raw) return null;
+  const iso = String(raw).trim().match(/^(\d{4})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return null;
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function invoiceMonthKey(doc: CustomerDocument): string {
+  return monthKeyFromDate(doc.documentDate) || monthKeyFromDate(doc.createdAt) || 'unknown';
+}
+
+function shiftMonthKey(monthKey: string, delta: number): string {
+  const [y, m] = monthKey.split('-').map(Number);
+  const dt = new Date(y, m - 1 + delta, 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number);
+  if (!y || !m) return monthKey;
+  return new Date(y, m - 1, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+}
 
 function buildDataSnapshot(params: {
   orders: CustomerOrder[];
@@ -48,7 +76,13 @@ function buildDataSnapshot(params: {
   const invoiceSalesTotal = invoices.reduce((s, d) => s + (d.grandTotal || 0), 0);
   const estimateTotal = estimates.reduce((s, d) => s + (d.grandTotal || 0), 0);
 
+  const now = new Date();
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const lastMonthKey = shiftMonthKey(thisMonthKey, -1);
+
   const salesByCustomer = new Map<string, { customerName: string; invoiceCount: number; salesTotal: number }>();
+  const salesByMonth = new Map<string, { month: string; label: string; invoiceCount: number; salesTotal: number }>();
+
   for (const inv of invoices) {
     const key = inv.customerId || inv.customerName;
     const row = salesByCustomer.get(key) || {
@@ -59,7 +93,21 @@ function buildDataSnapshot(params: {
     row.invoiceCount += 1;
     row.salesTotal += inv.grandTotal || 0;
     salesByCustomer.set(key, row);
+
+    const month = invoiceMonthKey(inv);
+    const monthRow = salesByMonth.get(month) || {
+      month,
+      label: month === 'unknown' ? 'Unknown date' : monthLabel(month),
+      invoiceCount: 0,
+      salesTotal: 0
+    };
+    monthRow.invoiceCount += 1;
+    monthRow.salesTotal += inv.grandTotal || 0;
+    salesByMonth.set(month, monthRow);
   }
+
+  const thisMonthRow = salesByMonth.get(thisMonthKey);
+  const lastMonthRow = salesByMonth.get(lastMonthKey);
 
   const plantSales = new Map<
     string,
@@ -91,15 +139,35 @@ function buildDataSnapshot(params: {
       invoiceCount: invoices.length,
       estimateCount: estimates.length,
       invoiceSalesTotal,
-      estimateTotal
+      estimateTotal,
+      thisMonthSalesTotal: thisMonthRow?.salesTotal || 0,
+      thisMonthInvoiceCount: thisMonthRow?.invoiceCount || 0,
+      thisMonthKey,
+      thisMonthLabel: monthLabel(thisMonthKey)
     },
     /** Pre-aggregated sales from saved invoices — prefer this for sales questions. */
     sales: {
       source: 'Saved invoices (CustomerDocument type=invoice). Estimates are not counted as sales.',
+      dateRule:
+        'Invoice month uses documentDate (YYYY-MM-DD). If missing, uses createdAt. Periods are local calendar months.',
+      today: now.toISOString().slice(0, 10),
+      thisMonth: {
+        month: thisMonthKey,
+        label: monthLabel(thisMonthKey),
+        invoiceCount: thisMonthRow?.invoiceCount || 0,
+        salesTotal: thisMonthRow?.salesTotal || 0
+      },
+      lastMonth: {
+        month: lastMonthKey,
+        label: monthLabel(lastMonthKey),
+        invoiceCount: lastMonthRow?.invoiceCount || 0,
+        salesTotal: lastMonthRow?.salesTotal || 0
+      },
       invoiceSalesTotal,
       estimateTotal,
       invoiceCount: invoices.length,
       estimateCount: estimates.length,
+      byMonth: [...salesByMonth.values()].sort((a, b) => b.month.localeCompare(a.month)),
       byCustomer: [...salesByCustomer.values()]
         .sort((a, b) => b.salesTotal - a.salesTotal)
         .slice(0, 100),
@@ -157,6 +225,8 @@ function buildDataSnapshot(params: {
       customerName: d.customerName,
       customerId: d.customerId,
       documentDate: d.documentDate,
+      month: invoiceMonthKey(d),
+      createdAt: d.createdAt || null,
       dueDate: d.dueDate || null,
       orderNumber: d.orderNumber || null,
       subtotal: d.subtotal,
@@ -176,6 +246,7 @@ function buildDataSnapshot(params: {
       documentNumber: d.documentNumber,
       customerName: d.customerName,
       documentDate: d.documentDate,
+      month: invoiceMonthKey(d),
       orderNumber: d.orderNumber || null,
       grandTotal: d.grandTotal
     }))
@@ -191,28 +262,56 @@ export function ReportsWorkspace({
 }: ReportsWorkspaceProps) {
   const [inventory, setInventory] = useState<InventoryPlant[]>([]);
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
+  const [docsError, setDocsError] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
   const [report, setReport] = useState<string | null>(null);
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   useEffect(() => subscribeToInventory(setInventory), []);
 
+  async function refreshDocuments() {
+    try {
+      const docs = await listAllDocuments();
+      setDocuments(docs);
+      setDocsError(null);
+      return docs;
+    } catch (err: any) {
+      setDocuments([]);
+      setDocsError(err?.message || 'Could not load saved invoices/estimates.');
+      return [] as CustomerDocument[];
+    }
+  }
+
+  async function refreshAudit() {
+    try {
+      const events = await listRecentAuditEvents(25);
+      setAuditEvents(events);
+      setAuditError(null);
+    } catch (err: any) {
+      setAuditEvents([]);
+      setAuditError(err?.message || 'Could not load activity log.');
+    }
+  }
+
   useEffect(() => {
-    let active = true;
-    listAllDocuments()
-      .then((docs) => {
-        if (active) setDocuments(docs);
-      })
-      .catch(() => {
-        if (active) setDocuments([]);
-      });
-    return () => {
-      active = false;
-    };
+    void refreshDocuments();
+    void refreshAudit();
   }, []);
+
+  const invoiceCount = documents.filter((d) => d.type === 'invoice').length;
+  const estimateCount = documents.filter((d) => d.type === 'estimate').length;
+  const salesPreview = buildDataSnapshot({
+    orders,
+    trucks,
+    customers,
+    inventory,
+    documents
+  }).sales;
 
   if (!permissions.canViewReports) {
     return (
@@ -233,12 +332,13 @@ export function ReportsWorkspace({
     setCopied(false);
 
     try {
+      const freshDocuments = await refreshDocuments();
       const data = buildDataSnapshot({
         orders,
         trucks,
         customers,
         inventory,
-        documents
+        documents: freshDocuments
       });
 
       const response = await fetch('/api/run-report', {
@@ -300,9 +400,33 @@ export function ReportsWorkspace({
       </div>
 
       <div className="p-5 space-y-4 flex-1 flex flex-col">
-        <div className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed">
-          <span className="font-bold">Sales tip:</span> Save invoices from an order to include them in
-          sales reports. Estimates are tracked separately and are not counted as sales.
+        <div className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed space-y-1">
+          <p>
+            <span className="font-bold">Sales data loaded:</span> {invoiceCount} invoice
+            {invoiceCount === 1 ? '' : 's'} · {estimateCount} estimate
+            {estimateCount === 1 ? '' : 's'} ·{' '}
+            <span className="font-bold">
+              {salesPreview.thisMonth.label}: ${salesPreview.thisMonth.salesTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {' '}({salesPreview.thisMonth.invoiceCount} invoice
+            {salesPreview.thisMonth.invoiceCount === 1 ? '' : 's'}) · All-time invoices: $
+            {salesPreview.invoiceSalesTotal.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })}
+          </p>
+          <p>
+            <span className="font-bold">Sales tip:</span> Only invoices saved under a customer count
+            (Create Invoice → Save to Customer). Estimates are not sales. Month uses the invoice date.
+          </p>
+          {docsError && (
+            <p className="text-red-700 font-semibold">Could not load documents: {docsError}</p>
+          )}
+          {!docsError && invoiceCount === 0 && (
+            <p className="text-amber-800 font-semibold">
+              No saved invoices yet — “sales this month” will be $0 until you save at least one invoice.
+            </p>
+          )}
         </div>
 
         <div>
@@ -428,6 +552,47 @@ export function ReportsWorkspace({
             </div>
           </div>
         )}
+
+        <div className="border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
+            <div className="flex items-center gap-2 min-w-0">
+              <History className="h-4 w-4 text-emerald-700 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Recent activity</p>
+                <p className="text-xs font-semibold text-gray-800 truncate">Key saves and conversions</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshAudit()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 bg-slate-50/40">
+            {auditError ? (
+              <p className="px-4 py-3 text-xs text-amber-800">
+                {auditError} Publish the latest firestore.rules (auditLog) if this persists.
+              </p>
+            ) : auditEvents.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">
+                No activity yet. Saving invoices, estimates, uploads, or backups will show up here.
+              </p>
+            ) : (
+              auditEvents.map((event) => (
+                <div key={event.id || `${event.action}-${event.createdAt}`} className="px-4 py-2.5">
+                  <p className="text-xs font-semibold text-gray-900">{event.summary}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5 font-mono">
+                    {event.action} · {new Date(event.createdAt).toLocaleString()}
+                    {event.actorEmail ? ` · ${event.actorEmail}` : ''}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

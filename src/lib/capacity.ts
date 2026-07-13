@@ -57,6 +57,24 @@ export function calculateWeightPercentage(weightLbs: number, truckType?: string)
   return Math.round((weightLbs / capacity) * 100);
 }
 
+export function isTruckOverweight(weightLbs: number, truckType?: string): boolean {
+  const capacity = getTruckWeightCapacity(truckType);
+  return capacity > 0 && weightLbs > capacity;
+}
+
+/** ok < 90%, warn 90–100%, critical > 100% */
+export function getCapacitySeverity(
+  weightLbs: number,
+  truckType?: string
+): 'none' | 'ok' | 'warn' | 'critical' {
+  const capacity = getTruckWeightCapacity(truckType);
+  if (!capacity) return 'none';
+  const pct = calculateWeightPercentage(weightLbs, truckType);
+  if (pct > 100) return 'critical';
+  if (pct >= 90) return 'warn';
+  return 'ok';
+}
+
 export function formatWeightPercentage(weightLbs: number, truckType?: string): string {
   const pct = calculateWeightPercentage(weightLbs, truckType);
   if (pct <= 0) return '';

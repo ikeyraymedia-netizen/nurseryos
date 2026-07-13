@@ -34,6 +34,7 @@ import {
   defaultDocumentNumber
 } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
+import { logAuditEvent } from '../lib/audit';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -71,7 +72,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Customer billing details (inline editable)
   const [billToName, setBillToName] = useState(order.customerName);
-  const [billToAddress, setBillToAddress] = useState('Forest Hill Nursery Distributor\nPickup Facility');
+  const [billToAddress, setBillToAddress] = useState('');
 
   // Custom invoice properties (saved in invoiceDetails)
   const [invoiceNumber, setInvoiceNumber] = useState(`INV-${order.orderNumber}`);
@@ -81,7 +82,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [taxRate, setTaxRate] = useState<number>(4.45); // Default Louisiana local tax or typical nursery tax
   const [freightCharge, setFreightCharge] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
-  const [invoiceNotes, setInvoiceNotes] = useState('Thank you for choosing Bayou State Plant Co. for your foliage and landscape liner needs. Balance due is payable in full. All shipments are subject to safe transportation and loading conditions.');
+  const [invoiceNotes, setInvoiceNotes] = useState('Thank you for your business. Balance due is payable in full per the terms above.');
 
   // Store editable item prices
   const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
@@ -92,7 +93,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
-  const [emailSubject, setEmailSubject] = useState(`Invoice INV-${order.orderNumber} from Bayou State Plant Co.`);
+  const [emailSubject, setEmailSubject] = useState(`Invoice INV-${order.orderNumber}`);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
@@ -539,7 +540,10 @@ Thank you for choosing ${nurseryName}!
         customerEmail: customerEmail || order.customerEmail
       };
 
-      await updateCustomerOrder(updatedOrder);
+      const isDocumentOnlyOrder = order.id.startsWith('preview-');
+      if (!isDocumentOnlyOrder) {
+        await updateCustomerOrder(updatedOrder);
+      }
 
       const lineItems = updatedItems.map((item) => ({
         id: item.id,
@@ -551,11 +555,14 @@ Thank you for choosing ${nurseryName}!
       }));
 
       const customerId = customer?.id || order.customerId;
-      if (customerId) {
-        const docPayload = {
+      if (!customerId) {
+        throw new Error('No customer linked. Assign a customer on the order before saving.');
+      }
+
+      const docPayload = {
           customerId,
           customerName: billToName || customer?.name || order.customerName,
-          orderId: order.id,
+          orderId: isDocumentOnlyOrder ? undefined : order.id,
           orderNumber: order.orderNumber,
           type: documentType,
           documentNumber: invoiceNumber,
@@ -586,12 +593,42 @@ Thank you for choosing ${nurseryName}!
           const newId = await addCustomerDocument(docPayload);
           setSavedDocumentId(newId);
         }
+
+      // Keep order linked to the same customer used for the saved document
+      if (!isDocumentOnlyOrder && (!order.customerId || order.customerId !== customerId)) {
+        await updateCustomerOrder({
+          ...updatedOrder,
+          customerId,
+          customerName: billToName || customer?.name || order.customerName
+        });
       }
 
+      await logAuditEvent({
+        action: savedDocumentId ? `${documentType}.updated` : `${documentType}.saved`,
+        summary: `Saved ${documentType} ${invoiceNumber} for ${billToName || customer?.name || order.customerName}`,
+        meta: {
+          documentType,
+          documentNumber: invoiceNumber,
+          customerId,
+          orderId: isDocumentOnlyOrder ? null : order.id,
+          grandTotal
+        }
+      });
+
       setSaveSuccess(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save document:', err);
-      alert('Could not save. Make sure a customer is linked, then try again.');
+      const code = err?.code || '';
+      const message = err?.message || String(err);
+      if (code === 'permission-denied' || /insufficient permissions/i.test(message)) {
+        alert(
+          'Could not save invoice to customer: Firestore permission denied.\n\nAsk your admin to deploy firestore.rules (documents collection), then try again.'
+        );
+      } else if (!customer?.id && !order.customerId) {
+        alert('Could not save. Link a customer on the order, then try again.');
+      } else {
+        alert(`Could not save invoice to customer: ${message}`);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -885,7 +922,7 @@ Thank you for choosing ${nurseryName}!
               {saveSuccess ? (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>Pricing Saved!</span>
+                  <span>Saved to Customer!</span>
                 </>
               ) : (
                 <>
@@ -1171,7 +1208,7 @@ Thank you for choosing ${nurseryName}!
                   </h3>
                   <div className="text-xs text-gray-800 space-y-1 font-mono">
                     <p><span className="font-bold text-gray-400">Shipper:</span> {nurseryName}</p>
-                    <p><span className="font-bold text-gray-400">Origin:</span> Forest Hill Facility, LA</p>
+                    <p><span className="font-bold text-gray-400">Origin:</span> Nursery loading facility</p>
                     <p>
                       <span className="font-bold text-gray-400">Cargo Basis:</span>{' '}
                       <span className="font-bold text-emerald-900 uppercase">

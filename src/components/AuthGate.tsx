@@ -17,6 +17,7 @@ import { setActiveTenant } from '../lib/db';
 import { setInventoryTenant } from '../lib/inventory';
 import { setCustomersTenant } from '../lib/customers';
 import { setDocumentsTenant } from '../lib/documents';
+import { setAuditTenant } from '../lib/audit';
 import { LogIn, UserPlus } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 
@@ -64,6 +65,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setInventoryTenant(null);
         setCustomersTenant(null);
         setDocumentsTenant(null);
+        setAuditTenant(null);
         setAuthReady(true);
         return;
       }
@@ -79,6 +81,7 @@ export function AuthGate({ children }: AuthGateProps) {
           setInventoryTenant(null);
           setCustomersTenant(null);
           setDocumentsTenant(null);
+          setAuditTenant(null);
           setAuthReady(true);
           return;
         }
@@ -94,6 +97,7 @@ export function AuthGate({ children }: AuthGateProps) {
           setInventoryTenant(null);
           setCustomersTenant(null);
           setDocumentsTenant(null);
+          setAuditTenant(null);
           setAuthReady(true);
           return;
         }
@@ -116,6 +120,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setInventoryTenant(resolvedTenant.id);
         setCustomersTenant(resolvedTenant.id);
         setDocumentsTenant(resolvedTenant.id);
+        setAuditTenant(resolvedTenant.id);
         setAuthReady(true);
       } catch (err: any) {
         console.error(err);
@@ -124,6 +129,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setInventoryTenant(null);
         setCustomersTenant(null);
         setDocumentsTenant(null);
+        setAuditTenant(null);
         setAuthReady(true);
       }
     });
@@ -143,6 +149,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setInventoryTenant(null);
         setCustomersTenant(null);
         setDocumentsTenant(null);
+        setAuditTenant(null);
         await logOut();
       }
     };

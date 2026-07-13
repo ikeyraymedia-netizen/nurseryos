@@ -566,8 +566,11 @@ Sales rules (important):
 - Saved invoices (data.sales, data.invoices, summary.invoiceSalesTotal) are the source of truth for SALES.
 - Estimates are quotes only — do NOT count them as sales unless the user explicitly asks about estimates.
 - If there are zero invoices, say that no invoices have been saved yet and remind them: open an order → Create Invoice → Save to Customer.
-- Prefer the pre-aggregated data.sales.byCustomer and data.sales.topPlantsByRevenue when answering sales questions.
+- For "this month" / "sales this month" / current-month questions, use data.sales.thisMonth.salesTotal and data.sales.thisMonth.invoiceCount EXACTLY. Do not recompute from scratch.
+- For "last month", use data.sales.lastMonth. For other months, use data.sales.byMonth.
+- Prefer the pre-aggregated data.sales.byCustomer, data.sales.byMonth, and data.sales.topPlantsByRevenue when answering sales questions.
 - Use invoice grandTotal for sales dollars unless asked for subtotal-only.
+- If thisMonth.salesTotal is 0 but invoiceSalesTotal > 0, say sales this month are $0 and also mention all-time invoice sales + which months have sales in data.sales.byMonth.
 
 Write a clear, practical report for nursery owners and managers:
 - Start with a short title line

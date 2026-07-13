@@ -9,6 +9,7 @@ interface BillOfLadingModalProps {
   truck: Truck;
   orders: CustomerOrder[];
   containerWeights: ContainerWeight[];
+  nurseryName?: string;
 }
 
 export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
@@ -17,6 +18,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   truck,
   orders,
   containerWeights,
+  nurseryName = 'NurseryOS',
 }) => {
   // Sort orders by the designated loading sequence on the truck
   const sortedOrders = orders
@@ -33,7 +35,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [selectedBOLType, setSelectedBOLType] = useState<'consolidated' | string>('consolidated');
 
   // State for customizable document fields
-  const [shipperAddress, setShipperAddress] = useState('BAYOU STATE PLANT CO\n11428 US 165\nForest Hill, LA');
+  const [shipperAddress, setShipperAddress] = useState(`${nurseryName}\nNursery Loading Facility`);
   const [shipDate, setShipDate] = useState(truck.loadingDate || new Date().toISOString().split('T')[0]);
   const [driverName, setDriverName] = useState('');
   const [truckNumber, setTruckNumber] = useState(truck.name.match(/\d+/) ? `Truck #${truck.name.match(/\d+/)![0]}` : 'Unit 401');
@@ -198,7 +200,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       y = infoTop + 74;
 
       drawSectionTitle('Shipper');
-      writeWrapped(`Bayou State Plant Co.\n${shipperAddress}`, margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
+      writeWrapped(`${nurseryName}\n${shipperAddress}`, margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
       y += 2;
 
       drawSectionTitle(selectedBOLType === 'consolidated' ? 'Stops / Consignees' : 'Consignee');
@@ -548,7 +550,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
                 <div>
                   <h1 className="text-xl font-black tracking-tight text-emerald-950 uppercase">
-                    Bayou State Plant Co.
+                    {nurseryName}
                   </h1>
                   <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-wide">
                     Wholesale Foliage & Landscape Liners
@@ -589,11 +591,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   </h3>
                   <div className="text-[11px] text-gray-800 font-medium leading-relaxed">
                     <p className="font-black text-xs text-gray-950">BAYOU STATE PLANT CO</p>
-                    <p className="mt-1 font-semibold">Forest Hill Loading Facilities & Greenhouse Complex</p>
+                    <p className="mt-1 font-semibold">Nursery loading facilities</p>
                     <p className="mt-2 text-gray-400 font-mono text-[10px] uppercase font-bold tracking-wider">Mailing & Pickup Address:</p>
                     <p className="font-mono whitespace-pre-wrap mt-0.5 text-gray-700 leading-normal">{shipperAddress}</p>
                     <p className="mt-2">Phone: (318) 748-0190</p>
-                    <p>Email: logistics@bayoustateplantco.com</p>
+                    <p>Contact your nursery office for logistics details</p>
                   </div>
                 </div>
                 <div>
@@ -601,7 +603,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     Carrier & Equipment Details
                   </h3>
                   <div className="text-[11px] text-gray-800 font-mono space-y-1">
-                    <p><span className="font-bold text-gray-500">Carrier Name:</span> <span className="font-bold text-gray-900">{truck.carrier || 'Bayou State Plant Co. (Private Fleet)'}</span></p>
+                    <p><span className="font-bold text-gray-500">Carrier Name:</span> <span className="font-bold text-gray-900">{truck.carrier || `${nurseryName} (Private Fleet)`}</span></p>
                     <p><span className="font-bold text-gray-500">Driver Name:</span> <span className="font-bold text-gray-900">{driverName || '__________________________'}</span></p>
                     <p><span className="font-bold text-gray-500">Truck / Tractor #:</span> <span className="font-bold text-gray-900">{truckNumber || 'N/A'}</span></p>
                     <p><span className="font-bold text-gray-500">Trailer Number:</span> <span className="font-bold text-gray-900">{trailerNumber || '__________________________'}</span></p>
@@ -765,7 +767,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 <div className="space-y-6">
                   <div>
                     <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">
-                      Shipper Representative (Bayou State Plant Co.)
+                      Shipper Representative ({nurseryName})
                     </p>
                     <div className="flex items-end pt-4 border-b border-gray-300">
                       <span className="text-[10px] text-gray-400 mr-2 shrink-0">Signature:</span>
@@ -837,7 +839,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
               {/* Page Number / Footer */}
               <div className="pt-10 text-center text-[9px] text-gray-400 font-mono">
-                Bayou State Plant Co. • {selectedBOLType === 'consolidated' ? 'Consolidated Carrier Document' : `Individual Shipment: Order #${singleOrder?.orderNumber}`} • Page 1 of 1
+                {nurseryName} • {selectedBOLType === 'consolidated' ? 'Consolidated Carrier Document' : `Individual Shipment: Order #${singleOrder?.orderNumber}`} • Page 1 of 1
               </div>
 
             </div>

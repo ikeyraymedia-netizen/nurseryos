@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, Calendar, Weight, Trash2, CheckCircle2, CircleDot, PlayCircle, Plus, Truck as TruckIcon } from 'lucide-react';
 import { CustomerOrder, Truck } from '../types';
 import { deleteTruck } from '../lib/db';
-import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
+import { getTruckWeightCapacity, calculateWeightPercentage, getCapacitySeverity } from '../lib/capacity';
 
 interface TrucksListProps {
   trucks: Truck[];
@@ -218,6 +218,8 @@ export const TrucksList: React.FC<TrucksListProps> = ({
           filteredTrucks.map((truck) => {
             const isSelected = truck.id === selectedTruckId;
             const { orderCount, totalQty, loadedQty, totalWeight, percentage, capacity, overallWeightPercentage, status } = getTruckStats(truck);
+            const weightSeverity = getCapacitySeverity(totalWeight, truck.truckType);
+            const isOver = weightSeverity === 'critical';
 
             return (
               <div
@@ -225,8 +227,12 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                 onClick={() => onSelectTruck(truck.id)}
                 className={`group relative border-2 rounded-xl p-4 cursor-pointer transition-all duration-150 flex flex-col justify-between ${
                   isSelected
-                    ? 'border-emerald-600 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/20'
-                    : 'border-slate-200/90 bg-white hover:border-emerald-600 hover:bg-emerald-50/10 hover:shadow-md shadow-sm'
+                    ? isOver
+                      ? 'border-red-600 bg-red-50/50 shadow-sm ring-1 ring-red-500/20'
+                      : 'border-emerald-600 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/20'
+                    : isOver
+                      ? 'border-red-300 bg-red-50/30 hover:border-red-500 hover:shadow-md shadow-sm'
+                      : 'border-slate-200/90 bg-white hover:border-emerald-600 hover:bg-emerald-50/10 hover:shadow-md shadow-sm'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -296,11 +302,19 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                     {orderCount} {orderCount === 1 ? 'order' : 'orders'}
                   </span>
                   <span className="flex items-center shrink-0" title={capacity > 0 ? `Capacity: ${capacity.toLocaleString()} lbs (${overallWeightPercentage}% full)` : undefined}>
-                    <Weight className="h-3.5 w-3.5 mr-0.5 text-gray-400" />
+                    <Weight className={`h-3.5 w-3.5 mr-0.5 ${isOver ? 'text-red-600' : 'text-gray-400'}`} />
                     {totalWeight.toLocaleString()} lbs
                     {capacity > 0 && (
-                      <span className="ml-1 text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-sans shrink-0">
-                        {overallWeightPercentage}% capacity
+                      <span
+                        className={`ml-1 text-[10px] font-bold px-1.5 py-0.2 rounded font-sans shrink-0 border ${
+                          isOver
+                            ? 'text-red-900 bg-red-100 border-red-300'
+                            : weightSeverity === 'warn'
+                              ? 'text-amber-900 bg-amber-50 border-amber-300'
+                              : 'text-amber-800 bg-amber-50 border-amber-200'
+                        }`}
+                      >
+                        {isOver ? `OVERWEIGHT ${overallWeightPercentage}%` : `${overallWeightPercentage}% capacity`}
                       </span>
                     )}
                   </span>
@@ -319,6 +333,12 @@ export const TrucksList: React.FC<TrucksListProps> = ({
 
                 {/* Progress Bar */}
                 <div className="mt-3">
+                  {isOver && (
+                    <p className="text-[11px] font-bold text-red-800 bg-red-100 border border-red-200 rounded-lg px-2 py-1.5 mb-2 leading-snug">
+                      Overweight — {totalWeight.toLocaleString()} lbs on a {capacity.toLocaleString()} lb{' '}
+                      {truck.truckType || 'trailer'}. Split orders or use a larger truck before loading.
+                    </p>
+                  )}
                   <div className="flex justify-between items-center text-[10px] mb-1">
                     <span className="font-semibold text-gray-600">
                       Loaded: <span className="font-bold text-gray-900">{loadedQty}</span>/{totalQty} pots

@@ -33,6 +33,14 @@ function customerDoc(tenantId: string, id: string) {
   return doc(db, 'tenants', tenantId, 'customers', id);
 }
 
+function ordersCol(tenantId: string) {
+  return collection(db, 'tenants', tenantId, 'orders');
+}
+
+function documentsCol(tenantId: string) {
+  return collection(db, 'tenants', tenantId, 'documents');
+}
+
 function sanitizeForFirestore<T>(data: T): T {
   if (Array.isArray(data)) {
     return data.map((item) => sanitizeForFirestore(item)) as T;
@@ -46,6 +54,30 @@ function sanitizeForFirestore<T>(data: T): T {
     return result as T;
   }
   return data;
+}
+
+function normalizeCustomerName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function customerCompletenessScore(customer: Customer): number {
+  let score = 0;
+  if (customer.contactEmail) score += 3;
+  if (customer.phone) score += 2;
+  if (customer.billingAddress) score += 2;
+  if (customer.shippingAddress || customer.receiverAddress) score += 2;
+  if (customer.pointOfContact) score += 1;
+  if (customer.paymentTerms) score += 1;
+  if (customer.notes) score += 1;
+  return score;
+}
+
+function pickKeeper(group: Customer[]): Customer {
+  return [...group].sort((a, b) => {
+    const scoreDiff = customerCompletenessScore(b) - customerCompletenessScore(a);
+    if (scoreDiff !== 0) return scoreDiff;
+    return (a.createdAt || '').localeCompare(b.createdAt || '');
+  })[0];
 }
 
 export function subscribeToCustomers(callback: (customers: Customer[]) => void) {
@@ -120,6 +152,110 @@ export async function deleteAllCustomers(): Promise<number> {
 
   if (ops > 0) await batch.commit();
   return deleted;
+}
+
+/** Count how many customer names appear more than once. */
+export function countDuplicateCustomerNames(customers: Customer[]): number {
+  const counts = new Map<string, number>();
+  for (const customer of customers) {
+    const key = normalizeCustomerName(customer.name || '');
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let extras = 0;
+  for (const count of counts.values()) {
+    if (count > 1) extras += count - 1;
+  }
+  return extras;
+}
+
+/**
+ * Keep one customer per normalized name (preferring the most complete record),
+ * delete extras, and re-point orders/documents that used a removed id.
+ */
+export async function deduplicateCustomersByName(): Promise<{
+  duplicateGroups: number;
+  removed: number;
+  remappedOrders: number;
+  remappedDocuments: number;
+}> {
+  const tenantId = requireTenantId();
+  const snapshot = await getDocs(customersCol(tenantId));
+  const customers: Customer[] = snapshot.docs.map((snap) => ({
+    id: snap.id,
+    ...(snap.data() as Omit<Customer, 'id'>)
+  }));
+
+  const groups = new Map<string, Customer[]>();
+  for (const customer of customers) {
+    const key = normalizeCustomerName(customer.name || '');
+    if (!key) continue;
+    const list = groups.get(key) || [];
+    list.push(customer);
+    groups.set(key, list);
+  }
+
+  const idRemap = new Map<string, string>();
+  const toDelete: string[] = [];
+  let duplicateGroups = 0;
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    duplicateGroups += 1;
+    const keeper = pickKeeper(group);
+    for (const customer of group) {
+      if (customer.id === keeper.id) continue;
+      idRemap.set(customer.id, keeper.id);
+      toDelete.push(customer.id);
+    }
+  }
+
+  if (toDelete.length === 0) {
+    return { duplicateGroups: 0, removed: 0, remappedOrders: 0, remappedDocuments: 0 };
+  }
+
+  let remappedOrders = 0;
+  const ordersSnap = await getDocs(ordersCol(tenantId));
+  for (const orderSnap of ordersSnap.docs) {
+    const data = orderSnap.data() as { customerId?: string; customerName?: string };
+    const nextId = data.customerId ? idRemap.get(data.customerId) : undefined;
+    if (!nextId) continue;
+    await updateDoc(orderSnap.ref, {
+      customerId: nextId,
+      updatedAt: new Date().toISOString()
+    });
+    remappedOrders += 1;
+  }
+
+  let remappedDocuments = 0;
+  const docsSnap = await getDocs(documentsCol(tenantId));
+  for (const docSnap of docsSnap.docs) {
+    const data = docSnap.data() as { customerId?: string };
+    const nextId = data.customerId ? idRemap.get(data.customerId) : undefined;
+    if (!nextId) continue;
+    await updateDoc(docSnap.ref, {
+      customerId: nextId,
+      updatedAt: new Date().toISOString()
+    });
+    remappedDocuments += 1;
+  }
+
+  let removed = 0;
+  let batch = writeBatch(db);
+  let ops = 0;
+  for (const id of toDelete) {
+    batch.delete(customerDoc(tenantId, id));
+    ops += 1;
+    removed += 1;
+    if (ops >= 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
+  }
+  if (ops > 0) await batch.commit();
+
+  return { duplicateGroups, removed, remappedOrders, remappedDocuments };
 }
 
 export function parseCsvCustomers(text: string): Array<Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>> {
@@ -225,9 +361,20 @@ function parseCsvRows(text: string): string[][] {
 export async function bulkImportCustomers(
   customers: Array<Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>>
 ): Promise<number> {
+  const tenantId = requireTenantId();
+  const existingSnap = await getDocs(customersCol(tenantId));
+  const existingNames = new Set(
+    existingSnap.docs.map((snap) =>
+      normalizeCustomerName(String((snap.data() as { name?: string }).name || ''))
+    )
+  );
+
   let count = 0;
   for (const customer of customers) {
+    const key = normalizeCustomerName(customer.name || '');
+    if (!key || existingNames.has(key)) continue;
     await addCustomer(customer);
+    existingNames.add(key);
     count += 1;
   }
   return count;

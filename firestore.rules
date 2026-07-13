@@ -125,6 +125,12 @@ service cloud.firestore {
         allow read: if canReadOps(tenantId);
         allow create, update, delete: if canWriteOps(tenantId);
       }
+
+      match /auditLog/{eventId} {
+        allow read: if isAdminOrOwner(tenantId);
+        allow create: if isMember(tenantId);
+        allow update, delete: if false;
+      }
     }
   }
 }

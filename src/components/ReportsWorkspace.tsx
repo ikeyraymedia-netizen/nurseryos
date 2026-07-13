@@ -22,14 +22,16 @@ interface ReportsWorkspaceProps {
 }
 
 const SUGGESTED_REPORTS = [
+  'Total sales from all saved invoices (grand totals).',
+  'Sales by customer from saved invoices, ranked highest to lowest.',
+  'List every saved invoice with date, customer, and amount.',
+  'Compare estimates vs invoices: counts and dollar totals.',
+  'Top-selling plants by dollars from saved invoices.',
   'Which orders are pending or still loading?',
   'Show inventory items that are low on stock (under 10 on hand).',
-  'Summarize truck loading progress and which trucks are overweight risk.',
+  'Summarize truck loading progress and overweight risk.',
   'List plants pulled but not yet loaded on trucks.',
-  'Sales summary from estimates and invoices by customer.',
-  'Top customers by order count and total plant quantity.',
-  'Inventory by container size with total pots available.',
-  'What needs attention this week for loading and inventory?'
+  'What needs attention this week for loading, inventory, and sales?'
 ];
 
 function buildDataSnapshot(params: {
@@ -41,6 +43,43 @@ function buildDataSnapshot(params: {
 }) {
   const { orders, trucks, customers, inventory, documents } = params;
 
+  const invoices = documents.filter((d) => d.type === 'invoice');
+  const estimates = documents.filter((d) => d.type === 'estimate');
+  const invoiceSalesTotal = invoices.reduce((s, d) => s + (d.grandTotal || 0), 0);
+  const estimateTotal = estimates.reduce((s, d) => s + (d.grandTotal || 0), 0);
+
+  const salesByCustomer = new Map<string, { customerName: string; invoiceCount: number; salesTotal: number }>();
+  for (const inv of invoices) {
+    const key = inv.customerId || inv.customerName;
+    const row = salesByCustomer.get(key) || {
+      customerName: inv.customerName,
+      invoiceCount: 0,
+      salesTotal: 0
+    };
+    row.invoiceCount += 1;
+    row.salesTotal += inv.grandTotal || 0;
+    salesByCustomer.set(key, row);
+  }
+
+  const plantSales = new Map<
+    string,
+    { plantName: string; containerSize: string; qty: number; revenue: number }
+  >();
+  for (const inv of invoices) {
+    for (const item of inv.items || []) {
+      const key = `${item.plantName}||${item.containerSize}`;
+      const row = plantSales.get(key) || {
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        qty: 0,
+        revenue: 0
+      };
+      row.qty += item.quantity || 0;
+      row.revenue += (item.quantity || 0) * (item.unitPrice || 0);
+      plantSales.set(key, row);
+    }
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     summary: {
@@ -48,7 +87,25 @@ function buildDataSnapshot(params: {
       truckCount: trucks.length,
       customerCount: customers.length,
       inventoryCount: inventory.length,
-      documentCount: documents.length
+      documentCount: documents.length,
+      invoiceCount: invoices.length,
+      estimateCount: estimates.length,
+      invoiceSalesTotal,
+      estimateTotal
+    },
+    /** Pre-aggregated sales from saved invoices — prefer this for sales questions. */
+    sales: {
+      source: 'Saved invoices (CustomerDocument type=invoice). Estimates are not counted as sales.',
+      invoiceSalesTotal,
+      estimateTotal,
+      invoiceCount: invoices.length,
+      estimateCount: estimates.length,
+      byCustomer: [...salesByCustomer.values()]
+        .sort((a, b) => b.salesTotal - a.salesTotal)
+        .slice(0, 100),
+      topPlantsByRevenue: [...plantSales.values()]
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 50)
     },
     orders: orders.slice(0, 200).map((o) => ({
       id: o.id,
@@ -95,14 +152,32 @@ function buildDataSnapshot(params: {
       location: p.location || null,
       weeksUntilReady: p.weeksUntilReady ?? null
     })),
-    documents: documents.slice(0, 150).map((d) => ({
-      type: d.type,
+    invoices: invoices.slice(0, 200).map((d) => ({
+      documentNumber: d.documentNumber,
+      customerName: d.customerName,
+      customerId: d.customerId,
+      documentDate: d.documentDate,
+      dueDate: d.dueDate || null,
+      orderNumber: d.orderNumber || null,
+      subtotal: d.subtotal,
+      salesTax: d.salesTax,
+      freightCharge: d.freightCharge ?? 0,
+      discount: d.discount ?? 0,
+      grandTotal: d.grandTotal,
+      lineItems: (d.items || []).slice(0, 40).map((i) => ({
+        plantName: i.plantName,
+        containerSize: i.containerSize,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        lineTotal: (i.quantity || 0) * (i.unitPrice || 0)
+      }))
+    })),
+    estimates: estimates.slice(0, 100).map((d) => ({
       documentNumber: d.documentNumber,
       customerName: d.customerName,
       documentDate: d.documentDate,
-      grandTotal: d.grandTotal,
-      subtotal: d.subtotal,
-      orderNumber: d.orderNumber || null
+      orderNumber: d.orderNumber || null,
+      grandTotal: d.grandTotal
     }))
   };
 }
@@ -218,13 +293,18 @@ export function ReportsWorkspace({
         <div className="min-w-0">
           <h2 className="text-lg font-black tracking-tight">Reports</h2>
           <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-            Ask AI for a report using your live orders, trucks, inventory, customers, and
-            estimates/invoices.
+            Ask AI about loading, inventory, customers, and sales. Sales numbers come from invoices
+            you saved under a customer (Create Invoice → Save to Customer).
           </p>
         </div>
       </div>
 
       <div className="p-5 space-y-4 flex-1 flex flex-col">
+        <div className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed">
+          <span className="font-bold">Sales tip:</span> Save invoices from an order to include them in
+          sales reports. Estimates are tracked separately and are not counted as sales.
+        </div>
+
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-emerald-700" />
@@ -257,7 +337,7 @@ export function ReportsWorkspace({
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               rows={3}
-              placeholder='e.g. "Which #3 plants are below 25 on hand?" or "Show incomplete trucks for this week"'
+              placeholder='e.g. "Total sales this month" or "Sales by customer from invoices"'
               className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-white resize-y min-h-[84px]"
               disabled={loading}
             />

@@ -1,10 +1,19 @@
 export type MemberRole = 'owner' | 'admin' | 'loader' | 'field';
 
+/** Paid add-on modules. Core (orders, trucks, team, weights, customers) is always included. */
+export type TenantModuleId = 'inventory' | 'invoicing' | 'reports' | 'tasks' | 'bol';
+
 export interface Tenant {
   id: string;
   name: string;
   createdAt: string;
   ownerId: string;
+  /**
+   * Enabled paid modules for this nursery.
+   * Omit/undefined = legacy (all modules on).
+   * `[]` = Core only.
+   */
+  modules?: TenantModuleId[];
 }
 
 export interface TenantMember {
@@ -21,6 +30,8 @@ export interface UserProfile {
   displayName?: string;
   activeTenantId: string | null;
   createdAt: string;
+  /** Platform operator — can manage modules for any nursery. Set in Firestore. */
+  isPlatformAdmin?: boolean;
 }
 
 export interface ContainerWeight {

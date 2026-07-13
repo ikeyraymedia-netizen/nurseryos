@@ -25,6 +25,9 @@ import {
 } from './lib/db';
 import { subscribeToCustomers } from './lib/customers';
 import { getPermissionsForRole } from './lib/permissions';
+import { applyModuleGates } from './lib/modules';
+import { listAllDocuments } from './lib/documents';
+import { buildOrdersNeedingInvoiceSet } from './lib/invoicing';
 import {
   buildWhatsNewDigest,
   getLastSeenAt,
@@ -32,6 +35,7 @@ import {
   setLastSeenAt,
   WhatsNewItem
 } from './lib/whatsNew';
+import { PlatformDashboard } from './components/PlatformDashboard';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -109,19 +113,33 @@ function useWhatsNewDigest(params: {
 }
 
 function NurseryApp({
-  tenant,
+  tenant: tenantProp,
   member,
   userEmail,
   userId,
-  onSignOut
+  isPlatformAdmin = false,
+  onSignOut,
+  onRefreshTenant,
+  onBackToSeller
 }: {
   tenant: Tenant;
   member: TenantMember;
   userEmail: string;
   userId: string;
+  isPlatformAdmin?: boolean;
   onSignOut: () => Promise<void>;
+  onRefreshTenant?: () => Promise<void>;
+  onBackToSeller?: () => void;
 }) {
-  const permissions = useMemo(() => getPermissionsForRole(member.role), [member.role]);
+  const [tenant, setTenant] = useState(tenantProp);
+  useEffect(() => {
+    setTenant(tenantProp);
+  }, [tenantProp]);
+
+  const permissions = useMemo(
+    () => applyModuleGates(getPermissionsForRole(member.role), tenant),
+    [member.role, tenant]
+  );
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
@@ -141,6 +159,9 @@ function NurseryApp({
     existingDocument?: CustomerDocument | null;
   } | null>(null);
   const [focusCustomerId, setFocusCustomerId] = useState<string | null>(null);
+  const [orderIdsNeedingInvoice, setOrderIdsNeedingInvoice] = useState<Set<string>>(
+    () => new Set()
+  );
   const mainPanelRef = useRef<HTMLDivElement>(null);
 
   const whatsNewReady =
@@ -155,6 +176,24 @@ function NurseryApp({
     canViewTrucks: permissions.canViewTrucks,
     canViewTasks: permissions.canViewTasks
   });
+
+  useEffect(() => {
+    if (!permissions.canViewInvoices || !permissions.canViewOrders) {
+      setOrderIdsNeedingInvoice(new Set());
+      return;
+    }
+    let cancelled = false;
+    listAllDocuments()
+      .then((docs) => {
+        if (!cancelled) setOrderIdsNeedingInvoice(buildOrdersNeedingInvoiceSet(orders, docs));
+      })
+      .catch(() => {
+        if (!cancelled) setOrderIdsNeedingInvoice(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orders, permissions.canViewInvoices, permissions.canViewOrders, documentModal]);
 
   useEffect(() => {
     if (!permissions.canViewOrders && !permissions.canViewTrucks) {
@@ -337,6 +376,9 @@ function NurseryApp({
             userEmail={userEmail}
             role={member.role}
             onSignOut={onSignOut}
+            onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
+            onManagePackages={undefined}
+            onBackToSeller={onBackToSeller}
           />
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
             <div className="flex bg-slate-200/80 p-1.5 rounded-2xl gap-1 border border-slate-300/70 shadow-inner max-w-md">
@@ -373,7 +415,11 @@ function NurseryApp({
                 permissions={permissions}
               />
             ) : (
-              <InventoryWorkspace permissions={permissions} />
+              <InventoryWorkspace
+                permissions={permissions}
+                trucks={trucks}
+                orders={dynamicOrders}
+              />
             )}
           </main>
         </div>
@@ -382,6 +428,13 @@ function NurseryApp({
             items={whatsNewItems}
             onDismiss={dismissWhatsNew}
             onOpenTasks={() => setActiveTab('tasks')}
+          />
+        )}
+        {showTeamManager && (
+          <TeamManager
+            tenant={tenant}
+            currentUserId={userId}
+            onClose={() => setShowTeamManager(false)}
           />
         )}
       </InventoryMatchProvider>
@@ -402,6 +455,8 @@ function NurseryApp({
         onSignOut={onSignOut}
         onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
         onManageWeights={permissions.canEditWeights ? () => setShowWeightsEditor(true) : undefined}
+        onManagePackages={undefined}
+        onBackToSeller={onBackToSeller}
         onSelectOrder={(id) => {
           setSelectedOrderId(id);
           setSelectedTruckId(null);
@@ -522,6 +577,7 @@ function NurseryApp({
               orders={dynamicOrders}
               selectedOrderId={selectedOrderId}
               canDelete={permissions.canDeleteOrders}
+              orderIdsNeedingInvoice={orderIdsNeedingInvoice}
               onSelectOrder={(id) => {
                 setSelectedOrderId(id);
                 setSelectedTruckId(null);
@@ -568,7 +624,11 @@ function NurseryApp({
             </button>
           )}
           {activeTab === 'inventory' ? (
-            <InventoryWorkspace permissions={permissions} />
+            <InventoryWorkspace
+              permissions={permissions}
+              trucks={trucks}
+              orders={dynamicOrders}
+            />
           ) : activeTab === 'customers' ? (
             <CustomersWorkspace
               customers={customers}
@@ -754,15 +814,106 @@ function NurseryApp({
 export default function App() {
   return (
     <AuthGate>
-      {({ user, tenant, member, onSignOut }) => (
-        <NurseryApp
-          tenant={tenant}
-          member={member}
-          userEmail={user.email || 'unknown'}
-          userId={user.uid}
-          onSignOut={onSignOut}
-        />
-      )}
+      {(session) => <RootApp session={session} />}
     </AuthGate>
+  );
+}
+
+const SELLER_VIEW_KEY = 'nurseryos:sellerView';
+
+function RootApp({
+  session
+}: {
+  session: {
+    user: { uid: string; email: string | null };
+    profile: { isPlatformAdmin?: boolean; activeTenantId: string | null };
+    tenant: Tenant | null;
+    member: TenantMember | null;
+    onSignOut: () => Promise<void>;
+    onRefreshTenant: () => Promise<void>;
+  };
+}) {
+  const isPlatformAdmin = !!session.profile.isPlatformAdmin;
+  const [sellerView, setSellerView] = useState<'platform' | 'nursery'>(() => {
+    if (!isPlatformAdmin) return 'nursery';
+    try {
+      const stored = sessionStorage.getItem(SELLER_VIEW_KEY);
+      if (stored === 'nursery' || stored === 'platform') return stored;
+    } catch {
+      /* ignore */
+    }
+    return 'platform';
+  });
+
+  function goPlatform() {
+    setSellerView('platform');
+    try {
+      sessionStorage.setItem(SELLER_VIEW_KEY, 'platform');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function goNursery() {
+    setSellerView('nursery');
+    try {
+      sessionStorage.setItem(SELLER_VIEW_KEY, 'nursery');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (isPlatformAdmin && sellerView === 'platform') {
+    return (
+      <PlatformDashboard
+        userEmail={session.user.email || 'seller'}
+        homeNursery={session.tenant}
+        canOpenHomeNursery={!!session.tenant && !!session.member}
+        onOpenHomeNursery={goNursery}
+        onSignOut={session.onSignOut}
+      />
+    );
+  }
+
+  if (!session.tenant || !session.member) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
+        <BrandLogo variant="icon" size="lg" showText={false} />
+        <h1 className="mt-6 text-lg font-black">No nursery workspace linked</h1>
+        <p className="mt-2 text-sm text-slate-400 max-w-md leading-relaxed">
+          Your seller account can manage packages from the platform console. To open a nursery
+          workspace (like Bayou), this account also needs to be a member of that nursery.
+        </p>
+        {isPlatformAdmin && (
+          <button
+            type="button"
+            onClick={goPlatform}
+            className="mt-6 px-4 py-2 rounded-xl bg-emerald-600 text-xs font-black"
+          >
+            Back to Seller console
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => session.onSignOut()}
+          className="mt-3 text-xs font-bold text-slate-400 underline"
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <NurseryApp
+      tenant={session.tenant}
+      member={session.member}
+      userEmail={session.user.email || 'unknown'}
+      userId={session.user.uid}
+      isPlatformAdmin={isPlatformAdmin}
+      onSignOut={session.onSignOut}
+      onRefreshTenant={session.onRefreshTenant}
+      onBackToSeller={isPlatformAdmin ? goPlatform : undefined}
+    />
   );
 }

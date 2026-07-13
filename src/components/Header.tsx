@@ -13,6 +13,8 @@ interface HeaderProps {
   onSignOut?: () => Promise<void> | void;
   onManageTeam?: () => void;
   onManageWeights?: () => void;
+  onManagePackages?: () => void;
+  onBackToSeller?: () => void;
   onSelectOrder?: (orderId: string) => void;
 }
 
@@ -24,6 +26,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSignOut,
   onManageTeam,
   onManageWeights,
+  onManagePackages,
+  onBackToSeller,
   onSelectOrder
 }) => {
   // Calculate total pending vs total completed orders
@@ -98,6 +102,24 @@ export const Header: React.FC<HeaderProps> = ({
                 className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-emerald-800 bg-emerald-900/50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200 hover:bg-emerald-800"
               >
                 Team
+              </button>
+            )}
+            {onBackToSeller && (
+              <button
+                type="button"
+                onClick={onBackToSeller}
+                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-amber-900/40 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-200 hover:bg-amber-800/50"
+              >
+                Seller home
+              </button>
+            )}
+            {onManagePackages && (
+              <button
+                type="button"
+                onClick={onManagePackages}
+                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-amber-900/40 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-200 hover:bg-amber-800/50"
+              >
+                Packages
               </button>
             )}
             {onSignOut && (

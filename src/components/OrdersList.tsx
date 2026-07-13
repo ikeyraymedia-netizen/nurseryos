@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Calendar, Weight, Trash2, CheckCircle2, CircleDot, PlayCircle, MapPin } from 'lucide-react';
+import { Search, Calendar, Weight, Trash2, CheckCircle2, CircleDot, PlayCircle, MapPin, DollarSign } from 'lucide-react';
 import { CustomerOrder } from '../types';
 import { deleteCustomerOrder } from '../lib/db';
 
@@ -7,6 +7,7 @@ interface OrdersListProps {
   orders: CustomerOrder[];
   selectedOrderId: string | null;
   canDelete?: boolean;
+  orderIdsNeedingInvoice?: Set<string>;
   onSelectOrder: (orderId: string) => void;
 }
 
@@ -14,6 +15,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   orders,
   selectedOrderId,
   canDelete = true,
+  orderIdsNeedingInvoice,
   onSelectOrder
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -202,6 +204,12 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                 {/* Status & Date & Weight */}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2.5 pt-2.5 border-t border-gray-100/70 text-[11px] text-gray-500 font-mono">
                   <span className="shrink-0">{getStatusBadge(order.status)}</span>
+                  {orderIdsNeedingInvoice?.has(order.id) && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                      <DollarSign className="h-3 w-3 mr-0.5" />
+                      Invoice not saved
+                    </span>
+                  )}
                   <span className="flex items-center shrink-0">
                     <Weight className="h-3.5 w-3.5 mr-1 text-gray-400" />
                     {order.totalWeightLbs.toLocaleString()} lbs

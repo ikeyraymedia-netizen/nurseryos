@@ -9,6 +9,7 @@ import {
   sendMemberPasswordReset
 } from '../lib/tenants';
 import { roleLabel } from '../lib/permissions';
+import { TENANT_MODULE_DEFS, resolveEnabledModules } from '../lib/modules';
 import { logAuditEvent } from '../lib/audit';
 
 interface TeamManagerProps {
@@ -136,6 +137,34 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
         </div>
 
         <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-bold uppercase text-gray-500 mb-1">Workspace package</p>
+            <p className="text-[11px] text-gray-600 mb-2">
+              Core always includes orders, trucks, customers, team, and weights.
+              {tenant.modules == null
+                ? ' This nursery is on a legacy plan (all add-ons).'
+                : ''}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {TENANT_MODULE_DEFS.map((mod) => {
+                const on = resolveEnabledModules(tenant).has(mod.id);
+                return (
+                  <span
+                    key={mod.id}
+                    className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                      on
+                        ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                        : 'bg-white text-slate-400 border-slate-200'
+                    }`}
+                  >
+                    {mod.label}
+                    {on ? '' : ' · off'}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <p className="text-xs font-bold uppercase text-gray-500 mb-2">Current members</p>
             <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">

@@ -46,8 +46,26 @@ service cloud.firestore {
       return canReadOps(tenantId);
     }
 
+    function isPlatformAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.keys().hasAny(['isPlatformAdmin'])
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isPlatformAdmin == true;
+    }
+
     match /users/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+      allow read: if signedIn() && request.auth.uid == userId;
+      // Clients may manage their own profile but cannot grant themselves platform admin.
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && (
+          !('isPlatformAdmin' in request.resource.data)
+          || request.resource.data.isPlatformAdmin == false
+        );
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPlatformAdmin']);
+      allow delete: if signedIn() && request.auth.uid == userId;
     }
 
     match /inviteCodes/{code} {
@@ -60,11 +78,23 @@ service cloud.firestore {
     }
 
     match /tenants/{tenantId} {
-      allow read: if isMember(tenantId);
+      allow read: if isMember(tenantId) || isPlatformAdmin();
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(['name', 'createdAt', 'ownerId']);
-      allow update, delete: if isOwner(tenantId);
+      // Owners may rename; only platform admins may change modules / ownership fields.
+      allow update: if isPlatformAdmin()
+        || (
+          isOwner(tenantId)
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && (
+            !('modules' in resource.data)
+              ? !('modules' in request.resource.data)
+              : request.resource.data.modules == resource.data.modules
+          )
+        );
+      allow delete: if isOwner(tenantId) || isPlatformAdmin();
 
       match /members/{memberId} {
         allow read: if isMember(tenantId);

@@ -3,6 +3,7 @@ import { Truck, CustomerOrder } from '../types';
 import { addTruck, updateTruck } from '../lib/db';
 import { X, Check, Save, Truck as TruckIcon, HelpCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
+import { toDateKey } from '../lib/dates';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
@@ -21,7 +22,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   const [carrier, setCarrier] = useState('');
   const [truckType, setTruckType] = useState('');
   const [notes, setNotes] = useState('');
-  const [loadingDate, setLoadingDate] = useState('');
+  const [loadingDate, setLoadingDate] = useState(() => toDateKey(new Date()));
   const [owner, setOwner] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -34,7 +35,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
       setCarrier(truckToEdit.carrier || '');
       setTruckType(truckToEdit.truckType || '');
       setNotes(truckToEdit.notes || '');
-      setLoadingDate(truckToEdit.loadingDate || '');
+      setLoadingDate(truckToEdit.loadingDate || toDateKey(new Date()));
       setOwner(truckToEdit.owner || '');
       setSelectedOrderIds(truckToEdit.orderIds || []);
     } else {
@@ -42,7 +43,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
       setCarrier('');
       setTruckType('');
       setNotes('');
-      setLoadingDate('');
+      setLoadingDate(toDateKey(new Date()));
       setOwner('');
       setSelectedOrderIds([]);
     }
@@ -93,6 +94,10 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
     }
     if (selectedOrderIds.length === 0) {
       setError('Please select at least one customer order to load on this truck.');
+      return;
+    }
+    if (!loadingDate) {
+      setError('Please set a loading date so this truck appears on the Trucks week board.');
       return;
     }
 
@@ -210,16 +215,17 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Loading Date
+                Loading Date *
               </label>
               <input
                 type="date"
                 value={loadingDate}
                 onChange={(e) => setLoadingDate(e.target.value)}
+                required
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
               />
               <p className="text-[10px] text-gray-500 mt-1 leading-snug">
-                Used on the Trucks week board (Sun–Sat). Leave blank only if the load day is unknown.
+                Places this truck on that day in the Trucks week board (Sun–Sat).
               </p>
             </div>
             <div>

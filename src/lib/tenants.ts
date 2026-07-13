@@ -19,7 +19,11 @@ import {
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { DEFAULT_CONTAINER_WEIGHTS } from '../data/defaultWeights';
-import { Tenant, TenantMember, UserProfile, TenantInvite, MemberRole } from '../types';
+import { Tenant, TenantMember, UserProfile, TenantInvite, MemberRole, TenantModuleId } from '../types';
+import {
+  DEFAULT_NEW_TENANT_MODULES,
+  normalizeModulesList
+} from './modules';
 
 function slugifyNurseryName(name: string): string {
   const base = name
@@ -91,7 +95,8 @@ export async function signUpWithNursery(params: {
     id: tenantId,
     name: trimmedNursery,
     createdAt: now,
-    ownerId: cred.user.uid
+    ownerId: cred.user.uid,
+    modules: [...DEFAULT_NEW_TENANT_MODULES]
   };
 
   const member: TenantMember = {
@@ -115,7 +120,8 @@ export async function signUpWithNursery(params: {
   batch.set(doc(db, 'tenants', tenantId), {
     name: tenant.name,
     createdAt: tenant.createdAt,
-    ownerId: tenant.ownerId
+    ownerId: tenant.ownerId,
+    modules: tenant.modules
   });
   batch.set(doc(db, 'tenants', tenantId, 'members', cred.user.uid), member);
   batch.set(doc(db, 'users', cred.user.uid), profile);
@@ -147,6 +153,23 @@ export async function renameTenant(tenantId: string, name: string): Promise<void
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Nursery name is required.');
   await updateDoc(doc(db, 'tenants', tenantId), { name: trimmed });
+}
+
+export async function updateTenantModules(
+  tenantId: string,
+  modules: TenantModuleId[]
+): Promise<void> {
+  await updateDoc(doc(db, 'tenants', tenantId), {
+    modules: normalizeModulesList(modules)
+  });
+}
+
+/** Platform admin: list every nursery workspace. */
+export async function listAllTenants(): Promise<Tenant[]> {
+  const snap = await getDocs(collection(db, 'tenants'));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<Tenant, 'id'>) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function generateInviteCode(): string {

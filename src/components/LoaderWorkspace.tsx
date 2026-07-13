@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FileText,
   ListTodo,
@@ -17,9 +17,10 @@ import {
   Truck,
   MapPin,
   Trash2,
-  Edit
+  Edit,
+  DollarSign
 } from 'lucide-react';
-import { CustomerOrder, ContainerWeight, Customer, CustomerDocumentType } from '../types';
+import { CustomerOrder, ContainerWeight, Customer, CustomerDocument, CustomerDocumentType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   updateOrderItemProgress,
@@ -30,9 +31,10 @@ import {
   updateCustomerOrder
 } from '../lib/db';
 import { notifyInventorySyncIssue } from '../lib/inventory';
+import { orderNeedsInvoiceSave } from '../lib/invoicing';
+import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { InvoiceModal } from './InvoiceModal';
-import { DollarSign } from 'lucide-react';
 
 interface LoaderWorkspaceProps {
   order: CustomerOrder;
@@ -65,6 +67,25 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const [editQuantity, setEditQuantity] = useState(1);
   const [editNotes, setEditNotes] = useState('');
   const [editIsAddition, setEditIsAddition] = useState(false);
+  const [needsInvoiceSave, setNeedsInvoiceSave] = useState(false);
+
+  useEffect(() => {
+    if (!permissions.canViewInvoices) {
+      setNeedsInvoiceSave(false);
+      return;
+    }
+    let cancelled = false;
+    listAllDocuments()
+      .then((docs: CustomerDocument[]) => {
+        if (!cancelled) setNeedsInvoiceSave(orderNeedsInvoiceSave(order, docs));
+      })
+      .catch(() => {
+        if (!cancelled) setNeedsInvoiceSave(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [order, permissions.canViewInvoices, isInvoiceOpen]);
 
   const handleVendorSave = async (itemId: string, vendorName: string) => {
     try {
@@ -489,6 +510,27 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           )}
         </div>
       </div>
+
+      {permissions.canViewInvoices && needsInvoiceSave && (
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs text-amber-950 leading-relaxed">
+            <span className="font-black">Invoice not saved to customer.</span> Pricing is on this order,
+            but Reports won&apos;t count it as sales until you open Create Invoice and tap{' '}
+            <span className="font-bold">Save to Customer</span>.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setDocumentType('invoice');
+              setIsInvoiceOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold"
+          >
+            <DollarSign className="h-3.5 w-3.5" />
+            Save invoice
+          </button>
+        </div>
+      )}
 
       {/* Staging Location Card */}
       <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">

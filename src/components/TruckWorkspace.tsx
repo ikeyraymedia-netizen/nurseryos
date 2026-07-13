@@ -34,10 +34,12 @@ import {
   AlertCircle,
   MapPin,
   Trash2,
-  Mail
+  Mail,
+  Printer
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
+import { downloadTruckPullSheetPdf } from '../lib/pullSheet';
 
 interface TruckWorkspaceProps {
   truck: Truck;
@@ -66,10 +68,36 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [resettingOrderId, setResettingOrderId] = useState<string | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<CustomerOrder | null>(null);
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false);
+  const [pullSheetBusy, setPullSheetBusy] = useState(false);
 
   function openInvoice(order: CustomerOrder) {
     setShowInvoiceMenu(false);
     setInvoiceOrder(order);
+  }
+
+  function handleDownloadPullSheet() {
+    setPullSheetBusy(true);
+    try {
+      const sheetOrders = orders
+        .filter((o) => truck.orderIds.includes(o.id) || o.truckId === truck.id)
+        .sort((a, b) => {
+          const idxA = truck.orderIds.indexOf(a.id);
+          const idxB = truck.orderIds.indexOf(b.id);
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        });
+      downloadTruckPullSheetPdf({
+        truck,
+        orders: sheetOrders,
+        nurseryName
+      });
+    } catch (err) {
+      console.error('Pull sheet PDF failed:', err);
+      alert('Could not generate pull sheet PDF. Try again.');
+    } finally {
+      setPullSheetBusy(false);
+    }
   }
 
   // States for adding a plant to an existing order in this truck
@@ -550,6 +578,17 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start md:self-center">
+            <button
+              type="button"
+              disabled={pullSheetBusy || truckOrders.length === 0}
+              onClick={handleDownloadPullSheet}
+              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-emerald-50 text-emerald-950 transition-colors border border-emerald-200 shadow-sm font-sans disabled:opacity-50"
+              title="Download printable pull sheet PDF"
+            >
+              <Printer className="h-3.5 w-3.5 mr-1.5" />
+              {pullSheetBusy ? 'Preparing…' : 'Pull Sheet PDF'}
+            </button>
+
             {permissions.canViewBOL && (
               <button
                 onClick={() => setIsBOLOpen(true)}

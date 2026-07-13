@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Calendar,
@@ -34,7 +34,7 @@ interface TrucksListProps {
   onSelectTruck: (truckId: string | null) => void;
 }
 
-type DaySelection = string | 'unscheduled';
+type DaySelection = string | 'unscheduled' | 'all';
 
 export const TrucksList: React.FC<TrucksListProps> = ({
   trucks,
@@ -55,6 +55,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'loading' | 'completed'>('all');
   const [deletingTruckId, setDeletingTruckId] = useState<string | null>(null);
+  const lastFocusedTruckId = useRef<string | null>(null);
 
   const weekDays = useMemo(() => weekDateKeysFromSunday(weekStart), [weekStart]);
 
@@ -62,6 +63,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
     const map: Record<string, Truck[]> = {};
     for (const day of weekDays) map[day] = [];
     const unscheduled: Truck[] = [];
+    const outsideWeek: Truck[] = [];
 
     for (const truck of trucks) {
       const key = (truck.loadingDate || '').trim();
@@ -69,11 +71,35 @@ export const TrucksList: React.FC<TrucksListProps> = ({
         unscheduled.push(truck);
         continue;
       }
-      if (!map[key]) map[key] = [];
-      map[key].push(truck);
+      if (weekDays.includes(key)) {
+        map[key].push(truck);
+      } else {
+        outsideWeek.push(truck);
+        if (!map[key]) map[key] = [];
+        map[key].push(truck);
+      }
     }
-    return { map, unscheduled };
+    return { map, unscheduled, outsideWeek };
   }, [trucks, weekDays]);
+
+  // After build/open, jump the week board to that truck's loading day (once per selection).
+  useEffect(() => {
+    if (!selectedTruckId || selectedTruckId === 'new') {
+      lastFocusedTruckId.current = null;
+      return;
+    }
+    if (lastFocusedTruckId.current === selectedTruckId) return;
+    const truck = trucks.find((t) => t.id === selectedTruckId);
+    if (!truck) return;
+    lastFocusedTruckId.current = selectedTruckId;
+    const key = (truck.loadingDate || '').trim();
+    if (!key) {
+      setSelectedDay('unscheduled');
+      return;
+    }
+    setWeekStart(startOfWeekSunday(new Date(`${key}T00:00:00`)));
+    setSelectedDay(key);
+  }, [selectedTruckId, trucks]);
 
   const handleDeleteConfirm = async (truckId: string) => {
     try {
@@ -124,9 +150,33 @@ export const TrucksList: React.FC<TrucksListProps> = ({
 
   const dayTrucks = useMemo(() => {
     if (!selectedDay) return [];
+    if (selectedDay === 'all') return trucks;
     if (selectedDay === 'unscheduled') return trucksByLoadingDate.unscheduled;
     return trucksByLoadingDate.map[selectedDay] || [];
-  }, [selectedDay, trucksByLoadingDate]);
+  }, [selectedDay, trucks, trucksByLoadingDate]);
+
+  const formatLoadingDateShort = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr + 'T00:00:00');
+      return date.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const otherDaysThisWeek = useMemo(() => {
+    return weekDays
+      .filter((day) => day !== selectedDay && (trucksByLoadingDate.map[day] || []).length > 0)
+      .map((day) => ({
+        day,
+        count: (trucksByLoadingDate.map[day] || []).length,
+        label: formatLoadingDateShort(day)
+      }));
+  }, [weekDays, selectedDay, trucksByLoadingDate]);
 
   const filteredTrucks = dayTrucks.filter((truck) => {
     const stats = getTruckStats(truck);
@@ -194,12 +244,25 @@ export const TrucksList: React.FC<TrucksListProps> = ({
     }
   };
 
+  const jumpToOutsideTruck = (truck: Truck) => {
+    const key = (truck.loadingDate || '').trim();
+    if (!key) {
+      setSelectedDay('unscheduled');
+      return;
+    }
+    setWeekStart(startOfWeekSunday(new Date(`${key}T00:00:00`)));
+    setSelectedDay(key);
+    onSelectTruck(truck.id);
+  };
+
   const selectedDayLabel =
     selectedDay === 'unscheduled'
       ? 'Unscheduled'
-      : selectedDay
-        ? formatLoadingDate(selectedDay)
-        : null;
+      : selectedDay === 'all'
+        ? 'All trucks'
+        : selectedDay
+          ? formatLoadingDate(selectedDay)
+          : null;
 
   return (
     <div id="trucks-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
@@ -294,18 +357,53 @@ export const TrucksList: React.FC<TrucksListProps> = ({
         })}
       </div>
 
-      {trucksByLoadingDate.unscheduled.length > 0 && (
+      <div className="flex flex-wrap gap-2 mb-3">
         <button
           type="button"
-          onClick={() => setSelectedDay('unscheduled')}
-          className={`mb-3 w-full text-left text-[11px] font-bold rounded-xl px-3 py-2 border transition-colors ${
-            selectedDay === 'unscheduled'
-              ? 'bg-amber-100 border-amber-300 text-amber-950'
-              : 'bg-amber-50/60 border-amber-200 text-amber-900 hover:bg-amber-50'
+          onClick={() => setSelectedDay('all')}
+          className={`text-[11px] font-bold rounded-xl px-3 py-2 border transition-colors ${
+            selectedDay === 'all'
+              ? 'bg-slate-800 border-slate-900 text-white'
+              : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
           }`}
         >
-          Unscheduled ({trucksByLoadingDate.unscheduled.length}) — no loading date set
+          All trucks ({trucks.length})
         </button>
+        {trucksByLoadingDate.unscheduled.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedDay('unscheduled')}
+            className={`text-[11px] font-bold rounded-xl px-3 py-2 border transition-colors ${
+              selectedDay === 'unscheduled'
+                ? 'bg-amber-100 border-amber-300 text-amber-950'
+                : 'bg-amber-50/60 border-amber-200 text-amber-900 hover:bg-amber-50'
+            }`}
+          >
+            Unscheduled ({trucksByLoadingDate.unscheduled.length})
+          </button>
+        )}
+      </div>
+
+      {trucksByLoadingDate.outsideWeek.length > 0 && selectedDay !== 'all' && (
+        <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <p className="text-[11px] font-bold text-slate-700 mb-1.5">
+            {trucksByLoadingDate.outsideWeek.length} truck
+            {trucksByLoadingDate.outsideWeek.length === 1 ? '' : 's'} outside this week
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {trucksByLoadingDate.outsideWeek.slice(0, 6).map((truck) => (
+              <button
+                key={truck.id}
+                type="button"
+                onClick={() => jumpToOutsideTruck(truck)}
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white border border-slate-200 text-emerald-800 hover:border-emerald-400"
+              >
+                {truck.name}
+                {truck.loadingDate ? ` · ${formatLoadingDateShort(truck.loadingDate)}` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {!selectedDay ? (
@@ -313,8 +411,17 @@ export const TrucksList: React.FC<TrucksListProps> = ({
           <Calendar className="h-8 w-8 text-emerald-700 mb-3" />
           <p className="text-sm font-bold text-gray-800">Pick a day</p>
           <p className="text-xs text-slate-500 mt-1 max-w-[220px] leading-relaxed">
-            Tap Sun–Sat above to see trucks scheduled to load that day. Set the loading date when you build a truck.
+            Tap Sun–Sat above to see trucks scheduled to load that day, or open All trucks.
           </p>
+          {trucks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedDay('all')}
+              className="mt-4 text-xs font-bold text-emerald-800 underline"
+            >
+              Show all {trucks.length} trucks
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -366,15 +473,36 @@ export const TrucksList: React.FC<TrucksListProps> = ({
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[500px] lg:max-h-[600px] min-h-[220px]">
             {filteredTrucks.length === 0 ? (
-              <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-300">
+              <div className="text-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-300 px-3">
                 <p className="text-sm font-semibold text-gray-700">No trucks this day</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-[200px] mx-auto leading-normal">
+                <p className="text-xs text-slate-500 mt-1 max-w-[220px] mx-auto leading-normal">
                   {searchQuery || statusFilter !== 'all'
                     ? 'Try adjusting your filters or search terms.'
-                    : canCreate
-                      ? 'Build a truck and set this loading date to see it here.'
-                      : 'Nothing scheduled for this day yet.'}
+                    : 'The board opens on today — if your truck has a different loading date, tap that day (or All trucks).'}
                 </p>
+                {otherDaysThisWeek.length > 0 && !searchQuery && statusFilter === 'all' && (
+                  <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+                    {otherDaysThisWeek.map(({ day, count, label }) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setSelectedDay(day)}
+                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {trucks.length > 0 && !searchQuery && statusFilter === 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDay('all')}
+                    className="mt-3 text-xs font-bold text-emerald-800 underline"
+                  >
+                    Show all trucks
+                  </button>
+                )}
               </div>
             ) : (
               filteredTrucks.map((truck) => {

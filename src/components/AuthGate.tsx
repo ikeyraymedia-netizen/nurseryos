@@ -25,12 +25,31 @@ import { BrandLogo } from './BrandLogo';
 interface AuthSession {
   user: User;
   profile: UserProfile;
-  tenant: Tenant;
-  member: TenantMember;
+  tenant: Tenant | null;
+  member: TenantMember | null;
+  onRefreshTenant: () => Promise<void>;
 }
 
 interface AuthGateProps {
   children: (session: AuthSession & { onSignOut: () => Promise<void> }) => ReactNode;
+}
+
+function clearTenantContexts() {
+  setActiveTenant(null);
+  setInventoryTenant(null);
+  setCustomersTenant(null);
+  setDocumentsTenant(null);
+  setAuditTenant(null);
+  setTasksTenant(null);
+}
+
+function bindTenantContexts(tenantId: string) {
+  setActiveTenant(tenantId);
+  setInventoryTenant(tenantId);
+  setCustomersTenant(tenantId);
+  setDocumentsTenant(tenantId);
+  setAuditTenant(tenantId);
+  setTasksTenant(tenantId);
 }
 
 export function AuthGate({ children }: AuthGateProps) {
@@ -62,29 +81,40 @@ export function AuthGate({ children }: AuthGateProps) {
         setProfile(null);
         setTenant(null);
         setMember(null);
-        setActiveTenant(null);
-        setInventoryTenant(null);
-        setCustomersTenant(null);
-        setDocumentsTenant(null);
-        setAuditTenant(null);
-        setTasksTenant(null);
+        clearTenantContexts();
         setAuthReady(true);
         return;
       }
 
       try {
         const nextProfile = await getUserProfile(nextUser.uid);
-        if (!nextProfile?.activeTenantId) {
+        const isPlatformAdmin = !!nextProfile?.isPlatformAdmin;
+
+        if (!nextProfile) {
+          setBootError('Your account profile was not found. Create a nursery or join with an invite code.');
+          setProfile(null);
+          setTenant(null);
+          setMember(null);
+          clearTenantContexts();
+          setAuthReady(true);
+          return;
+        }
+
+        // Seller / platform admin can sign in without a nursery membership.
+        if (!nextProfile.activeTenantId) {
+          if (isPlatformAdmin) {
+            setProfile(nextProfile);
+            setTenant(null);
+            setMember(null);
+            clearTenantContexts();
+            setAuthReady(true);
+            return;
+          }
           setBootError('Your account has no nursery workspace yet. Create a nursery or join with an invite code.');
           setProfile(null);
           setTenant(null);
           setMember(null);
-          setActiveTenant(null);
-          setInventoryTenant(null);
-          setCustomersTenant(null);
-          setDocumentsTenant(null);
-          setAuditTenant(null);
-          setTasksTenant(null);
+          clearTenantContexts();
           setAuthReady(true);
           return;
         }
@@ -92,16 +122,19 @@ export function AuthGate({ children }: AuthGateProps) {
         const nextTenant = await getTenant(nextProfile.activeTenantId);
         const nextMember = await getTenantMembership(nextProfile.activeTenantId, nextUser.uid);
         if (!nextTenant || !nextMember) {
+          if (isPlatformAdmin) {
+            setProfile(nextProfile);
+            setTenant(null);
+            setMember(null);
+            clearTenantContexts();
+            setAuthReady(true);
+            return;
+          }
           setBootError('Nursery workspace not found. Please contact support or create a new account.');
           setProfile(null);
           setTenant(null);
           setMember(null);
-          setActiveTenant(null);
-          setInventoryTenant(null);
-          setCustomersTenant(null);
-          setDocumentsTenant(null);
-          setAuditTenant(null);
-          setTasksTenant(null);
+          clearTenantContexts();
           setAuthReady(true);
           return;
         }
@@ -120,22 +153,12 @@ export function AuthGate({ children }: AuthGateProps) {
         setProfile(nextProfile);
         setTenant(resolvedTenant);
         setMember(nextMember);
-        setActiveTenant(resolvedTenant.id);
-        setInventoryTenant(resolvedTenant.id);
-        setCustomersTenant(resolvedTenant.id);
-        setDocumentsTenant(resolvedTenant.id);
-        setAuditTenant(resolvedTenant.id);
-        setTasksTenant(resolvedTenant.id);
+        bindTenantContexts(resolvedTenant.id);
         setAuthReady(true);
       } catch (err: any) {
         console.error(err);
         setBootError(err?.message || 'Failed to load nursery workspace.');
-        setActiveTenant(null);
-        setInventoryTenant(null);
-        setCustomersTenant(null);
-        setDocumentsTenant(null);
-        setAuditTenant(null);
-        setTasksTenant(null);
+        clearTenantContexts();
         setAuthReady(true);
       }
     });
@@ -144,19 +167,21 @@ export function AuthGate({ children }: AuthGateProps) {
   }, []);
 
   const session = useMemo(() => {
-    if (!user || !profile || !tenant || !member) return null;
+    if (!user || !profile) return null;
+    const isPlatformAdmin = !!profile.isPlatformAdmin;
+    if (!isPlatformAdmin && (!tenant || !member)) return null;
     return {
       user,
       profile,
       tenant,
       member,
+      onRefreshTenant: async () => {
+        if (!profile.activeTenantId) return;
+        const next = await getTenant(profile.activeTenantId);
+        if (next) setTenant(next);
+      },
       onSignOut: async () => {
-        setActiveTenant(null);
-        setInventoryTenant(null);
-        setCustomersTenant(null);
-        setDocumentsTenant(null);
-        setAuditTenant(null);
-        setTasksTenant(null);
+        clearTenantContexts();
         await logOut();
       }
     };
@@ -256,6 +281,13 @@ export function AuthGate({ children }: AuthGateProps) {
               Sign in
             </button>
           </div>
+
+          {mode === 'signin' && (
+            <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+              Nursery owners sign in to their nursery. Sellers with platform admin land on the{' '}
+              <span className="font-bold text-slate-700">NurseryOS Seller</span> console.
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-3 pb-6">
             {mode === 'signup' && (

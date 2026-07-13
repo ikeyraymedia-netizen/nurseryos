@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { Sprout, Upload, Plus, Droplets, Scissors, Search, RefreshCw, AlertCircle } from 'lucide-react';
-import { InventoryPlant } from '../types';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Sprout, Upload, Plus, Droplets, Scissors, Search, RefreshCw, AlertCircle, Truck } from 'lucide-react';
+import { CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
@@ -12,11 +12,15 @@ import {
   subscribeToInventory,
   updateInventoryPlant
 } from '../lib/inventory';
+import { buildLowStockForUpcomingTrucks } from '../lib/lowStockAlerts';
 
 interface InventoryWorkspaceProps {
   permissions: AppPermissions;
+  trucks?: TruckType[];
+  orders?: CustomerOrder[];
 }
 
+const LOW_STOCK_TOGGLE_KEY = 'nurseryos:inventory:showLowStockUpcoming';
 const INVENTORY_UPLOAD_TIMEOUT_MS = 360_000;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -62,7 +66,11 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
-export function InventoryWorkspace({ permissions }: InventoryWorkspaceProps) {
+export function InventoryWorkspace({
+  permissions,
+  trucks = [],
+  orders = []
+}: InventoryWorkspaceProps) {
   const [plants, setPlants] = useState<InventoryPlant[]>([]);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -72,6 +80,13 @@ export function InventoryWorkspace({ permissions }: InventoryWorkspaceProps) {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showLowStockUpcoming, setShowLowStockUpcoming] = useState(() => {
+    try {
+      return localStorage.getItem(LOW_STOCK_TOGGLE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const [newPlantName, setNewPlantName] = useState('');
   const [newContainerSize, setNewContainerSize] = useState('#3');
@@ -87,7 +102,25 @@ export function InventoryWorkspace({ permissions }: InventoryWorkspaceProps) {
     return subscribeToInventory(setPlants);
   }, []);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOW_STOCK_TOGGLE_KEY, showLowStockUpcoming ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [showLowStockUpcoming]);
+
   const selected = plants.find((p) => p.id === selectedId) || null;
+
+  const lowStockAlerts = useMemo(() => {
+    if (!showLowStockUpcoming) return [];
+    return buildLowStockForUpcomingTrucks({
+      trucks,
+      orders,
+      inventory: plants,
+      horizonDays: 14
+    });
+  }, [showLowStockUpcoming, trucks, orders, plants]);
 
   const filtered = plants.filter((p) => {
     const q = search.toLowerCase();
@@ -434,6 +467,71 @@ export function InventoryWorkspace({ permissions }: InventoryWorkspaceProps) {
           </p>
         )}
       </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <Truck className="h-4 w-4 text-emerald-700" />
+            Low stock for upcoming trucks
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+            Compare on-hand inventory to plants needed on trucks loading in the next 14 days.
+          </p>
+        </div>
+        <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer select-none">
+          <span className="text-xs font-bold text-slate-600">{showLowStockUpcoming ? 'On' : 'Off'}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showLowStockUpcoming}
+            onClick={() => setShowLowStockUpcoming((v) => !v)}
+            className={`relative h-7 w-12 rounded-full transition-colors ${
+              showLowStockUpcoming ? 'bg-emerald-700' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                showLowStockUpcoming ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </label>
+      </div>
+
+      {showLowStockUpcoming && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <p className="text-xs font-black uppercase tracking-wide text-amber-900 mb-2">
+            Shortages ({lowStockAlerts.length})
+          </p>
+          {lowStockAlerts.length === 0 ? (
+            <p className="text-sm text-amber-900/80">
+              No shortages found for trucks with a loading date in the next 14 days.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {lowStockAlerts.map((alert) => (
+                <div
+                  key={`${alert.plantName}-${alert.containerSize}`}
+                  className="bg-white border border-amber-200 rounded-xl px-3 py-2.5"
+                >
+                  <p className="text-sm font-bold text-gray-900">
+                    {alert.plantName}{' '}
+                    <span className="text-xs font-mono text-slate-500">({alert.containerSize})</span>
+                  </p>
+                  <p className="text-xs text-amber-950 mt-0.5">
+                    Need <span className="font-black">{alert.needed}</span> · On hand{' '}
+                    <span className="font-black">{alert.available}</span> · Short{' '}
+                    <span className="font-black text-red-700">{alert.shortfall}</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-1 truncate">
+                    {alert.loadingDates.join(', ')} · {alert.truckNames.join(', ')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">

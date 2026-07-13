@@ -15,6 +15,7 @@ import { TeamManager } from './components/TeamManager';
 import { CustomersWorkspace } from './components/CustomersWorkspace';
 import { ReportsWorkspace } from './components/ReportsWorkspace';
 import { TasksWorkspace } from './components/TasksWorkspace';
+import { WhatsNewModal } from './components/WhatsNewModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import {
   subscribeToOrders,
@@ -24,6 +25,13 @@ import {
 } from './lib/db';
 import { subscribeToCustomers } from './lib/customers';
 import { getPermissionsForRole } from './lib/permissions';
+import {
+  buildWhatsNewDigest,
+  getLastSeenAt,
+  listTasksCreatedSinceForTenant,
+  setLastSeenAt,
+  WhatsNewItem
+} from './lib/whatsNew';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -37,6 +45,68 @@ import {
 import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList } from 'lucide-react';
 
 type WorkspaceTab = 'orders' | 'trucks' | 'inventory' | 'customers' | 'reports' | 'tasks';
+
+function useWhatsNewDigest(params: {
+  tenantId: string;
+  userId: string;
+  orders: CustomerOrder[];
+  trucks: TruckType[];
+  ready: boolean;
+  canViewOrders: boolean;
+  canViewTrucks: boolean;
+  canViewTasks: boolean;
+}) {
+  const [items, setItems] = useState<WhatsNewItem[]>([]);
+  const ranRef = useRef(false);
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+
+  useEffect(() => {
+    if (!params.ready || ranRef.current) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled || ranRef.current) return;
+      ranRef.current = true;
+
+      void (async () => {
+        const p = paramsRef.current;
+        const lastSeen = getLastSeenAt(p.tenantId, p.userId);
+        if (!lastSeen) {
+          setLastSeenAt(p.tenantId, p.userId);
+          return;
+        }
+
+        const tasks = p.canViewTasks
+          ? await listTasksCreatedSinceForTenant(p.tenantId, lastSeen)
+          : [];
+        if (cancelled) return;
+
+        const digest = buildWhatsNewDigest({
+          orders: p.canViewOrders ? p.orders : [],
+          trucks: p.canViewTrucks ? p.trucks : [],
+          tasks,
+          since: lastSeen,
+          userId: p.userId
+        });
+        if (digest.length > 0) setItems(digest);
+        else setLastSeenAt(p.tenantId, p.userId);
+      })().catch((err) => console.warn('Whats-new digest failed:', err));
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [params.ready]);
+
+  function dismiss() {
+    setLastSeenAt(params.tenantId, params.userId);
+    setItems([]);
+  }
+
+  return { items, dismiss };
+}
 
 function NurseryApp({
   tenant,
@@ -72,6 +142,19 @@ function NurseryApp({
   } | null>(null);
   const [focusCustomerId, setFocusCustomerId] = useState<string | null>(null);
   const mainPanelRef = useRef<HTMLDivElement>(null);
+
+  const whatsNewReady =
+    !loading || (!permissions.canViewOrders && !permissions.canViewTrucks);
+  const { items: whatsNewItems, dismiss: dismissWhatsNew } = useWhatsNewDigest({
+    tenantId: tenant.id,
+    userId,
+    orders,
+    trucks,
+    ready: whatsNewReady,
+    canViewOrders: permissions.canViewOrders,
+    canViewTrucks: permissions.canViewTrucks,
+    canViewTasks: permissions.canViewTasks
+  });
 
   useEffect(() => {
     if (!permissions.canViewOrders && !permissions.canViewTrucks) {
@@ -294,6 +377,13 @@ function NurseryApp({
             )}
           </main>
         </div>
+        {whatsNewItems.length > 0 && (
+          <WhatsNewModal
+            items={whatsNewItems}
+            onDismiss={dismissWhatsNew}
+            onOpenTasks={() => setActiveTab('tasks')}
+          />
+        )}
       </InventoryMatchProvider>
     );
   }
@@ -631,6 +721,29 @@ function NurseryApp({
         <WeightsEditor
           containerWeights={containerWeights}
           onClose={() => setShowWeightsEditor(false)}
+        />
+      )}
+
+      {whatsNewItems.length > 0 && (
+        <WhatsNewModal
+          items={whatsNewItems}
+          onDismiss={dismissWhatsNew}
+          onOpenOrders={() => {
+            setActiveTab('orders');
+            setSelectedTruckId(null);
+            setIsEditingTruck(false);
+          }}
+          onOpenTrucks={() => {
+            setActiveTab('trucks');
+            setSelectedOrderId(null);
+            setIsEditingTruck(false);
+          }}
+          onOpenTasks={() => {
+            setActiveTab('tasks');
+            setSelectedTruckId(null);
+            setSelectedOrderId(null);
+            setIsEditingTruck(false);
+          }}
         />
       )}
     </div>

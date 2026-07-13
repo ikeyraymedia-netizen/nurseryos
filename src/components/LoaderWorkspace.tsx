@@ -165,7 +165,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         pulledQuantity: 0,
         notes: newNotes.trim() || undefined,
         vendor: newVendorName.trim() || undefined,
-        isAddition: newIsAddition
+        isAddition: newIsAddition,
+        addedAt: new Date().toISOString()
       };
 
       const updatedItems = [...order.items, newItem];

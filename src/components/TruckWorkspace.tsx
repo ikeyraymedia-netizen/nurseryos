@@ -295,7 +295,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         quantity: Number(newQuantity) || 1,
         loadedQuantity: 0,
         notes: newNotes.trim() || undefined,
-        isAddition: newIsAddition
+        isAddition: newIsAddition,
+        addedAt: new Date().toISOString()
       };
 
       const updatedItems = [...order.items, newItem];
@@ -366,7 +367,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         quantity: Number(standaloneQuantity) || 1,
         loadedQuantity: 0,
         notes: standaloneNotes.trim() || undefined,
-        isAddition: true
+        isAddition: true,
+        addedAt: new Date().toISOString()
       };
 
       const orderNumber = standaloneOrderNumber.trim() || `ADD-${Date.now().toString().slice(-4)}`;

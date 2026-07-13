@@ -41,6 +41,8 @@ export interface PlantOrderItem {
   pulledQuantity?: number; // To track pulled/delivered progress
   notes?: string;
   isAddition?: boolean; // Tag for items added to an existing order
+  /** ISO timestamp when this line was added to an existing order (for activity alerts) */
+  addedAt?: string;
   unitPrice?: number; // Optional price per plant item for invoices
   vendor?: string; // Vendor name/id we are buying this plant from
 }

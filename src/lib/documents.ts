@@ -126,6 +126,27 @@ export async function deleteCustomerDocument(documentId: string): Promise<void> 
   await deleteDoc(documentDoc(tenantId, documentId));
 }
 
+export async function listAllDocuments(): Promise<CustomerDocument[]> {
+  const tenantId = requireTenantId();
+  try {
+    const snapshot = await getDocs(query(documentsCol(tenantId), orderBy('createdAt', 'desc')));
+    const docs: CustomerDocument[] = [];
+    snapshot.forEach((snap) => {
+      docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
+    });
+    return docs;
+  } catch (err) {
+    console.warn('Ordered documents query failed, falling back:', err);
+    const snapshot = await getDocs(documentsCol(tenantId));
+    const docs: CustomerDocument[] = [];
+    snapshot.forEach((snap) => {
+      docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
+    });
+    docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return docs;
+  }
+}
+
 export function defaultDocumentNumber(
   type: CustomerDocumentType,
   orderNumber?: string

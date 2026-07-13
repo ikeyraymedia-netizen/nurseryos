@@ -537,6 +537,102 @@ app.get('/api/config-status', (req, res) => {
   });
 });
 
+app.post('/api/run-report', async (req, res) => {
+  try {
+    const { question, nurseryName, data } = req.body || {};
+    if (!question || typeof question !== 'string' || !question.trim()) {
+      res.status(400).json({ error: 'Missing report question.' });
+      return;
+    }
+    if (!data || typeof data !== 'object') {
+      res.status(400).json({ error: 'Missing nursery data snapshot.' });
+      return;
+    }
+
+    const ai = getAiClient();
+    const nursery = typeof nurseryName === 'string' && nurseryName.trim() ? nurseryName.trim() : 'Nursery';
+    const snapshot = JSON.stringify(data);
+
+    const prompt = `You are NurseryOS, an operations analyst for a wholesale nursery named "${nursery}".
+
+The user asked for this report:
+"""
+${question.trim()}
+"""
+
+Use ONLY the JSON nursery data below. Do not invent plants, customers, or numbers that are not supported by the data. If something cannot be answered from the data, say so clearly.
+
+Write a clear, practical report for nursery owners and managers:
+- Start with a short title line
+- Use plain text (no markdown code fences)
+- Prefer short sections, bullet lists, and totals
+- Call out risks, shortages, unfinished loads, and follow-ups when relevant
+- Keep it concise but useful
+
+NURSERY DATA JSON:
+${snapshot}`;
+
+    let lastError: any = null;
+    let reportText = '';
+
+    for (const model of PARSE_MODELS) {
+      try {
+        console.log(`Running report with ${model}...`);
+        const response = await withTimeout(
+          ai.models.generateContent({
+            model,
+            contents: prompt
+          }),
+          `Report (${model})`,
+          GEMINI_REQUEST_TIMEOUT_MS
+        );
+        reportText = (response.text || '').trim();
+        if (reportText) break;
+        throw new Error('Gemini returned an empty report.');
+      } catch (err: any) {
+        lastError = err;
+        if (isSkippableModelError(err)) {
+          console.warn(`${model} unavailable for reports, trying fallback...`);
+          continue;
+        }
+        if (isRetryableModelError(err)) {
+          console.warn(`${model} busy for reports, trying fallback...`);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!reportText) {
+      throw lastError || new Error('Failed to generate report.');
+    }
+
+    res.json({ report: reportText });
+  } catch (error: any) {
+    console.error('Error running report with Gemini:', error);
+    const msg = String(error?.message || error || '');
+    if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
+      res.status(500).json({
+        error: 'GEMINI_API_KEY is missing on the server. Add it in Railway → Variables, then redeploy.',
+        details: msg
+      });
+      return;
+    }
+    const statusCode = getApiStatusCode(error);
+    if (statusCode === 429 || statusCode === 503) {
+      res.status(503).json({
+        error: 'AI service is temporarily busy. Please try again in a few seconds.',
+        details: msg
+      });
+      return;
+    }
+    res.status(500).json({
+      error: 'Failed to run report.',
+      details: msg
+    });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

@@ -131,6 +131,18 @@ service cloud.firestore {
         allow create: if isMember(tenantId);
         allow update, delete: if false;
       }
+
+      match /tasks/{taskId} {
+        allow read: if isMember(tenantId);
+        allow create, delete: if isAdminOrOwner(tenantId);
+        allow update: if isAdminOrOwner(tenantId)
+          || (
+            isMember(tenantId)
+            && resource.data.assigneeUserId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['completed', 'completedAt', 'completedByUserId', 'updatedAt'])
+          );
+      }
     }
   }
 }

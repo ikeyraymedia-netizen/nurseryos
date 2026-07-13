@@ -18,6 +18,9 @@ export interface AppPermissions {
   canUploadInventory: boolean;
   canManageTeam: boolean;
   canViewReports: boolean;
+  canViewTasks: boolean;
+  canAssignTasks: boolean;
+  canCompleteTasks: boolean;
 }
 
 export function getPermissionsForRole(role: MemberRole): AppPermissions {
@@ -41,7 +44,10 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditInventory: true,
         canUploadInventory: true,
         canManageTeam: true,
-        canViewReports: true
+        canViewReports: true,
+        canViewTasks: true,
+        canAssignTasks: true,
+        canCompleteTasks: true
       };
     case 'loader':
       return {
@@ -61,7 +67,10 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditInventory: false,
         canUploadInventory: false,
         canManageTeam: false,
-        canViewReports: false
+        canViewReports: false,
+        canViewTasks: true,
+        canAssignTasks: false,
+        canCompleteTasks: true
       };
     case 'field':
       return {
@@ -81,7 +90,10 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditInventory: true,
         canUploadInventory: true,
         canManageTeam: false,
-        canViewReports: false
+        canViewReports: false,
+        canViewTasks: true,
+        canAssignTasks: false,
+        canCompleteTasks: true
       };
     default:
       return getPermissionsForRole('loader');

@@ -171,3 +171,21 @@ export interface InventoryPlant {
   dateCreated: string;
   dateUpdated: string;
 }
+
+export interface NurseryTask {
+  id: string;
+  title: string;
+  notes?: string;
+  /** Local calendar date YYYY-MM-DD */
+  dueDate: string;
+  assigneeUserId: string;
+  assigneeName: string;
+  assigneeEmail?: string;
+  createdByUserId: string;
+  createdByName: string;
+  completed: boolean;
+  completedAt?: string | null;
+  completedByUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

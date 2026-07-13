@@ -18,6 +18,7 @@ import { setInventoryTenant } from '../lib/inventory';
 import { setCustomersTenant } from '../lib/customers';
 import { setDocumentsTenant } from '../lib/documents';
 import { setAuditTenant } from '../lib/audit';
+import { setTasksTenant } from '../lib/tasks';
 import { LogIn, UserPlus } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 
@@ -66,6 +67,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setCustomersTenant(null);
         setDocumentsTenant(null);
         setAuditTenant(null);
+        setTasksTenant(null);
         setAuthReady(true);
         return;
       }
@@ -82,6 +84,7 @@ export function AuthGate({ children }: AuthGateProps) {
           setCustomersTenant(null);
           setDocumentsTenant(null);
           setAuditTenant(null);
+          setTasksTenant(null);
           setAuthReady(true);
           return;
         }
@@ -98,6 +101,7 @@ export function AuthGate({ children }: AuthGateProps) {
           setCustomersTenant(null);
           setDocumentsTenant(null);
           setAuditTenant(null);
+          setTasksTenant(null);
           setAuthReady(true);
           return;
         }
@@ -121,6 +125,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setCustomersTenant(resolvedTenant.id);
         setDocumentsTenant(resolvedTenant.id);
         setAuditTenant(resolvedTenant.id);
+        setTasksTenant(resolvedTenant.id);
         setAuthReady(true);
       } catch (err: any) {
         console.error(err);
@@ -130,6 +135,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setCustomersTenant(null);
         setDocumentsTenant(null);
         setAuditTenant(null);
+        setTasksTenant(null);
         setAuthReady(true);
       }
     });
@@ -150,6 +156,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setCustomersTenant(null);
         setDocumentsTenant(null);
         setAuditTenant(null);
+        setTasksTenant(null);
         await logOut();
       }
     };

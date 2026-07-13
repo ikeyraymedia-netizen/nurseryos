@@ -14,6 +14,7 @@ import { InventoryMatchProvider } from './components/InventoryMatchProvider';
 import { TeamManager } from './components/TeamManager';
 import { CustomersWorkspace } from './components/CustomersWorkspace';
 import { ReportsWorkspace } from './components/ReportsWorkspace';
+import { TasksWorkspace } from './components/TasksWorkspace';
 import { InvoiceModal } from './components/InvoiceModal';
 import {
   subscribeToOrders,
@@ -33,9 +34,9 @@ import {
   CustomerDocumentType,
   CustomerDocument
 } from './types';
-import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users } from 'lucide-react';
+import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList } from 'lucide-react';
 
-type WorkspaceTab = 'orders' | 'trucks' | 'inventory' | 'customers' | 'reports';
+type WorkspaceTab = 'orders' | 'trucks' | 'inventory' | 'customers' | 'reports' | 'tasks';
 
 function NurseryApp({
   tenant,
@@ -254,8 +255,43 @@ function NurseryApp({
             role={member.role}
             onSignOut={onSignOut}
           />
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <InventoryWorkspace permissions={permissions} />
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+            <div className="flex bg-slate-200/80 p-1.5 rounded-2xl gap-1 border border-slate-300/70 shadow-inner max-w-md">
+              <button
+                type="button"
+                onClick={() => setActiveTab('inventory')}
+                className={`flex-1 flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                  activeTab === 'inventory' || activeTab === 'orders'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'text-gray-500'
+                }`}
+              >
+                <Sprout className="h-4 w-4" />
+                <span>Inventory</span>
+              </button>
+              {permissions.canViewTasks && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('tasks')}
+                  className={`flex-1 flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                    activeTab === 'tasks' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  }`}
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Tasks</span>
+                </button>
+              )}
+            </div>
+            {activeTab === 'tasks' ? (
+              <TasksWorkspace
+                tenant={tenant}
+                member={member}
+                userId={userId}
+                permissions={permissions}
+              />
+            ) : (
+              <InventoryWorkspace permissions={permissions} />
+            )}
           </main>
         </div>
       </InventoryMatchProvider>
@@ -356,6 +392,23 @@ function NurseryApp({
                 <span>Reports</span>
               </button>
             )}
+            {permissions.canViewTasks && (
+              <button
+                onClick={() => {
+                  if (!leaveTruckBuilderIfNeeded()) return;
+                  setActiveTab('tasks');
+                  setSelectedTruckId(null);
+                  setSelectedOrderId(null);
+                  setIsEditingTruck(false);
+                }}
+                className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                  activeTab === 'tasks' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                <ClipboardList className="h-4 w-4" />
+                <span>Tasks</span>
+              </button>
+            )}
           </div>
 
           {activeTab === 'inventory' ? (
@@ -369,6 +422,10 @@ function NurseryApp({
           ) : activeTab === 'reports' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
               Ask AI for loading, inventory, sales, and customer reports in the main panel.
+            </div>
+          ) : activeTab === 'tasks' ? (
+            <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
+              Assign weekly tasks by person. Workers check them off when finished.
             </div>
           ) : activeTab === 'orders' ? (
             <OrdersList
@@ -449,6 +506,13 @@ function NurseryApp({
               permissions={permissions}
               nurseryName={tenant.name}
             />
+          ) : activeTab === 'tasks' ? (
+            <TasksWorkspace
+              tenant={tenant}
+              member={member}
+              userId={userId}
+              permissions={permissions}
+            />
           ) : selectedTruckId === 'new' && permissions.canBuildTrucks ? (
             <TruckBuilder
               orders={dynamicOrders}
@@ -517,6 +581,7 @@ function NurseryApp({
           activeTab !== 'inventory' &&
           activeTab !== 'customers' &&
           activeTab !== 'reports' &&
+          activeTab !== 'tasks' &&
           !isBuildingTruck && (
           <div className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
             <OrderUploader

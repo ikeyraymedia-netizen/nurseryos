@@ -218,6 +218,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 onChange={(e) => setLoadingDate(e.target.value)}
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
               />
+              <p className="text-[10px] text-gray-500 mt-1 leading-snug">
+                Used on the Trucks week board (Sun–Sat). Leave blank only if the load day is unknown.
+              </p>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">

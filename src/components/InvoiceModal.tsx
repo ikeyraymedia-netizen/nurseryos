@@ -634,10 +634,6 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleExportPdf = async () => {
     const el = printRef.current;
     if (!el) return;
@@ -645,7 +641,10 @@ Thank you for choosing ${nurseryName}!
       const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -667,8 +666,13 @@ Thank you for choosing ${nurseryName}!
       pdf.save(`${invoiceNumber || docLabel}.pdf`);
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert('PDF export failed. You can still use Print → Save as PDF.');
+      alert('PDF export failed. Try again, or copy the preview and paste into a doc to print.');
     }
+  };
+
+  // Avoid window.print() — it can crash Cursor's embedded browser / Electron webviews.
+  const handlePrint = async () => {
+    await handleExportPdf();
   };
 
   const handleDocumentTypeChange = (type: CustomerDocumentType) => {
@@ -951,7 +955,7 @@ Thank you for choosing ${nurseryName}!
               className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Printer className="h-4 w-4" />
-              <span>Print {docLabel}</span>
+              <span>Download & Print {docLabel}</span>
             </button>
 
             {/* Email Invoice Panel */}
@@ -1088,7 +1092,7 @@ Thank you for choosing ${nurseryName}!
               <button
                 onClick={handlePrint}
                 className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 hover:bg-emerald-100 transition-colors"
-                title="Print Invoice"
+                title="Download PDF to print"
               >
                 <Printer className="h-4 w-4" />
               </button>

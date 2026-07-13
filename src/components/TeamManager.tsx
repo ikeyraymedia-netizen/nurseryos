@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2 } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
-import { createTeamInvite, listActiveInvites, listTeamMembers, removeTeamMember } from '../lib/tenants';
+import {
+  createTeamInvite,
+  listActiveInvites,
+  listTeamMembers,
+  removeTeamMember,
+  sendMemberPasswordReset
+} from '../lib/tenants';
 import { roleLabel } from '../lib/permissions';
+import { logAuditEvent } from '../lib/audit';
 
 interface TeamManagerProps {
   tenant: Tenant;
@@ -16,7 +23,9 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
   const [role, setRole] = useState<Exclude<MemberRole, 'owner'>>('loader');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
 
   async function refresh() {
     const [m, i] = await Promise.all([
@@ -34,6 +43,7 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
   async function handleCreateInvite() {
     setBusy(true);
     setError(null);
+    setMessage(null);
     try {
       const invite = await createTeamInvite({
         tenantId: tenant.id,
@@ -66,6 +76,7 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
 
     setBusy(true);
     setError(null);
+    setMessage(null);
     try {
       await removeTeamMember({
         tenantId: tenant.id,
@@ -77,6 +88,37 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
       setError(err?.message || 'Failed to remove member.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleResetPassword(member: TenantMember) {
+    if (!member.email) {
+      setError('This team member has no email on file.');
+      return;
+    }
+    const label = member.displayName || member.email;
+    const ok = window.confirm(
+      `Send a password reset email to ${label} (${member.email})?\n\nThey will choose a new password from the link. You will not see their password.`
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    setResettingUserId(member.userId);
+    setError(null);
+    setMessage(null);
+    try {
+      await sendMemberPasswordReset(member.email);
+      await logAuditEvent({
+        action: 'team.password_reset_sent',
+        summary: `Password reset email sent to ${member.email}`,
+        meta: { memberUserId: member.userId, memberEmail: member.email, role: member.role }
+      });
+      setMessage(`Reset email sent to ${member.email}. Ask them to check inbox/spam.`);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send password reset.');
+    } finally {
+      setBusy(false);
+      setResettingUserId(null);
     }
   }
 
@@ -96,20 +138,36 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
         <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
           <div>
             <p className="text-xs font-bold uppercase text-gray-500 mb-2">Current members</p>
+            <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">
+              Password resets are owner/admin only: send a reset email from here. Staff cannot reset
+              passwords from the login screen.
+            </p>
             <div className="space-y-2">
               {members.map((m) => (
                 <div
                   key={m.userId}
-                  className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 px-3 py-2"
                 >
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">{m.displayName || m.email}</p>
-                    <p className="text-xs text-gray-500">{m.email}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">
+                      {m.displayName || m.email}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{m.email}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-800 px-2 py-1 rounded-full">
                       {roleLabel(m.role)}
                     </span>
+                    <button
+                      type="button"
+                      disabled={busy || !m.email}
+                      onClick={() => void handleResetPassword(m)}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      title="Send password reset email"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      {resettingUserId === m.userId ? 'Sending…' : 'Reset'}
+                    </button>
                     {m.userId !== currentUserId && m.role !== 'owner' && (
                       <button
                         type="button"
@@ -156,6 +214,7 @@ export function TeamManager({ tenant, currentUserId, onClose }: TeamManagerProps
               </button>
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
+            {message && <p className="text-xs text-emerald-800 font-semibold">{message}</p>}
           </div>
 
           {invites.length > 0 && (

@@ -401,6 +401,13 @@ export function AuthGate({ children }: AuthGateProps) {
               </div>
             )}
 
+            {mode === 'signin' && (
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Forgot your password? Ask your nursery owner or admin — they can send a reset from{' '}
+                <span className="font-semibold text-slate-700">Team</span>.
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={busy}

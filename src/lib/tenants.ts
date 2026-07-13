@@ -14,6 +14,7 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
   User
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
@@ -201,6 +202,27 @@ export async function removeTeamMember(params: {
     throw new Error('Owner cannot be removed from the nursery.');
   }
   await deleteDoc(doc(db, 'tenants', tenantId, 'members', memberUserId));
+}
+
+/**
+ * Owner/admin-initiated password reset for a team member.
+ * Sends Firebase's reset email — the member chooses a new password; the owner never sees it.
+ */
+export async function sendMemberPasswordReset(memberEmail: string): Promise<void> {
+  const email = memberEmail.trim();
+  if (!email) throw new Error('This team member has no email on file.');
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (err: any) {
+    const code = err?.code || '';
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+      throw new Error('No login account found for that email.');
+    }
+    if (code === 'auth/too-many-requests') {
+      throw new Error('Too many reset emails sent. Wait a few minutes and try again.');
+    }
+    throw new Error(err?.message || 'Could not send password reset email.');
+  }
 }
 
 export async function listActiveInvites(tenantId: string): Promise<TenantInvite[]> {

@@ -22,6 +22,7 @@ let activeTenantId: string | null = null;
 
 // Keep track of fallback state
 let fallbackActive = false;
+let fallbackReason: string | null = null;
 const weightsListeners = new Set<(weights: ContainerWeight[]) => void>();
 const ordersListeners = new Set<(orders: CustomerOrder[]) => void>();
 const trucksListeners = new Set<(trucks: Truck[]) => void>();
@@ -31,6 +32,7 @@ const pendingOrderWriteIds = new Set<string>();
 export function setActiveTenant(tenantId: string | null) {
   activeTenantId = tenantId;
   fallbackActive = false;
+  fallbackReason = null;
 }
 
 function requireTenantId(): string {
@@ -107,6 +109,10 @@ export function isUsingFallback(): boolean {
   return fallbackActive;
 }
 
+export function getFallbackReason(): string | null {
+  return fallbackReason;
+}
+
 // --- LOCAL STORAGE HELPERS ---
 function getLocalWeights(): ContainerWeight[] {
   const data = localStorage.getItem(localKey('container_weights'));
@@ -174,6 +180,7 @@ function activateLocalFallback(reason: string) {
   if (!fallbackActive) {
     console.warn(`⚠️ Switching to local storage fallback mode: ${reason}`);
     fallbackActive = true;
+    fallbackReason = reason;
 
     const localW = getLocalWeights();
     const localO = getLocalOrders();
@@ -181,7 +188,72 @@ function activateLocalFallback(reason: string) {
     weightsListeners.forEach((cb) => cb(localW));
     ordersListeners.forEach((cb) => cb(localO));
     trucksListeners.forEach((cb) => cb(localT));
+  } else {
+    fallbackReason = reason;
   }
+}
+
+/**
+ * Push browser-local orders/trucks to Firestore, clear offline mode, then reload.
+ * Fixes loaders not seeing trucks built while this device was in Local Active mode.
+ */
+export async function reconnectAndSyncToCloud(): Promise<void> {
+  const tenantId = requireTenantId();
+  const localOrders = getLocalOrders();
+  const localTrucks = getLocalTrucks();
+
+  // Firestore batches max ~500 ops; chunk if needed
+  const chunks: Array<() => Promise<void>> = [];
+  let batch = writeBatch(db);
+  let ops = 0;
+
+  const flush = () => {
+    if (ops === 0) return;
+    const toCommit = batch;
+    chunks.push(() => toCommit.commit());
+    batch = writeBatch(db);
+    ops = 0;
+  };
+
+  for (const order of localOrders) {
+    batch.set(orderDoc(tenantId, order.id), order, { merge: true });
+    ops += 1;
+    if (ops >= 400) flush();
+  }
+
+  for (const truck of localTrucks) {
+    batch.set(
+      truckDoc(tenantId, truck.id),
+      {
+        name: truck.name,
+        carrier: truck.carrier || '',
+        truckType: truck.truckType || '',
+        notes: truck.notes || '',
+        loadingDate: truck.loadingDate || '',
+        owner: truck.owner || '',
+        dateCreated: truck.dateCreated,
+        status: truck.status || 'pending',
+        orderIds: truck.orderIds || []
+      },
+      { merge: true }
+    );
+    ops += 1;
+    for (const orderId of truck.orderIds || []) {
+      batch.set(orderDoc(tenantId, orderId), { truckId: truck.id }, { merge: true });
+      ops += 1;
+      if (ops >= 400) flush();
+    }
+    if (ops >= 400) flush();
+  }
+  flush();
+
+  for (const commit of chunks) {
+    await commit();
+  }
+
+  fallbackActive = false;
+  fallbackReason = null;
+  window.location.reload();
 }
 
 export async function initializeDefaultWeightsIfNeeded(): Promise<ContainerWeight[]> {
@@ -733,12 +805,9 @@ export async function addTruck(truck: Omit<Truck, 'id' | 'dateCreated' | 'status
   });
   saveLocalOrders(updatedOrders);
 
-  if (fallbackActive) {
-    return newId;
-  }
-
+  // Always attempt cloud write so loaders on other devices can see the truck.
   try {
-    const activeOrderIds = new Set(orders.map((o) => o.id));
+    const activeOrderIds = new Set(getLocalOrders().map((o) => o.id));
     const batch = writeBatch(db);
     batch.set(truckDoc(tenantId, newId), {
       name: truck.name,
@@ -759,11 +828,17 @@ export async function addTruck(truck: Omit<Truck, 'id' | 'dateCreated' | 'status
     }
 
     await batch.commit();
+    fallbackActive = false;
+    fallbackReason = null;
     return newId;
   } catch (error: any) {
     console.error('Error adding truck to Firestore:', error);
     activateLocalFallback(error.message || 'Firestore write failed');
-    return newId;
+    throw new Error(
+      'Truck saved on this device only — loaders will not see it until you sync. ' +
+        'Click “Sync to cloud” in the header (Local Active), or check Firestore rules/connection. ' +
+        `(${error?.message || 'cloud write failed'})`
+    );
   }
 }
 
@@ -787,10 +862,8 @@ export async function updateTruck(truck: Truck): Promise<void> {
   });
   saveLocalOrders(updatedOrders);
 
-  if (fallbackActive) return;
-
   try {
-    const activeOrderIds = new Set(orders.map((o) => o.id));
+    const activeOrderIds = new Set(getLocalOrders().map((o) => o.id));
     const batch = writeBatch(db);
     batch.set(truckDoc(tenantId, truck.id), truck, { merge: true });
 
@@ -807,9 +880,16 @@ export async function updateTruck(truck: Truck): Promise<void> {
     }
 
     await batch.commit();
+    fallbackActive = false;
+    fallbackReason = null;
   } catch (error: any) {
     console.error('Error updating truck on Firestore:', error);
     activateLocalFallback(error.message || 'Firestore write failed');
+    throw new Error(
+      'Truck changes saved on this device only — loaders may not see them. ' +
+        'Click “Sync to cloud” in the header. ' +
+        `(${error?.message || 'cloud write failed'})`
+    );
   }
 }
 

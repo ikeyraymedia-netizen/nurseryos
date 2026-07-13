@@ -1,7 +1,7 @@
-import React from 'react';
-import { Clock, CheckCircle2, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, CheckCircle2, LogOut, CloudUpload } from 'lucide-react';
 import { CustomerOrder, MemberRole } from '../types';
-import { isUsingFallback } from '../lib/db';
+import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
 import { roleLabel } from '../lib/permissions';
 
@@ -31,6 +31,20 @@ export const Header: React.FC<HeaderProps> = ({
   const completedOrders = orders.filter((o) => o.status === 'completed');
   
   const fallbackActive = isUsingFallback();
+  const fallbackReason = getFallbackReason();
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  async function handleSyncToCloud() {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      await reconnectAndSyncToCloud();
+    } catch (err: any) {
+      setSyncError(err?.message || 'Could not sync to cloud.');
+      setSyncing(false);
+    }
+  }
 
   return (
     <header className="bg-emerald-950 text-white shadow-md border-b border-emerald-900">
@@ -175,6 +189,35 @@ export const Header: React.FC<HeaderProps> = ({
 
         </div>
       </div>
+
+      {fallbackActive && (
+        <div className="border-t border-amber-500/30 bg-amber-500/15 px-4 py-2.5">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+            <p className="text-[11px] text-amber-100 leading-relaxed">
+              <span className="font-black">Local Active:</span> this device is offline from the nursery
+              cloud. Trucks/orders saved here won&apos;t show for loaders on phones or other computers
+              until you sync.
+              {fallbackReason ? (
+                <span className="block sm:inline sm:ml-1 text-amber-200/80 font-mono">
+                  ({fallbackReason})
+                </span>
+              ) : null}
+              {syncError ? (
+                <span className="block text-red-200 font-semibold mt-1">{syncError}</span>
+              ) : null}
+            </p>
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={() => void handleSyncToCloud()}
+              className="inline-flex items-center justify-center gap-1.5 shrink-0 rounded-lg bg-amber-400 hover:bg-amber-300 text-amber-950 px-3 py-2 text-[11px] font-black disabled:opacity-60"
+            >
+              <CloudUpload className="h-3.5 w-3.5" />
+              {syncing ? 'Syncing…' : 'Sync to cloud'}
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

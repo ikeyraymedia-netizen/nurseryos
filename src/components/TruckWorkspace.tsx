@@ -1456,6 +1456,10 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             ) ||
             null
           }
+          truckOrders={orders.filter(
+            (candidate) =>
+              truck.orderIds.includes(candidate.id) || candidate.truckId === truck.id
+          )}
           nurseryName={nurseryName}
         />
       )}

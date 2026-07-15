@@ -65,8 +65,16 @@ export interface InvoiceDetails {
   paymentTerms?: string;
   taxRate?: number; // sales tax percentage, e.g. 4.45
   freightCharge?: number; // delivery / freight charge
+  freightAllocation?: FreightAllocation;
   discount?: number; // flat discount amount
   notes?: string; // custom terms/invoice notes
+}
+
+export interface FreightAllocation {
+  truckId: string;
+  totalFreight: number;
+  method: 'equal' | 'truckUsage';
+  allocatedAt: string;
 }
 
 export interface CustomerOrder {
@@ -126,6 +134,7 @@ export interface CustomerDocument {
   paymentTerms?: string;
   taxRate?: number;
   freightCharge?: number;
+  freightAllocation?: FreightAllocation;
   discount?: number;
   notes?: string;
   billToName: string;

@@ -5,7 +5,8 @@ import {
   InvoiceDetails,
   Customer,
   CustomerDocumentType,
-  CustomerDocument
+  CustomerDocument,
+  FreightAllocation
 } from '../types';
 import { 
   X, 
@@ -31,10 +32,16 @@ import { updateCustomerOrder } from '../lib/db';
 import {
   addCustomerDocument,
   updateCustomerDocument,
-  defaultDocumentNumber
+  defaultDocumentNumber,
+  listAllDocuments
 } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { logAuditEvent } from '../lib/audit';
+import {
+  allocateFreight,
+  FreightAllocationMethod,
+  FreightShare
+} from '../lib/freightAllocation';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -48,6 +55,8 @@ interface InvoiceModalProps {
   customer?: Customer | null;
   /** Existing saved document to update (from Customers tab). */
   existingDocument?: CustomerDocument | null;
+  /** Other orders assigned to the same truck, used for freight allocation. */
+  truckOrders?: CustomerOrder[];
   nurseryName?: string;
 }
 
@@ -58,6 +67,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   documentType: initialDocumentType = 'invoice',
   customer = null,
   existingDocument = null,
+  truckOrders = [],
   nurseryName = 'NurseryOS'
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +100,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Database saving status
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showFreightAllocation, setShowFreightAllocation] = useState(false);
 
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
@@ -508,12 +519,60 @@ Thank you for choosing ${nurseryName}!
     setSaveSuccess(false);
   };
 
+  const uniqueTruckOrders = truckOrders.filter(
+    (candidate, index, all) =>
+      candidate.id &&
+      all.findIndex((other) => other.id === candidate.id) === index
+  );
+  const canAllocateFreight =
+    documentType === 'invoice' &&
+    freightCharge > 0 &&
+    !!order.truckId &&
+    uniqueTruckOrders.length > 1 &&
+    !order.invoiceDetails?.freightAllocation &&
+    !existingDocument?.freightAllocation;
+
+  const handleSaveInvoice = () => {
+    if (canAllocateFreight) {
+      setShowFreightAllocation(true);
+      return;
+    }
+    void saveInvoice();
+  };
+
+  const handleFreightChoice = (method: FreightAllocationMethod | 'keep') => {
+    setShowFreightAllocation(false);
+    if (method === 'keep') {
+      void saveInvoice();
+      return;
+    }
+    const shares = allocateFreight(freightCharge, uniqueTruckOrders, method);
+    void saveInvoice(shares, method, freightCharge);
+  };
+
   // Persist prices to order + save estimate/invoice under the customer
-  const handleSaveInvoice = async () => {
+  const saveInvoice = async (
+    freightShares?: FreightShare[],
+    freightMethod?: FreightAllocationMethod,
+    totalFreight?: number
+  ) => {
     setIsSaving(true);
     setSaveSuccess(false);
 
     try {
+      const currentFreight =
+        freightShares?.find((share) => share.orderId === order.id)?.amount ?? freightCharge;
+      const freightAllocation: FreightAllocation | undefined =
+        freightShares && freightMethod && order.truckId && totalFreight !== undefined
+          ? {
+              truckId: order.truckId,
+              totalFreight,
+              method: freightMethod,
+              allocatedAt: new Date().toISOString()
+            }
+          : order.invoiceDetails?.freightAllocation || existingDocument?.freightAllocation;
+      const savedGrandTotal = subtotal - discountAmount + salesTax + currentFreight;
+
       const updatedItems = order.items.map((item) => ({
         ...item,
         unitPrice:
@@ -528,7 +587,8 @@ Thank you for choosing ${nurseryName}!
         dueDate,
         paymentTerms,
         taxRate,
-        freightCharge,
+        freightCharge: currentFreight,
+        freightAllocation,
         discount,
         notes: invoiceNotes
       };
@@ -570,7 +630,8 @@ Thank you for choosing ${nurseryName}!
           dueDate: dueDate || undefined,
           paymentTerms,
           taxRate,
-          freightCharge,
+          freightCharge: currentFreight,
+          freightAllocation,
           discount,
           notes: invoiceNotes,
           billToName,
@@ -579,7 +640,7 @@ Thank you for choosing ${nurseryName}!
           items: lineItems,
           subtotal,
           salesTax,
-          grandTotal
+          grandTotal: savedGrandTotal
         };
 
         if (savedDocumentId) {
@@ -592,6 +653,42 @@ Thank you for choosing ${nurseryName}!
         } else {
           const newId = await addCustomerDocument(docPayload);
           setSavedDocumentId(newId);
+        }
+
+        if (freightShares && freightAllocation) {
+          const allDocuments = await listAllDocuments();
+          const siblingOrders = uniqueTruckOrders.filter((truckOrder) => truckOrder.id !== order.id);
+
+          for (const sibling of siblingOrders) {
+            const share = freightShares.find((item) => item.orderId === sibling.id);
+            if (!share) continue;
+
+            await updateCustomerOrder({
+              ...sibling,
+              invoiceDetails: {
+                ...sibling.invoiceDetails,
+                freightCharge: share.amount,
+                freightAllocation
+              }
+            });
+
+            const siblingInvoice = allDocuments.find(
+              (document) => document.type === 'invoice' && document.orderId === sibling.id
+            );
+            if (siblingInvoice) {
+              await updateCustomerDocument({
+                ...siblingInvoice,
+                freightCharge: share.amount,
+                freightAllocation,
+                grandTotal:
+                  siblingInvoice.subtotal -
+                  (siblingInvoice.discount || 0) +
+                  siblingInvoice.salesTax +
+                  share.amount
+              });
+            }
+          }
+          setFreightCharge(currentFreight);
         }
 
       // Keep order linked to the same customer used for the saved document
@@ -611,7 +708,9 @@ Thank you for choosing ${nurseryName}!
           documentNumber: invoiceNumber,
           customerId,
           orderId: isDocumentOnlyOrder ? null : order.id,
-          grandTotal
+          grandTotal: savedGrandTotal,
+          freightAllocationMethod: freightMethod || null,
+          totalFreight: totalFreight ?? null
         }
       });
 
@@ -683,6 +782,71 @@ Thank you for choosing ${nurseryName}!
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-50 print:p-0 print:bg-white print:backdrop-blur-none">
+      {showFreightAllocation && (
+        <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 bg-emerald-950 text-white">
+              <h3 className="text-base font-black">Distribute truck freight?</h3>
+              <p className="text-xs text-emerald-200 mt-1">
+                This truck has {uniqueTruckOrders.length} orders and ${freightCharge.toFixed(2)} in
+                total freight.
+              </p>
+            </div>
+            <div className="p-5 space-y-3">
+              <button
+                type="button"
+                onClick={() => handleFreightChoice('equal')}
+                className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 px-4 py-3 transition-colors"
+              >
+                <span className="block text-sm font-black text-gray-900">Split evenly</span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Divide the freight equally across all {uniqueTruckOrders.length} invoices.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFreightChoice('truckUsage')}
+                className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 px-4 py-3 transition-colors"
+              >
+                <span className="block text-sm font-black text-gray-900">
+                  Split by % of truck used
+                </span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Allocate by each order&apos;s share of the truck&apos;s total plant weight.
+                </span>
+                <span className="block text-[11px] text-slate-600 mt-2 font-mono">
+                  {allocateFreight(freightCharge, uniqueTruckOrders, 'truckUsage')
+                    .map((share) => {
+                      const shareOrder = uniqueTruckOrders.find(
+                        (candidate) => candidate.id === share.orderId
+                      );
+                      return `${shareOrder?.customerName || 'Order'} ${share.percentage.toFixed(1)}% · $${share.amount.toFixed(2)}`;
+                    })
+                    .join('  |  ')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFreightChoice('keep')}
+                className="w-full text-left rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-3"
+              >
+                <span className="block text-sm font-bold text-gray-800">
+                  Keep all freight on this invoice
+                </span>
+              </button>
+            </div>
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFreightAllocation(false)}
+                className="px-3 py-2 text-xs font-bold text-slate-600 hover:text-slate-900"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Modal Container */}
       <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">

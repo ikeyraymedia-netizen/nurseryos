@@ -38,6 +38,7 @@ import { InvoiceModal } from './InvoiceModal';
 
 interface LoaderWorkspaceProps {
   order: CustomerOrder;
+  orders?: CustomerOrder[];
   containerWeights: ContainerWeight[];
   customers: Customer[];
   permissions: AppPermissions;
@@ -46,6 +47,7 @@ interface LoaderWorkspaceProps {
 
 export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   order,
+  orders = [],
   containerWeights,
   customers,
   permissions,
@@ -1197,6 +1199,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             (c) => c.name.trim().toLowerCase() === order.customerName.trim().toLowerCase()
           ) ||
           null
+        }
+        truckOrders={
+          order.truckId
+            ? orders.filter((candidate) => candidate.truckId === order.truckId)
+            : []
         }
         nurseryName={nurseryName}
       />

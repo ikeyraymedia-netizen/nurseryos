@@ -709,6 +709,7 @@ function NurseryApp({
           ) : selectedOrder ? (
             <LoaderWorkspace
               order={selectedOrder}
+              orders={dynamicOrders}
               containerWeights={containerWeights}
               customers={customers}
               permissions={permissions}
@@ -765,6 +766,13 @@ function NurseryApp({
           documentType={documentModal.type}
           customer={documentModalCustomer}
           existingDocument={documentModal.existingDocument || null}
+          truckOrders={
+            documentModalOrder.truckId
+              ? dynamicOrders.filter(
+                  (candidate) => candidate.truckId === documentModalOrder.truckId
+                )
+              : []
+          }
           nurseryName={tenant.name}
         />
       )}

@@ -37,6 +37,7 @@ interface ParsedOrderDraft {
 }
 
 type UploadKind = 'order' | 'estimate';
+type InputMode = 'file' | 'text';
 
 export const OrderUploader: React.FC<OrderUploaderProps> = ({
   containerWeights,
@@ -48,6 +49,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   onEstimateSaved
 }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [inputMode, setInputMode] = useState<InputMode>('file');
+  const [pastedText, setPastedText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
@@ -100,9 +103,18 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setStatusMessage('Reading file content...');
 
     try {
-      const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+      const allowedTypes = [
+        'application/pdf',
+        'image/png',
+        'image/jpeg',
+        'image/jpg',
+        'image/webp',
+        'text/plain'
+      ];
       if (!allowedTypes.includes(file.type)) {
-        throw new Error('Unsupported file format. Please upload a PDF or an image (PNG, JPEG, WebP).');
+        throw new Error(
+          'Unsupported file format. Please upload a PDF or image, or paste plain text.'
+        );
       }
 
       const base64Data = await new Promise<string>((resolve, reject) => {
@@ -351,48 +363,128 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     fileInputRef.current?.click();
   };
 
+  const processPastedText = () => {
+    const text = pastedText.trim();
+    if (!text) {
+      setErrorMessage('Paste the order text before continuing.');
+      return;
+    }
+    const file = new File([text], 'pasted-order.txt', { type: 'text/plain' });
+    void processFile(file);
+  };
+
   return (
     <div id="uploader-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6">
       <div className="flex items-center space-x-2.5 mb-4">
         <Upload className="h-5 w-5 text-emerald-800 font-bold" />
-        <h3 className="text-lg font-bold text-gray-900 font-sans">Upload Document</h3>
+        <h3 className="text-lg font-bold text-gray-900 font-sans">Add Order</h3>
       </div>
 
       <p className="text-sm text-slate-600 mb-4 leading-relaxed font-medium">
-        Upload plant paperwork. After AI reads it, choose whether it’s an estimate (saved under the
-        customer only) or a plant order for loading.
+        Upload plant paperwork or paste plain text. After AI reads it, choose whether it’s an
+        estimate (saved under the customer only) or a plant order for loading.
       </p>
 
       {!loading && !pendingDraft && !savedOrderId && !savedEstimateCustomerId && (
-        <div
-          onClick={triggerFileInput}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center min-h-[180px] ${
-            isDragging
-              ? 'border-emerald-500 bg-emerald-50/50'
-              : 'border-slate-300 bg-slate-50/30 hover:border-emerald-500 hover:bg-emerald-50/20 shadow-inner'
-          }`}
-        >
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
-            className="hidden"
-          />
-          <div className="bg-emerald-100/80 p-3 rounded-full text-emerald-800 mb-3.5 shadow-sm">
-            <FileText className="h-6 w-6" />
+        <div className="space-y-3">
+          <div className="flex rounded-xl bg-slate-100 border border-slate-200 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setInputMode('file');
+                setErrorMessage(null);
+              }}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
+                inputMode === 'file'
+                  ? 'bg-white text-emerald-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload File
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setInputMode('text');
+                setErrorMessage(null);
+              }}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
+                inputMode === 'text'
+                  ? 'bg-white text-emerald-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Paste Text
+            </button>
           </div>
-          <p className="text-sm font-semibold text-gray-800">Drag & drop plant document here</p>
-          <p className="text-xs text-gray-400 mt-1">Supports PDFs, photos, invoices up to 20MB</p>
-          <button
-            type="button"
-            className="mt-4 px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow transition-colors"
-          >
-            Choose File
-          </button>
+
+          {inputMode === 'file' ? (
+            <div
+              onClick={triggerFileInput}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center min-h-[180px] ${
+                isDragging
+                  ? 'border-emerald-500 bg-emerald-50/50'
+                  : 'border-slate-300 bg-slate-50/30 hover:border-emerald-500 hover:bg-emerald-50/20 shadow-inner'
+              }`}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden"
+              />
+              <div className="bg-emerald-100/80 p-3 rounded-full text-emerald-800 mb-3.5 shadow-sm">
+                <FileText className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-semibold text-gray-800">
+                Drag & drop plant document here
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Supports PDFs, photos, invoices up to 20MB
+              </p>
+              <button
+                type="button"
+                className="mt-4 px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow transition-colors"
+              >
+                Choose File
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
+              <label
+                htmlFor="pasted-order-text"
+                className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-2"
+              >
+                Paste customer order text
+              </label>
+              <textarea
+                id="pasted-order-text"
+                value={pastedText}
+                onChange={(event) => {
+                  setPastedText(event.target.value);
+                  setErrorMessage(null);
+                }}
+                rows={10}
+                placeholder={`Customer: Acme Landscape\nPO: 1042\n\n10 - #3 Live Oak\n6 - #7 Magnolia\n12 - #1 Dwarf Yaupon`}
+                className="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
+              />
+              <button
+                type="button"
+                onClick={processPastedText}
+                disabled={!pastedText.trim()}
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Sprout className="h-4 w-4" />
+                Analyze Pasted Text
+              </button>
+            </div>
+          )}
         </div>
       )}
 

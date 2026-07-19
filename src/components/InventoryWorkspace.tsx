@@ -144,8 +144,18 @@ export function InventoryWorkspace({
     return (
       p.plantName.toLowerCase().includes(q) ||
       p.containerSize.toLowerCase().includes(q) ||
-      (p.location || '').toLowerCase().includes(q)
+      (p.location || '').toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q) ||
+      (p.listPrice != null && String(p.listPrice).includes(q))
     );
+  });
+
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    const cat = (a.category || 'ZZZ').localeCompare(b.category || 'ZZZ');
+    if (cat !== 0) return cat;
+    const name = a.plantName.localeCompare(b.plantName);
+    if (name !== 0) return name;
+    return a.containerSize.localeCompare(b.containerSize);
   });
 
   async function handleAddPlant(e: FormEvent) {
@@ -205,9 +215,10 @@ export function InventoryWorkspace({
       setUploadStatus(`Saving ${parsed.length} plants to inventory...`);
       const count = await bulkImportInventoryPlants(parsed);
       const zeroQty = parsed.filter((p) => !p.quantityAvailable).length;
+      const withPrice = parsed.filter((p) => p.listPrice != null).length;
       setMessage(
         zeroQty > count * 0.8
-          ? `Imported ${count} plants from ${file.name}. Qty set to 0 (price catalog) — edit on-hand counts as needed.`
+          ? `Imported ${count} plants (${withPrice} with list price) from ${file.name}. Qty starts at 0 — clear old inventory first if re-importing, then edit on-hand counts.`
           : `Imported ${count} plants from ${file.name}.`
       );
       setMessageIsError(false);
@@ -585,10 +596,10 @@ export function InventoryWorkspace({
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-150 max-h-[420px] overflow-y-auto">
-            {filtered.length === 0 ? (
+            {sortedFiltered.length === 0 ? (
               <p className="p-4 text-sm text-gray-500">No inventory yet.</p>
             ) : (
-              filtered.map((plant) => (
+              sortedFiltered.map((plant) => (
                 <button
                   key={plant.id}
                   type="button"
@@ -599,8 +610,11 @@ export function InventoryWorkspace({
                 >
                   <p className="font-bold text-sm text-gray-900">{plant.plantName}</p>
                   <p className="text-xs text-gray-500">
-                    {plant.containerSize} • Qty {plant.quantityAvailable}
-                    {plant.weeksUntilReady != null ? ` • ${plant.weeksUntilReady} wks` : ''}
+                    {plant.category ? `${plant.category} · ` : ''}
+                    {plant.containerSize}
+                    {plant.listPrice != null ? ` · $${plant.listPrice.toFixed(2)}` : ''}
+                    {` · Qty ${plant.quantityAvailable}`}
+                    {plant.weeksUntilReady != null ? ` · ${plant.weeksUntilReady} wks` : ''}
                   </p>
                 </button>
               ))
@@ -664,9 +678,13 @@ export function InventoryWorkspace({
             <div className="bg-white rounded-2xl border border-gray-150 p-5 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-black text-gray-900">{selected.plantName}</h3>
-                  <p className="text-sm text-gray-500">{selected.containerSize}</p>
-                </div>
+                <h3 className="text-xl font-black text-gray-900">{selected.plantName}</h3>
+                <p className="text-sm text-gray-500">
+                  {selected.category ? `${selected.category} · ` : ''}
+                  {selected.containerSize}
+                  {selected.listPrice != null ? ` · $${selected.listPrice.toFixed(2)}` : ''}
+                </p>
+              </div>
                 {permissions.canEditInventory && (
                   <button
                     type="button"
@@ -693,6 +711,32 @@ export function InventoryWorkspace({
                     onChange={(e) =>
                       saveSelected({ quantityAvailable: Number(e.target.value) || 0 })
                     }
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block text-xs">
+                  <span className="font-bold text-gray-500 uppercase">List price</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    disabled={!permissions.canEditInventory}
+                    value={selected.listPrice ?? ''}
+                    onChange={(e) =>
+                      saveSelected({
+                        listPrice: e.target.value === '' ? null : Number(e.target.value)
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block text-xs">
+                  <span className="font-bold text-gray-500 uppercase">Section / category</span>
+                  <input
+                    disabled={!permissions.canEditInventory}
+                    value={selected.category || ''}
+                    onChange={(e) => saveSelected({ category: e.target.value || undefined })}
+                    placeholder="e.g. Shrubs"
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   />
                 </label>

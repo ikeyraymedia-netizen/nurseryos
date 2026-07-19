@@ -10,6 +10,8 @@ export type SpreadsheetInventoryItem = {
   quantityAvailable: number;
   weeksUntilReady: number | null;
   location?: string;
+  category?: string;
+  listPrice?: number | null;
   notes: string;
   chemicals: [];
   cutBackAt: null;
@@ -28,22 +30,16 @@ const SECTION_HEADERS = new Set([
   'grass',
   'vines',
   'vine',
-  'palms',
-  'palm',
-  'ferns',
-  'fern',
   'annuals',
   'annual',
-  'roses',
-  'rose',
   'fruit',
   'fruits',
   'edibles',
   'conifers',
   'natives',
   'specialty',
-  'contact',
-  'notes'
+  'misc',
+  'miscellaneous'
 ]);
 
 function detectCsvDelimiter(headerLine: string): string {
@@ -251,31 +247,49 @@ function titleCaseWords(value: string): string {
     .join(' ');
 }
 
+function parsePriceNumber(raw: string): number | null {
+  const cleaned = String(raw || '').replace(/[^0-9.]/g, '');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isBoilerplateRow(label: string): boolean {
+  return /catalog|availability|pricing|confirm|www\.|contact|@|^\*|phone|^\d{3}[-.]/i.test(label);
+}
+
 function isSectionHeader(label: string): boolean {
   const n = normalizeHeaderCell(label);
-  if (!n) return false;
-  if (SECTION_HEADERS.has(n)) return true;
-  if (/catalog|availability|pricing|confirm|www\.|contact/i.test(label)) return true;
-  return false;
+  return Boolean(n) && SECTION_HEADERS.has(n);
 }
 
 function looksLikeGenusHeader(label: string): boolean {
   const t = String(label || '').trim();
-  if (!t || t.length > 40) return false;
-  if (isSectionHeader(t)) return false;
-  // ALL CAPS botanical / category label (ABELIA, ASIAN JASMINE group, etc.)
+  if (!t || t.length > 48) return false;
+  if (isSectionHeader(t) || isBoilerplateRow(t)) return false;
   const letters = t.replace(/[^A-Za-z]/g, '');
   if (letters.length < 3) return false;
   return t === t.toUpperCase() && /[A-Z]/.test(t);
 }
 
+function buildCatalogPlantName(genus: string | null, variety: string): string {
+  const v = variety.trim().replace(/\s+/g, ' ');
+  if (!genus) return v;
+  const gNorm = normalizeHeaderCell(genus);
+  const vNorm = normalizeHeaderCell(v);
+  if (vNorm === gNorm || vNorm.startsWith(`${gNorm} `)) return titleCaseWords(v);
+  if (gNorm.split(/\s+/).every((w) => vNorm.includes(w))) return titleCaseWords(v);
+  return `${genus} ${v}`.replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Parse nursery price-list matrices like Bayou/SiteOne catalogs:
- * size headers across columns, plant rows with $ prices under those sizes.
+ * section banners, genus + size headers, then plant rows with $ prices.
  */
 export function parseCatalogMatrix(table: string[][]): SpreadsheetInventoryItem[] {
   let sizesByCol: Record<number, string> = {};
   let genusPrefix: string | null = null;
+  let section: string | null = null;
   const out: SpreadsheetInventoryItem[] = [];
   const seen = new Set<string>();
 
@@ -288,61 +302,67 @@ export function parseCatalogMatrix(table: string[][]): SpreadsheetInventoryItem[
     const sizeCols: Array<{ idx: number; size: string }> = [];
     const priceCols: Array<{ idx: number; price: string }> = [];
 
-    for (let i = 0; i < cells.length; i += 1) {
+    for (let i = 1; i < cells.length; i += 1) {
       const cell = cells[i];
       if (!cell) continue;
       const size = normalizeSizeToken(cell);
-      if (size && i > 0) sizeCols.push({ idx: i, size });
-      else if (i > 0 && isPriceToken(cell)) priceCols.push({ idx: i, price: cell });
+      if (size) sizeCols.push({ idx: i, size });
+      else if (isPriceToken(cell)) priceCols.push({ idx: i, price: cell });
     }
 
-    // Pure section banner
+    if (label && isBoilerplateRow(label) && priceCols.length === 0) continue;
+
+    // Pure section banner (GROUND COVER, SHRUBS, …)
     if (label && isSectionHeader(label) && sizeCols.length === 0 && priceCols.length === 0) {
+      section = titleCaseWords(label);
       genusPrefix = null;
       continue;
     }
 
-    // Size header row (optionally with genus in col 0)
+    // Size header row (optionally with genus or section name in col 0)
     if (sizeCols.length > 0 && priceCols.length === 0) {
       sizesByCol = {};
       for (const s of sizeCols) sizesByCol[s.idx] = s.size;
-      if (label && looksLikeGenusHeader(label)) {
+
+      if (label && isSectionHeader(label)) {
+        section = titleCaseWords(label);
+        genusPrefix = null;
+      } else if (label && looksLikeGenusHeader(label)) {
         genusPrefix = titleCaseWords(label);
       } else if (!label) {
-        // keep existing genusPrefix
-      } else if (isSectionHeader(label)) {
-        genusPrefix = null;
+        // keep genus; blank size-only header (ground cover 4" / #1)
       }
       continue;
     }
 
-    // Plant / variety row with prices
+    // Plant / variety row with prices under active size columns
     if (label && priceCols.length > 0 && Object.keys(sizesByCol).length > 0) {
-      if (isSectionHeader(label) || looksLikeGenusHeader(label)) continue;
-
-      let plantName = label;
-      if (
-        genusPrefix &&
-        !normalizeHeaderCell(plantName).includes(normalizeHeaderCell(genusPrefix))
-      ) {
-        plantName = `${genusPrefix} ${label}`;
+      if (isSectionHeader(label) || looksLikeGenusHeader(label) || isBoilerplateRow(label)) {
+        continue;
       }
+
+      const plantName = buildCatalogPlantName(genusPrefix, label);
 
       for (const p of priceCols) {
         const size = sizesByCol[p.idx];
         if (!size) continue;
+        const listPrice = parsePriceNumber(p.price);
         const key = `${normalizeHeaderCell(plantName)}::${size}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({
+
+        const entry: SpreadsheetInventoryItem = {
           plantName,
           containerSize: size,
           quantityAvailable: 0,
           weeksUntilReady: null,
           chemicals: [],
           cutBackAt: null,
-          notes: `List price ${p.price}`
-        });
+          listPrice,
+          notes: listPrice != null ? `List price $${listPrice.toFixed(2)}` : ''
+        };
+        if (section) entry.category = section;
+        out.push(entry);
       }
     }
   }

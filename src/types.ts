@@ -200,6 +200,10 @@ export interface InventoryPlant {
   cutBackAt?: string | null;
   cutBackNotes?: string;
   location?: string;
+  /** Catalog section e.g. Shrubs, Ground Cover, Grasses */
+  category?: string;
+  /** List / wholesale price from catalog import */
+  listPrice?: number | null;
   notes?: string;
   dateCreated: string;
   dateUpdated: string;

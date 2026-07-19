@@ -69,9 +69,12 @@ export async function pushDocumentToQuickbooks(params: {
   qboDocType: string;
   qboDocNumber?: string | null;
   customerName?: string | null;
+  totalAmt?: number | null;
   environment?: string;
   companyName?: string | null;
+  openUrl?: string | null;
   sandboxUrl?: string | null;
+  verified?: boolean;
 }> {
   const res = await fetch('/api/quickbooks/push-invoice', {
     method: 'POST',
@@ -85,8 +88,32 @@ export async function pushDocumentToQuickbooks(params: {
     qboDocType: String(data.qboDocType || 'invoice'),
     qboDocNumber: data.qboDocNumber ? String(data.qboDocNumber) : null,
     customerName: data.customerName ? String(data.customerName) : null,
+    totalAmt: data.totalAmt != null ? Number(data.totalAmt) : null,
     environment: data.environment ? String(data.environment) : null,
     companyName: data.companyName ? String(data.companyName) : null,
-    sandboxUrl: data.sandboxUrl ? String(data.sandboxUrl) : null
+    openUrl: data.openUrl ? String(data.openUrl) : null,
+    sandboxUrl: data.sandboxUrl ? String(data.sandboxUrl) : null,
+    verified: Boolean(data.verified)
   };
+}
+
+export async function fetchRecentQuickbooksInvoices(tenantId: string): Promise<{
+  environment: string;
+  companyName: string | null;
+  realmId: string;
+  invoices: Array<{
+    id: string;
+    docNumber: string | null;
+    txnDate: string | null;
+    totalAmt: number | null;
+    customerName: string | null;
+    openUrl: string;
+  }>;
+}> {
+  const res = await fetch(
+    `/api/quickbooks/recent-invoices?tenantId=${encodeURIComponent(tenantId)}`,
+    { headers: await authHeaders() }
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
 }

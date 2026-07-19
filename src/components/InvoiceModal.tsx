@@ -776,16 +776,20 @@ Thank you for choosing ${nurseryName}!
         ? `Doc #${result.qboDocNumber}`
         : `Id ${result.qboInvoiceId}`;
       const customerBit = result.customerName ? ` · customer “${result.customerName}”` : '';
+      const totalBit =
+        result.totalAmt != null ? ` · $${Number(result.totalAmt).toFixed(2)}` : '';
       setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
-      alert(
-        `Invoice pushed to ${where}${companyBit}.\n\n${docBit}${customerBit}\n\n` +
-          (result.environment === 'sandbox'
-            ? 'Open https://app.sandbox.qbo.intuit.com (not regular QuickBooks), then Sales → Invoices or search that customer.\n\nIf you have multiple sandbox companies, switch to the one you authorized when connecting.'
-            : 'Open QuickBooks Online → Sales → Invoices, or search that customer.')
-      );
-      if (result.sandboxUrl && result.environment === 'sandbox') {
-        // Keep UX soft — user can open after reading alert
+      if (result.openUrl) {
+        window.open(result.openUrl, '_blank', 'noopener,noreferrer');
       }
+      alert(
+        `Invoice pushed to ${where}${companyBit}.\n\n${docBit}${customerBit}${totalBit}\n\n` +
+          (result.openUrl
+            ? `A new tab should open with that invoice.\nIf it didn’t: ${result.openUrl}`
+            : result.environment === 'sandbox'
+              ? 'Open https://app.sandbox.qbo.intuit.com — make sure the company name matches the one shown above.'
+              : 'Open QuickBooks Online → Sales → Invoices.')
+      );
     } catch (err: any) {
       alert(err?.message || 'Failed to push to QuickBooks.');
     } finally {

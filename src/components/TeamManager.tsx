@@ -21,6 +21,7 @@ import { logAuditEvent } from '../lib/audit';
 import {
   disconnectQuickbooks,
   fetchQuickbooksStatus,
+  fetchRecentQuickbooksInvoices,
   QuickbooksStatus,
   startQuickbooksConnect
 } from '../lib/quickbooks';
@@ -53,6 +54,17 @@ export function TeamManager({
   const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
   const [qbBusy, setQbBusy] = useState(false);
   const [qbError, setQbError] = useState<string | null>(null);
+  const [qbRecent, setQbRecent] = useState<
+    Array<{
+      id: string;
+      docNumber: string | null;
+      txnDate: string | null;
+      totalAmt: number | null;
+      customerName: string | null;
+      openUrl: string;
+    }>
+  >([]);
+  const [qbRecentBusy, setQbRecentBusy] = useState(false);
 
   async function refresh() {
     const [m, i] = await Promise.all([
@@ -145,6 +157,29 @@ export function TeamManager({
     }
   }
 
+  async function handleLoadRecentQbInvoices() {
+    setQbRecentBusy(true);
+    setQbError(null);
+    try {
+      const data = await fetchRecentQuickbooksInvoices(tenant.id);
+      setQbRecent(data.invoices);
+      if (data.companyName) {
+        setQbStatus((prev) => (prev ? { ...prev, companyName: data.companyName } : prev));
+      }
+      if (data.invoices.length === 0) {
+        setQbError(
+          `No invoices found in connected ${data.environment} company${
+            data.companyName ? ` “${data.companyName}”` : ''
+          }. Try pushing again after redeploy.`
+        );
+      }
+    } catch (err: any) {
+      setQbError(err?.message || 'Failed to load recent QuickBooks invoices.');
+    } finally {
+      setQbRecentBusy(false);
+    }
+  }
+
   async function handleDisconnectQuickbooks() {
     const ok = confirm('Disconnect QuickBooks from this nursery?');
     if (!ok) return;
@@ -159,6 +194,7 @@ export function TeamManager({
         summary: 'Disconnected QuickBooks Online'
       });
       setMessage('QuickBooks disconnected.');
+      setQbRecent([]);
       await refreshQuickbooks();
     } catch (err: any) {
       setQbError(err?.message || 'Failed to disconnect QuickBooks.');
@@ -398,18 +434,49 @@ export function TeamManager({
                     >
                       sandbox QuickBooks
                     </a>
-                    , not your live company.
+                    , not your live company. Company name in sandbox must match what’s shown above.
                   </p>
                 )}
-                <button
-                  type="button"
-                  disabled={qbBusy || busy}
-                  onClick={() => void handleDisconnectQuickbooks()}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
-                >
-                  <Unlink className="h-3.5 w-3.5" />
-                  Disconnect
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={qbBusy || busy}
+                    onClick={() => void handleDisconnectQuickbooks()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                  >
+                    <Unlink className="h-3.5 w-3.5" />
+                    Disconnect
+                  </button>
+                  <button
+                    type="button"
+                    disabled={qbRecentBusy || busy}
+                    onClick={() => void handleLoadRecentQbInvoices()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 bg-white text-sky-800 text-xs font-bold disabled:opacity-50"
+                  >
+                    {qbRecentBusy ? 'Loading…' : 'Show recent QBO invoices'}
+                  </button>
+                </div>
+                {qbRecent.length > 0 && (
+                  <div className="rounded-lg border border-sky-100 bg-white px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase text-sky-900">
+                      Latest in connected company
+                    </p>
+                    {qbRecent.map((inv) => (
+                      <a
+                        key={inv.id}
+                        href={inv.openUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block text-[11px] text-sky-900 hover:underline"
+                      >
+                        {inv.docNumber ? `#${inv.docNumber}` : `Id ${inv.id}`}
+                        {inv.customerName ? ` · ${inv.customerName}` : ''}
+                        {inv.totalAmt != null ? ` · $${inv.totalAmt.toFixed(2)}` : ''}
+                        {inv.txnDate ? ` · ${inv.txnDate}` : ''}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <button

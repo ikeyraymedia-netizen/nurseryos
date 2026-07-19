@@ -232,6 +232,34 @@ async function qboRequest<T>(
   return data as T;
 }
 
+function qbAppBase(env?: QbEnvironment): string {
+  return (env || qbEnv()) === 'production'
+    ? 'https://app.qbo.intuit.com'
+    : 'https://app.sandbox.qbo.intuit.com';
+}
+
+function qbTxnOpenUrl(
+  env: QbEnvironment | undefined,
+  docType: 'invoice' | 'estimate',
+  txnId: string
+): string {
+  const path = docType === 'estimate' ? 'estimate' : 'invoice';
+  return `${qbAppBase(env)}/app/${path}?txnId=${encodeURIComponent(txnId)}`;
+}
+
+async function fetchCompanyName(tenantId: string, realmId: string): Promise<string | null> {
+  try {
+    const info = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/companyinfo/${realmId}?minorversion=65`
+    );
+    return info?.CompanyInfo?.CompanyName || info?.CompanyInfo?.LegalName || null;
+  } catch {
+    return null;
+  }
+}
+
 async function findOrCreateServiceItem(tenantId: string): Promise<string> {
   const query = encodeURIComponent(`select * from Item where Name = 'NurseryOS Line'`);
   const search = await qboRequest<any>(
@@ -308,7 +336,7 @@ function mapDocToInvoice(
       Description: desc || `Line ${index + 1}`,
       SalesItemLineDetail: {
         ItemRef: { value: itemRefId },
-        Qty: qty,
+        Qty: qty || 1,
         UnitPrice: unitPrice
       }
     };
@@ -324,6 +352,19 @@ function mapDocToInvoice(
         ItemRef: { value: itemRefId },
         Qty: 1,
         UnitPrice: freight
+      }
+    });
+  }
+
+  if (lines.length === 0) {
+    lines.push({
+      DetailType: 'SalesItemLineDetail',
+      Amount: 0,
+      Description: String(doc.documentNumber || 'NurseryOS document'),
+      SalesItemLineDetail: {
+        ItemRef: { value: itemRefId },
+        Qty: 1,
+        UnitPrice: 0
       }
     });
   }
@@ -554,19 +595,14 @@ export function registerQuickbooksRoutes(app: Express) {
       }
 
       const integration = await loadIntegration(tenantId);
-      let companyName: string | null = null;
-      try {
-        const info = await qboRequest<any>(
-          tenantId,
-          'GET',
-          `/companyinfo/${integration!.realmId}?minorversion=65`
-        );
-        companyName = info?.CompanyInfo?.CompanyName || info?.CompanyInfo?.LegalName || null;
-      } catch {
-        companyName = null;
-      }
+      const env = integration?.environment || qbEnv();
+      const companyName = integration?.realmId
+        ? await fetchCompanyName(tenantId, integration.realmId)
+        : null;
 
-      // Verify the invoice is readable back from QBO
+      // Re-read from QBO so we return confirmed customer + totals
+      let verifiedCustomer = String(doc.billToName || doc.customerName || '');
+      let totalAmt: number | null = null;
       let verified = false;
       try {
         const checkPath =
@@ -574,16 +610,22 @@ export function registerQuickbooksRoutes(app: Express) {
             ? `/estimate/${qboId}?minorversion=65`
             : `/invoice/${qboId}?minorversion=65`;
         const check = await qboRequest<any>(tenantId, 'GET', checkPath);
-        verified = Boolean(check?.Invoice?.Id || check?.Estimate?.Id);
+        const checked = doc.type === 'estimate' ? check?.Estimate : check?.Invoice;
+        verified = Boolean(checked?.Id);
+        if (checked?.CustomerRef?.name) verifiedCustomer = String(checked.CustomerRef.name);
+        if (checked?.TotalAmt != null) totalAmt = Number(checked.TotalAmt);
       } catch {
         verified = false;
       }
+
+      const openUrl = qbTxnOpenUrl(env, doc.type, qboId);
 
       await docRef.set(
         {
           qboInvoiceId: qboId,
           qboDocType: doc.type,
           qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
+          qboOpenUrl: openUrl,
           qboSyncedAt: new Date().toISOString(),
           qboSyncedByUserId: uid,
           updatedAt: new Date().toISOString()
@@ -591,18 +633,58 @@ export function registerQuickbooksRoutes(app: Express) {
         { merge: true }
       );
 
-      const env = integration?.environment || qbEnv();
       res.json({
         success: true,
         qboInvoiceId: qboId,
         qboDocType: doc.type,
         qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
-        customerName: String(doc.billToName || doc.customerName || ''),
+        customerName: verifiedCustomer,
+        totalAmt,
         environment: env,
         companyName,
         verified,
-        sandboxUrl:
-          env === 'sandbox' ? 'https://app.sandbox.qbo.intuit.com/app/invoices' : null
+        openUrl,
+        sandboxUrl: env === 'sandbox' ? `${qbAppBase('sandbox')}/app/invoices` : null
+      });
+    })
+  );
+
+  // List recent invoices in the connected QBO company (debug / find-what-was-pushed)
+  app.get('/api/quickbooks/recent-invoices', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.query.tenantId || '');
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertAdminOrOwner(tenantId, uid);
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.realmId) {
+        res.status(400).json({ error: 'QuickBooks is not connected.' });
+        return;
+      }
+      const env = integration.environment || qbEnv();
+      const companyName = await fetchCompanyName(tenantId, integration.realmId);
+      const result = await qboRequest<any>(
+        tenantId,
+        'GET',
+        `/query?query=${encodeURIComponent(
+          'SELECT Id, DocNumber, TxnDate, TotalAmt, CustomerRef FROM Invoice ORDERBY MetaData.CreateTime DESC MAXRESULTS 10'
+        )}&minorversion=65`
+      );
+      const invoices = (result?.QueryResponse?.Invoice || []).map((inv: any) => ({
+        id: String(inv.Id),
+        docNumber: inv.DocNumber ? String(inv.DocNumber) : null,
+        txnDate: inv.TxnDate ? String(inv.TxnDate) : null,
+        totalAmt: inv.TotalAmt != null ? Number(inv.TotalAmt) : null,
+        customerName: inv.CustomerRef?.name ? String(inv.CustomerRef.name) : null,
+        openUrl: qbTxnOpenUrl(env, 'invoice', String(inv.Id))
+      }));
+      res.json({
+        environment: env,
+        companyName,
+        realmId: integration.realmId,
+        invoices
       });
     })
   );

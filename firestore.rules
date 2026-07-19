@@ -44,8 +44,12 @@ service cloud.firestore {
       return hasMemberRole(tenantId, 'loader');
     }
 
+    function isSupervisor(tenantId) {
+      return hasMemberRole(tenantId, 'supervisor');
+    }
+
     function canReadOps(tenantId) {
-      return isAdminOrOwner(tenantId) || isLoader(tenantId);
+      return isAdminOrOwner(tenantId) || isLoader(tenantId) || isSupervisor(tenantId);
     }
 
     function canWriteOps(tenantId) {
@@ -54,6 +58,10 @@ service cloud.firestore {
 
     function canWriteLoadingProgress(tenantId) {
       return canReadOps(tenantId);
+    }
+
+    function canEditOrderLines(tenantId) {
+      return isAdminOrOwner(tenantId) || isSupervisor(tenantId) || isLoader(tenantId);
     }
 
     function isPlatformAdmin() {
@@ -132,13 +140,14 @@ service cloud.firestore {
       match /orders/{docId} {
         allow read: if canReadOps(tenantId);
         allow create, delete: if canWriteOps(tenantId);
-        allow update: if canWriteOps(tenantId) || isLoader(tenantId);
+        allow update: if canWriteOps(tenantId) || canEditOrderLines(tenantId);
       }
 
       match /trucks/{docId} {
         allow read: if canReadOps(tenantId);
-        allow create, delete: if canWriteOps(tenantId);
-        allow update: if canWriteOps(tenantId) || isLoader(tenantId);
+        allow create: if canWriteOps(tenantId) || isSupervisor(tenantId);
+        allow delete: if canWriteOps(tenantId);
+        allow update: if canWriteOps(tenantId) || canEditOrderLines(tenantId);
       }
 
       match /containerWeights/{docId} {
@@ -147,9 +156,9 @@ service cloud.firestore {
       }
 
       match /inventory/{docId} {
-        allow read: if isAdminOrOwner(tenantId) || isField(tenantId) || isLoader(tenantId);
-        allow create, delete: if isAdminOrOwner(tenantId) || isField(tenantId);
-        allow update: if isAdminOrOwner(tenantId) || isField(tenantId)
+        allow read: if isAdminOrOwner(tenantId) || isField(tenantId) || isLoader(tenantId) || isSupervisor(tenantId);
+        allow create, delete: if isAdminOrOwner(tenantId) || isField(tenantId) || isSupervisor(tenantId);
+        allow update: if isAdminOrOwner(tenantId) || isField(tenantId) || isSupervisor(tenantId)
           || (
             isLoader(tenantId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantityAvailable', 'dateUpdated'])
@@ -157,12 +166,12 @@ service cloud.firestore {
       }
 
       match /customers/{docId} {
-        allow read: if canReadOps(tenantId);
+        allow read: if canWriteOps(tenantId);
         allow create, update, delete: if canWriteOps(tenantId);
       }
 
       match /documents/{docId} {
-        allow read: if canReadOps(tenantId);
+        allow read: if canWriteOps(tenantId);
         allow create, update, delete: if canWriteOps(tenantId);
       }
 
@@ -174,8 +183,8 @@ service cloud.firestore {
 
       match /tasks/{taskId} {
         allow read: if isMember(tenantId);
-        allow create, delete: if isAdminOrOwner(tenantId);
-        allow update: if isAdminOrOwner(tenantId)
+        allow create, delete: if isAdminOrOwner(tenantId) || isSupervisor(tenantId);
+        allow update: if isAdminOrOwner(tenantId) || isSupervisor(tenantId)
           || (
             isMember(tenantId)
             && resource.data.assigneeUserId == request.auth.uid

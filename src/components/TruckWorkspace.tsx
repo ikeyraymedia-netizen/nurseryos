@@ -300,6 +300,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
 
   const handleAddPlantToOrderSubmit = async (e: React.FormEvent, order: CustomerOrder) => {
     e.preventDefault();
+    if (!permissions.canEditOrders) return;
     setAddError(null);
 
     if (!newPlantName.trim()) {
@@ -367,6 +368,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   };
 
   const handleCreateStandaloneAdditionSubmit = async (e: React.FormEvent) => {
+    if (!permissions.canUploadOrders) return;
     e.preventDefault();
     setStandaloneError(null);
 
@@ -435,6 +437,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   };
 
   const handleDeleteItem = async (order: CustomerOrder, itemId: string) => {
+    if (!permissions.canEditOrders) return;
     if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
       const updatedItems = order.items.filter((item) => item.id !== itemId);
@@ -466,6 +469,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   };
 
   const handleSaveEditedItem = async (order: CustomerOrder, itemId: string) => {
+    if (!permissions.canEditOrders) return;
     try {
       const updatedItems = order.items.map((item) => {
         if (item.id === itemId) {
@@ -758,7 +762,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           /* SEPARATE CUSTOMER CARDS BREAKDOWN */
           <div className="space-y-4">
             {/* Quick Add Standalone Addition Action */}
-            {!isCreatingStandalone ? (
+            {permissions.canUploadOrders &&
+              (!isCreatingStandalone ? (
               <button
                 type="button"
                 onClick={() => setIsCreatingStandalone(true)}
@@ -896,7 +901,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   </button>
                 </div>
               </form>
-            )}
+            ))}
 
             {truckOrders.map((order) => {
               const isExpanded = expandedOrderId === order.id;
@@ -1061,7 +1066,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                       </div>
 
                       {/* Quick Add Plant Action */}
-                      {addingPlantToOrderId !== order.id ? (
+                      {permissions.canEditOrders &&
+                        (addingPlantToOrderId !== order.id ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -1191,7 +1197,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             </button>
                           </div>
                         </form>
-                      )}
+                      ))}
 
                       {/* Items checklist */}
                       <div className="divide-y divide-gray-100">
@@ -1200,7 +1206,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           const isUpdatingPulled = updatingItemId === `${order.id}-${item.id}-pulled`;
                           const isFullyLoaded = item.loadedQuantity >= item.quantity;
                           const isFullyPulled = (item.pulledQuantity ?? 0) >= item.quantity;
-                          const isEditing = editingItemId === `${order.id}-${item.id}`;
+                          const isEditing = editingItemId === `${order.id}-${item.id}` && permissions.canEditOrders;
 
                           return (
                             <div key={item.id} className="py-3">
@@ -1317,6 +1323,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                       )}
                                       
                                       {/* Quick edit/delete triggers */}
+                                      {permissions.canEditOrders && (
                                       <span className="inline-flex items-center space-x-1 shrink-0 ml-1">
                                         <button
                                           onClick={() => {
@@ -1340,6 +1347,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                           <Trash2 className="h-3 w-3 text-gray-400 hover:text-red-600" />
                                         </button>
                                       </span>
+                                      )}
                                     </div>
                                     {item.notes && (
                                       <p className="text-[10px] text-amber-700 font-medium italic mt-0.5">

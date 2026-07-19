@@ -11,6 +11,8 @@ export interface AppPermissions {
   canDeleteTrucks: boolean;
   canUploadOrders: boolean;
   canViewInvoices: boolean;
+  canViewPricing: boolean;
+  canViewCustomers: boolean;
   canViewBOL: boolean;
   canEditWeights: boolean;
   canViewInventory: boolean;
@@ -24,13 +26,21 @@ export interface AppPermissions {
 }
 
 const ROLE_RANK: Record<MemberRole, number> = {
-  owner: 4,
-  admin: 3,
+  owner: 5,
+  admin: 4,
+  supervisor: 3,
   loader: 2,
   field: 1
 };
 
-const ASSIGNABLE_ROLES: Exclude<MemberRole, 'owner'>[] = ['admin', 'loader', 'field'];
+const ALL_ROLES: MemberRole[] = ['owner', 'admin', 'supervisor', 'loader', 'field'];
+
+const ASSIGNABLE_ROLES: Exclude<MemberRole, 'owner'>[] = [
+  'admin',
+  'supervisor',
+  'loader',
+  'field'
+];
 
 export function getAssignableRoles(): Exclude<MemberRole, 'owner'>[] {
   return [...ASSIGNABLE_ROLES];
@@ -50,7 +60,7 @@ export function normalizeMemberRoles(
         : [];
   const unique: MemberRole[] = [];
   for (const role of raw) {
-    if ((['owner', 'admin', 'loader', 'field'] as string[]).includes(role) && !unique.includes(role)) {
+    if ((ALL_ROLES as string[]).includes(role) && !unique.includes(role)) {
       unique.push(role);
     }
   }
@@ -89,6 +99,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canDeleteTrucks: true,
         canUploadOrders: true,
         canViewInvoices: true,
+        canViewPricing: true,
+        canViewCustomers: true,
         canViewBOL: true,
         canEditWeights: true,
         canViewInventory: true,
@@ -96,6 +108,33 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canUploadInventory: true,
         canManageTeam: true,
         canViewReports: true,
+        canViewTasks: true,
+        canAssignTasks: true,
+        canCompleteTasks: true
+      };
+    case 'supervisor':
+      // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
+      // No pricing, invoices, customers, uploads, deletes, or team/billing admin.
+      return {
+        canViewOrders: true,
+        canViewTrucks: true,
+        canCheckOffLoading: true,
+        canEditOrders: true,
+        canDeleteOrders: false,
+        canBuildTrucks: true,
+        canEditTrucks: true,
+        canDeleteTrucks: false,
+        canUploadOrders: false,
+        canViewInvoices: false,
+        canViewPricing: false,
+        canViewCustomers: false,
+        canViewBOL: true,
+        canEditWeights: false,
+        canViewInventory: true,
+        canEditInventory: true,
+        canUploadInventory: true,
+        canManageTeam: false,
+        canViewReports: false,
         canViewTasks: true,
         canAssignTasks: true,
         canCompleteTasks: true
@@ -112,6 +151,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canDeleteTrucks: false,
         canUploadOrders: false,
         canViewInvoices: false,
+        canViewPricing: false,
+        canViewCustomers: false,
         canViewBOL: false,
         canEditWeights: false,
         canViewInventory: false,
@@ -135,6 +176,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canDeleteTrucks: false,
         canUploadOrders: false,
         canViewInvoices: false,
+        canViewPricing: false,
+        canViewCustomers: false,
         canViewBOL: false,
         canEditWeights: false,
         canViewInventory: true,
@@ -176,6 +219,8 @@ export function roleLabel(role: MemberRole): string {
       return 'Owner';
     case 'admin':
       return 'Admin';
+    case 'supervisor':
+      return 'Supervisor';
     case 'loader':
       return 'Loader';
     case 'field':

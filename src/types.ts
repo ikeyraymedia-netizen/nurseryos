@@ -1,4 +1,4 @@
-export type MemberRole = 'owner' | 'admin' | 'loader' | 'field';
+export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'loader' | 'field';
 
 /** Paid add-on modules. Core (orders, trucks, team, weights, customers) is always included. */
 export type TenantModuleId = 'inventory' | 'invoicing' | 'reports' | 'tasks' | 'bol';

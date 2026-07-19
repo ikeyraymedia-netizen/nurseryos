@@ -204,7 +204,7 @@ export function TeamManager({
         meta: {
           memberUserId: member.userId,
           memberEmail: member.email,
-          roles: getMemberRoles(member)
+          roles: rolesLabel(getMemberRoles(member))
         }
       });
       setMessage(`Reset email sent to ${member.email}. Ask them to check inbox/spam.`);
@@ -385,8 +385,9 @@ export function TeamManager({
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
             <p className="text-xs font-bold uppercase text-emerald-800 mb-2">Invite a team member</p>
             <p className="text-xs text-emerald-900/80 mb-3">
-              Select one or more roles for the invite. Example: Field + Loader for someone who
-              manages inventory and checks trucks.
+              Select one or more roles for the invite. Supervisor can run trucks and edit order
+              lines (BOL, loading) without pricing, invoices, customers, or uploads. Example:
+              Field + Loader for inventory plus truck checkoff.
             </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
               {ASSIGNABLE.map((role) => {

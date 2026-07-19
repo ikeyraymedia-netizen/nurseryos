@@ -200,6 +200,12 @@ function NurseryApp({
   }, [orders, permissions.canViewInvoices, permissions.canViewOrders, documentModal]);
 
   useEffect(() => {
+    if (activeTab === 'customers' && !permissions.canViewCustomers) {
+      setActiveTab(permissions.canViewOrders ? 'orders' : 'trucks');
+    }
+  }, [activeTab, permissions.canViewCustomers, permissions.canViewOrders]);
+
+  useEffect(() => {
     if (!permissions.canViewOrders && !permissions.canViewTrucks) {
       setLoading(false);
       return;
@@ -222,7 +228,13 @@ function NurseryApp({
         }
         if (!active) return;
 
-        if (permissions.canEditWeights || permissions.canUploadOrders) {
+        // Supervisors/loaders need weights for truck capacity even without edit/upload rights.
+        if (
+          permissions.canEditWeights ||
+          permissions.canUploadOrders ||
+          permissions.canViewTrucks ||
+          permissions.canViewOrders
+        ) {
           unsubscribeWeights = subscribeToWeights((weights) => {
             if (active) setContainerWeights(weights);
           });
@@ -231,6 +243,12 @@ function NurseryApp({
         if (permissions.canViewTrucks) {
           unsubscribeTrucks = subscribeToTrucks((newTrucks) => {
             if (active) setTrucks(newTrucks);
+          });
+        }
+
+        if (permissions.canViewCustomers) {
+          unsubscribeCustomers = subscribeToCustomers((nextCustomers) => {
+            if (active) setCustomers(nextCustomers);
           });
         }
 
@@ -245,9 +263,6 @@ function NurseryApp({
               if (selectedTruckId) return null;
               return newOrders.length > 0 ? newOrders[0].id : null;
             });
-          });
-          unsubscribeCustomers = subscribeToCustomers((nextCustomers) => {
-            if (active) setCustomers(nextCustomers);
           });
         } else {
           clearTimeout(safetyTimeout);
@@ -516,7 +531,7 @@ function NurseryApp({
                 <span>Inventory</span>
               </button>
             )}
-            {permissions.canViewOrders && (
+            {permissions.canViewCustomers && (
               <button
                 onClick={() => setActiveTab('customers')}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
@@ -567,7 +582,7 @@ function NurseryApp({
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
               Use the main panel to manage live plant inventory.
             </div>
-          ) : activeTab === 'customers' ? (
+          ) : activeTab === 'customers' && permissions.canViewCustomers ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
               Manage your customer directory in the main panel.
             </div>
@@ -636,7 +651,7 @@ function NurseryApp({
               trucks={trucks}
               orders={dynamicOrders}
             />
-          ) : activeTab === 'customers' ? (
+          ) : activeTab === 'customers' && permissions.canViewCustomers ? (
             <CustomersWorkspace
               customers={customers}
               orders={dynamicOrders}

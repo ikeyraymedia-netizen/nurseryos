@@ -87,6 +87,7 @@ export function applyModuleGates(
     canEditInventory: permissions.canEditInventory && inventory,
     canUploadInventory: permissions.canUploadInventory && inventory,
     canViewInvoices: permissions.canViewInvoices && invoicing,
+    canViewPricing: permissions.canViewPricing && invoicing,
     canViewReports: permissions.canViewReports && reports,
     canViewTasks: permissions.canViewTasks && tasks,
     canAssignTasks: permissions.canAssignTasks && tasks,

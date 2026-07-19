@@ -33,17 +33,45 @@ function parseJsonCandidate(candidate: string): admin.ServiceAccount {
 /**
  * Prefer FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway — pasting raw JSON often breaks
  * because of newlines in private_key. Base64 is a single safe line.
+ * Also accept raw JSON accidentally pasted into the BASE64 variable.
  */
 function parseServiceAccount(): admin.ServiceAccount | null {
   const base64Env = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64?.trim();
   if (base64Env) {
-    const cleaned = stripWrappingQuotes(base64Env.replace(/\s+/g, ''));
+    const cleaned = stripWrappingQuotes(base64Env.replace(/^\uFEFF/, ''));
+
+    // User pasted raw JSON into the BASE64 variable — accept it.
+    if (cleaned.startsWith('{')) {
+      try {
+        return parseJsonCandidate(cleaned);
+      } catch (err: any) {
+        throw new Error(
+          `FIREBASE_SERVICE_ACCOUNT_BASE64 looks like JSON but failed to parse (${err?.message || 'invalid'}). On Railway, multiline JSON often breaks — use base64 instead.`
+        );
+      }
+    }
+
+    const b64 = cleaned.replace(/\s+/g, '');
+    let decoded: string;
     try {
-      const decoded = Buffer.from(cleaned, 'base64').toString('utf8').trim();
+      decoded = Buffer.from(b64, 'base64').toString('utf8').trim();
+    } catch (err: any) {
+      throw new Error(
+        `FIREBASE_SERVICE_ACCOUNT_BASE64 is not valid base64 (${err?.message || 'invalid'}).`
+      );
+    }
+
+    if (!decoded.startsWith('{')) {
+      throw new Error(
+        'FIREBASE_SERVICE_ACCOUNT_BASE64 decoded to garbage (not JSON). Re-copy with: base64 < ~/Downloads/nurseryos-54c15-firebase-adminsdk-fbsvc-5f9a77ed21.json | tr -d \'\\n\' | pbcopy — then check with: pbpaste | head -c 3  (should print eyJ).'
+      );
+    }
+
+    try {
       return parseJsonCandidate(decoded);
     } catch (err: any) {
       throw new Error(
-        `FIREBASE_SERVICE_ACCOUNT_BASE64 could not be decoded (${err?.message || 'invalid'}). Re-run: base64 -i your-key.json | pbcopy`
+        `FIREBASE_SERVICE_ACCOUNT_BASE64 decoded but JSON parse failed (${err?.message || 'invalid'}).`
       );
     }
   }
@@ -88,7 +116,7 @@ function parseServiceAccount(): admin.ServiceAccount | null {
   const hint =
     lastError instanceof Error && lastError.message ? ` (${lastError.message})` : '';
   throw new Error(
-    `FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON${hint}. Do not paste raw JSON into Railway — delete that variable and set FIREBASE_SERVICE_ACCOUNT_BASE64 instead (base64 -i key.json | pbcopy).`
+    `FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON${hint}. Prefer FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway.`
   );
 }
 

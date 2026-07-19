@@ -375,10 +375,17 @@ export function registerQuickbooksRoutes(app: Express) {
   app.get('/api/quickbooks/config-status', (_req, res) => {
     const quickbooks = isQuickbooksConfigured();
     const firebaseAdmin = isFirebaseAdminConfigured();
+    let redirectUri: string | null = null;
+    try {
+      redirectUri = requireQbConfig().redirectUri;
+    } catch {
+      redirectUri = null;
+    }
     res.json({
       configured: quickbooks && firebaseAdmin,
       quickbooks,
       firebaseAdmin,
+      redirectUri,
       environment: qbEnv()
     });
   });

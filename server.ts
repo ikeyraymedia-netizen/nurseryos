@@ -5,6 +5,10 @@ import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import { registerQuickbooksRoutes, isQuickbooksConfigured } from './server/quickbooks';
+import {
+  isSpreadsheetInventoryUpload,
+  parseInventorySpreadsheetBuffer
+} from './server/inventoryParse';
 
 dotenv.config();
 
@@ -417,7 +421,7 @@ Return your response in structured JSON format matching the schema provided.`;
   }
 });
 
-// API endpoint to parse inventory files (PDF/image/excel) into live inventory items
+// API endpoint to parse inventory files (PDF/image via AI; CSV/Excel parsed locally)
 app.post('/api/parse-inventory', async (req, res) => {
   try {
     const { base64Data, mimeType, fileName } = req.body;
@@ -426,8 +430,24 @@ app.post('/api/parse-inventory', async (req, res) => {
       return;
     }
 
+    const cleanBase64 = String(base64Data).replace(/^data:.*?;base64,/, '');
+
+    // Spreadsheets are not supported by Gemini mime types — parse them directly.
+    if (isSpreadsheetInventoryUpload(String(mimeType), fileName)) {
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      const items = await parseInventorySpreadsheetBuffer(buffer, fileName);
+      if (items.length === 0) {
+        res.status(400).json({
+          error:
+            'No plant rows found in that spreadsheet. For price catalogs, size headers (#1, #3, 4") and priced plant rows are required.'
+        });
+        return;
+      }
+      res.json({ items });
+      return;
+    }
+
     const ai = getAiClient();
-    const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, '');
     const prompt = `Analyze this nursery inventory source file (${fileName || 'inventory file'}).
 Extract a clean plant inventory list where each item includes:
 1) plantName

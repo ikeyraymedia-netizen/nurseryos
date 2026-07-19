@@ -204,7 +204,12 @@ export function InventoryWorkspace({
 
       setUploadStatus(`Saving ${parsed.length} plants to inventory...`);
       const count = await bulkImportInventoryPlants(parsed);
-      setMessage(`Imported ${count} plants from ${file.name}.`);
+      const zeroQty = parsed.filter((p) => !p.quantityAvailable).length;
+      setMessage(
+        zeroQty > count * 0.8
+          ? `Imported ${count} plants from ${file.name}. Qty set to 0 (price catalog) — edit on-hand counts as needed.`
+          : `Imported ${count} plants from ${file.name}.`
+      );
       setMessageIsError(false);
     } catch (err: any) {
       const msg = err?.message || 'Spreadsheet import failed.';

@@ -70,6 +70,8 @@ export async function pushDocumentToQuickbooks(params: {
   qboDocNumber?: string | null;
   customerName?: string | null;
   totalAmt?: number | null;
+  lineCount?: number | null;
+  linePreview?: string[];
   environment?: string;
   companyName?: string | null;
   openUrl?: string | null;
@@ -89,6 +91,8 @@ export async function pushDocumentToQuickbooks(params: {
     qboDocNumber: data.qboDocNumber ? String(data.qboDocNumber) : null,
     customerName: data.customerName ? String(data.customerName) : null,
     totalAmt: data.totalAmt != null ? Number(data.totalAmt) : null,
+    lineCount: data.lineCount != null ? Number(data.lineCount) : null,
+    linePreview: Array.isArray(data.linePreview) ? data.linePreview.map(String) : [],
     environment: data.environment ? String(data.environment) : null,
     companyName: data.companyName ? String(data.companyName) : null,
     openUrl: data.openUrl ? String(data.openUrl) : null,

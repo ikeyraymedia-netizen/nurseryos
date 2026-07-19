@@ -778,17 +778,22 @@ Thank you for choosing ${nurseryName}!
       const customerBit = result.customerName ? ` · customer “${result.customerName}”` : '';
       const totalBit =
         result.totalAmt != null ? ` · $${Number(result.totalAmt).toFixed(2)}` : '';
+      const linesBit =
+        result.lineCount != null ? ` · ${result.lineCount} plant line(s)` : '';
+      const previewBit =
+        result.linePreview && result.linePreview.length
+          ? `\nPlants: ${result.linePreview.join('; ')}`
+          : '';
       setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
       if (result.openUrl) {
         window.open(result.openUrl, '_blank', 'noopener,noreferrer');
       }
       alert(
-        `Invoice pushed to ${where}${companyBit}.\n\n${docBit}${customerBit}${totalBit}\n\n` +
+        `Invoice pushed to ${where}${companyBit}.\n\n` +
+          `${docBit}${customerBit}${totalBit}${linesBit}${previewBit}\n\n` +
           (result.openUrl
-            ? `A new tab should open with that invoice.\nIf it didn’t: ${result.openUrl}`
-            : result.environment === 'sandbox'
-              ? 'Open https://app.sandbox.qbo.intuit.com — make sure the company name matches the one shown above.'
-              : 'Open QuickBooks Online → Sales → Invoices.')
+            ? `Opening the connected sandbox company now.\nIf the tab looks wrong, use Team → Show recent QBO invoices.`
+            : 'Use Team → Show recent QBO invoices to open it.')
       );
     } catch (err: any) {
       alert(err?.message || 'Failed to push to QuickBooks.');

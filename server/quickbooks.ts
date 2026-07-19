@@ -241,10 +241,78 @@ function qbAppBase(env?: QbEnvironment): string {
 function qbTxnOpenUrl(
   env: QbEnvironment | undefined,
   docType: 'invoice' | 'estimate',
-  txnId: string
+  txnId: string,
+  realmId?: string | null
 ): string {
   const path = docType === 'estimate' ? 'estimate' : 'invoice';
-  return `${qbAppBase(env)}/app/${path}?txnId=${encodeURIComponent(txnId)}`;
+  const base = qbAppBase(env);
+  // Include company switch so the browser opens the connected realm, not whatever
+  // company the user last viewed (otherwise txnId can show a totally different invoice).
+  if (realmId) {
+    const navigationURL = `${path}?txnId=${encodeURIComponent(txnId)}`;
+    return `${base}/app/switchCompany?companyId=${encodeURIComponent(
+      realmId
+    )}&navigationURL=${encodeURIComponent(navigationURL)}`;
+  }
+  return `${base}/app/${path}?txnId=${encodeURIComponent(txnId)}`;
+}
+
+function escapeQboQueryValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function sizeToQbNameSuffix(containerSize: string): string[] {
+  const size = String(containerSize || '').trim();
+  const out: string[] = [];
+  if (!size) return out;
+  out.push(size);
+  const hash = size.match(/^#(\d+)$/);
+  if (hash) {
+    out.push(`${hash[1]} gal.`);
+    out.push(`${hash[1]} gal`);
+    out.push(`${hash[1]}g`);
+  }
+  if (/^b\s*&\s*b$/i.test(size)) out.push('B&B');
+  if (/^tray$/i.test(size)) {
+    out.push('18ct. Flat');
+    out.push('Flat');
+  }
+  if (/"$/.test(size)) out.push(size);
+  return [...new Set(out)];
+}
+
+async function findItemRefForLine(
+  tenantId: string,
+  plantName: string,
+  containerSize: string,
+  fallbackItemId: string
+): Promise<string> {
+  const plant = String(plantName || '').trim();
+  if (!plant) return fallbackItemId;
+
+  const candidates: string[] = [];
+  for (const suffix of sizeToQbNameSuffix(containerSize)) {
+    candidates.push(`${plant} ${suffix}`);
+  }
+  candidates.push(plant);
+
+  for (const name of candidates) {
+    try {
+      const query = encodeURIComponent(
+        `select * from Item where Name = '${escapeQboQueryValue(name)}' MAXRESULTS 1`
+      );
+      const search = await qboRequest<any>(
+        tenantId,
+        'GET',
+        `/query?query=${query}&minorversion=65`
+      );
+      const existing = search?.QueryResponse?.Item?.[0];
+      if (existing?.Id) return String(existing.Id);
+    } catch {
+      // try next candidate
+    }
+  }
+  return fallbackItemId;
 }
 
 async function fetchCompanyName(tenantId: string, realmId: string): Promise<string | null> {
@@ -295,52 +363,89 @@ async function findOrCreateServiceItem(tenantId: string): Promise<string> {
 async function findOrCreateCustomer(
   tenantId: string,
   doc: Record<string, any>
-): Promise<string> {
-  const displayName = String(doc.billToName || doc.customerName || 'Customer').slice(0, 100);
+): Promise<{ id: string; displayName: string }> {
+  const displayName = String(doc.billToName || doc.customerName || '')
+    .trim()
+    .slice(0, 100);
+  if (!displayName) {
+    throw Object.assign(new Error('Invoice is missing bill-to / customer name.'), {
+      status: 400
+    });
+  }
+
   const query = encodeURIComponent(
-    `select * from Customer where DisplayName = '${displayName.replace(/'/g, "\\'")}'`
+    `select * from Customer where DisplayName = '${escapeQboQueryValue(displayName)}' MAXRESULTS 1`
   );
-  const search = await qboRequest<any>(
-    tenantId,
-    'GET',
-    `/query?query=${query}&minorversion=65`
-  );
-  const existing = search?.QueryResponse?.Customer?.[0];
-  if (existing?.Id) return String(existing.Id);
+  try {
+    const search = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/query?query=${query}&minorversion=65`
+    );
+    const existing = search?.QueryResponse?.Customer?.[0];
+    if (existing?.Id) {
+      return { id: String(existing.Id), displayName: String(existing.DisplayName || displayName) };
+    }
+  } catch {
+    // Fall through to create
+  }
 
   const created = await qboRequest<any>(tenantId, 'POST', '/customer?minorversion=65', {
     DisplayName: displayName,
     CompanyName: displayName,
-    PrimaryEmailAddr: doc.customerEmail ? { Address: doc.customerEmail } : undefined,
+    PrimaryEmailAddr: doc.customerEmail ? { Address: String(doc.customerEmail) } : undefined,
     BillAddr: doc.billToAddress
       ? { Line1: String(doc.billToAddress).slice(0, 500) }
       : undefined
   });
   const id = created?.Customer?.Id;
   if (!id) throw new Error('QuickBooks did not return a customer id.');
-  return String(id);
+  return { id: String(id), displayName };
 }
 
-function mapDocToInvoice(
+async function mapDocToInvoice(
+  tenantId: string,
   doc: Record<string, any>,
   customerRefId: string,
-  itemRefId: string
+  fallbackItemId: string
 ) {
-  const lines = (Array.isArray(doc.items) ? doc.items : []).map((item: any, index: number) => {
-    const qty = Number(item.quantity) || 0;
-    const unitPrice = Number(item.unitPrice) || 0;
-    const desc = [item.plantName, item.containerSize].filter(Boolean).join(' — ');
-    return {
+  const rawItems = Array.isArray(doc.items) ? doc.items : [];
+  if (rawItems.length === 0) {
+    throw Object.assign(
+      new Error(
+        'This invoice has no plant line items saved. Save the invoice to the customer again, then push.'
+      ),
+      { status: 400 }
+    );
+  }
+
+  const lines = [];
+  for (let index = 0; index < rawItems.length; index += 1) {
+    const item = rawItems[index] || {};
+    const plantName = String(item.plantName || item.name || '').trim();
+    const containerSize = String(item.containerSize || item.size || '').trim();
+    const qty = Number(item.quantity ?? item.qty) || 0;
+    const unitPrice = Number(item.unitPrice ?? item.price) || 0;
+    if (!plantName && qty === 0 && unitPrice === 0) continue;
+
+    const itemRefId = await findItemRefForLine(
+      tenantId,
+      plantName || `Line ${index + 1}`,
+      containerSize,
+      fallbackItemId
+    );
+    const desc = [plantName || `Line ${index + 1}`, containerSize].filter(Boolean).join(' — ');
+    lines.push({
       DetailType: 'SalesItemLineDetail',
-      Amount: Number((qty * unitPrice).toFixed(2)),
-      Description: desc || `Line ${index + 1}`,
+      Amount: Number((Math.max(qty, 1) * unitPrice).toFixed(2)),
+      Description: desc,
       SalesItemLineDetail: {
         ItemRef: { value: itemRefId },
-        Qty: qty || 1,
+        Qty: Math.max(qty, 1),
         UnitPrice: unitPrice
       }
-    };
-  });
+    });
+  }
 
   const freight = Number(doc.freightCharge) || 0;
   if (freight > 0) {
@@ -349,7 +454,7 @@ function mapDocToInvoice(
       Amount: Number(freight.toFixed(2)),
       Description: 'Freight / Delivery',
       SalesItemLineDetail: {
-        ItemRef: { value: itemRefId },
+        ItemRef: { value: fallbackItemId },
         Qty: 1,
         UnitPrice: freight
       }
@@ -357,23 +462,23 @@ function mapDocToInvoice(
   }
 
   if (lines.length === 0) {
-    lines.push({
-      DetailType: 'SalesItemLineDetail',
-      Amount: 0,
-      Description: String(doc.documentNumber || 'NurseryOS document'),
-      SalesItemLineDetail: {
-        ItemRef: { value: itemRefId },
-        Qty: 1,
-        UnitPrice: 0
-      }
-    });
+    throw Object.assign(
+      new Error('No usable plant lines found on this invoice. Re-save it, then push again.'),
+      { status: 400 }
+    );
   }
 
   return {
     DocNumber: String(doc.documentNumber || '').slice(0, 21) || undefined,
     TxnDate: String(doc.documentDate || new Date().toISOString()).slice(0, 10),
     DueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined,
-    PrivateNote: doc.notes ? String(doc.notes).slice(0, 4000) : undefined,
+    PrivateNote: [
+      doc.notes ? String(doc.notes) : '',
+      `NurseryOS ${doc.type || 'invoice'} ${doc.documentNumber || ''}`.trim()
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 4000),
     CustomerRef: { value: customerRefId },
     Line: lines,
     CustomerMemo: doc.paymentTerms
@@ -578,9 +683,9 @@ export function registerQuickbooksRoutes(app: Express) {
         return;
       }
 
-      const customerRefId = await findOrCreateCustomer(tenantId, doc);
+      const customer = await findOrCreateCustomer(tenantId, doc);
       const itemRefId = await findOrCreateServiceItem(tenantId);
-      const payload = mapDocToInvoice(doc, customerRefId, itemRefId);
+      const payload = await mapDocToInvoice(tenantId, doc, customer.id, itemRefId);
       const endpoint = doc.type === 'estimate' ? '/estimate' : '/invoice';
       const created = await qboRequest<any>(
         tenantId,
@@ -600,9 +705,10 @@ export function registerQuickbooksRoutes(app: Express) {
         ? await fetchCompanyName(tenantId, integration.realmId)
         : null;
 
-      // Re-read from QBO so we return confirmed customer + totals
-      let verifiedCustomer = String(doc.billToName || doc.customerName || '');
+      let verifiedCustomer = customer.displayName;
       let totalAmt: number | null = null;
+      let lineCount = 0;
+      let linePreview: string[] = [];
       let verified = false;
       try {
         const checkPath =
@@ -614,11 +720,23 @@ export function registerQuickbooksRoutes(app: Express) {
         verified = Boolean(checked?.Id);
         if (checked?.CustomerRef?.name) verifiedCustomer = String(checked.CustomerRef.name);
         if (checked?.TotalAmt != null) totalAmt = Number(checked.TotalAmt);
+        const checkedLines = Array.isArray(checked?.Line) ? checked.Line : [];
+        lineCount = checkedLines.filter((l: any) => l?.DetailType === 'SalesItemLineDetail').length;
+        linePreview = checkedLines
+          .filter((l: any) => l?.DetailType === 'SalesItemLineDetail')
+          .slice(0, 5)
+          .map((l: any) => String(l.Description || l.SalesItemLineDetail?.ItemRef?.name || 'Line'));
       } catch {
         verified = false;
       }
 
-      const openUrl = qbTxnOpenUrl(env, doc.type, qboId);
+      if (verified && lineCount === 0) {
+        throw new Error(
+          'QuickBooks created an invoice with no plant lines. Re-save the NurseryOS invoice (with prices), then push again.'
+        );
+      }
+
+      const openUrl = qbTxnOpenUrl(env, doc.type, qboId, integration?.realmId);
 
       await docRef.set(
         {
@@ -640,6 +758,8 @@ export function registerQuickbooksRoutes(app: Express) {
         qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
         customerName: verifiedCustomer,
         totalAmt,
+        lineCount,
+        linePreview,
         environment: env,
         companyName,
         verified,
@@ -678,7 +798,7 @@ export function registerQuickbooksRoutes(app: Express) {
         txnDate: inv.TxnDate ? String(inv.TxnDate) : null,
         totalAmt: inv.TotalAmt != null ? Number(inv.TotalAmt) : null,
         customerName: inv.CustomerRef?.name ? String(inv.CustomerRef.name) : null,
-        openUrl: qbTxnOpenUrl(env, 'invoice', String(inv.Id))
+        openUrl: qbTxnOpenUrl(env, 'invoice', String(inv.Id), integration.realmId)
       }));
       res.json({
         environment: env,

@@ -101,7 +101,7 @@ export function TeamManager({
         if (!ready) {
           if (cfg?.quickbooks && !cfg?.firebaseAdmin) {
             setQbError(
-              'Firebase Admin is missing on the server. Add FIREBASE_SERVICE_ACCOUNT_JSON in Railway, redeploy, then try again.'
+              'Firebase Admin is missing on the server. In Railway set FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the key file), redeploy, then try again.'
             );
           } else if (!cfg?.quickbooks) {
             setQbError(
@@ -412,7 +412,7 @@ export function TeamManager({
             {qbStatus && !qbStatus.configured && !qbError && (
               <p className="text-[11px] text-amber-800">
                 Server keys not set yet. Add QUICKBOOKS_CLIENT_ID / SECRET and
-                FIREBASE_SERVICE_ACCOUNT_JSON in Railway, then refresh.
+                FIREBASE_SERVICE_ACCOUNT_BASE64 in Railway, then refresh.
               </p>
             )}
           </div>

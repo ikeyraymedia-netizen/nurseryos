@@ -16,14 +16,38 @@ function stripWrappingQuotes(value: string): string {
   return value;
 }
 
+function normalizeServiceAccount(parsed: admin.ServiceAccount & { private_key?: string }) {
+  if (parsed?.private_key && parsed.private_key.includes('\\n')) {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+  }
+  if (!parsed?.client_email || !parsed?.private_key) {
+    throw new Error('Service account JSON is missing client_email or private_key.');
+  }
+  return parsed;
+}
+
+function parseJsonCandidate(candidate: string): admin.ServiceAccount {
+  return normalizeServiceAccount(JSON.parse(candidate) as admin.ServiceAccount & { private_key?: string });
+}
+
 /**
- * Railway/env pastes often mangle service-account JSON. Accept:
- * - raw JSON (pretty or single-line)
- * - JSON wrapped in extra quotes
- * - base64-encoded JSON
- * - private_key newlines stored as literal \n (standard in env vars)
+ * Prefer FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway — pasting raw JSON often breaks
+ * because of newlines in private_key. Base64 is a single safe line.
  */
 function parseServiceAccount(): admin.ServiceAccount | null {
+  const base64Env = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64?.trim();
+  if (base64Env) {
+    const cleaned = stripWrappingQuotes(base64Env.replace(/\s+/g, ''));
+    try {
+      const decoded = Buffer.from(cleaned, 'base64').toString('utf8').trim();
+      return parseJsonCandidate(decoded);
+    } catch (err: any) {
+      throw new Error(
+        `FIREBASE_SERVICE_ACCOUNT_BASE64 could not be decoded (${err?.message || 'invalid'}). Re-run: base64 -i your-key.json | pbcopy`
+      );
+    }
+  }
+
   const rawEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (!rawEnv) return null;
 
@@ -31,22 +55,22 @@ function parseServiceAccount(): admin.ServiceAccount | null {
   const cleaned = stripWrappingQuotes(rawEnv.replace(/^\uFEFF/, ''));
   candidates.push(cleaned);
 
-  // Sometimes the whole JSON is escaped once more as a JSON string.
-  if (cleaned.includes('\\"') || cleaned.startsWith('{') === false) {
+  // Whole value stored as a JSON string (extra escaping).
+  if (cleaned.includes('\\"') || !cleaned.startsWith('{')) {
     try {
       const unescaped = JSON.parse(cleaned);
       if (typeof unescaped === 'string') candidates.push(unescaped);
       else if (unescaped && typeof unescaped === 'object') {
-        return unescaped as admin.ServiceAccount;
+        return normalizeServiceAccount(unescaped as admin.ServiceAccount & { private_key?: string });
       }
     } catch {
-      // keep trying other formats
+      // keep trying
     }
   }
 
-  // Base64 of the JSON file (recommended for Railway).
+  // Value might already be base64 sitting in the JSON-named var.
   try {
-    const decoded = Buffer.from(cleaned, 'base64').toString('utf8').trim();
+    const decoded = Buffer.from(cleaned.replace(/\s+/g, ''), 'base64').toString('utf8').trim();
     if (decoded.startsWith('{')) candidates.push(decoded);
   } catch {
     // not base64
@@ -55,33 +79,23 @@ function parseServiceAccount(): admin.ServiceAccount | null {
   let lastError: unknown;
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate) as admin.ServiceAccount & {
-        private_key?: string;
-      };
-      if (parsed?.private_key && parsed.private_key.includes('\\n')) {
-        parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
-      }
-      if (!parsed || (typeof parsed === 'object' && !('client_email' in parsed) && !('private_key' in parsed))) {
-        throw new Error('Parsed JSON is missing service account fields.');
-      }
-      return parsed;
+      return parseJsonCandidate(candidate);
     } catch (err) {
       lastError = err;
     }
   }
 
   const hint =
-    lastError instanceof Error && lastError.message
-      ? ` (${lastError.message})`
-      : '';
+    lastError instanceof Error && lastError.message ? ` (${lastError.message})` : '';
   throw new Error(
-    `FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON${hint}. In Railway, paste the raw JSON file contents, or set the value to base64 of that file (no extra quotes).`
+    `FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON${hint}. Do not paste raw JSON into Railway — delete that variable and set FIREBASE_SERVICE_ACCOUNT_BASE64 instead (base64 -i key.json | pbcopy).`
   );
 }
 
 export function isFirebaseAdminConfigured(): boolean {
   return Boolean(
-    process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_BASE64?.trim() ||
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() ||
       process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()
   );
 }
@@ -100,7 +114,7 @@ export function getAdminDb(): Firestore {
       admin.initializeApp({ projectId: PROJECT_ID });
     } else {
       throw new Error(
-        'Firebase Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (service account JSON) in Railway.'
+        'Firebase Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_BASE64 in Railway (base64 of the service account JSON file).'
       );
     }
   }

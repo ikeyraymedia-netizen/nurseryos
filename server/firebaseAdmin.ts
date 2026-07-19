@@ -16,11 +16,12 @@ function stripWrappingQuotes(value: string): string {
   return value;
 }
 
-function normalizeServiceAccount(parsed: admin.ServiceAccount & { private_key?: string }) {
+function normalizeServiceAccount(parsed: admin.ServiceAccount & { private_key?: string; client_email?: string }) {
   if (parsed?.private_key && parsed.private_key.includes('\\n')) {
     parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
   }
-  if (!parsed?.client_email || !parsed?.private_key) {
+  const email = parsed.clientEmail || parsed.client_email;
+  if (!email || !parsed?.private_key) {
     throw new Error('Service account JSON is missing client_email or private_key.');
   }
   return parsed;

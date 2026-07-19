@@ -9,6 +9,7 @@ import {
   deleteAllInventoryPlants,
   deleteInventoryPlant,
   parseCsvInventory,
+  parseExcelInventory,
   subscribeToInventory,
   updateInventoryPlant
 } from '../lib/inventory';
@@ -29,10 +30,22 @@ const INVENTORY_AI_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
   'image/jpg',
-  'image/webp',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel'
+  'image/webp'
 ]);
+
+function isSpreadsheetFile(file: File, mimeType: string): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith('.csv') ||
+    name.endsWith('.tsv') ||
+    name.endsWith('.xlsx') ||
+    name.endsWith('.xls') ||
+    mimeType === 'text/csv' ||
+    mimeType === 'text/tab-separated-values' ||
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+}
 
 function inferInventoryMimeType(file: File): string {
   if (file.type) return file.type;
@@ -47,6 +60,10 @@ function inferInventoryMimeType(file: File): string {
       return 'image/jpeg';
     case 'webp':
       return 'image/webp';
+    case 'csv':
+      return 'text/csv';
+    case 'tsv':
+      return 'text/tab-separated-values';
     case 'xlsx':
       return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     case 'xls':
@@ -163,25 +180,34 @@ export function InventoryWorkspace({
     }
   }
 
-  async function handleCsvUpload(file: File) {
+  async function handleSpreadsheetUpload(file: File) {
     if (!permissions.canUploadInventory) return;
     setUploadLoading(true);
     setUploadError(null);
-    setUploadStatus('Reading CSV file...');
     setMessage(null);
     setMessageIsError(false);
+
+    const lower = file.name.toLowerCase();
+    const isExcel = lower.endsWith('.xlsx') || lower.endsWith('.xls');
+
     try {
-      const text = await file.text();
-      const parsed = parseCsvInventory(text);
+      setUploadStatus(isExcel ? 'Reading Excel file...' : 'Reading CSV file...');
+      const parsed = isExcel
+        ? await parseExcelInventory(file)
+        : parseCsvInventory(await file.text());
+
       if (parsed.length === 0) {
-        throw new Error('No rows found. CSV needs headers like plant, size, qty, weeks, location.');
+        throw new Error(
+          'No plant rows found. Use a header row with columns like Plant / Name, Size, Qty (or On Hand), Location.'
+        );
       }
+
       setUploadStatus(`Saving ${parsed.length} plants to inventory...`);
       const count = await bulkImportInventoryPlants(parsed);
-      setMessage(`Imported ${count} plants from CSV.`);
+      setMessage(`Imported ${count} plants from ${file.name}.`);
       setMessageIsError(false);
     } catch (err: any) {
-      const msg = err?.message || 'CSV import failed.';
+      const msg = err?.message || 'Spreadsheet import failed.';
       setUploadError(msg);
       setMessage(msg);
       setMessageIsError(true);
@@ -195,8 +221,14 @@ export function InventoryWorkspace({
     if (!permissions.canUploadInventory) return;
 
     const mimeType = inferInventoryMimeType(file);
+    if (isSpreadsheetFile(file, mimeType)) {
+      await handleSpreadsheetUpload(file);
+      return;
+    }
+
     if (!INVENTORY_AI_MIME_TYPES.has(mimeType)) {
-      const msg = 'Unsupported file format. Upload a PDF, photo (PNG/JPEG/WebP), or Excel spreadsheet.';
+      const msg =
+        'Unsupported file format. Upload CSV, Excel (.xlsx/.xls), PDF, or a photo (PNG/JPEG/WebP).';
       setUploadError(msg);
       setMessage(msg);
       setMessageIsError(true);
@@ -401,24 +433,24 @@ export function InventoryWorkspace({
               <div className="flex flex-wrap gap-2">
                 <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold cursor-pointer hover:bg-emerald-800">
                   <Upload className="h-4 w-4" />
-                  Upload CSV
+                  Upload CSV / Excel
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.tsv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleCsvUpload(file);
+                      if (file) handleSpreadsheetUpload(file);
                       e.currentTarget.value = '';
                     }}
                   />
                 </label>
                 <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer hover:bg-slate-200">
                   <Upload className="h-4 w-4" />
-                  PDF / Photo / Excel
+                  PDF / Photo
                   <input
                     type="file"
-                    accept=".pdf,.xlsx,.xls,image/*"
+                    accept=".pdf,image/*"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];

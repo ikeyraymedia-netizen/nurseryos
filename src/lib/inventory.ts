@@ -373,44 +373,197 @@ export async function addChemicalApplication(
 }
 
 export function parseCsvInventory(text: string): Array<Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'>> {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) return [];
+  const cleaned = text.replace(/^\uFEFF/, '').trim();
+  if (!cleaned) return [];
 
-  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const idx = (name: string) => headers.findIndex((h) => h.includes(name));
+  const rawLines = cleaned.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (rawLines.length < 2) return [];
 
-  const nameIdx = idx('plant') >= 0 ? idx('plant') : idx('name');
-  const sizeIdx = idx('size') >= 0 ? idx('size') : idx('container');
-  const qtyIdx = idx('qty') >= 0 ? idx('qty') : idx('quantity');
-  const weeksIdx = idx('week');
-  const locationIdx = idx('location');
+  const delimiter = detectCsvDelimiter(rawLines[0]);
+  const table = rawLines.map((line) => splitCsvLine(line, delimiter));
+  return mapTableToInventory(table);
+}
 
+function detectCsvDelimiter(headerLine: string): string {
+  const comma = (headerLine.match(/,/g) || []).length;
+  const semi = (headerLine.match(/;/g) || []).length;
+  const tab = (headerLine.match(/\t/g) || []).length;
+  if (tab >= comma && tab >= semi && tab > 0) return '\t';
+  if (semi > comma) return ';';
+  return ',';
+}
+
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === delimiter && !inQuotes) {
+      out.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function normalizeHeaderCell(value: string): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_/]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function pickColumn(headers: string[], aliasGroups: string[][]): number {
+  for (const aliases of aliasGroups) {
+    for (const alias of aliases) {
+      const exact = headers.findIndex((h) => h === alias);
+      if (exact >= 0) return exact;
+    }
+    for (const alias of aliases) {
+      const partial = headers.findIndex((h) => h.includes(alias));
+      if (partial >= 0) return partial;
+    }
+  }
+  return -1;
+}
+
+function parseQty(raw: string): number {
+  const cleaned = String(raw || '').replace(/,/g, '').replace(/[^\d.-]/g, '');
+  if (!cleaned) return 0;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+function mapTableToInventory(
+  table: string[][]
+): Array<Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'>> {
+  if (table.length < 2) return [];
+
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(table.length, 25); i += 1) {
+    const headers = table[i].map(normalizeHeaderCell);
+    const nameIdx = pickColumn(headers, [
+      ['plant name', 'plant', 'botanical name', 'botanical', 'species', 'variety', 'cultivar'],
+      ['description', 'item description', 'product name', 'product', 'item'],
+      ['name']
+    ]);
+    if (nameIdx >= 0) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+
+  const headers = table[headerRowIdx].map(normalizeHeaderCell);
+  const nameIdx = pickColumn(headers, [
+    ['plant name', 'plant', 'botanical name', 'botanical', 'species', 'variety', 'cultivar'],
+    ['description', 'item description', 'product name', 'product', 'item'],
+    ['name']
+  ]);
   if (nameIdx < 0) return [];
 
-  return lines.slice(1).map((line) => {
-    const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+  const sizeIdx = pickColumn(headers, [
+    ['container size', 'container', 'pot size', 'size', 'gallon', 'caliper', 'pot']
+  ]);
+  const qtyIdx = pickColumn(headers, [
+    ['qty available', 'quantity available', 'on hand', 'available', 'qty', 'quantity', 'stock', 'count', 'inventory']
+  ]);
+  const weeksIdx = pickColumn(headers, [['weeks until ready', 'weeks', 'week', 'ready']]);
+  const locationIdx = pickColumn(headers, [
+    ['location', 'bed', 'block', 'bay', 'zone', 'aisle', 'house', 'yard']
+  ]);
+  const notesIdx = pickColumn(headers, [['notes', 'note', 'comment', 'remarks', 'memo']]);
+
+  const out: Array<Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'>> = [];
+  for (const row of table.slice(headerRowIdx + 1)) {
+    const plantName = String(row[nameIdx] || '').trim();
+    if (!plantName) continue;
+    if (normalizeHeaderCell(plantName) === headers[nameIdx]) continue;
+
     const entry: Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'> = {
-      plantName: cols[nameIdx] || 'Unknown Plant',
-      containerSize: sizeIdx >= 0 ? cols[sizeIdx] || 'Other' : 'Other',
-      quantityAvailable: qtyIdx >= 0 ? Number(cols[qtyIdx]) || 0 : 0,
-      weeksUntilReady: weeksIdx >= 0 ? Number(cols[weeksIdx]) || null : null,
+      plantName,
+      containerSize: sizeIdx >= 0 ? String(row[sizeIdx] || '').trim() || 'Other' : 'Other',
+      quantityAvailable: qtyIdx >= 0 ? parseQty(row[qtyIdx]) : 0,
+      weeksUntilReady:
+        weeksIdx >= 0 && String(row[weeksIdx] || '').trim()
+          ? Number(String(row[weeksIdx]).replace(/[^\d.-]/g, '')) || null
+          : null,
       chemicals: [],
       cutBackAt: null,
-      notes: ''
+      notes: notesIdx >= 0 ? String(row[notesIdx] || '').trim() : ''
     };
-    if (locationIdx >= 0 && cols[locationIdx]) entry.location = cols[locationIdx];
-    return entry;
-  });
+    if (locationIdx >= 0 && String(row[locationIdx] || '').trim()) {
+      entry.location = String(row[locationIdx]).trim();
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
+/** Parse .xlsx / .xls nursery inventory sheets without AI. */
+export async function parseExcelInventory(
+  file: File
+): Promise<Array<Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'>>> {
+  const XLSX = await import('xlsx');
+  const buf = await file.arrayBuffer();
+  const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json<(string | number | null | undefined)[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: false
+  }) as (string | number | null | undefined)[][];
+
+  const table = rows.map((row) => (Array.isArray(row) ? row : []).map((c) => String(c ?? '').trim()));
+  return mapTableToInventory(table);
 }
 
 export async function bulkImportInventoryPlants(
   plants: Array<Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'>>
 ): Promise<number> {
+  if (plants.length === 0) return 0;
+  const tenantId = requireTenantId();
+  const now = new Date().toISOString();
   let count = 0;
+  let batch = writeBatch(db);
+  let ops = 0;
+
   for (const plant of plants) {
-    await addInventoryPlant(plant);
+    const id = `inv-${Date.now()}-${count}-${Math.random().toString(36).slice(2, 6)}`;
+    const fullPlant: InventoryPlant = {
+      ...plant,
+      id,
+      chemicals: plant.chemicals || [],
+      dateCreated: now,
+      dateUpdated: now
+    };
+    batch.set(inventoryDoc(tenantId, id), sanitizeForFirestore(fullPlant));
+    ops += 1;
     count += 1;
+    if (ops >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
   }
+
+  if (ops > 0) await batch.commit();
   return count;
 }
 

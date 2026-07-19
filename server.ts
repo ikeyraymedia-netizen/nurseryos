@@ -86,6 +86,9 @@ function isSkippableModelError(error: any): boolean {
 }
 
 const PARSE_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  // Legacy fallbacks for older API keys that still have 2.5 access
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite'
 ] as const;

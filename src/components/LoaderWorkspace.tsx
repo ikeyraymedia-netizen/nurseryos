@@ -43,6 +43,7 @@ interface LoaderWorkspaceProps {
   customers: Customer[];
   permissions: AppPermissions;
   nurseryName?: string;
+  tenantId?: string;
 }
 
 export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
@@ -51,7 +52,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   containerWeights,
   customers,
   permissions,
-  nurseryName = 'NurseryOS'
+  nurseryName = 'NurseryOS',
+  tenantId
 }) => {
   const [activeTab, setActiveTab] = useState<'checklist' | 'plaintext'>('checklist');
   const [copied, setCopied] = useState(false);
@@ -1206,6 +1208,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             : []
         }
         nurseryName={nurseryName}
+        tenantId={tenantId}
       />
       )}
 

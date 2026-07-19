@@ -179,6 +179,11 @@ service cloud.firestore {
           );
       }
 
+      match /integrations/{integrationId} {
+        // OAuth tokens — Admin SDK only. Never expose refresh tokens to clients.
+        allow read, write: if false;
+      }
+
       match /customers/{docId} {
         allow read: if canManageCustomersAndDocs(tenantId);
         allow create, update, delete: if canManageCustomersAndDocs(tenantId);

@@ -148,6 +148,11 @@ export interface CustomerDocument {
   salesTax: number;
   grandTotal: number;
   emailSentAt?: string;
+  /** QuickBooks Online invoice/estimate id after sync. */
+  qboInvoiceId?: string;
+  qboDocType?: CustomerDocumentType;
+  qboSyncedAt?: string;
+  qboSyncedByUserId?: string;
   createdAt: string;
   updatedAt: string;
 }

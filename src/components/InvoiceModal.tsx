@@ -26,7 +26,8 @@ import {
   Send,
   AlertTriangle,
   Info,
-  Download
+  Download,
+  Link2
 } from 'lucide-react';
 import { updateCustomerOrder } from '../lib/db';
 import {
@@ -42,6 +43,7 @@ import {
   FreightAllocationMethod,
   FreightShare
 } from '../lib/freightAllocation';
+import { pushDocumentToQuickbooks } from '../lib/quickbooks';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -58,6 +60,7 @@ interface InvoiceModalProps {
   /** Other orders assigned to the same truck, used for freight allocation. */
   truckOrders?: CustomerOrder[];
   nurseryName?: string;
+  tenantId?: string;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -68,7 +71,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   customer = null,
   existingDocument = null,
   truckOrders = [],
-  nurseryName = 'NurseryOS'
+  nurseryName = 'NurseryOS',
+  tenantId
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
@@ -101,6 +105,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showFreightAllocation, setShowFreightAllocation] = useState(false);
+  const [isPushingQb, setIsPushingQb] = useState(false);
+  const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
 
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
@@ -733,6 +739,39 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
+  const handlePushToQuickbooks = async () => {
+    if (!tenantId) {
+      alert('Nursery context missing. Close and reopen this invoice.');
+      return;
+    }
+    if (!savedDocumentId) {
+      alert(`Save this ${docLabel.toLowerCase()} to the customer first, then push to QuickBooks.`);
+      return;
+    }
+    setIsPushingQb(true);
+    setQbPushMessage(null);
+    try {
+      const result = await pushDocumentToQuickbooks({
+        tenantId,
+        documentId: savedDocumentId
+      });
+      await logAuditEvent({
+        action: 'quickbooks.document_pushed',
+        summary: `Pushed ${documentType} ${invoiceNumber} to QuickBooks (${result.qboInvoiceId})`,
+        meta: {
+          documentId: savedDocumentId,
+          qboInvoiceId: result.qboInvoiceId,
+          qboDocType: result.qboDocType
+        }
+      });
+      setQbPushMessage(`Synced to QuickBooks · #${result.qboInvoiceId}`);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to push to QuickBooks.');
+    } finally {
+      setIsPushingQb(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     const el = printRef.current;
     if (!el) return;
@@ -1105,6 +1144,29 @@ Thank you for choosing ${nurseryName}!
                 </>
               )}
             </button>
+
+            {tenantId && (
+              <button
+                type="button"
+                onClick={() => void handlePushToQuickbooks()}
+                disabled={isPushingQb || !savedDocumentId}
+                className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                title={
+                  savedDocumentId
+                    ? 'Push saved document to QuickBooks Online'
+                    : 'Save to customer first'
+                }
+              >
+                <Link2 className="h-4 w-4" />
+                <span>
+                  {isPushingQb
+                    ? 'Pushing to QuickBooks…'
+                    : qbPushMessage ||
+                      existingDocument?.qboInvoiceId ||
+                      'Push to QuickBooks'}
+                </span>
+              </button>
+            )}
 
             <button
               onClick={handleExportPdf}

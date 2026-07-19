@@ -163,6 +163,26 @@ function NurseryApp({
   const [loading, setLoading] = useState(true);
   const [showTeamManager, setShowTeamManager] = useState(false);
   const [showWeightsEditor, setShowWeightsEditor] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qb = params.get('qb');
+    if (!qb) return;
+    const message = params.get('message');
+    if (qb === 'connected') {
+      alert(
+        'QuickBooks connected. Open Team to confirm status, then push invoices from the invoice screen.'
+      );
+      setShowTeamManager(true);
+    } else if (qb === 'error') {
+      alert(`QuickBooks connect failed: ${message || 'Unknown error'}`);
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('qb');
+    url.searchParams.delete('message');
+    window.history.replaceState({}, '', url.pathname + url.search);
+  }, []);
+
   const [documentModal, setDocumentModal] = useState<{
     orderId: string | null;
     type: CustomerDocumentType;
@@ -742,6 +762,7 @@ function NurseryApp({
               permissions={permissions}
               customers={customers}
               nurseryName={tenant.name}
+              tenantId={tenant.id}
               onEditTruck={() => {
                 setActiveTab('trucks');
                 setIsEditingTruck(true);
@@ -762,6 +783,7 @@ function NurseryApp({
               customers={customers}
               permissions={permissions}
               nurseryName={tenant.name}
+              tenantId={tenant.id}
             />
           ) : (
             <div className="bg-white rounded-2xl border border-emerald-100 p-12 text-center min-h-[400px] flex flex-col items-center justify-center">
@@ -822,6 +844,7 @@ function NurseryApp({
               : []
           }
           nurseryName={tenant.name}
+          tenantId={tenant.id}
         />
       )}
 

@@ -1,8 +1,13 @@
 {
   "firestore": [
     {
-      "database": "ai-studio-plantordertextif-d3c99fd6-7054-4352-80ad-160200b57368",
+      "database": "(default)",
       "rules": "firestore.rules"
     }
-  ]
+  ],
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  }
 }

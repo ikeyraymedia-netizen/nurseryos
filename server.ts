@@ -4,6 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
+import { registerQuickbooksRoutes, isQuickbooksConfigured } from './server/quickbooks';
 
 dotenv.config();
 
@@ -13,6 +14,8 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const PORT = Number(process.env.PORT) || 3000;
+
+registerQuickbooksRoutes(app);
 
 // Lazy initialize Google Gen AI
 let aiClient: GoogleGenAI | null = null;
@@ -533,7 +536,8 @@ app.post('/api/send-invoice', async (req, res) => {
 // Check server status & API key configuration
 app.get('/api/config-status', (req, res) => {
   res.json({
-    hasGeminiKey: !!process.env.GEMINI_API_KEY
+    hasGeminiKey: !!process.env.GEMINI_API_KEY,
+    hasQuickbooks: isQuickbooksConfigured()
   });
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
 import {
   createTeamInvite,
@@ -18,6 +18,12 @@ import {
 } from '../lib/permissions';
 import { TENANT_MODULE_DEFS, resolveEnabledModules } from '../lib/modules';
 import { logAuditEvent } from '../lib/audit';
+import {
+  disconnectQuickbooks,
+  fetchQuickbooksStatus,
+  QuickbooksStatus,
+  startQuickbooksConnect
+} from '../lib/quickbooks';
 
 interface TeamManagerProps {
   tenant: Tenant;
@@ -44,6 +50,8 @@ export function TeamManager({
   const [message, setMessage] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
+  const [qbBusy, setQbBusy] = useState(false);
 
   async function refresh() {
     const [m, i] = await Promise.all([
@@ -54,9 +62,84 @@ export function TeamManager({
     setInvites(i);
   }
 
+  async function refreshQuickbooks() {
+    try {
+      const status = await fetchQuickbooksStatus(tenant.id);
+      setQbStatus(status);
+    } catch (err: any) {
+      setQbStatus(null);
+      // Don't block Team UI if Admin/QB env isn't ready yet.
+      if (err?.message) {
+        console.warn('QuickBooks status:', err.message);
+      }
+    }
+  }
+
   useEffect(() => {
     refresh().catch((err) => setError(err?.message || 'Failed to load team.'));
+    void (async () => {
+      try {
+        const cfg = await fetch('/api/quickbooks/config-status').then((r) => r.json());
+        if (!cfg?.configured) {
+          setQbStatus({
+            connected: false,
+            realmId: null,
+            connectedAt: null,
+            environment: cfg?.environment || 'sandbox',
+            configured: false
+          });
+          return;
+        }
+        await refreshQuickbooks();
+      } catch {
+        setQbStatus({
+          connected: false,
+          realmId: null,
+          connectedAt: null,
+          environment: 'sandbox',
+          configured: false
+        });
+      }
+    })();
   }, [tenant.id]);
+
+  async function handleConnectQuickbooks() {
+    setQbBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const url = await startQuickbooksConnect(tenant.id);
+      await logAuditEvent({
+        action: 'quickbooks.connect_started',
+        summary: 'Started QuickBooks Online connection'
+      });
+      window.location.href = url;
+    } catch (err: any) {
+      setError(err?.message || 'Failed to start QuickBooks connect.');
+      setQbBusy(false);
+    }
+  }
+
+  async function handleDisconnectQuickbooks() {
+    const ok = confirm('Disconnect QuickBooks from this nursery?');
+    if (!ok) return;
+    setQbBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await disconnectQuickbooks(tenant.id);
+      await logAuditEvent({
+        action: 'quickbooks.disconnected',
+        summary: 'Disconnected QuickBooks Online'
+      });
+      setMessage('QuickBooks disconnected.');
+      await refreshQuickbooks();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to disconnect QuickBooks.');
+    } finally {
+      setQbBusy(false);
+    }
+  }
 
   function toggleInviteRole(role: Exclude<MemberRole, 'owner'>) {
     setInviteRoles((prev) => {
@@ -256,6 +339,55 @@ export function TeamManager({
                 );
               })}
             </div>
+          </div>
+
+          <div className="rounded-xl border border-sky-100 bg-sky-50/50 px-3 py-3 space-y-2">
+            <p className="text-xs font-bold uppercase text-sky-900">QuickBooks Online</p>
+            <p className="text-[11px] text-sky-950/80 leading-relaxed">
+              Connect this nursery to push saved invoices and estimates into QuickBooks.
+              Owner/admin only.
+            </p>
+            {qbStatus?.connected ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-emerald-800">
+                  Connected
+                  {qbStatus.connectedAt
+                    ? ` · ${new Date(qbStatus.connectedAt).toLocaleDateString()}`
+                    : ''}
+                  {qbStatus.environment ? ` · ${qbStatus.environment}` : ''}
+                </p>
+                <button
+                  type="button"
+                  disabled={qbBusy || busy}
+                  onClick={() => void handleDisconnectQuickbooks()}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                >
+                  <Unlink className="h-3.5 w-3.5" />
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={qbBusy || busy || qbStatus?.configured === false}
+                onClick={() => void handleConnectQuickbooks()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sky-700 text-white text-xs font-bold disabled:opacity-50"
+                title={
+                  qbStatus?.configured === false
+                    ? 'Add QuickBooks env vars on the server first'
+                    : 'Connect QuickBooks'
+                }
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                {qbBusy ? 'Opening QuickBooks…' : 'Connect QuickBooks'}
+              </button>
+            )}
+            {qbStatus && !qbStatus.configured && (
+              <p className="text-[11px] text-amber-800">
+                Server keys not set yet. Add QUICKBOOKS_CLIENT_ID / SECRET and Firebase Admin
+                credentials in Railway, then refresh.
+              </p>
+            )}
           </div>
 
           <div>

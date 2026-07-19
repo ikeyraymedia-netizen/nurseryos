@@ -48,6 +48,7 @@ interface TruckWorkspaceProps {
   permissions: AppPermissions;
   customers?: Customer[];
   nurseryName?: string;
+  tenantId?: string;
   onEditTruck: () => void;
   onSelectOrder: (orderId: string) => void;
 }
@@ -59,6 +60,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   permissions,
   customers = [],
   nurseryName = 'NurseryOS',
+  tenantId,
   onEditTruck,
   onSelectOrder
 }) => {
@@ -1469,6 +1471,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               truck.orderIds.includes(candidate.id) || candidate.truckId === truck.id
           )}
           nurseryName={nurseryName}
+          tenantId={tenantId}
         />
       )}
     </div>

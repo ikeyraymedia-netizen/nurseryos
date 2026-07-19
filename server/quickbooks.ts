@@ -265,30 +265,78 @@ function sizeToQbNameSuffix(containerSize: string): string[] {
   const size = String(containerSize || '').trim();
   const out: string[] = [];
   if (!size) return out;
-  out.push(size);
   const hash = size.match(/^#(\d+)$/);
   if (hash) {
+    // Prefer QuickBooks product-list style names first
     out.push(`${hash[1]} gal.`);
     out.push(`${hash[1]} gal`);
+    out.push(size);
     out.push(`${hash[1]}g`);
-  }
-  if (/^b\s*&\s*b$/i.test(size)) out.push('B&B');
-  if (/^tray$/i.test(size)) {
+  } else if (/^b\s*&\s*b$/i.test(size)) {
+    out.push('B&B');
+  } else if (/^tray$/i.test(size)) {
     out.push('18ct. Flat');
     out.push('Flat');
+    out.push('Tray');
+  } else if (/"$/.test(size)) {
+    out.push(size);
+  } else {
+    out.push(size);
   }
-  if (/"$/.test(size)) out.push(size);
   return [...new Set(out)];
 }
 
-async function findItemRefForLine(
+function preferredQbItemName(plantName: string, containerSize: string): string {
+  const plant = String(plantName || '').trim() || 'Plant';
+  const suffix = sizeToQbNameSuffix(containerSize)[0];
+  const full = suffix ? `${plant} ${suffix}` : plant;
+  return full.slice(0, 100);
+}
+
+async function getIncomeAccountId(tenantId: string): Promise<string> {
+  const accounts = await qboRequest<any>(
+    tenantId,
+    'GET',
+    `/query?query=${encodeURIComponent(
+      "SELECT * FROM Account WHERE AccountType = 'Income' MAXRESULTS 1"
+    )}&minorversion=65`
+  );
+  const accountId = accounts?.QueryResponse?.Account?.[0]?.Id;
+  if (!accountId) {
+    throw new Error(
+      'QuickBooks needs an Income account to create products. Add one in QBO, then retry.'
+    );
+  }
+  return String(accountId);
+}
+
+async function findItemByExactName(tenantId: string, name: string): Promise<string | null> {
+  const query = encodeURIComponent(
+    `select * from Item where Name = '${escapeQboQueryValue(name)}' MAXRESULTS 1`
+  );
+  const search = await qboRequest<any>(
+    tenantId,
+    'GET',
+    `/query?query=${query}&minorversion=65`
+  );
+  const existing = search?.QueryResponse?.Item?.[0];
+  return existing?.Id ? String(existing.Id) : null;
+}
+
+/**
+ * Use a real Product/Service per plant (so QBO Product column shows the plant name),
+ * matching existing QB catalog names when possible, otherwise creating a Service item.
+ */
+async function findOrCreateItemForLine(
   tenantId: string,
   plantName: string,
   containerSize: string,
-  fallbackItemId: string
+  incomeAccountId: string
 ): Promise<string> {
   const plant = String(plantName || '').trim();
-  if (!plant) return fallbackItemId;
+  if (!plant) {
+    throw new Error('Invoice line is missing a plant name.');
+  }
 
   const candidates: string[] = [];
   for (const suffix of sizeToQbNameSuffix(containerSize)) {
@@ -298,21 +346,32 @@ async function findItemRefForLine(
 
   for (const name of candidates) {
     try {
-      const query = encodeURIComponent(
-        `select * from Item where Name = '${escapeQboQueryValue(name)}' MAXRESULTS 1`
-      );
-      const search = await qboRequest<any>(
-        tenantId,
-        'GET',
-        `/query?query=${query}&minorversion=65`
-      );
-      const existing = search?.QueryResponse?.Item?.[0];
-      if (existing?.Id) return String(existing.Id);
+      const id = await findItemByExactName(tenantId, name.slice(0, 100));
+      if (id) return id;
     } catch {
-      // try next candidate
+      // try next
     }
   }
-  return fallbackItemId;
+
+  const createName = preferredQbItemName(plant, containerSize);
+  // If create name was already tried and missing, create it now.
+  try {
+    const existing = await findItemByExactName(tenantId, createName);
+    if (existing) return existing;
+  } catch {
+    // continue to create
+  }
+
+  const created = await qboRequest<any>(tenantId, 'POST', '/item?minorversion=65', {
+    Name: createName,
+    Type: 'Service',
+    IncomeAccountRef: { value: incomeAccountId }
+  });
+  const id = created?.Item?.Id;
+  if (!id) {
+    throw new Error(`Could not create QuickBooks product “${createName}”.`);
+  }
+  return String(id);
 }
 
 async function fetchCompanyName(tenantId: string, realmId: string): Promise<string | null> {
@@ -328,35 +387,17 @@ async function fetchCompanyName(tenantId: string, realmId: string): Promise<stri
   }
 }
 
-async function findOrCreateServiceItem(tenantId: string): Promise<string> {
-  const query = encodeURIComponent(`select * from Item where Name = 'NurseryOS Line'`);
-  const search = await qboRequest<any>(
-    tenantId,
-    'GET',
-    `/query?query=${query}&minorversion=65`
-  );
-  const existing = search?.QueryResponse?.Item?.[0];
-  if (existing?.Id) return String(existing.Id);
-
-  const accounts = await qboRequest<any>(
-    tenantId,
-    'GET',
-    `/query?query=${encodeURIComponent("SELECT * FROM Account WHERE AccountType = 'Income' MAXRESULTS 1")}&minorversion=65`
-  );
-  const accountId = accounts?.QueryResponse?.Account?.[0]?.Id;
-  if (!accountId) {
-    throw new Error(
-      'QuickBooks needs an Income account to create line items. Add one in QBO, then retry.'
-    );
-  }
-
+async function findOrCreateFreightItem(tenantId: string, incomeAccountId: string): Promise<string> {
+  const name = 'Freight / Delivery';
+  const existing = await findItemByExactName(tenantId, name);
+  if (existing) return existing;
   const created = await qboRequest<any>(tenantId, 'POST', '/item?minorversion=65', {
-    Name: 'NurseryOS Line',
+    Name: name,
     Type: 'Service',
-    IncomeAccountRef: { value: String(accountId) }
+    IncomeAccountRef: { value: incomeAccountId }
   });
   const id = created?.Item?.Id;
-  if (!id) throw new Error('Could not create a QuickBooks service item for line mapping.');
+  if (!id) throw new Error('Could not create QuickBooks freight item.');
   return String(id);
 }
 
@@ -407,7 +448,7 @@ async function mapDocToInvoice(
   tenantId: string,
   doc: Record<string, any>,
   customerRefId: string,
-  fallbackItemId: string
+  incomeAccountId: string
 ) {
   const rawItems = Array.isArray(doc.items) ? doc.items : [];
   if (rawItems.length === 0) {
@@ -428,20 +469,20 @@ async function mapDocToInvoice(
     const unitPrice = Number(item.unitPrice ?? item.price) || 0;
     if (!plantName && qty === 0 && unitPrice === 0) continue;
 
-    const itemRefId = await findItemRefForLine(
+    const itemRefId = await findOrCreateItemForLine(
       tenantId,
       plantName || `Line ${index + 1}`,
       containerSize,
-      fallbackItemId
+      incomeAccountId
     );
-    const desc = [plantName || `Line ${index + 1}`, containerSize].filter(Boolean).join(' — ');
+    const safeQty = qty > 0 ? qty : 1;
     lines.push({
       DetailType: 'SalesItemLineDetail',
-      Amount: Number((Math.max(qty, 1) * unitPrice).toFixed(2)),
-      Description: desc,
+      Amount: Number((safeQty * unitPrice).toFixed(2)),
+      Description: item.notes ? String(item.notes).slice(0, 4000) : undefined,
       SalesItemLineDetail: {
         ItemRef: { value: itemRefId },
-        Qty: Math.max(qty, 1),
+        Qty: safeQty,
         UnitPrice: unitPrice
       }
     });
@@ -449,12 +490,13 @@ async function mapDocToInvoice(
 
   const freight = Number(doc.freightCharge) || 0;
   if (freight > 0) {
+    const freightItemId = await findOrCreateFreightItem(tenantId, incomeAccountId);
     lines.push({
       DetailType: 'SalesItemLineDetail',
       Amount: Number(freight.toFixed(2)),
       Description: 'Freight / Delivery',
       SalesItemLineDetail: {
-        ItemRef: { value: fallbackItemId },
+        ItemRef: { value: freightItemId },
         Qty: 1,
         UnitPrice: freight
       }
@@ -684,8 +726,8 @@ export function registerQuickbooksRoutes(app: Express) {
       }
 
       const customer = await findOrCreateCustomer(tenantId, doc);
-      const itemRefId = await findOrCreateServiceItem(tenantId);
-      const payload = await mapDocToInvoice(tenantId, doc, customer.id, itemRefId);
+      const incomeAccountId = await getIncomeAccountId(tenantId);
+      const payload = await mapDocToInvoice(tenantId, doc, customer.id, incomeAccountId);
       const endpoint = doc.type === 'estimate' ? '/estimate' : '/invoice';
       const created = await qboRequest<any>(
         tenantId,
@@ -725,7 +767,9 @@ export function registerQuickbooksRoutes(app: Express) {
         linePreview = checkedLines
           .filter((l: any) => l?.DetailType === 'SalesItemLineDetail')
           .slice(0, 5)
-          .map((l: any) => String(l.Description || l.SalesItemLineDetail?.ItemRef?.name || 'Line'));
+          .map((l: any) =>
+            String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line')
+          );
       } catch {
         verified = false;
       }

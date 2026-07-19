@@ -399,12 +399,30 @@ export function registerQuickbooksRoutes(app: Express) {
       }
       await assertAdminOrOwner(tenantId, uid);
       const integration = await loadIntegration(tenantId);
+      const connected = Boolean(integration?.realmId && integration?.refreshToken);
+      let companyName: string | null = null;
+      if (connected) {
+        try {
+          const info = await qboRequest<any>(
+            tenantId,
+            'GET',
+            `/companyinfo/${integration!.realmId}?minorversion=65`
+          );
+          companyName =
+            info?.CompanyInfo?.CompanyName ||
+            info?.CompanyInfo?.LegalName ||
+            null;
+        } catch {
+          companyName = null;
+        }
+      }
       res.json({
-        connected: Boolean(integration?.realmId && integration?.refreshToken),
+        connected,
         realmId: integration?.realmId || null,
         connectedAt: integration?.connectedAt || null,
         environment: integration?.environment || qbEnv(),
-        configured: isQuickbooksConfigured() && isFirebaseAdminConfigured()
+        configured: isQuickbooksConfigured() && isFirebaseAdminConfigured(),
+        companyName
       });
     })
   );
@@ -535,10 +553,37 @@ export function registerQuickbooksRoutes(app: Express) {
         throw new Error('QuickBooks did not return a document id.');
       }
 
+      const integration = await loadIntegration(tenantId);
+      let companyName: string | null = null;
+      try {
+        const info = await qboRequest<any>(
+          tenantId,
+          'GET',
+          `/companyinfo/${integration!.realmId}?minorversion=65`
+        );
+        companyName = info?.CompanyInfo?.CompanyName || info?.CompanyInfo?.LegalName || null;
+      } catch {
+        companyName = null;
+      }
+
+      // Verify the invoice is readable back from QBO
+      let verified = false;
+      try {
+        const checkPath =
+          doc.type === 'estimate'
+            ? `/estimate/${qboId}?minorversion=65`
+            : `/invoice/${qboId}?minorversion=65`;
+        const check = await qboRequest<any>(tenantId, 'GET', checkPath);
+        verified = Boolean(check?.Invoice?.Id || check?.Estimate?.Id);
+      } catch {
+        verified = false;
+      }
+
       await docRef.set(
         {
           qboInvoiceId: qboId,
           qboDocType: doc.type,
+          qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
           qboSyncedAt: new Date().toISOString(),
           qboSyncedByUserId: uid,
           updatedAt: new Date().toISOString()
@@ -546,10 +591,18 @@ export function registerQuickbooksRoutes(app: Express) {
         { merge: true }
       );
 
+      const env = integration?.environment || qbEnv();
       res.json({
         success: true,
         qboInvoiceId: qboId,
-        qboDocType: doc.type
+        qboDocType: doc.type,
+        qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
+        customerName: String(doc.billToName || doc.customerName || ''),
+        environment: env,
+        companyName,
+        verified,
+        sandboxUrl:
+          env === 'sandbox' ? 'https://app.sandbox.qbo.intuit.com/app/invoices' : null
       });
     })
   );

@@ -382,6 +382,25 @@ export function TeamManager({
                     : ''}
                   {qbStatus.environment ? ` · ${qbStatus.environment}` : ''}
                 </p>
+                {qbStatus.companyName && (
+                  <p className="text-[11px] text-sky-950/80">
+                    Company: <span className="font-semibold">{qbStatus.companyName}</span>
+                  </p>
+                )}
+                {qbStatus.environment === 'sandbox' && (
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Invoices go to{' '}
+                    <a
+                      className="underline font-semibold"
+                      href="https://app.sandbox.qbo.intuit.com/app/invoices"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      sandbox QuickBooks
+                    </a>
+                    , not your live company.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={qbBusy || busy}

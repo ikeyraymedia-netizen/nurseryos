@@ -16,6 +16,7 @@ export interface QuickbooksStatus {
   connectedAt: string | null;
   environment: 'sandbox' | 'production';
   configured: boolean;
+  companyName?: string | null;
 }
 
 async function readApiError(res: Response): Promise<string> {
@@ -63,7 +64,15 @@ export async function disconnectQuickbooks(tenantId: string): Promise<void> {
 export async function pushDocumentToQuickbooks(params: {
   tenantId: string;
   documentId: string;
-}): Promise<{ qboInvoiceId: string; qboDocType: string }> {
+}): Promise<{
+  qboInvoiceId: string;
+  qboDocType: string;
+  qboDocNumber?: string | null;
+  customerName?: string | null;
+  environment?: string;
+  companyName?: string | null;
+  sandboxUrl?: string | null;
+}> {
   const res = await fetch('/api/quickbooks/push-invoice', {
     method: 'POST',
     headers: await authHeaders(),
@@ -73,6 +82,11 @@ export async function pushDocumentToQuickbooks(params: {
   if (!res.ok) throw new Error(data?.error || 'Failed to push to QuickBooks.');
   return {
     qboInvoiceId: String(data.qboInvoiceId),
-    qboDocType: String(data.qboDocType || 'invoice')
+    qboDocType: String(data.qboDocType || 'invoice'),
+    qboDocNumber: data.qboDocNumber ? String(data.qboDocNumber) : null,
+    customerName: data.customerName ? String(data.customerName) : null,
+    environment: data.environment ? String(data.environment) : null,
+    companyName: data.companyName ? String(data.companyName) : null,
+    sandboxUrl: data.sandboxUrl ? String(data.sandboxUrl) : null
   };
 }

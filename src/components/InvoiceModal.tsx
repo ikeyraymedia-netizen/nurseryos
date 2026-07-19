@@ -761,10 +761,31 @@ Thank you for choosing ${nurseryName}!
         meta: {
           documentId: savedDocumentId,
           qboInvoiceId: result.qboInvoiceId,
-          qboDocType: result.qboDocType
+          qboDocType: result.qboDocType,
+          qboDocNumber: result.qboDocNumber,
+          companyName: result.companyName,
+          environment: result.environment
         }
       });
-      setQbPushMessage(`Synced to QuickBooks · #${result.qboInvoiceId}`);
+      const where =
+        result.environment === 'sandbox'
+          ? 'SANDBOX QuickBooks'
+          : 'QuickBooks';
+      const companyBit = result.companyName ? ` · ${result.companyName}` : '';
+      const docBit = result.qboDocNumber
+        ? `Doc #${result.qboDocNumber}`
+        : `Id ${result.qboInvoiceId}`;
+      const customerBit = result.customerName ? ` · customer “${result.customerName}”` : '';
+      setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
+      alert(
+        `Invoice pushed to ${where}${companyBit}.\n\n${docBit}${customerBit}\n\n` +
+          (result.environment === 'sandbox'
+            ? 'Open https://app.sandbox.qbo.intuit.com (not regular QuickBooks), then Sales → Invoices or search that customer.\n\nIf you have multiple sandbox companies, switch to the one you authorized when connecting.'
+            : 'Open QuickBooks Online → Sales → Invoices, or search that customer.')
+      );
+      if (result.sandboxUrl && result.environment === 'sandbox') {
+        // Keep UX soft — user can open after reading alert
+      }
     } catch (err: any) {
       alert(err?.message || 'Failed to push to QuickBooks.');
     } finally {

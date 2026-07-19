@@ -163,7 +163,7 @@ export function CustomersWorkspace({
 
   async function handleAddCustomer(e: FormEvent) {
     e.preventDefault();
-    if (!permissions.canEditOrders) return;
+    if (!permissions.canEditCustomers) return;
     if (!name.trim()) {
       setMessage('Customer name is required.');
       return;
@@ -211,7 +211,7 @@ export function CustomersWorkspace({
   }
 
   async function handleSaveSelectedCustomer() {
-    if (!permissions.canEditOrders || !selectedCustomer) return;
+    if (!permissions.canEditCustomers || !selectedCustomer) return;
     if (!editName.trim()) {
       setMessage('Customer name is required.');
       return;
@@ -245,7 +245,7 @@ export function CustomersWorkspace({
   }
 
   async function handleCsvUpload(file: File) {
-    if (!permissions.canEditOrders) return;
+    if (!permissions.canEditCustomers) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -273,7 +273,7 @@ export function CustomersWorkspace({
   }
 
   async function handleDeduplicateCustomers() {
-    if (!permissions.canEditOrders) return;
+    if (!permissions.canEditCustomers) return;
     const extras = countDuplicateCustomerNames(customers);
     if (extras === 0) {
       setMessage('No duplicate customer names found.');
@@ -303,7 +303,7 @@ export function CustomersWorkspace({
   }
 
   async function handleExportBackup() {
-    if (!permissions.canEditOrders) return;
+    if (!permissions.canEditCustomers) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -334,7 +334,7 @@ export function CustomersWorkspace({
   }
 
   async function handleDeleteAllCustomers() {
-    if (!permissions.canEditOrders) return;
+    if (!permissions.canEditCustomers) return;
     if (customers.length === 0) {
       setMessage('No customers to delete.');
       return;
@@ -370,7 +370,7 @@ export function CustomersWorkspace({
   }
 
   async function handleConvertEstimateToOrder(doc: CustomerDocument) {
-    if (!permissions.canEditOrders || !selectedCustomer) return;
+    if (!permissions.canUploadOrders || !selectedCustomer) return;
     if (doc.type !== 'estimate') return;
     if (doc.orderId) {
       onOpenOrder?.(doc.orderId);
@@ -500,7 +500,7 @@ export function CustomersWorkspace({
               )}
             </div>
 
-            {permissions.canEditOrders && (
+            {permissions.canEditCustomers && (
               <div className="border-t border-gray-100 pt-4 space-y-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Edit customer</p>
                 <div className="grid md:grid-cols-2 gap-3">
@@ -631,7 +631,7 @@ export function CustomersWorkspace({
                             Open {doc.type}
                           </button>
                         )}
-                        {permissions.canEditOrders && doc.type === 'estimate' && !doc.orderId && (
+                        {permissions.canUploadOrders && doc.type === 'estimate' && !doc.orderId && (
                           <button
                             type="button"
                             disabled={convertingDocId === doc.id || busy}
@@ -642,7 +642,7 @@ export function CustomersWorkspace({
                             {convertingDocId === doc.id ? 'Converting…' : 'Convert to order'}
                           </button>
                         )}
-                        {doc.type === 'estimate' && doc.orderId && onOpenOrder && (
+                        {permissions.canViewOrders && doc.type === 'estimate' && doc.orderId && onOpenOrder && (
                           <button
                             type="button"
                             onClick={() => onOpenOrder(doc.orderId!)}
@@ -720,7 +720,7 @@ export function CustomersWorkspace({
                   <p className="text-xs text-gray-500">Search customers, then open one to view details.</p>
                 </div>
               </div>
-              {permissions.canEditOrders && (
+              {permissions.canEditCustomers && (
                 <button
                   type="button"
                   onClick={() => {
@@ -735,7 +735,7 @@ export function CustomersWorkspace({
               )}
             </div>
 
-            {permissions.canEditOrders && (
+            {permissions.canEditCustomers && (
               <div className="flex flex-wrap gap-2 mb-4">
                 <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer hover:bg-emerald-100">
                   <Upload className="h-4 w-4" />
@@ -789,7 +789,7 @@ export function CustomersWorkspace({
               </p>
             )}
 
-            {permissions.canEditOrders && showAddForm && (
+            {permissions.canEditCustomers && showAddForm && (
               <form
                 onSubmit={handleAddCustomer}
                 className="border border-gray-200 rounded-2xl p-4 space-y-3 bg-slate-50/60 mb-4"

@@ -150,9 +150,15 @@ function NurseryApp({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(
-    permissions.canViewInventory && !permissions.canViewOrders ? 'inventory' : 'orders'
-  );
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => {
+    if (permissions.canViewOrders) return 'orders';
+    if (permissions.canViewCustomers) return 'customers';
+    if (permissions.canViewReports) return 'reports';
+    if (permissions.canViewInventory) return 'inventory';
+    if (permissions.canViewTrucks) return 'trucks';
+    if (permissions.canViewTasks) return 'tasks';
+    return 'orders';
+  });
   const [isEditingTruck, setIsEditingTruck] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showTeamManager, setShowTeamManager] = useState(false);
@@ -169,7 +175,11 @@ function NurseryApp({
   const mainPanelRef = useRef<HTMLDivElement>(null);
 
   const whatsNewReady =
-    !loading || (!permissions.canViewOrders && !permissions.canViewTrucks);
+    !loading ||
+    (!permissions.canViewOrders &&
+      !permissions.canViewTrucks &&
+      !permissions.canViewCustomers &&
+      !permissions.canViewReports);
   const { items: whatsNewItems, dismiss: dismissWhatsNew } = useWhatsNewDigest({
     tenantId: tenant.id,
     userId,
@@ -201,12 +211,25 @@ function NurseryApp({
 
   useEffect(() => {
     if (activeTab === 'customers' && !permissions.canViewCustomers) {
-      setActiveTab(permissions.canViewOrders ? 'orders' : 'trucks');
+      setActiveTab(
+        permissions.canViewOrders
+          ? 'orders'
+          : permissions.canViewReports
+            ? 'reports'
+            : permissions.canViewInventory
+              ? 'inventory'
+              : 'trucks'
+      );
     }
-  }, [activeTab, permissions.canViewCustomers, permissions.canViewOrders]);
+  }, [activeTab, permissions.canViewCustomers, permissions.canViewOrders, permissions.canViewReports, permissions.canViewInventory]);
 
   useEffect(() => {
-    if (!permissions.canViewOrders && !permissions.canViewTrucks) {
+    const needsOpsData =
+      permissions.canViewOrders ||
+      permissions.canViewTrucks ||
+      permissions.canViewReports ||
+      permissions.canViewCustomers;
+    if (!needsOpsData && !permissions.canViewInventory) {
       setLoading(false);
       return;
     }
@@ -240,7 +263,8 @@ function NurseryApp({
           });
         }
 
-        if (permissions.canViewTrucks) {
+        // Reports (office) needs truck/order snapshots without yard tabs.
+        if (permissions.canViewTrucks || permissions.canViewReports) {
           unsubscribeTrucks = subscribeToTrucks((newTrucks) => {
             if (active) setTrucks(newTrucks);
           });
@@ -252,17 +276,19 @@ function NurseryApp({
           });
         }
 
-        if (permissions.canViewOrders) {
+        if (permissions.canViewOrders || permissions.canViewReports) {
           unsubscribeOrders = subscribeToOrders((newOrders) => {
             if (!active) return;
             clearTimeout(safetyTimeout);
             setOrders(newOrders);
             setLoading(false);
-            setSelectedOrderId((prev) => {
-              if (prev) return prev;
-              if (selectedTruckId) return null;
-              return newOrders.length > 0 ? newOrders[0].id : null;
-            });
+            if (permissions.canViewOrders) {
+              setSelectedOrderId((prev) => {
+                if (prev) return prev;
+                if (selectedTruckId) return null;
+                return newOrders.length > 0 ? newOrders[0].id : null;
+              });
+            }
           });
         } else {
           clearTimeout(safetyTimeout);

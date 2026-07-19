@@ -1,4 +1,4 @@
-export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'loader' | 'field';
+export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'office' | 'loader' | 'inventory';
 
 /** Paid add-on modules. Core (orders, trucks, team, weights, customers) is always included. */
 export type TenantModuleId = 'inventory' | 'invoicing' | 'reports' | 'tasks' | 'bol';
@@ -21,7 +21,7 @@ export interface TenantMember {
   email: string;
   /** Highest-privilege role (legacy + primary). Prefer `roles` when present. */
   role: MemberRole;
-  /** All assigned roles. A member can be both field and loader, etc. */
+  /** All assigned roles. A member can be both inventory and loader, etc. */
   roles?: MemberRole[];
   displayName?: string;
   joinedAt: string;

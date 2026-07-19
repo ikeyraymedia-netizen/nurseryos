@@ -13,6 +13,7 @@ export interface AppPermissions {
   canViewInvoices: boolean;
   canViewPricing: boolean;
   canViewCustomers: boolean;
+  canEditCustomers: boolean;
   canViewBOL: boolean;
   canEditWeights: boolean;
   canViewInventory: boolean;
@@ -29,18 +30,34 @@ const ROLE_RANK: Record<MemberRole, number> = {
   owner: 5,
   admin: 4,
   supervisor: 3,
+  office: 3,
   loader: 2,
-  field: 1
+  inventory: 1
 };
 
-const ALL_ROLES: MemberRole[] = ['owner', 'admin', 'supervisor', 'loader', 'field'];
+const ALL_ROLES: MemberRole[] = [
+  'owner',
+  'admin',
+  'supervisor',
+  'office',
+  'loader',
+  'inventory'
+];
 
 const ASSIGNABLE_ROLES: Exclude<MemberRole, 'owner'>[] = [
   'admin',
   'supervisor',
+  'office',
   'loader',
-  'field'
+  'inventory'
 ];
+
+/** Map legacy role ids stored in Firestore to current ids. */
+function canonicalizeRole(role: string): MemberRole | null {
+  if (role === 'field') return 'inventory';
+  if ((ALL_ROLES as string[]).includes(role)) return role as MemberRole;
+  return null;
+}
 
 export function getAssignableRoles(): Exclude<MemberRole, 'owner'>[] {
   return [...ASSIGNABLE_ROLES];
@@ -48,7 +65,7 @@ export function getAssignableRoles(): Exclude<MemberRole, 'owner'>[] {
 
 /** Normalize member/invite roles; always returns at least one role. */
 export function normalizeMemberRoles(
-  roleOrRoles: MemberRole | MemberRole[] | null | undefined,
+  roleOrRoles: MemberRole | MemberRole[] | string | string[] | null | undefined,
   fallbackRole?: MemberRole
 ): MemberRole[] {
   const raw = Array.isArray(roleOrRoles)
@@ -60,8 +77,9 @@ export function normalizeMemberRoles(
         : [];
   const unique: MemberRole[] = [];
   for (const role of raw) {
-    if ((ALL_ROLES as string[]).includes(role) && !unique.includes(role)) {
-      unique.push(role);
+    const canonical = canonicalizeRole(String(role));
+    if (canonical && !unique.includes(canonical)) {
+      unique.push(canonical);
     }
   }
   if (unique.length === 0) return ['loader'];
@@ -101,6 +119,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewInvoices: true,
         canViewPricing: true,
         canViewCustomers: true,
+        canEditCustomers: true,
         canViewBOL: true,
         canEditWeights: true,
         canViewInventory: true,
@@ -128,6 +147,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewInvoices: false,
         canViewPricing: false,
         canViewCustomers: false,
+        canEditCustomers: false,
         canViewBOL: true,
         canEditWeights: false,
         canViewInventory: true,
@@ -138,6 +158,33 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewTasks: true,
         canAssignTasks: true,
         canCompleteTasks: true
+      };
+    case 'office':
+      // Front office: customers, invoices, pricing, reports. No yard/ops tabs.
+      return {
+        canViewOrders: false,
+        canViewTrucks: false,
+        canCheckOffLoading: false,
+        canEditOrders: false,
+        canDeleteOrders: false,
+        canBuildTrucks: false,
+        canEditTrucks: false,
+        canDeleteTrucks: false,
+        canUploadOrders: false,
+        canViewInvoices: true,
+        canViewPricing: true,
+        canViewCustomers: true,
+        canEditCustomers: true,
+        canViewBOL: false,
+        canEditWeights: false,
+        canViewInventory: false,
+        canEditInventory: false,
+        canUploadInventory: false,
+        canManageTeam: false,
+        canViewReports: true,
+        canViewTasks: false,
+        canAssignTasks: false,
+        canCompleteTasks: false
       };
     case 'loader':
       return {
@@ -153,6 +200,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewInvoices: false,
         canViewPricing: false,
         canViewCustomers: false,
+        canEditCustomers: false,
         canViewBOL: false,
         canEditWeights: false,
         canViewInventory: false,
@@ -164,7 +212,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: false,
         canCompleteTasks: true
       };
-    case 'field':
+    case 'inventory':
       return {
         canViewOrders: false,
         canViewTrucks: false,
@@ -178,6 +226,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewInvoices: false,
         canViewPricing: false,
         canViewCustomers: false,
+        canEditCustomers: false,
         canViewBOL: false,
         canEditWeights: false,
         canViewInventory: true,
@@ -221,10 +270,12 @@ export function roleLabel(role: MemberRole): string {
       return 'Admin';
     case 'supervisor':
       return 'Supervisor';
+    case 'office':
+      return 'Office';
     case 'loader':
       return 'Loader';
-    case 'field':
-      return 'Field';
+    case 'inventory':
+      return 'Inventory';
     default:
       return role;
   }

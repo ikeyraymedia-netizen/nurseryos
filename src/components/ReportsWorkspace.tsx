@@ -272,7 +272,13 @@ export function ReportsWorkspace({
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditError, setAuditError] = useState<string | null>(null);
 
-  useEffect(() => subscribeToInventory(setInventory), []);
+  useEffect(() => {
+    if (!permissions.canViewInventory) {
+      setInventory([]);
+      return;
+    }
+    return subscribeToInventory(setInventory);
+  }, [permissions.canViewInventory]);
 
   async function refreshDocuments() {
     try {
@@ -316,7 +322,7 @@ export function ReportsWorkspace({
   if (!permissions.canViewReports) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-gray-500">
-        Reports are available to owners and admins only.
+        Reports are available to owners, admins, and office staff.
       </div>
     );
   }

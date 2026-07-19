@@ -24,7 +24,7 @@ import {
   initializeDefaultWeightsIfNeeded
 } from './lib/db';
 import { subscribeToCustomers } from './lib/customers';
-import { getPermissionsForRole } from './lib/permissions';
+import { getPermissionsForMember } from './lib/permissions';
 import { applyModuleGates } from './lib/modules';
 import { listAllDocuments } from './lib/documents';
 import { buildOrdersNeedingInvoiceSet } from './lib/invoicing';
@@ -132,13 +132,17 @@ function NurseryApp({
   onBackToSeller?: () => void;
 }) {
   const [tenant, setTenant] = useState(tenantProp);
+  const [memberState, setMemberState] = useState(member);
   useEffect(() => {
     setTenant(tenantProp);
   }, [tenantProp]);
+  useEffect(() => {
+    setMemberState(member);
+  }, [member]);
 
   const permissions = useMemo(
-    () => applyModuleGates(getPermissionsForRole(member.role), tenant),
-    [member.role, tenant]
+    () => applyModuleGates(getPermissionsForMember(memberState), tenant),
+    [memberState, tenant]
   );
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [trucks, setTrucks] = useState<TruckType[]>([]);
@@ -374,7 +378,8 @@ function NurseryApp({
             orders={[]}
             nurseryName={tenant.name}
             userEmail={userEmail}
-            role={member.role}
+            role={memberState.role}
+            member={memberState}
             onSignOut={onSignOut}
             onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
             onManagePackages={undefined}
@@ -410,7 +415,7 @@ function NurseryApp({
             {activeTab === 'tasks' ? (
               <TasksWorkspace
                 tenant={tenant}
-                member={member}
+                member={memberState}
                 userId={userId}
                 permissions={permissions}
               />
@@ -435,6 +440,7 @@ function NurseryApp({
             tenant={tenant}
             currentUserId={userId}
             onClose={() => setShowTeamManager(false)}
+            onMemberUpdated={setMemberState}
           />
         )}
       </InventoryMatchProvider>
@@ -451,7 +457,8 @@ function NurseryApp({
         orders={dynamicOrders}
         nurseryName={tenant.name}
         userEmail={userEmail}
-        role={member.role}
+        role={memberState.role}
+        member={memberState}
         onSignOut={onSignOut}
         onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
         onManageWeights={permissions.canEditWeights ? () => setShowWeightsEditor(true) : undefined}
@@ -659,7 +666,7 @@ function NurseryApp({
           ) : activeTab === 'tasks' ? (
             <TasksWorkspace
               tenant={tenant}
-              member={member}
+              member={memberState}
               userId={userId}
               permissions={permissions}
             />
@@ -782,6 +789,7 @@ function NurseryApp({
           tenant={tenant}
           currentUserId={userId}
           onClose={() => setShowTeamManager(false)}
+          onMemberUpdated={setMemberState}
         />
       )}
 

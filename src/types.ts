@@ -19,7 +19,10 @@ export interface Tenant {
 export interface TenantMember {
   userId: string;
   email: string;
+  /** Highest-privilege role (legacy + primary). Prefer `roles` when present. */
   role: MemberRole;
+  /** All assigned roles. A member can be both field and loader, etc. */
+  roles?: MemberRole[];
   displayName?: string;
   joinedAt: string;
 }
@@ -165,7 +168,10 @@ export interface Truck {
 export interface TenantInvite {
   id: string;
   code: string;
+  /** Primary role for legacy invite codes. */
   role: Exclude<MemberRole, 'owner'>;
+  /** Roles granted when the invite is redeemed. */
+  roles?: Exclude<MemberRole, 'owner'>[];
   tenantId: string;
   tenantName: string;
   createdBy: string;

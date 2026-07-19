@@ -18,20 +18,30 @@ service cloud.firestore {
       return memberDoc(tenantId).data.role;
     }
 
+    function hasMemberRole(tenantId, role) {
+      return isMember(tenantId) && (
+        memberRole(tenantId) == role
+        || (
+          memberDoc(tenantId).data.keys().hasAny(['roles'])
+          && role in memberDoc(tenantId).data.roles
+        )
+      );
+    }
+
     function isOwner(tenantId) {
-      return isMember(tenantId) && memberRole(tenantId) == 'owner';
+      return hasMemberRole(tenantId, 'owner');
     }
 
     function isAdminOrOwner(tenantId) {
-      return isMember(tenantId) && memberRole(tenantId) in ['owner', 'admin'];
+      return hasMemberRole(tenantId, 'owner') || hasMemberRole(tenantId, 'admin');
     }
 
     function isField(tenantId) {
-      return isMember(tenantId) && memberRole(tenantId) == 'field';
+      return hasMemberRole(tenantId, 'field');
     }
 
     function isLoader(tenantId) {
-      return isMember(tenantId) && memberRole(tenantId) == 'loader';
+      return hasMemberRole(tenantId, 'loader');
     }
 
     function canReadOps(tenantId) {

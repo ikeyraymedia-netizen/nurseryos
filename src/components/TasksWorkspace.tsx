@@ -11,6 +11,7 @@ import {
 import { NurseryTask, Tenant, TenantMember } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { listTeamMembers } from '../lib/tenants';
+import { getMemberRoles, rolesLabel } from '../lib/permissions';
 import {
   createTask,
   deleteTask,
@@ -286,7 +287,7 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
                 {(team.some((m) => m.userId === userId) ? team : [member, ...team]).map((m) => (
                   <option key={m.userId} value={m.userId}>
                     {memberLabel(m)}
-                    {m.userId === userId ? ' (me)' : ''} — {m.role}
+                    {m.userId === userId ? ' (me)' : ''} — {rolesLabel(getMemberRoles(m))}
                   </option>
                 ))}
               </select>

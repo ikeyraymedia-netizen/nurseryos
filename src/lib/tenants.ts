@@ -24,6 +24,7 @@ import {
   DEFAULT_NEW_TENANT_MODULES,
   normalizeModulesList
 } from './modules';
+import { memberHasRole, normalizeMemberRoles, primaryRole } from './permissions';
 
 function slugifyNurseryName(name: string): string {
   const base = name
@@ -103,6 +104,7 @@ export async function signUpWithNursery(params: {
     userId: cred.user.uid,
     email: cred.user.email || email.trim(),
     role: 'owner',
+    roles: ['owner'],
     displayName: displayName.trim() || undefined,
     joinedAt: now
   };
@@ -179,10 +181,18 @@ function generateInviteCode(): string {
 export async function createTeamInvite(params: {
   tenantId: string;
   tenantName: string;
-  role: Exclude<MemberRole, 'owner'>;
+  role?: Exclude<MemberRole, 'owner'>;
+  roles?: Exclude<MemberRole, 'owner'>[];
   createdBy: string;
 }): Promise<TenantInvite> {
-  const { tenantId, tenantName, role, createdBy } = params;
+  const { tenantId, tenantName, createdBy } = params;
+  const roles = normalizeMemberRoles(
+    params.roles?.length ? params.roles : params.role ? [params.role] : ['loader']
+  ).filter((r): r is Exclude<MemberRole, 'owner'> => r !== 'owner');
+  if (roles.length === 0) {
+    throw new Error('Pick at least one role for the invite.');
+  }
+  const role = primaryRole(roles) as Exclude<MemberRole, 'owner'>;
   const inviteId = `invite-${Date.now()}`;
   const code = generateInviteCode();
   const now = new Date().toISOString();
@@ -191,6 +201,7 @@ export async function createTeamInvite(params: {
     id: inviteId,
     code,
     role,
+    roles,
     tenantId,
     tenantName,
     createdBy,
@@ -203,11 +214,43 @@ export async function createTeamInvite(params: {
     tenantId,
     inviteId,
     role,
+    roles,
     tenantName,
     active: true,
     createdAt: now
   });
   return invite;
+}
+
+export async function updateMemberRoles(params: {
+  tenantId: string;
+  memberUserId: string;
+  roles: MemberRole[];
+}): Promise<TenantMember> {
+  const roles = normalizeMemberRoles(params.roles);
+  if (roles.length === 0) {
+    throw new Error('A team member must have at least one role.');
+  }
+  const memberRef = doc(db, 'tenants', params.tenantId, 'members', params.memberUserId);
+  const snap = await getDoc(memberRef);
+  if (!snap.exists()) {
+    throw new Error('Team member not found.');
+  }
+  const existing = snap.data() as TenantMember;
+  if (memberHasRole(existing, 'owner') && !roles.includes('owner')) {
+    throw new Error('Cannot remove the owner role from this screen.');
+  }
+  if (roles.includes('owner') && !memberHasRole(existing, 'owner')) {
+    throw new Error('Cannot promote someone to owner from Team. Change ownership in Firestore if needed.');
+  }
+
+  const next: TenantMember = {
+    ...existing,
+    role: primaryRole(roles),
+    roles
+  };
+  await updateDoc(memberRef, { role: next.role, roles: next.roles });
+  return next;
 }
 
 export async function listTeamMembers(tenantId: string): Promise<TenantMember[]> {
@@ -219,9 +262,10 @@ export async function removeTeamMember(params: {
   tenantId: string;
   memberUserId: string;
   memberRole: MemberRole;
+  memberRoles?: MemberRole[];
 }): Promise<void> {
-  const { tenantId, memberUserId, memberRole } = params;
-  if (memberRole === 'owner') {
+  const { tenantId, memberUserId, memberRole, memberRoles } = params;
+  if (memberHasRole({ role: memberRole, roles: memberRoles }, 'owner')) {
     throw new Error('Owner cannot be removed from the nursery.');
   }
   await deleteDoc(doc(db, 'tenants', tenantId, 'members', memberUserId));
@@ -274,18 +318,25 @@ export async function joinNurseryWithInvite(params: {
     throw new Error('Invalid or expired invite code.');
   }
 
-  const { tenantId, inviteId, role, tenantName } = codeSnap.data() as {
+  const codeData = codeSnap.data() as {
     tenantId: string;
     inviteId: string;
     role: Exclude<MemberRole, 'owner'>;
+    roles?: Exclude<MemberRole, 'owner'>[];
     tenantName?: string;
   };
+  const { tenantId, inviteId, tenantName } = codeData;
+  const roles = normalizeMemberRoles(
+    codeData.roles?.length ? codeData.roles : [codeData.role]
+  ).filter((r): r is Exclude<MemberRole, 'owner'> => r !== 'owner');
+  const role = primaryRole(roles.length ? roles : [codeData.role]) as Exclude<MemberRole, 'owner'>;
 
   const now = new Date().toISOString();
   const member: TenantMember = {
     userId: params.user.uid,
     email: params.user.email || '',
     role,
+    roles: roles.length ? roles : [role],
     displayName: params.displayName?.trim() || undefined,
     joinedAt: now
   };

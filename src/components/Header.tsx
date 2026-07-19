@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Clock, CheckCircle2, LogOut, CloudUpload } from 'lucide-react';
-import { CustomerOrder, MemberRole } from '../types';
+import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
-import { roleLabel } from '../lib/permissions';
+import { getMemberRoles, rolesLabel } from '../lib/permissions';
 
 interface HeaderProps {
   orders: CustomerOrder[];
   nurseryName: string;
   userEmail?: string;
   role?: MemberRole;
+  member?: Pick<TenantMember, 'role' | 'roles'> | null;
   onSignOut?: () => Promise<void> | void;
   onManageTeam?: () => void;
   onManageWeights?: () => void;
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   nurseryName,
   userEmail,
   role,
+  member,
   onSignOut,
   onManageTeam,
   onManageWeights,
@@ -81,8 +83,11 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <p className="text-xs text-emerald-300 font-mono uppercase tracking-widest font-bold">
                 NurseryOS Workspace
-                {role && (
-                  <span className="text-emerald-500 font-normal"> | {roleLabel(role)}</span>
+                {(member || role) && (
+                  <span className="text-emerald-500 font-normal">
+                    {' '}
+                    | {member ? rolesLabel(getMemberRoles(member)) : rolesLabel([role as MemberRole])}
+                  </span>
                 )}
               </p>
             </div>

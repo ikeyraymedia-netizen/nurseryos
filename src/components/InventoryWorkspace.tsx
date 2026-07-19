@@ -198,7 +198,7 @@ export function InventoryWorkspace({
 
       if (parsed.length === 0) {
         throw new Error(
-          'No plant rows found. Use a header row with columns like Plant / Name, Size, Qty (or On Hand), Location.'
+          'No plant rows found. Need either columns like Plant / Size / Qty, or a price catalog with size headers (#1, #3, 4") and priced plant rows.'
         );
       }
 
@@ -294,7 +294,9 @@ export function InventoryWorkspace({
         const friendly =
           response.status === 503
             ? 'AI service is temporarily busy. Wait a few seconds and try again.'
-            : errorData.error || errorData.details || 'AI inventory import failed.';
+            : errorData.error ||
+              (typeof errorData.details === 'string' ? errorData.details : null) ||
+              'AI inventory import failed.';
         throw new Error(friendly);
       }
 

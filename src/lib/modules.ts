@@ -40,8 +40,8 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
 
 export const ALL_TENANT_MODULE_IDS: TenantModuleId[] = TENANT_MODULE_DEFS.map((m) => m.id);
 
-/** New nurseries start on Core only until you enable add-ons. */
-export const DEFAULT_NEW_TENANT_MODULES: TenantModuleId[] = [];
+/** New nurseries get the full package (matches prior all-features experience). */
+export const DEFAULT_NEW_TENANT_MODULES: TenantModuleId[] = [...ALL_TENANT_MODULE_IDS];
 
 /**
  * Resolve enabled add-on modules for a tenant.

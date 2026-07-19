@@ -18,13 +18,24 @@ export interface QuickbooksStatus {
   configured: boolean;
 }
 
+async function readApiError(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as { error?: string };
+    if (data?.error) return data.error;
+  } catch {
+    // non-JSON body
+  }
+  if (text?.trim()) return text.trim().slice(0, 240);
+  return `Request failed (${res.status})`;
+}
+
 export async function fetchQuickbooksStatus(tenantId: string): Promise<QuickbooksStatus> {
   const res = await fetch(`/api/quickbooks/status?tenantId=${encodeURIComponent(tenantId)}`, {
     headers: await authHeaders()
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || 'Failed to load QuickBooks status.');
-  return data as QuickbooksStatus;
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as QuickbooksStatus;
 }
 
 export async function startQuickbooksConnect(tenantId: string): Promise<string> {
@@ -33,8 +44,8 @@ export async function startQuickbooksConnect(tenantId: string): Promise<string> 
     headers: await authHeaders(),
     body: JSON.stringify({ tenantId })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || 'Failed to start QuickBooks connect.');
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as { authorizeUrl?: string };
   if (!data?.authorizeUrl) throw new Error('No QuickBooks authorize URL returned.');
   return String(data.authorizeUrl);
 }

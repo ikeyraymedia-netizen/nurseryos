@@ -4,6 +4,7 @@ import {
   getAdminDb,
   getMemberRoles,
   hasAnyRole,
+  isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
 
@@ -372,8 +373,12 @@ export function isQuickbooksConfigured(): boolean {
 
 export function registerQuickbooksRoutes(app: Express) {
   app.get('/api/quickbooks/config-status', (_req, res) => {
+    const quickbooks = isQuickbooksConfigured();
+    const firebaseAdmin = isFirebaseAdminConfigured();
     res.json({
-      configured: isQuickbooksConfigured(),
+      configured: quickbooks && firebaseAdmin,
+      quickbooks,
+      firebaseAdmin,
       environment: qbEnv()
     });
   });
@@ -392,7 +397,7 @@ export function registerQuickbooksRoutes(app: Express) {
         realmId: integration?.realmId || null,
         connectedAt: integration?.connectedAt || null,
         environment: integration?.environment || qbEnv(),
-        configured: isQuickbooksConfigured()
+        configured: isQuickbooksConfigured() && isFirebaseAdminConfigured()
       });
     })
   );

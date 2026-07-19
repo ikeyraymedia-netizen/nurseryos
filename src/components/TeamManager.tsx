@@ -52,6 +52,7 @@ export function TeamManager({
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
   const [qbBusy, setQbBusy] = useState(false);
+  const [qbError, setQbError] = useState<string | null>(null);
 
   async function refresh() {
     const [m, i] = await Promise.all([
@@ -66,12 +67,21 @@ export function TeamManager({
     try {
       const status = await fetchQuickbooksStatus(tenant.id);
       setQbStatus(status);
+      setQbError(null);
     } catch (err: any) {
-      setQbStatus(null);
-      // Don't block Team UI if Admin/QB env isn't ready yet.
-      if (err?.message) {
-        console.warn('QuickBooks status:', err.message);
-      }
+      // Keep configured=true if keys exist; surface the real auth/role/admin error.
+      setQbStatus((prev) =>
+        prev
+          ? { ...prev, connected: false }
+          : {
+              connected: false,
+              realmId: null,
+              connectedAt: null,
+              environment: 'sandbox',
+              configured: true
+            }
+      );
+      setQbError(err?.message || 'Failed to load QuickBooks status.');
     }
   }
 
@@ -80,18 +90,31 @@ export function TeamManager({
     void (async () => {
       try {
         const cfg = await fetch('/api/quickbooks/config-status').then((r) => r.json());
-        if (!cfg?.configured) {
-          setQbStatus({
-            connected: false,
-            realmId: null,
-            connectedAt: null,
-            environment: cfg?.environment || 'sandbox',
-            configured: false
-          });
+        const ready = Boolean(cfg?.configured);
+        setQbStatus({
+          connected: false,
+          realmId: null,
+          connectedAt: null,
+          environment: cfg?.environment || 'sandbox',
+          configured: ready
+        });
+        if (!ready) {
+          if (cfg?.quickbooks && !cfg?.firebaseAdmin) {
+            setQbError(
+              'Firebase Admin is missing on the server. Add FIREBASE_SERVICE_ACCOUNT_JSON in Railway, redeploy, then try again.'
+            );
+          } else if (!cfg?.quickbooks) {
+            setQbError(
+              'QuickBooks keys are missing. Add QUICKBOOKS_CLIENT_ID / SECRET (and REDIRECT_URI or APP_URL) in Railway.'
+            );
+          } else {
+            setQbError('QuickBooks is not fully configured on the server yet.');
+          }
           return;
         }
+        setQbError(null);
         await refreshQuickbooks();
-      } catch {
+      } catch (err: any) {
         setQbStatus({
           connected: false,
           realmId: null,
@@ -99,23 +122,25 @@ export function TeamManager({
           environment: 'sandbox',
           configured: false
         });
+        setQbError(err?.message || 'Could not reach QuickBooks config endpoint.');
       }
     })();
   }, [tenant.id]);
 
   async function handleConnectQuickbooks() {
     setQbBusy(true);
+    setQbError(null);
     setError(null);
     setMessage(null);
     try {
       const url = await startQuickbooksConnect(tenant.id);
-      await logAuditEvent({
+      void logAuditEvent({
         action: 'quickbooks.connect_started',
         summary: 'Started QuickBooks Online connection'
-      });
-      window.location.href = url;
+      }).catch(() => undefined);
+      window.location.assign(url);
     } catch (err: any) {
-      setError(err?.message || 'Failed to start QuickBooks connect.');
+      setQbError(err?.message || 'Failed to start QuickBooks connect.');
       setQbBusy(false);
     }
   }
@@ -124,6 +149,7 @@ export function TeamManager({
     const ok = confirm('Disconnect QuickBooks from this nursery?');
     if (!ok) return;
     setQbBusy(true);
+    setQbError(null);
     setError(null);
     setMessage(null);
     try {
@@ -135,7 +161,7 @@ export function TeamManager({
       setMessage('QuickBooks disconnected.');
       await refreshQuickbooks();
     } catch (err: any) {
-      setError(err?.message || 'Failed to disconnect QuickBooks.');
+      setQbError(err?.message || 'Failed to disconnect QuickBooks.');
     } finally {
       setQbBusy(false);
     }
@@ -374,7 +400,7 @@ export function TeamManager({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sky-700 text-white text-xs font-bold disabled:opacity-50"
                 title={
                   qbStatus?.configured === false
-                    ? 'Add QuickBooks env vars on the server first'
+                    ? 'Add QuickBooks and Firebase Admin env vars on the server first'
                     : 'Connect QuickBooks'
                 }
               >
@@ -382,10 +408,11 @@ export function TeamManager({
                 {qbBusy ? 'Opening QuickBooks…' : 'Connect QuickBooks'}
               </button>
             )}
-            {qbStatus && !qbStatus.configured && (
+            {qbError && <p className="text-[11px] text-red-700 leading-relaxed">{qbError}</p>}
+            {qbStatus && !qbStatus.configured && !qbError && (
               <p className="text-[11px] text-amber-800">
-                Server keys not set yet. Add QUICKBOOKS_CLIENT_ID / SECRET and Firebase Admin
-                credentials in Railway, then refresh.
+                Server keys not set yet. Add QUICKBOOKS_CLIENT_ID / SECRET and
+                FIREBASE_SERVICE_ACCOUNT_JSON in Railway, then refresh.
               </p>
             )}
           </div>

@@ -371,9 +371,125 @@ export function parseCatalogMatrix(table: string[][]): SpreadsheetInventoryItem[
 }
 
 export function parseInventoryTable(table: string[][]): SpreadsheetInventoryItem[] {
+  if (isQuickbooksProductList(table)) {
+    return parseQuickbooksProductList(table);
+  }
   const standard = mapTableToInventory(table);
   if (standard.length > 0) return standard;
   return parseCatalogMatrix(table);
+}
+
+function isQuickbooksProductList(table: string[][]): boolean {
+  const head = table
+    .slice(0, 12)
+    .map((r) => r.join(' ').toLowerCase())
+    .join(' | ');
+  return head.includes('product/service') && head.includes('sales price');
+}
+
+function splitQbPlantAndSize(fullName: string): { plantName: string; containerSize: string } {
+  const name = fullName.trim().replace(/\s+/g, ' ');
+
+  let m = name.match(/^(.*?)\s+(\d+)\s*gal\.?\s*$/i);
+  if (m && m[1].trim()) {
+    return { plantName: m[1].trim(), containerSize: `#${m[2]}` };
+  }
+
+  m = name.match(/^(.*?)\s+B\s*&\s*B\s*$/i);
+  if (m && m[1].trim()) {
+    return { plantName: m[1].trim(), containerSize: 'B&B' };
+  }
+
+  m = name.match(/^(.*?)\s+(\d+)\s*ct\.?\s*Flat\s*$/i);
+  if (m && m[1].trim()) {
+    return { plantName: m[1].trim(), containerSize: 'Tray' };
+  }
+
+  m = name.match(/^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:["”]|in(?:ch)?)\s*$/i);
+  if (m && m[1].trim()) {
+    return { plantName: m[1].trim(), containerSize: `${m[2]}"` };
+  }
+
+  return { plantName: name, containerSize: 'Other' };
+}
+
+function isQbCategoryOrTitleRow(name: string): boolean {
+  const n = name.trim();
+  if (!n) return true;
+  if (/^product\/service/i.test(n)) return true;
+  if (/sales price/i.test(n)) return true;
+  if (/product_?service list/i.test(n)) return true;
+  if (/containers?$/i.test(n)) return true;
+  if (/^(services?|inventory|b\s*&\s*b)$/i.test(n)) return true;
+  if (/^bayou state/i.test(n) && n.length < 60) return true;
+  return false;
+}
+
+function findQbSalesPrice(cells: string[]): number | null {
+  for (let i = 1; i < cells.length; i += 1) {
+    const raw = String(cells[i] || '').trim();
+    if (!raw) continue;
+    if (/^\$?\d+(\.\d{1,2})?$/.test(raw.replace(/,/g, ''))) {
+      const n = Number(raw.replace(/[$,]/g, ''));
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return null;
+}
+
+/** QuickBooks "Product/Service List" export: name embeds size, sales price in later column. */
+export function parseQuickbooksProductList(table: string[][]): SpreadsheetInventoryItem[] {
+  const out: SpreadsheetInventoryItem[] = [];
+  const seen = new Set<string>();
+
+  for (const row of table) {
+    const cells = (row || []).map((c) => String(c ?? '').trim());
+    const fullName = (cells[0] || '').trim();
+    if (!fullName) continue;
+    if (isQbCategoryOrTitleRow(fullName)) continue;
+
+    const listPrice = findQbSalesPrice(cells);
+    const { plantName, containerSize } = splitQbPlantAndSize(fullName);
+    if (!plantName) continue;
+
+    // Skip QuickBooks service / non-plant rows
+    if (
+      containerSize === 'Other' &&
+      /^(adjust|shipping|freight|delivery|discount|credit|invoice|labor|consult|hour|fee)\b/i.test(
+        plantName
+      )
+    ) {
+      continue;
+    }
+
+    const key = `${normalizeHeaderCell(plantName)}::${normalizeHeaderCell(containerSize)}::${normalizeHeaderCell(fullName)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const notesParts = [`QB: ${fullName}`];
+    if (listPrice != null) notesParts.push(`List price $${listPrice.toFixed(2)}`);
+
+    const entry: SpreadsheetInventoryItem = {
+      plantName,
+      containerSize,
+      quantityAvailable: 0,
+      weeksUntilReady: null,
+      chemicals: [],
+      cutBackAt: null,
+      listPrice,
+      notes: notesParts.join(' · ')
+    };
+
+    // Category from size so list groups cleanly (not QB parent folder names)
+    if (containerSize === 'B&B') entry.category = 'B&B';
+    else if (containerSize === 'Tray') entry.category = 'Flats';
+    else if (/^#\d+$/.test(containerSize)) entry.category = `${containerSize.slice(1)} gal`;
+    else if (/"$/.test(containerSize)) entry.category = 'Caliper';
+
+    out.push(entry);
+  }
+
+  return out;
 }
 
 export function parseInventoryCsvText(text: string): SpreadsheetInventoryItem[] {

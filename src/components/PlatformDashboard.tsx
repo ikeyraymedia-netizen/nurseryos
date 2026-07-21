@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Building2, Check, LogOut, Package, ArrowRight } from 'lucide-react';
 import { Tenant, TenantModuleId } from '../types';
-import { listAllTenants, updateTenantModules } from '../lib/tenants';
 import {
-  ALL_TENANT_MODULE_IDS,
+  listAllTenants,
+  updateTenantModules,
+  updateTenantShippingAddress,
+  resolveNurseryShippingAddress
+} from '../lib/tenants';
+import {
   TENANT_MODULE_DEFS,
   resolveEnabledModules
 } from '../lib/modules';
@@ -27,20 +31,23 @@ export function PlatformDashboard({
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TenantModuleId[]>([]);
+  const [addressDraft, setAddressDraft] = useState('');
   const [legacyAllOn, setLegacyAllOn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
       setLegacyAllOn(true);
-      setDraft([...ALL_TENANT_MODULE_IDS]);
+      setDraft([...resolveEnabledModules(tenant)]);
     } else {
       setLegacyAllOn(false);
       setDraft([...resolveEnabledModules(tenant)]);
     }
+    setAddressDraft(resolveNurseryShippingAddress(tenant));
   }
 
   async function refresh() {
@@ -109,10 +116,31 @@ export function PlatformDashboard({
     }
   }
 
+  async function handleSaveAddress() {
+    if (!selectedId) return;
+    setSavingAddress(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await updateTenantShippingAddress(selectedId, addressDraft);
+      const saved = addressDraft.trim();
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === selectedId ? { ...t, shippingAddress: saved || undefined } : t
+        )
+      );
+      setMessage('Ship-from address saved for this nursery.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save ship-from address.');
+    } finally {
+      setSavingAddress(false);
+    }
+  }
+
   const selected = tenants.find((t) => t.id === selectedId) || null;
 
   function moduleSummary(tenant: Tenant): string {
-    if (tenant.modules == null) return 'Legacy · all add-ons';
+    if (tenant.modules == null) return 'Legacy · standard add-ons';
     if (tenant.modules.length === 0) return 'Core only';
     return tenant.modules
       .map((id) => TENANT_MODULE_DEFS.find((m) => m.id === id)?.label || id)
@@ -224,7 +252,7 @@ export function PlatformDashboard({
 
                 {legacyAllOn && (
                   <p className="text-[11px] text-amber-200 bg-amber-950/40 border border-amber-800/50 rounded-xl px-3 py-2">
-                    Legacy plan (all add-ons). Saving will lock in the toggles below.
+                    Legacy plan (standard add-ons). Saving will lock in the toggles below.
                   </p>
                 )}
 
@@ -261,6 +289,30 @@ export function PlatformDashboard({
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    Ship-from / origin address
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Shown as the origin on invoices and bills of lading for this nursery.
+                  </p>
+                  <textarea
+                    value={addressDraft}
+                    onChange={(e) => setAddressDraft(e.target.value)}
+                    rows={3}
+                    placeholder={'11428 US 165\nForest Hill, LA'}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none resize-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={savingAddress}
+                    onClick={handleSaveAddress}
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-black bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-50"
+                  >
+                    {savingAddress ? 'Saving…' : 'Save address'}
+                  </button>
                 </div>
 
                 {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}

@@ -380,7 +380,7 @@ export function TeamManager({
             <p className="text-[11px] text-gray-600 mb-2">
               Core always includes orders, trucks, customers, team, and weights.
               {tenant.modules == null
-                ? ' This nursery is on a legacy plan (all add-ons).'
+                ? ' This nursery is on a legacy plan (standard add-ons).'
                 : ''}
             </p>
             <div className="flex flex-wrap gap-1.5">

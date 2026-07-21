@@ -36,6 +36,7 @@ import {
   WhatsNewItem
 } from './lib/whatsNew';
 import { PlatformDashboard } from './components/PlatformDashboard';
+import { resolveNurseryShippingAddress } from './lib/tenants';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -133,6 +134,7 @@ function NurseryApp({
 }) {
   const [tenant, setTenant] = useState(tenantProp);
   const [memberState, setMemberState] = useState(member);
+  const nurseryAddress = resolveNurseryShippingAddress(tenant);
   useEffect(() => {
     setTenant(tenantProp);
   }, [tenantProp]);
@@ -762,6 +764,7 @@ function NurseryApp({
               permissions={permissions}
               customers={customers}
               nurseryName={tenant.name}
+              nurseryAddress={nurseryAddress}
               tenantId={tenant.id}
               onEditTruck={() => {
                 setActiveTab('trucks');
@@ -783,6 +786,7 @@ function NurseryApp({
               customers={customers}
               permissions={permissions}
               nurseryName={tenant.name}
+              nurseryAddress={nurseryAddress}
               tenantId={tenant.id}
             />
           ) : (
@@ -844,7 +848,9 @@ function NurseryApp({
               : []
           }
           nurseryName={tenant.name}
+          nurseryAddress={nurseryAddress}
           tenantId={tenant.id}
+          canViewProfit={permissions.canViewProfit}
         />
       )}
 

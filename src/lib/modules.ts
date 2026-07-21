@@ -35,23 +35,41 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     id: 'bol',
     label: 'Bill of Lading',
     description: 'Generate BOL documents from truck loads.'
+  },
+  {
+    id: 'vendors',
+    label: 'Assign Vendor',
+    description: 'Tag order lines with the grower/vendor you are buying from.'
+  },
+  {
+    id: 'profit',
+    label: 'Cost & Profit',
+    description: 'Enter plant cost per line and see profit/margin on the order (internal only).'
   }
 ];
 
 export const ALL_TENANT_MODULE_IDS: TenantModuleId[] = TENANT_MODULE_DEFS.map((m) => m.id);
 
-/** New nurseries get the full package (matches prior all-features experience). */
-export const DEFAULT_NEW_TENANT_MODULES: TenantModuleId[] = [...ALL_TENANT_MODULE_IDS];
+/**
+ * Opt-in modules stay off unless explicitly enabled for a nursery.
+ * Not included in new-tenant defaults or legacy "all add-ons" grandfathering.
+ */
+export const OPT_IN_MODULE_IDS: TenantModuleId[] = ['vendors', 'profit'];
+
+/** Standard package for new nurseries and legacy tenants (excludes opt-in modules). */
+export const DEFAULT_NEW_TENANT_MODULES: TenantModuleId[] = ALL_TENANT_MODULE_IDS.filter(
+  (id) => !OPT_IN_MODULE_IDS.includes(id)
+);
 
 /**
  * Resolve enabled add-on modules for a tenant.
- * Legacy tenants with no `modules` field keep everything enabled (grandfathered).
+ * Legacy tenants with no `modules` field get the standard package (opt-in modules stay off).
  */
 export function resolveEnabledModules(
   tenant: Pick<Tenant, 'modules'> | null | undefined
 ): Set<TenantModuleId> {
   if (!tenant || tenant.modules == null) {
-    return new Set(ALL_TENANT_MODULE_IDS);
+    return new Set(DEFAULT_NEW_TENANT_MODULES);
   }
   const valid = new Set<TenantModuleId>();
   for (const id of tenant.modules) {
@@ -80,6 +98,8 @@ export function applyModuleGates(
   const reports = mods.has('reports');
   const tasks = mods.has('tasks');
   const bol = mods.has('bol');
+  const vendors = mods.has('vendors');
+  const profit = mods.has('profit');
 
   return {
     ...permissions,
@@ -92,7 +112,10 @@ export function applyModuleGates(
     canViewTasks: permissions.canViewTasks && tasks,
     canAssignTasks: permissions.canAssignTasks && tasks,
     canCompleteTasks: permissions.canCompleteTasks && tasks,
-    canViewBOL: permissions.canViewBOL && bol
+    canViewBOL: permissions.canViewBOL && bol,
+    canUseVendors: permissions.canUseVendors && vendors,
+    // Profit needs both the module AND invoicing (cost/margin lives in the invoice view).
+    canViewProfit: permissions.canViewProfit && profit && invoicing
   };
 }
 

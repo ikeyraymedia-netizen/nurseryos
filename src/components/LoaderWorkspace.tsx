@@ -43,6 +43,7 @@ interface LoaderWorkspaceProps {
   customers: Customer[];
   permissions: AppPermissions;
   nurseryName?: string;
+  nurseryAddress?: string;
   tenantId?: string;
 }
 
@@ -53,6 +54,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   customers,
   permissions,
   nurseryName = 'NurseryOS',
+  nurseryAddress = '',
   tenantId
 }) => {
   const [activeTab, setActiveTab] = useState<'checklist' | 'plaintext'>('checklist');
@@ -189,7 +191,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         loadedQuantity: 0,
         pulledQuantity: 0,
         notes: newNotes.trim() || undefined,
-        vendor: newVendorName.trim() || undefined,
+        vendor: permissions.canUseVendors ? newVendorName.trim() || undefined : undefined,
         isAddition: newIsAddition,
         addedAt: new Date().toISOString()
       };
@@ -747,7 +749,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div
+                  className={`grid grid-cols-1 gap-3 ${
+                    permissions.canUseVendors ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                  }`}
+                >
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
                       Quantity *
@@ -761,19 +767,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
-                      Assign Vendor (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      list="vendors-list-loader"
-                      placeholder="Type or select vendor..."
-                      value={newVendorName}
-                      onChange={(e) => setNewVendorName(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
-                    />
-                  </div>
+                  {permissions.canUseVendors && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                        Assign Vendor (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        list="vendors-list-loader"
+                        placeholder="Type or select vendor..."
+                        value={newVendorName}
+                        onChange={(e) => setNewVendorName(e.target.value)}
+                        className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
                       Optional Notes
@@ -993,9 +1001,10 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             <span className="font-mono">Unit Wt: {unitWeight} lbs</span>
                             <span className="font-mono font-bold text-gray-700">Total: {itemTotalWeight.toLocaleString()} lbs</span>
                             
-                            <span className="text-gray-300">|</span>
-                            
                             {/* Vendor Section */}
+                            {permissions.canUseVendors && (
+                              <>
+                            <span className="text-gray-300">|</span>
                             {permissions.canEditOrders ? (
                             editingVendorItemId === item.id ? (
                               <div className="flex items-center space-x-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
@@ -1051,6 +1060,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             ) : item.vendor ? (
                               <span className="text-xs text-indigo-700 font-semibold">Vendor: {item.vendor}</span>
                             ) : null}
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -1184,9 +1195,10 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       </div>
 
       <datalist id="vendors-list-loader">
-        {DEFAULT_VENDORS.map((vendor) => (
-          <option key={vendor} value={vendor} />
-        ))}
+        {permissions.canUseVendors &&
+          DEFAULT_VENDORS.map((vendor) => (
+            <option key={vendor} value={vendor} />
+          ))}
       </datalist>
 
       {permissions.canViewInvoices && (
@@ -1208,7 +1220,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             : []
         }
         nurseryName={nurseryName}
+        nurseryAddress={nurseryAddress}
         tenantId={tenantId}
+        canViewProfit={permissions.canViewProfit}
       />
       )}
 

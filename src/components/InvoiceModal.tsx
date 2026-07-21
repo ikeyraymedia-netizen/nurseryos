@@ -27,7 +27,8 @@ import {
   AlertTriangle,
   Info,
   Download,
-  Link2
+  Link2,
+  TrendingUp
 } from 'lucide-react';
 import { updateCustomerOrder } from '../lib/db';
 import {
@@ -60,7 +61,11 @@ interface InvoiceModalProps {
   /** Other orders assigned to the same truck, used for freight allocation. */
   truckOrders?: CustomerOrder[];
   nurseryName?: string;
+  /** Ship-from / origin address for the nursery (invoice + BOL). */
+  nurseryAddress?: string;
   tenantId?: string;
+  /** Enable internal cost/profit tracking (gated by the profit module). */
+  canViewProfit?: boolean;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -72,7 +77,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   existingDocument = null,
   truckOrders = [],
   nurseryName = 'NurseryOS',
-  tenantId
+  nurseryAddress = '',
+  tenantId,
+  canViewProfit = false
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
@@ -90,16 +97,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Custom invoice properties (saved in invoiceDetails)
   const [invoiceNumber, setInvoiceNumber] = useState(`INV-${order.orderNumber}`);
+  const [poNumber, setPoNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
   const [dueDate, setDueDate] = useState('');
-  const [taxRate, setTaxRate] = useState<number>(4.45); // Default Louisiana local tax or typical nursery tax
+  const [taxRate, setTaxRate] = useState<number>(0);
   const [freightCharge, setFreightCharge] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [invoiceNotes, setInvoiceNotes] = useState('Thank you for your business. Balance due is payable in full per the terms above.');
 
   // Store editable item prices
   const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
+  // Store editable item costs (internal profit tracking only)
+  const [itemCosts, setItemCosts] = useState<Record<string, number>>({});
 
   // Database saving status
   const [isSaving, setIsSaving] = useState(false);
@@ -151,12 +161,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         'Net 30'
     );
     setDueDate(existingDocument?.dueDate || details?.dueDate || '');
+    setPoNumber(existingDocument?.poNumber || details?.poNumber || '');
     setTaxRate(
       existingDocument?.taxRate !== undefined
         ? existingDocument.taxRate
         : details?.taxRate !== undefined
           ? details.taxRate
-          : 4.45
+          : 0
     );
     setFreightCharge(
       existingDocument?.freightCharge !== undefined
@@ -199,6 +210,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       });
     }
     setItemPrices(pricesMap);
+
+    const costsMap: Record<string, number> = {};
+    order.items.forEach((item) => {
+      costsMap[item.id] = item.unitCost ?? 0;
+    });
+    existingDocument?.items?.forEach((item) => {
+      if (item.unitCost !== undefined) costsMap[item.id] = item.unitCost;
+    });
+    setItemCosts(costsMap);
+
     setSaveSuccess(false);
 
     setCustomerEmail(
@@ -267,6 +288,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const salesTax = Number(((taxableAmount * taxRate) / 100).toFixed(2));
   const grandTotal = subtotal - discountAmount + salesTax + freightCharge;
+
+  // Internal cost/profit (never shown to the customer)
+  const totalCost = order.items.reduce((sum, item) => {
+    const qty = getItemQty(item);
+    const cost = itemCosts[item.id] ?? 0;
+    return sum + qty * cost;
+  }, 0);
+  const totalProfit = subtotal - totalCost;
+  const profitMargin = subtotal > 0 ? (totalProfit / subtotal) * 100 : 0;
 
   // HTML Email Layout Builder
   const generateEmailHTML = (): string => {
@@ -515,6 +545,15 @@ Thank you for choosing ${nurseryName}!
     setSaveSuccess(false);
   };
 
+  // Cost edit change handler (internal profit tracking)
+  const handleCostChange = (itemId: string, newCost: number) => {
+    setItemCosts((prev) => ({
+      ...prev,
+      [itemId]: Math.max(0, newCost)
+    }));
+    setSaveSuccess(false);
+  };
+
   // Restore Default Wholesale Prices
   const handleResetPrices = () => {
     const defaultPrices: Record<string, number> = {};
@@ -584,13 +623,15 @@ Thank you for choosing ${nurseryName}!
         unitPrice:
           itemPrices[item.id] !== undefined
             ? itemPrices[item.id]
-            : getDefaultPriceForSize(item.containerSize)
+            : getDefaultPriceForSize(item.containerSize),
+        unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost
       }));
 
       const invoiceDetailsPayload: InvoiceDetails = {
         invoiceNumber,
         invoiceDate,
         dueDate,
+        poNumber: poNumber.trim() || undefined,
         paymentTerms,
         taxRate,
         freightCharge: currentFreight,
@@ -617,6 +658,7 @@ Thank you for choosing ${nurseryName}!
         containerSize: item.containerSize,
         quantity: getItemQty(item),
         unitPrice: item.unitPrice ?? 0,
+        unitCost: item.unitCost,
         notes: item.notes
       }));
 
@@ -634,6 +676,7 @@ Thank you for choosing ${nurseryName}!
           documentNumber: invoiceNumber,
           documentDate: invoiceDate,
           dueDate: dueDate || undefined,
+          poNumber: poNumber.trim() || undefined,
           paymentTerms,
           taxRate,
           freightCharge: currentFreight,
@@ -1003,6 +1046,23 @@ Thank you for choosing ${nurseryName}!
               />
             </div>
 
+            {/* Customer PO Number */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                Customer P.O. #
+              </label>
+              <input
+                type="text"
+                value={poNumber}
+                onChange={(e) => setPoNumber(e.target.value)}
+                placeholder="Customer purchase order number"
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
+              />
+              <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+                Prints on the invoice & BOL, and syncs to the QuickBooks P.O. field.
+              </p>
+            </div>
+
             {/* Date and Terms */}
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -1144,6 +1204,80 @@ Thank you for choosing ${nurseryName}!
                 <span>Reset to Standard Wholesale Prices</span>
               </button>
             </div>
+
+            {/* Internal Cost & Profit (never printed or emailed to the customer) */}
+            {canViewProfit && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="font-black uppercase tracking-wider text-[10px] text-indigo-800 flex items-center gap-1">
+                    <TrendingUp className="h-3.5 w-3.5" /> Cost & Profit
+                  </p>
+                  <span className="text-[8px] font-bold uppercase text-indigo-400 tracking-wide">
+                    Internal only
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {order.items.map((item) => {
+                    const qty = getItemQty(item);
+                    const price =
+                      itemPrices[item.id] !== undefined
+                        ? itemPrices[item.id]
+                        : getDefaultPriceForSize(item.containerSize);
+                    const cost = itemCosts[item.id] ?? 0;
+                    const lineProfit = (price - cost) * qty;
+                    return (
+                      <div key={item.id} className="flex items-center gap-1.5 text-[10px]">
+                        <span className="flex-1 truncate font-semibold text-gray-700" title={item.plantName}>
+                          {item.plantName}
+                        </span>
+                        <div className="inline-flex items-center">
+                          <span className="text-[9px] text-slate-400 font-mono font-bold mr-0.5">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={cost || ''}
+                            placeholder="cost"
+                            onChange={(e) => handleCostChange(item.id, Number(e.target.value))}
+                            className="w-14 font-mono font-bold text-right text-indigo-800 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded"
+                          />
+                        </div>
+                        <span
+                          className={`w-16 text-right font-mono font-bold ${
+                            lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                          }`}
+                        >
+                          ${lineProfit.toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="pt-2 border-t border-indigo-200 space-y-1 text-[10px] font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 font-medium">Revenue:</span>
+                    <span className="font-bold text-gray-900">${subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 font-medium">Total Cost:</span>
+                    <span className="font-bold text-gray-900">${totalCost.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-indigo-100">
+                    <span className="font-black uppercase text-indigo-800">Profit:</span>
+                    <span
+                      className={`font-black ${
+                        totalProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      ${totalProfit.toFixed(2)}
+                      <span className="ml-1 text-[9px] font-bold text-gray-400">
+                        ({profitMargin.toFixed(1)}%)
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-gray-200 flex flex-col space-y-2">
@@ -1427,6 +1561,11 @@ Thank you for choosing ${nurseryName}!
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Date:</span> {new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
                     </p>
+                    {poNumber.trim() && (
+                      <p className="text-gray-800">
+                        <span className="font-bold text-gray-500">P.O. #:</span> <span className="font-bold text-gray-950">{poNumber}</span>
+                      </p>
+                    )}
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-emerald-800">{paymentTerms}</span>
                     </p>
@@ -1468,7 +1607,10 @@ Thank you for choosing ${nurseryName}!
                   </h3>
                   <div className="text-xs text-gray-800 space-y-1 font-mono">
                     <p><span className="font-bold text-gray-400">Shipper:</span> {nurseryName}</p>
-                    <p><span className="font-bold text-gray-400">Origin:</span> Nursery loading facility</p>
+                    <p className="whitespace-pre-line">
+                      <span className="font-bold text-gray-400">Origin:</span>{' '}
+                      {nurseryAddress || 'Nursery loading facility'}
+                    </p>
                     <p>
                       <span className="font-bold text-gray-400">Cargo Basis:</span>{' '}
                       <span className="font-bold text-emerald-900 uppercase">

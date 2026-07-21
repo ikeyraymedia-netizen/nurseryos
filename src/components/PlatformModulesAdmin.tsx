@@ -3,7 +3,6 @@ import { Package, X, Check } from 'lucide-react';
 import { Tenant, TenantModuleId } from '../types';
 import { listAllTenants, updateTenantModules } from '../lib/tenants';
 import {
-  ALL_TENANT_MODULE_IDS,
   TENANT_MODULE_DEFS,
   resolveEnabledModules
 } from '../lib/modules';
@@ -49,7 +48,7 @@ export function PlatformModulesAdmin({
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
       setLegacyAllOn(true);
-      setDraft([...ALL_TENANT_MODULE_IDS]);
+      setDraft([...resolveEnabledModules(tenant)]);
     } else {
       setLegacyAllOn(false);
       setDraft([...resolveEnabledModules(tenant)]);
@@ -147,7 +146,7 @@ export function PlatformModulesAdmin({
 
               {legacyAllOn && (
                 <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                  This nursery is on a legacy plan (all modules). Saving will lock in the toggles below.
+                  This nursery is on a legacy plan (standard add-ons). Saving will lock in the toggles below.
                 </p>
               )}
 

@@ -374,6 +374,56 @@ async function findOrCreateItemForLine(
   return String(id);
 }
 
+/**
+ * QuickBooks Online has no native PO field on invoices — the "P.O. Number" that
+ * appears on sales forms is a company-defined sales custom field. Look it up so we
+ * can populate the matching CustomField (DefinitionId 1-3) on the transaction.
+ */
+async function getPoCustomFieldDefinition(
+  tenantId: string
+): Promise<{ definitionId: string; name: string } | null> {
+  try {
+    const prefs = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/query?query=${encodeURIComponent('select * from Preferences')}&minorversion=65`
+    );
+    const pref = prefs?.QueryResponse?.Preferences?.[0];
+    const groups = pref?.SalesFormsPrefs?.CustomField;
+    if (!Array.isArray(groups)) return null;
+
+    const entries: Array<{ Name?: string; StringValue?: string; BooleanValue?: boolean }> = [];
+    for (const group of groups) {
+      const inner = group?.CustomField;
+      if (Array.isArray(inner)) entries.push(...inner);
+    }
+
+    const names = new Map<string, string>();
+    const enabled = new Map<string, boolean>();
+    for (const entry of entries) {
+      const name = String(entry?.Name || '');
+      const nameMatch = name.match(/SalesCustomName(\d)/i);
+      if (nameMatch && entry?.StringValue) {
+        names.set(nameMatch[1], String(entry.StringValue));
+      }
+      const useMatch = name.match(/UseSalesCustom(\d)/i);
+      if (useMatch) {
+        enabled.set(useMatch[1], entry?.BooleanValue === true || String(entry?.StringValue) === 'true');
+      }
+    }
+
+    const looksLikePo = (label: string) => /\bp\.?\s*o\.?\b|purchase\s*order/i.test(label);
+    for (const [slot, label] of names) {
+      if (enabled.get(slot) !== false && looksLikePo(label)) {
+        return { definitionId: slot, name: label };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCompanyName(tenantId: string, realmId: string): Promise<string | null> {
   try {
     const info = await qboRequest<any>(
@@ -385,20 +435,6 @@ async function fetchCompanyName(tenantId: string, realmId: string): Promise<stri
   } catch {
     return null;
   }
-}
-
-async function findOrCreateFreightItem(tenantId: string, incomeAccountId: string): Promise<string> {
-  const name = 'Freight / Delivery';
-  const existing = await findItemByExactName(tenantId, name);
-  if (existing) return existing;
-  const created = await qboRequest<any>(tenantId, 'POST', '/item?minorversion=65', {
-    Name: name,
-    Type: 'Service',
-    IncomeAccountRef: { value: incomeAccountId }
-  });
-  const id = created?.Item?.Id;
-  if (!id) throw new Error('Could not create QuickBooks freight item.');
-  return String(id);
 }
 
 async function findOrCreateCustomer(
@@ -490,13 +526,14 @@ async function mapDocToInvoice(
 
   const freight = Number(doc.freightCharge) || 0;
   if (freight > 0) {
-    const freightItemId = await findOrCreateFreightItem(tenantId, incomeAccountId);
+    // SHIPPING_ITEM_ID maps to QBO's built-in Shipping field (not a product line),
+    // when Company Settings → Sales → Shipping is enabled.
     lines.push({
       DetailType: 'SalesItemLineDetail',
       Amount: Number(freight.toFixed(2)),
-      Description: 'Freight / Delivery',
+      Description: 'Shipping',
       SalesItemLineDetail: {
-        ItemRef: { value: freightItemId },
+        ItemRef: { value: 'SHIPPING_ITEM_ID' },
         Qty: 1,
         UnitPrice: freight
       }
@@ -510,12 +547,36 @@ async function mapDocToInvoice(
     );
   }
 
+  const poNumber = String(doc.poNumber || '').trim();
+  let customField: Array<Record<string, any>> | undefined;
+  if (poNumber) {
+    const poDef = await getPoCustomFieldDefinition(tenantId);
+    if (poDef) {
+      customField = [
+        {
+          DefinitionId: poDef.definitionId,
+          Name: poDef.name,
+          Type: 'StringType',
+          StringValue: poNumber.slice(0, 31)
+        }
+      ];
+    }
+  }
+
+  const memo = [
+    doc.paymentTerms ? `Terms: ${doc.paymentTerms}` : '',
+    poNumber ? `P.O. #: ${poNumber}` : ''
+  ]
+    .filter(Boolean)
+    .join('  •  ');
+
   return {
     DocNumber: String(doc.documentNumber || '').slice(0, 21) || undefined,
     TxnDate: String(doc.documentDate || new Date().toISOString()).slice(0, 10),
     DueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined,
     PrivateNote: [
       doc.notes ? String(doc.notes) : '',
+      poNumber ? `Customer PO #: ${poNumber}` : '',
       `NurseryOS ${doc.type || 'invoice'} ${doc.documentNumber || ''}`.trim()
     ]
       .filter(Boolean)
@@ -523,9 +584,8 @@ async function mapDocToInvoice(
       .slice(0, 4000),
     CustomerRef: { value: customerRefId },
     Line: lines,
-    CustomerMemo: doc.paymentTerms
-      ? { value: `Terms: ${doc.paymentTerms}` }
-      : undefined
+    CustomField: customField,
+    CustomerMemo: memo ? { value: memo } : undefined
   };
 }
 

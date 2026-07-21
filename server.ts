@@ -9,6 +9,11 @@ import {
   isSpreadsheetInventoryUpload,
   parseInventorySpreadsheetBuffer
 } from './server/inventoryParse';
+import {
+  decodeBase64Text,
+  isPlainTextMime,
+  parseOrderTextLocally
+} from './server/orderTextParse';
 
 dotenv.config();
 
@@ -38,7 +43,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const GEMINI_REQUEST_TIMEOUT_MS = 90_000;
+const GEMINI_REQUEST_TIMEOUT_MS = 55_000;
 const INVENTORY_GEMINI_TIMEOUT_MS = 240_000;
 
 async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = GEMINI_REQUEST_TIMEOUT_MS): Promise<T> {
@@ -79,23 +84,54 @@ function isRetryableModelError(error: any): boolean {
     return true;
   }
   const msg = String(error?.message || '').toLowerCase();
-  return msg.includes('high demand') || msg.includes('unavailable') || msg.includes('rate limit');
+  return (
+    msg.includes('high demand') ||
+    msg.includes('unavailable') ||
+    msg.includes('rate limit') ||
+    msg.includes('timed out') ||
+    msg.includes('timeout')
+  );
 }
 
 function isSkippableModelError(error: any): boolean {
   const status = getApiStatusCode(error);
   if (status === 404) return true;
   const msg = String(error?.message || '').toLowerCase();
-  return msg.includes('no longer available') || msg.includes('not found');
+  return (
+    msg.includes('no longer available') ||
+    msg.includes('not found') ||
+    msg.includes('timed out') ||
+    msg.includes('timeout')
+  );
 }
 
 const PARSE_MODELS = [
-  'gemini-3.5-flash',
   'gemini-3.1-flash-lite',
+  'gemini-3.5-flash',
   // Legacy fallbacks for older API keys that still have 2.5 access
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite'
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash'
 ] as const;
+
+function normalizeOrderMimeType(mimeType: string | undefined, fileName?: string): string {
+  const raw = String(mimeType || '')
+    .trim()
+    .toLowerCase();
+  if (raw === 'application/pdf' || raw === 'application/x-pdf' || raw === 'application/acrobat') {
+    return 'application/pdf';
+  }
+  if (raw === 'image/jpg' || raw === 'image/pjpeg') return 'image/jpeg';
+  if (raw === 'image/jpeg' || raw === 'image/png' || raw === 'image/webp' || raw === 'text/plain') {
+    return raw;
+  }
+  const name = String(fileName || '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+  if (name.endsWith('.webp')) return 'image/webp';
+  if (name.endsWith('.txt')) return 'text/plain';
+  return raw || 'application/pdf';
+}
 
 function getOrderParseSchema() {
   return {
@@ -184,12 +220,12 @@ async function generateOrderParseResponse(
   model: string,
   mimeType: string,
   cleanBase64: string,
-  prompt: string
+  prompt: string,
+  orderText?: string
 ) {
-  return withTimeout(
-    ai.models.generateContent({
-      model,
-      contents: [
+  const contents = orderText
+    ? [`${prompt}\n\n--- PASTED ORDER TEXT ---\n${orderText}`]
+    : [
         {
           inlineData: {
             mimeType,
@@ -197,7 +233,12 @@ async function generateOrderParseResponse(
           }
         },
         prompt
-      ],
+      ];
+
+  return withTimeout(
+    ai.models.generateContent({
+      model,
+      contents,
       config: getOrderParseSchema()
     }),
     `Order parse (${model})`
@@ -208,7 +249,8 @@ async function parseOrderWithFallback(
   ai: GoogleGenAI,
   mimeType: string,
   cleanBase64: string,
-  prompt: string
+  prompt: string,
+  orderText?: string
 ) {
   let lastError: any = null;
   const maxAttemptsPerModel = 2;
@@ -217,7 +259,14 @@ async function parseOrderWithFallback(
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
       try {
         console.log(`Parsing order with ${model} (attempt ${attempt}/${maxAttemptsPerModel})...`);
-        const response = await generateOrderParseResponse(ai, model, mimeType, cleanBase64, prompt);
+        const response = await generateOrderParseResponse(
+          ai,
+          model,
+          mimeType,
+          cleanBase64,
+          prompt,
+          orderText
+        );
         console.log(`Order parsed successfully with ${model}`);
         return response;
       } catch (err: any) {
@@ -333,17 +382,44 @@ async function parseInventoryWithFallback(
 // API endpoint to parse the order
 app.post('/api/parse-order', async (req, res) => {
   try {
-    const { base64Data, mimeType, fileName } = req.body;
+    const { base64Data, mimeType, fileName, orderText: rawOrderText } = req.body;
 
-    if (!base64Data || !mimeType) {
-      res.status(400).json({ error: 'Missing base64Data or mimeType.' });
+    const providedText =
+      typeof rawOrderText === 'string' && rawOrderText.trim() ? rawOrderText.trim() : '';
+    const looksLikeText =
+      Boolean(providedText) ||
+      isPlainTextMime(mimeType) ||
+      /\.txt$/i.test(String(fileName || ''));
+
+    if (!providedText && !base64Data) {
+      res.status(400).json({ error: 'Missing order text or file data.' });
+      return;
+    }
+
+    // Pasted plain text: parse locally first so upload works even when Gemini is slow/down.
+    if (looksLikeText) {
+      const textBody = providedText || (base64Data ? decodeBase64Text(base64Data) : '');
+      const local = parseOrderTextLocally(textBody);
+      if (local) {
+        console.log(`Parsed pasted order locally (${local.items.length} items).`);
+        res.json(local);
+        return;
+      }
+    }
+
+    if (!base64Data && !providedText) {
+      res.status(400).json({ error: 'Missing base64Data or orderText.' });
       return;
     }
 
     const ai = getAiClient();
 
     // Clean up base64 prefix if present
-    const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, '');
+    const cleanBase64 = base64Data ? String(base64Data).replace(/^data:.*?;base64,/, '') : '';
+    const resolvedMime = normalizeOrderMimeType(mimeType, fileName);
+    const orderTextForAi =
+      providedText ||
+      (looksLikeText && cleanBase64 ? decodeBase64Text(base64Data) : undefined);
 
     const prompt = `Analyze this plant order document (${fileName || 'document'}).
 It is a customer plant order list/invoice from a nursery. Extract:
@@ -370,7 +446,13 @@ This text is meant for nursery workers loading trucks, so make it incredibly cle
 Return your response in structured JSON format matching the schema provided.`;
 
     let response: any = null;
-    response = await parseOrderWithFallback(ai, mimeType, cleanBase64, prompt);
+    response = await parseOrderWithFallback(
+      ai,
+      resolvedMime,
+      cleanBase64,
+      prompt,
+      orderTextForAi
+    );
 
     const responseText = response.text;
     if (!responseText) {

@@ -15,6 +15,10 @@ export interface AppPermissions {
   canViewCustomers: boolean;
   canEditCustomers: boolean;
   canViewBOL: boolean;
+  /** Assign / view grower vendors on order lines (gated by vendors module). */
+  canUseVendors: boolean;
+  /** Enter plant cost and view profit/margin (gated by profit module; internal only). */
+  canViewProfit: boolean;
   canEditWeights: boolean;
   canViewInventory: boolean;
   canEditInventory: boolean;
@@ -121,6 +125,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewCustomers: true,
         canEditCustomers: true,
         canViewBOL: true,
+        canUseVendors: true,
+        canViewProfit: true,
         canEditWeights: true,
         canViewInventory: true,
         canEditInventory: true,
@@ -149,6 +155,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewCustomers: false,
         canEditCustomers: false,
         canViewBOL: true,
+        canUseVendors: true,
+        canViewProfit: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,
@@ -176,6 +184,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewCustomers: true,
         canEditCustomers: true,
         canViewBOL: false,
+        canUseVendors: false,
+        canViewProfit: true,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -202,6 +212,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewCustomers: false,
         canEditCustomers: false,
         canViewBOL: false,
+        canUseVendors: true,
+        canViewProfit: false,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -228,6 +240,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewCustomers: false,
         canEditCustomers: false,
         canViewBOL: false,
+        canUseVendors: false,
+        canViewProfit: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,

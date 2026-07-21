@@ -166,6 +166,34 @@ export async function updateTenantModules(
   });
 }
 
+export async function updateTenantShippingAddress(
+  tenantId: string,
+  shippingAddress: string
+): Promise<void> {
+  await updateDoc(doc(db, 'tenants', tenantId), {
+    shippingAddress: shippingAddress.trim() || null
+  });
+}
+
+/**
+ * Built-in ship-from defaults for known nurseries (used until a tenant sets its
+ * own address in the seller console). Keyed by a lowercase substring of the name.
+ */
+const KNOWN_TENANT_SHIPPING_ADDRESSES: Array<{ match: string; address: string }> = [
+  { match: 'bayou', address: '11428 US 165\nForest Hill, LA' }
+];
+
+/** Resolve the ship-from / origin address for a nursery. */
+export function resolveNurseryShippingAddress(
+  tenant: Pick<Tenant, 'name' | 'shippingAddress'> | null | undefined
+): string {
+  const explicit = tenant?.shippingAddress?.trim();
+  if (explicit) return explicit;
+  const name = (tenant?.name || '').toLowerCase();
+  const known = KNOWN_TENANT_SHIPPING_ADDRESSES.find((entry) => name.includes(entry.match));
+  return known ? known.address : '';
+}
+
 /** Platform admin: list every nursery workspace. */
 export async function listAllTenants(): Promise<Tenant[]> {
   const snap = await getDocs(collection(db, 'tenants'));

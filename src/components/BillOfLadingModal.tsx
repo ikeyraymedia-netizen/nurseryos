@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Truck, CustomerOrder, ContainerWeight } from '../types';
 import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -10,6 +10,8 @@ interface BillOfLadingModalProps {
   orders: CustomerOrder[];
   containerWeights: ContainerWeight[];
   nurseryName?: string;
+  /** Ship-from / origin address for the nursery. */
+  nurseryAddress?: string;
 }
 
 export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
@@ -19,6 +21,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   orders,
   containerWeights,
   nurseryName = 'NurseryOS',
+  nurseryAddress = '',
 }) => {
   // Sort orders by the designated loading sequence on the truck
   const sortedOrders = orders
@@ -35,7 +38,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [selectedBOLType, setSelectedBOLType] = useState<'consolidated' | string>('consolidated');
 
   // State for customizable document fields
-  const [shipperAddress, setShipperAddress] = useState(`${nurseryName}\nNursery Loading Facility`);
+  const [shipperAddress, setShipperAddress] = useState(
+    nurseryAddress
+      ? `${nurseryName}\n${nurseryAddress}`
+      : `${nurseryName}\nNursery Loading Facility`
+  );
   const [shipDate, setShipDate] = useState(truck.loadingDate || new Date().toISOString().split('T')[0]);
   const [driverName, setDriverName] = useState('');
   const [truckNumber, setTruckNumber] = useState(truck.name.match(/\d+/) ? `Truck #${truck.name.match(/\d+/)![0]}` : 'Unit 401');
@@ -43,6 +50,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [sealNumber, setSealNumber] = useState('');
   const [receiverAddress, setReceiverAddress] = useState('');
   const [receiverContact, setReceiverContact] = useState('');
+  const [poNumber, setPoNumber] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState(truck.notes || 'Handle with care. Protect from extreme heat. Secure loads.');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
@@ -117,6 +125,19 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     ? `BOL-${truck.id.substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
     : `BOL-ORD-${(singleOrder?.orderNumber || '').toUpperCase()}-${new Date(shipDate).getFullYear()}`;
 
+  // Prefill the customer PO # from the selected order(s)' saved invoice details.
+  useEffect(() => {
+    const pos = Array.from(
+      new Set(
+        currentBOLOrders
+          .map((o) => (o.invoiceDetails?.poNumber || '').trim())
+          .filter(Boolean)
+      )
+    );
+    setPoNumber(pos.join(', '));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBOLType]);
+
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);
     try {
@@ -190,14 +211,15 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       );
 
       const infoTop = y + 4;
-      box(margin, infoTop, pageWidth - margin * 2, 62);
+      box(margin, infoTop, pageWidth - margin * 2, 78);
       y = infoTop + 18;
       writeLine(`BOL Number: ${bolNumber}`, margin + 10, 10, true, 14);
       writeLine(`Ship Date: ${new Date(shipDate).toLocaleDateString()}`, margin + 10, 10, false, 14);
+      writeLine(`Customer P.O. #: ${poNumber.trim() || 'N/A'}`, margin + 10, 10, false, 14);
       writeLine(`Carrier: ${truck.carrier || 'Private Fleet'}`, margin + 210, 10, false, 14);
       writeLine(`Truck/Unit: ${truckNumber || 'N/A'}`, margin + 210, 10, false, 14);
       writeLine(`Trailer: ${trailerNumber || 'N/A'}   Seal: ${sealNumber || 'N/A'}`, margin + 390, 10, false, 14);
-      y = infoTop + 74;
+      y = infoTop + 90;
 
       drawSectionTitle('Shipper');
       writeWrapped(`${nurseryName}\n${shipperAddress}`, margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
@@ -364,6 +386,19 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 type="date"
                 value={shipDate}
                 onChange={(e) => setShipDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                Customer P.O. #
+              </label>
+              <input
+                type="text"
+                value={poNumber}
+                placeholder="Customer purchase order number"
+                onChange={(e) => setPoNumber(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
               />
             </div>
@@ -573,6 +608,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Date:</span> {new Date(shipDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
                     </p>
+                    {poNumber.trim() && (
+                      <p className="text-gray-800">
+                        <span className="font-bold text-gray-500">P.O. #:</span> <span className="font-black text-gray-900">{poNumber}</span>
+                      </p>
+                    )}
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Truck Type:</span> {truck.truckType || 'N/A'}
                     </p>

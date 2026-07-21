@@ -48,6 +48,7 @@ interface TruckWorkspaceProps {
   permissions: AppPermissions;
   customers?: Customer[];
   nurseryName?: string;
+  nurseryAddress?: string;
   tenantId?: string;
   onEditTruck: () => void;
   onSelectOrder: (orderId: string) => void;
@@ -60,6 +61,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   permissions,
   customers = [],
   nurseryName = 'NurseryOS',
+  nurseryAddress = '',
   tenantId,
   onEditTruck,
   onSelectOrder
@@ -68,6 +70,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [isBOLOpen, setIsBOLOpen] = useState(false);
   const [resettingOrderId, setResettingOrderId] = useState<string | null>(null);
+  const [removingOrderId, setRemovingOrderId] = useState<string | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<CustomerOrder | null>(null);
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false);
   const [pullSheetBusy, setPullSheetBusy] = useState(false);
@@ -270,6 +273,20 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       setResettingOrderId(null);
     } catch (err) {
       console.error('Failed to reset order:', err);
+    }
+  };
+
+  const handleRemoveOrderFromTruck = async (order: CustomerOrder) => {
+    try {
+      const updatedTruck: Truck = {
+        ...truck,
+        orderIds: (truck.orderIds || []).filter((id) => id !== order.id)
+      };
+      await updateTruck(updatedTruck);
+      if (expandedOrderId === order.id) setExpandedOrderId(null);
+      setRemovingOrderId(null);
+    } catch (err) {
+      console.error('Failed to remove order from truck:', err);
     }
   };
 
@@ -1064,6 +1081,35 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             <CheckCheck className="h-3.5 w-3.5 mr-1" />
                             Mark All Loaded
                           </button>
+                          {permissions.canEditTrucks &&
+                            (removingOrderId === order.id ? (
+                              <div className="flex items-center space-x-1 bg-rose-50 border border-rose-200 rounded-lg p-1">
+                                <span className="text-[10px] font-bold text-rose-800 px-1">
+                                  Remove from truck?
+                                </span>
+                                <button
+                                  onClick={() => handleRemoveOrderFromTruck(order)}
+                                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded animate-fade-in"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  onClick={() => setRemovingOrderId(null)}
+                                  className="px-2 py-0.5 bg-white border border-gray-200 text-gray-700 font-bold text-[10px] rounded animate-fade-in"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setRemovingOrderId(order.id)}
+                                className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                                title="Remove this order from the truck (keeps the order)"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                Remove from Truck
+                              </button>
+                            ))}
                         </div>
                       </div>
 
@@ -1450,6 +1496,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         orders={orders}
         containerWeights={containerWeights}
         nurseryName={nurseryName}
+        nurseryAddress={nurseryAddress}
       />
       )}
 
@@ -1471,7 +1518,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               truck.orderIds.includes(candidate.id) || candidate.truckId === truck.id
           )}
           nurseryName={nurseryName}
+          nurseryAddress={nurseryAddress}
           tenantId={tenantId}
+          canViewProfit={permissions.canViewProfit}
         />
       )}
     </div>

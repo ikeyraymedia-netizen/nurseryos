@@ -1,16 +1,25 @@
 export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'office' | 'loader' | 'inventory';
 
 /** Paid add-on modules. Core (orders, trucks, team, weights, customers) is always included. */
-export type TenantModuleId = 'inventory' | 'invoicing' | 'reports' | 'tasks' | 'bol';
+export type TenantModuleId =
+  | 'inventory'
+  | 'invoicing'
+  | 'reports'
+  | 'tasks'
+  | 'bol'
+  | 'vendors'
+  | 'profit';
 
 export interface Tenant {
   id: string;
   name: string;
   createdAt: string;
   ownerId: string;
+  /** Ship-from / origin address shown on invoices and bills of lading. */
+  shippingAddress?: string;
   /**
    * Enabled paid modules for this nursery.
-   * Omit/undefined = legacy (all modules on).
+   * Omit/undefined = legacy (standard add-ons on; opt-in modules like vendors stay off).
    * `[]` = Core only.
    */
   modules?: TenantModuleId[];
@@ -58,6 +67,7 @@ export interface PlantOrderItem {
   /** ISO timestamp when this line was added to an existing order (for activity alerts) */
   addedAt?: string;
   unitPrice?: number; // Optional price per plant item for invoices
+  unitCost?: number; // Our cost per plant (for profit tracking; internal only)
   vendor?: string; // Vendor name/id we are buying this plant from
 }
 
@@ -65,6 +75,7 @@ export interface InvoiceDetails {
   invoiceNumber?: string;
   invoiceDate?: string;
   dueDate?: string;
+  poNumber?: string; // Customer purchase order number
   paymentTerms?: string;
   taxRate?: number; // sales tax percentage, e.g. 4.45
   freightCharge?: number; // delivery / freight charge
@@ -120,6 +131,7 @@ export interface CustomerDocumentLineItem {
   containerSize: string;
   quantity: number;
   unitPrice: number;
+  unitCost?: number; // Our cost per plant (internal profit tracking; never shown to customer)
   notes?: string;
 }
 
@@ -134,6 +146,7 @@ export interface CustomerDocument {
   documentNumber: string;
   documentDate: string;
   dueDate?: string;
+  poNumber?: string; // Customer purchase order number
   paymentTerms?: string;
   taxRate?: number;
   freightCharge?: number;

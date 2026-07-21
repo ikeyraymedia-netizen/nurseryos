@@ -13,6 +13,7 @@ import { addCustomerDocument, defaultDocumentNumber } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { logAuditEvent } from '../lib/audit';
 import { AppPermissions } from '../lib/permissions';
+import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
 import { ContainerWeight, Customer, InventoryPlant, PlantOrderItem, CustomerDocumentType } from '../types';
 
 interface OrderUploaderProps {
@@ -93,48 +94,68 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setLinkedInventoryByItemId({});
   };
 
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, orderText?: string) => {
     setLoading(true);
     setSaving(false);
     setErrorMessage(null);
     resetDraftState();
     setSavedOrderId(null);
     setSavedEstimateCustomerId(null);
-    setStatusMessage('Reading file content...');
+    setStatusMessage(orderText ? 'Reading pasted order...' : 'Reading file content...');
 
     try {
-      const allowedTypes = [
-        'application/pdf',
-        'image/png',
-        'image/jpeg',
-        'image/jpg',
-        'image/webp',
-        'text/plain'
-      ];
-      if (!allowedTypes.includes(file.type)) {
+      const mimeType = inferUploadMimeType(file.name, file.type, orderText);
+      if (!isAllowedOrderUploadMime(mimeType)) {
         throw new Error(
           'Unsupported file format. Please upload a PDF or image, or paste plain text.'
         );
       }
 
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (err) => reject(err);
-        reader.readAsDataURL(file);
-      });
+      let base64Data: string | undefined;
+      if (!orderText) {
+        if (file.size > 20 * 1024 * 1024) {
+          throw new Error('File is too large. Please upload a PDF or image under 20MB.');
+        }
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+      }
 
-      setStatusMessage('Analyzing order document with Gemini AI (this may take up to 20 seconds)...');
+      setStatusMessage(
+        orderText
+          ? 'Parsing pasted order...'
+          : 'Analyzing order document with Gemini AI (this may take up to a minute)...'
+      );
 
-      const response = await fetch('/api/parse-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          base64Data,
-          mimeType: file.type,
-          fileName: file.name
-        })
-      });
+      const controller = new AbortController();
+      const abortTimer = window.setTimeout(() => controller.abort(), 180_000);
+
+      let response: Response;
+      try {
+        response = await fetch('/api/parse-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            ...(base64Data ? { base64Data } : {}),
+            mimeType,
+            fileName: file.name,
+            ...(orderText ? { orderText } : {})
+          })
+        });
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError') {
+          throw new Error(
+            'Order analysis timed out. Try a clearer photo/PDF, or paste the plant list as text.'
+          );
+        }
+        throw fetchErr;
+      } finally {
+        window.clearTimeout(abortTimer);
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -150,7 +171,13 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       }
 
       const result = await response.json();
-      const itemsWithIds: PlantOrderItem[] = result.items.map((item: any, index: number) => ({
+      const rawItems = Array.isArray(result.items) ? result.items : [];
+      if (rawItems.length === 0) {
+        throw new Error(
+          'No plant lines found. Check quantity/size format (e.g. "10 - #3 Live Oak") and try again.'
+        );
+      }
+      const itemsWithIds: PlantOrderItem[] = rawItems.map((item: any, index: number) => ({
         id: `item-${Date.now()}-${index}`,
         plantName: item.plantName,
         containerSize: item.containerSize,
@@ -167,7 +194,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         customerName: parsedCustomerName,
         orderNumber: result.orderNumber || 'N/A',
         items: itemsWithIds,
-        originalText: result.plainText || '',
+        originalText: result.plainText || orderText || '',
         totalWeightLbs: calculateOrderWeight(itemsWithIds),
         suggestedCustomerId: suggestedId,
         matchConfidence: match.confidence,
@@ -176,6 +203,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setSelectedCustomerId(suggestedId);
       setUploadKind(null);
       setLinkedInventoryByItemId({});
+      setPastedText('');
       setLoading(false);
       setStatusMessage('');
     } catch (err: any) {
@@ -370,7 +398,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       return;
     }
     const file = new File([text], 'pasted-order.txt', { type: 'text/plain' });
-    void processFile(file);
+    void processFile(file, text);
   };
 
   return (

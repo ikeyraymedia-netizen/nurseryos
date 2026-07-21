@@ -261,6 +261,28 @@ function escapeQboQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+/**
+ * QuickBooks rejects strings with control characters or certain non-ASCII
+ * symbols ("Invalid String. The String may contain unsupported or illegal
+ * chars."). Strip control chars, normalize common typographic characters to
+ * plain ASCII, and drop anything outside the safe printable range.
+ */
+function sanitizeQbString(value: unknown, maxLen = 4000): string {
+  let out = String(value ?? '');
+  // Normalize common “smart” punctuation and symbols to ASCII equivalents.
+  out = out
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2015]/g, '-')
+    .replace(/[\u2022\u00B7\u2043\u2219]/g, '-')
+    .replace(/\u2026/g, '...');
+  // Remove control characters except tab / newline / carriage return.
+  out = out.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+  // Drop any remaining characters outside the basic printable ASCII range.
+  out = out.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '');
+  return out.trim().slice(0, maxLen);
+}
+
 function sizeToQbNameSuffix(containerSize: string): string[] {
   const size = String(containerSize || '').trim();
   const out: string[] = [];
@@ -515,7 +537,7 @@ async function mapDocToInvoice(
     lines.push({
       DetailType: 'SalesItemLineDetail',
       Amount: Number((safeQty * unitPrice).toFixed(2)),
-      Description: item.notes ? String(item.notes).slice(0, 4000) : undefined,
+      Description: item.notes ? sanitizeQbString(item.notes, 4000) || undefined : undefined,
       SalesItemLineDetail: {
         ItemRef: { value: itemRefId },
         Qty: safeQty,
@@ -547,7 +569,7 @@ async function mapDocToInvoice(
     );
   }
 
-  const poNumber = String(doc.poNumber || '').trim();
+  const poNumber = sanitizeQbString(doc.poNumber, 31);
   let customField: Array<Record<string, any>> | undefined;
   if (poNumber) {
     const poDef = await getPoCustomFieldDefinition(tenantId);
@@ -557,31 +579,36 @@ async function mapDocToInvoice(
           DefinitionId: poDef.definitionId,
           Name: poDef.name,
           Type: 'StringType',
-          StringValue: poNumber.slice(0, 31)
+          StringValue: poNumber
         }
       ];
     }
   }
 
+  const paymentTerms = sanitizeQbString(doc.paymentTerms, 100);
   const memo = [
-    doc.paymentTerms ? `Terms: ${doc.paymentTerms}` : '',
+    paymentTerms ? `Terms: ${paymentTerms}` : '',
     poNumber ? `P.O. #: ${poNumber}` : ''
   ]
     .filter(Boolean)
-    .join('  •  ');
+    .join(' | ');
 
-  return {
-    DocNumber: String(doc.documentNumber || '').slice(0, 21) || undefined,
-    TxnDate: String(doc.documentDate || new Date().toISOString()).slice(0, 10),
-    DueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined,
-    PrivateNote: [
+  const privateNote = sanitizeQbString(
+    [
       doc.notes ? String(doc.notes) : '',
       poNumber ? `Customer PO #: ${poNumber}` : '',
       `NurseryOS ${doc.type || 'invoice'} ${doc.documentNumber || ''}`.trim()
     ]
       .filter(Boolean)
-      .join('\n')
-      .slice(0, 4000),
+      .join('\n'),
+    4000
+  );
+
+  return {
+    DocNumber: sanitizeQbString(doc.documentNumber, 21) || undefined,
+    TxnDate: String(doc.documentDate || new Date().toISOString()).slice(0, 10),
+    DueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined,
+    PrivateNote: privateNote || undefined,
     CustomerRef: { value: customerRefId },
     Line: lines,
     CustomField: customField,

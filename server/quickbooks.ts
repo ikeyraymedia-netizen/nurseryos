@@ -222,12 +222,15 @@ async function qboRequest<T>(
   });
   const data = (await res.json().catch(() => ({}))) as any;
   if (!res.ok) {
-    const detail =
-      data?.Fault?.Error?.[0]?.Message ||
-      data?.Fault?.Error?.[0]?.Detail ||
-      data?.error ||
-      `QuickBooks API error (${res.status})`;
-    throw new Error(String(detail));
+    const fault = data?.Fault?.Error?.[0];
+    // QBO often puts a generic Message ("Invalid String") but the useful part
+    // (which field is bad) is in Detail — surface both so errors are diagnosable.
+    const message = fault?.Message ? String(fault.Message) : '';
+    const detail = fault?.Detail ? String(fault.Detail) : '';
+    const combined = [message, detail].filter(Boolean).join(' — ');
+    const errMessage =
+      combined || data?.error || `QuickBooks API error (${res.status})`;
+    throw new Error(String(errMessage));
   }
   return data as T;
 }
@@ -816,12 +819,29 @@ export function registerQuickbooksRoutes(app: Express) {
       const incomeAccountId = await getIncomeAccountId(tenantId);
       const payload = await mapDocToInvoice(tenantId, doc, customer.id, incomeAccountId);
       const endpoint = doc.type === 'estimate' ? '/estimate' : '/invoice';
-      const created = await qboRequest<any>(
-        tenantId,
-        'POST',
-        `${endpoint}?minorversion=65`,
-        payload
-      );
+      const attemptCreate = (body: any) =>
+        qboRequest<any>(tenantId, 'POST', `${endpoint}?minorversion=65`, body);
+
+      let created: any;
+      try {
+        created = await attemptCreate(payload);
+      } catch (err) {
+        // The P.O. # custom field is best-effort. Some companies reject a
+        // CustomField payload (the field isn't enabled on invoices, or the
+        // DefinitionId doesn't line up), which would otherwise fail the whole
+        // sync. Retry once without it — the P.O. # still lands in the memo.
+        if (payload && payload.CustomField) {
+          const withoutCustomField = { ...payload };
+          delete withoutCustomField.CustomField;
+          console.warn(
+            '[quickbooks] push with CustomField failed, retrying without it',
+            (err as any)?.message
+          );
+          created = await attemptCreate(withoutCustomField);
+        } else {
+          throw err;
+        }
+      }
       const entity = doc.type === 'estimate' ? created?.Estimate : created?.Invoice;
       const qboId = entity?.Id ? String(entity.Id) : null;
       if (!qboId) {

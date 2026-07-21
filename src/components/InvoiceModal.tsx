@@ -1059,10 +1059,21 @@ Thank you for choosing ${nurseryName}!
         });
       }
 
-      pdf.save(`${invoiceNumber || docLabel}.pdf`);
+      // Use a manual Blob download (same as the Bill of Lading) instead of
+      // pdf.save(), which can silently fail in embedded / in-app browsers.
+      const fileName = `${(invoiceNumber || docLabel).replace(/[^\w.-]+/g, '_')}.pdf`;
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert('PDF export failed. Please try again.');
+      alert(`PDF export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 

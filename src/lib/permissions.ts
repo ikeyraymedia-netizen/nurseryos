@@ -19,6 +19,8 @@ export interface AppPermissions {
   canUseVendors: boolean;
   /** Enter plant cost and view profit/margin (gated by profit module; internal only). */
   canViewProfit: boolean;
+  /** Enter/edit plant cost on the order workspace (gated by profit module). */
+  canEditCost: boolean;
   canEditWeights: boolean;
   canViewInventory: boolean;
   canEditInventory: boolean;
@@ -127,6 +129,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewBOL: true,
         canUseVendors: true,
         canViewProfit: true,
+        canEditCost: true,
         canEditWeights: true,
         canViewInventory: true,
         canEditInventory: true,
@@ -157,6 +160,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewBOL: true,
         canUseVendors: true,
         canViewProfit: false,
+        canEditCost: true,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,
@@ -186,6 +190,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewBOL: false,
         canUseVendors: false,
         canViewProfit: true,
+        canEditCost: true,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -214,6 +219,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewBOL: false,
         canUseVendors: true,
         canViewProfit: false,
+        canEditCost: false,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -242,6 +248,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewBOL: false,
         canUseVendors: false,
         canViewProfit: false,
+        canEditCost: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,

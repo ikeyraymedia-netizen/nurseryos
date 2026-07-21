@@ -62,6 +62,54 @@ function monthLabel(monthKey: string): string {
   return new Date(y, m - 1, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
 }
 
+interface ProfitByRepRow {
+  rep: string;
+  invoiceCount: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  margin: number;
+}
+
+/** Aggregate invoice profit per sales rep (owner). Cost comes from saved line unitCost. */
+function buildProfitByRep(
+  documents: CustomerDocument[],
+  orders: CustomerOrder[]
+): ProfitByRepRow[] {
+  const ownerByOrderId = new Map<string, string>();
+  for (const o of orders) {
+    if (o.owner) ownerByOrderId.set(o.id, o.owner);
+  }
+  const invoices = documents.filter((d) => d.type === 'invoice');
+  const map = new Map<string, ProfitByRepRow>();
+  for (const inv of invoices) {
+    const rep =
+      inv.owner ||
+      (inv.orderId ? ownerByOrderId.get(inv.orderId) : undefined) ||
+      'Unassigned';
+    let revenue = 0;
+    let cost = 0;
+    for (const item of inv.items || []) {
+      const qty = item.quantity || 0;
+      revenue += qty * (item.unitPrice || 0);
+      cost += qty * (item.unitCost || 0);
+    }
+    const row =
+      map.get(rep) || { rep, invoiceCount: 0, revenue: 0, cost: 0, profit: 0, margin: 0 };
+    row.invoiceCount += 1;
+    row.revenue += revenue;
+    row.cost += cost;
+    map.set(rep, row);
+  }
+  return [...map.values()]
+    .map((r) => ({
+      ...r,
+      profit: r.revenue - r.cost,
+      margin: r.revenue > 0 ? ((r.revenue - r.cost) / r.revenue) * 100 : 0
+    }))
+    .sort((a, b) => b.profit - a.profit);
+}
+
 function buildDataSnapshot(params: {
   orders: CustomerOrder[];
   trucks: Truck[];
@@ -173,7 +221,8 @@ function buildDataSnapshot(params: {
         .slice(0, 100),
       topPlantsByRevenue: [...plantSales.values()]
         .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 50)
+        .slice(0, 50),
+      profitByRep: buildProfitByRep(documents, orders)
     },
     orders: orders.slice(0, 200).map((o) => ({
       id: o.id,
@@ -234,11 +283,13 @@ function buildDataSnapshot(params: {
       freightCharge: d.freightCharge ?? 0,
       discount: d.discount ?? 0,
       grandTotal: d.grandTotal,
+      owner: d.owner || null,
       lineItems: (d.items || []).slice(0, 40).map((i) => ({
         plantName: i.plantName,
         containerSize: i.containerSize,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
+        unitCost: i.unitCost ?? null,
         lineTotal: (i.quantity || 0) * (i.unitPrice || 0)
       }))
     })),
@@ -311,6 +362,9 @@ export function ReportsWorkspace({
 
   const invoiceCount = documents.filter((d) => d.type === 'invoice').length;
   const estimateCount = documents.filter((d) => d.type === 'estimate').length;
+  const profitByRep = buildProfitByRep(documents, orders);
+  const money = (n: number) =>
+    `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const salesPreview = buildDataSnapshot({
     orders,
     trucks,
@@ -556,6 +610,74 @@ export function ReportsWorkspace({
                 Examples: low stock, unfinished loads, invoice totals, or customer activity.
               </p>
             </div>
+          </div>
+        )}
+
+        {permissions.canViewProfit && (
+          <div className="border border-indigo-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-indigo-200 bg-indigo-50/60">
+              <div className="flex items-center gap-2 min-w-0">
+                <BarChart3 className="h-4 w-4 text-indigo-700 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">
+                    Profit by sales rep
+                  </p>
+                  <p className="text-xs font-semibold text-gray-800 truncate">
+                    From saved invoices (revenue − cost)
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase text-indigo-400 tracking-wide shrink-0">
+                Internal only
+              </span>
+            </div>
+            {profitByRep.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">
+                No invoice data yet. Set a Sales Rep on orders/invoices and enter plant costs to see
+                profit per rep here.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200 bg-white">
+                      <th className="text-left font-bold px-4 py-2">Sales Rep</th>
+                      <th className="text-right font-bold px-3 py-2">Invoices</th>
+                      <th className="text-right font-bold px-3 py-2">Revenue</th>
+                      <th className="text-right font-bold px-3 py-2">Cost</th>
+                      <th className="text-right font-bold px-3 py-2">Profit</th>
+                      <th className="text-right font-bold px-4 py-2">Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {profitByRep.map((row) => (
+                      <tr key={row.rep} className="bg-white">
+                        <td className="text-left font-bold text-gray-900 px-4 py-2">{row.rep}</td>
+                        <td className="text-right font-mono text-gray-700 px-3 py-2">
+                          {row.invoiceCount}
+                        </td>
+                        <td className="text-right font-mono text-gray-700 px-3 py-2">
+                          {money(row.revenue)}
+                        </td>
+                        <td className="text-right font-mono text-gray-700 px-3 py-2">
+                          {money(row.cost)}
+                        </td>
+                        <td
+                          className={`text-right font-mono font-black px-3 py-2 ${
+                            row.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                          }`}
+                        >
+                          {money(row.profit)}
+                        </td>
+                        <td className="text-right font-mono text-gray-500 px-4 py-2">
+                          {row.margin.toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

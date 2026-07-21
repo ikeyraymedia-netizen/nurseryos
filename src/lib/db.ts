@@ -639,6 +639,41 @@ export async function updateOrderItemVendor(
   }
 }
 
+export async function updateOrderItemCost(
+  orderId: string,
+  itemId: string,
+  unitCost: number | undefined,
+  orderItems: any[]
+): Promise<void> {
+  const tenantId = requireTenantId();
+  const updatedItems = orderItems.map((item) => {
+    if (item.id === itemId) {
+      return { ...item, unitCost: unitCost === undefined ? undefined : unitCost };
+    }
+    return item;
+  });
+
+  const orders = getLocalOrders();
+  const updatedOrders = orders.map((o) => {
+    if (o.id === orderId) {
+      return { ...o, items: updatedItems };
+    }
+    return o;
+  });
+  saveLocalOrders(updatedOrders);
+
+  if (fallbackActive) return;
+
+  try {
+    await updateDoc(orderDoc(tenantId, orderId), {
+      items: updatedItems
+    });
+  } catch (error: any) {
+    console.error('Error updating item cost on Firestore:', error);
+    activateLocalFallback(error.message || 'Firestore update failed');
+  }
+}
+
 export async function markAllItemsAsLoaded(orderId: string, orderItems: any[]): Promise<string> {
   const tenantId = requireTenantId();
   const inventoryDeltas = orderItems

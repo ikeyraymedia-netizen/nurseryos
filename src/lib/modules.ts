@@ -115,7 +115,9 @@ export function applyModuleGates(
     canViewBOL: permissions.canViewBOL && bol,
     canUseVendors: permissions.canUseVendors && vendors,
     // Profit needs both the module AND invoicing (cost/margin lives in the invoice view).
-    canViewProfit: permissions.canViewProfit && profit && invoicing
+    canViewProfit: permissions.canViewProfit && profit && invoicing,
+    // Cost entry on the order workspace only needs the profit module.
+    canEditCost: permissions.canEditCost && profit
   };
 }
 

@@ -4,6 +4,7 @@ import { addTruck, updateTruck } from '../lib/db';
 import { X, Check, Save, Truck as TruckIcon, HelpCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
 import { toDateKey } from '../lib/dates';
+import { DEFAULT_OWNERS } from '../data/owners';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
@@ -195,9 +196,14 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 required
               >
                 <option value="">Select Owner...</option>
-                <option value="Ikey">Ikey</option>
-                <option value="Nathan">Nathan</option>
-                <option value="Michael">Michael</option>
+                {DEFAULT_OWNERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+                {owner && !DEFAULT_OWNERS.includes(owner) && (
+                  <option value={owner}>{owner}</option>
+                )}
               </select>
             </div>
             <div>

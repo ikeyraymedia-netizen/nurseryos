@@ -38,6 +38,7 @@ import {
   listAllDocuments
 } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
+import { DEFAULT_OWNERS } from '../data/owners';
 import { logAuditEvent } from '../lib/audit';
 import {
   allocateFreight,
@@ -97,6 +98,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Custom invoice properties (saved in invoiceDetails)
   const [invoiceNumber, setInvoiceNumber] = useState(`INV-${order.orderNumber}`);
   const [poNumber, setPoNumber] = useState('');
+  const [salesRep, setSalesRep] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
   const [dueDate, setDueDate] = useState('');
@@ -161,6 +163,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
     setDueDate(existingDocument?.dueDate || details?.dueDate || '');
     setPoNumber(existingDocument?.poNumber || details?.poNumber || '');
+    setSalesRep(existingDocument?.owner || order.owner || '');
     setTaxRate(
       existingDocument?.taxRate !== undefined
         ? existingDocument.taxRate
@@ -643,7 +646,8 @@ Thank you for choosing ${nurseryName}!
         ...order,
         items: updatedItems,
         invoiceDetails: invoiceDetailsPayload,
-        customerEmail: customerEmail || order.customerEmail
+        customerEmail: customerEmail || order.customerEmail,
+        owner: salesRep.trim() || order.owner || undefined
       };
 
       const isDocumentOnlyOrder = order.id.startsWith('preview-');
@@ -685,6 +689,7 @@ Thank you for choosing ${nurseryName}!
           billToName,
           billToAddress: billToAddress || undefined,
           customerEmail: customerEmail || undefined,
+          owner: salesRep.trim() || undefined,
           items: lineItems,
           subtotal,
           salesTax,
@@ -1256,6 +1261,31 @@ Thank you for choosing ${nurseryName}!
               />
               <p className="text-[10px] text-gray-400 mt-1 leading-snug">
                 Prints on the invoice & BOL, and syncs to the QuickBooks P.O. field.
+              </p>
+            </div>
+
+            {/* Sales Rep (profit attribution) */}
+            <div>
+              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                Sales Rep
+              </label>
+              <select
+                value={salesRep}
+                onChange={(e) => setSalesRep(e.target.value)}
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
+              >
+                <option value="">Unassigned</option>
+                {DEFAULT_OWNERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+                {salesRep && !DEFAULT_OWNERS.includes(salesRep) && (
+                  <option value={salesRep}>{salesRep}</option>
+                )}
+              </select>
+              <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+                Credits this invoice&apos;s profit to the rep in Reports.
               </p>
             </div>
 

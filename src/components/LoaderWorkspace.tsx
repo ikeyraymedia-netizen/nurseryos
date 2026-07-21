@@ -26,6 +26,7 @@ import {
   updateOrderItemProgress,
   updateOrderItemPulledProgress,
   updateOrderItemVendor,
+  updateOrderItemCost,
   markAllItemsAsLoaded,
   resetOrderProgress,
   updateCustomerOrder
@@ -34,6 +35,7 @@ import { notifyInventorySyncIssue } from '../lib/inventory';
 import { orderNeedsInvoiceSave } from '../lib/invoicing';
 import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
+import { DEFAULT_OWNERS } from '../data/owners';
 import { InvoiceModal } from './InvoiceModal';
 
 interface LoaderWorkspaceProps {
@@ -99,6 +101,28 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       setEditingVendorItemId(null);
     } catch (err) {
       console.error('Error saving item vendor:', err);
+    }
+  };
+
+  const handleCostSave = async (itemId: string, rawValue: string) => {
+    const trimmed = rawValue.trim();
+    const parsed = trimmed === '' ? undefined : Number(trimmed);
+    const current = order.items.find((i) => i.id === itemId)?.unitCost;
+    const next = parsed === undefined || Number.isNaN(parsed) ? undefined : parsed;
+    if (next === current) return;
+    try {
+      await updateOrderItemCost(order.id, itemId, next, order.items);
+    } catch (err) {
+      console.error('Error saving item cost:', err);
+    }
+  };
+
+  const handleAssignOwner = async (owner: string) => {
+    if (!permissions.canEditOrders) return;
+    try {
+      await updateCustomerOrder({ ...order, owner: owner || undefined });
+    } catch (err) {
+      console.error('Error assigning order owner:', err);
     }
   };
 
@@ -586,6 +610,32 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         </div>
       )}
 
+      {permissions.canEditOrders && (
+        <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5">
+          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+            Sales Rep (whose invoice)
+          </label>
+          <select
+            value={order.owner || ''}
+            onChange={(e) => handleAssignOwner(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+          >
+            <option value="">Unassigned</option>
+            {DEFAULT_OWNERS.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            {order.owner && !DEFAULT_OWNERS.includes(order.owner) && (
+              <option value={order.owner}>{order.owner}</option>
+            )}
+          </select>
+          <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+            Credits this order&apos;s invoice profit to the selected rep in Reports.
+          </p>
+        </div>
+      )}
+
       {/* Weight Summary Panel */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-emerald-50/75 border border-emerald-300 rounded-2xl p-4 mb-5 shadow-sm">
         
@@ -1000,7 +1050,35 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             )}
                             <span className="font-mono">Unit Wt: {unitWeight} lbs</span>
                             <span className="font-mono font-bold text-gray-700">Total: {itemTotalWeight.toLocaleString()} lbs</span>
-                            
+
+                            {/* Cost Section (internal; gated by profit module) */}
+                            {permissions.canEditCost && (
+                              <>
+                                <span className="text-gray-300">|</span>
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50/70 text-indigo-800 font-semibold"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title="Your cost per plant (internal only)"
+                                >
+                                  <span className="text-[10px] uppercase tracking-wide">Cost</span>
+                                  <span className="text-[10px] font-mono">$</span>
+                                  <input
+                                    key={`cost-${item.id}-${item.unitCost ?? ''}`}
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    defaultValue={item.unitCost ?? ''}
+                                    placeholder="0.00"
+                                    onBlur={(e) => handleCostSave(item.id, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    }}
+                                    className="w-16 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none rounded px-1 py-0.5 text-xs font-mono font-bold text-right text-indigo-800"
+                                  />
+                                </span>
+                              </>
+                            )}
+
                             {/* Vendor Section */}
                             {permissions.canUseVendors && (
                               <>

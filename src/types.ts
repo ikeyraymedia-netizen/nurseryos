@@ -106,6 +106,7 @@ export interface CustomerOrder {
   customerEmail?: string; // Contact email for invoicing
   emailSentAt?: string; // Timestamp of when the last invoice was emailed
   stagedLocation?: string; // Where this order is staged out
+  owner?: string; // Sales rep this order/invoice is credited to
 }
 
 export interface Customer {
@@ -156,6 +157,7 @@ export interface CustomerDocument {
   billToName: string;
   billToAddress?: string;
   customerEmail?: string;
+  owner?: string; // Sales rep credited for this invoice/estimate
   items: CustomerDocumentLineItem[];
   subtotal: number;
   salesTax: number;

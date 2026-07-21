@@ -46,7 +46,6 @@ import {
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks } from '../lib/quickbooks';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface InvoiceModalProps {
   isOpen: boolean;
@@ -846,38 +845,224 @@ Thank you for choosing ${nurseryName}!
   };
 
   const handleExportPdf = async () => {
-    const el = printRef.current;
-    if (!el) return;
     try {
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      // Build the PDF programmatically (not a DOM screenshot). html2canvas can't
+      // parse Tailwind v4's oklch() colors, which made the old export fail.
+      const pdf = new jsPDF('p', 'pt', 'letter');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth - 16;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 8;
+      const margin = 40;
+      const contentWidth = pageWidth - margin * 2;
+      const rightX = pageWidth - margin;
+      let y = margin;
 
-      pdf.addImage(imgData, 'PNG', 8, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight - 16;
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + 8;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 8, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight - 16;
+      const ensureSpace = (needed = 16): void => {
+        if (y + needed > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+      };
+      const money = (n: number) =>
+        `$${(Number.isFinite(n) ? n : 0).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })}`;
+
+      // Header
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(20);
+      pdf.setTextColor(6, 46, 30);
+      pdf.text((nurseryName || 'NurseryOS').toUpperCase(), margin, y + 6);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(120, 120, 120);
+      pdf.text('WHOLESALE NURSERY', margin, y + 20);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(20, 120, 80);
+      pdf.text(docLabelUpper, rightX, y + 2, { align: 'right' });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.setTextColor(20, 20, 20);
+      pdf.text(invoiceNumber || docLabel, rightX, y + 20, { align: 'right' });
+
+      y += 40;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(60, 60, 60);
+      const metaLines: string[] = [
+        `Date: ${invoiceDate ? new Date(invoiceDate).toLocaleDateString() : '—'}`
+      ];
+      if (poNumber.trim()) metaLines.push(`P.O. #: ${poNumber.trim()}`);
+      metaLines.push(`Terms: ${paymentTerms || '—'}`);
+      metaLines.push(
+        `Due: ${dueDate ? new Date(dueDate).toLocaleDateString() : 'Upon Receipt'}`
+      );
+      metaLines.forEach((line) => {
+        pdf.text(line, rightX, y, { align: 'right' });
+        y += 12;
+      });
+
+      // Divider
+      y += 2;
+      pdf.setDrawColor(200, 200, 200);
+      pdf.setLineWidth(1);
+      pdf.line(margin, y, rightX, y);
+      y += 18;
+
+      // Bill To + Ship origin
+      const partiesTop = y;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(20, 120, 80);
+      pdf.text('BILL TO', margin, partiesTop);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.setTextColor(20, 20, 20);
+      pdf.text(billToName || order.customerName || '—', margin, partiesTop + 15);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(80, 80, 80);
+      let leftY = partiesTop + 28;
+      if (billToAddress.trim()) {
+        pdf.splitTextToSize(billToAddress.trim(), contentWidth / 2 - 10).forEach((l: string) => {
+          pdf.text(l, margin, leftY);
+          leftY += 12;
+        });
       }
+
+      const originX = margin + contentWidth / 2;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(20, 120, 80);
+      pdf.text('SHIP FROM', originX, partiesTop);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(80, 80, 80);
+      let rightY = partiesTop + 15;
+      pdf.text(`Shipper: ${nurseryName}`, originX, rightY);
+      rightY += 12;
+      const originText = nurseryAddress || 'Nursery loading facility';
+      pdf.splitTextToSize(`Origin: ${originText}`, contentWidth / 2 - 10).forEach((l: string) => {
+        pdf.text(l, originX, rightY);
+        rightY += 12;
+      });
+
+      y = Math.max(leftY, rightY) + 10;
+
+      // Items table
+      const xPlant = margin;
+      const xSize = margin + 250;
+      const xQty = margin + 330;
+      const xPrice = margin + 420;
+      const xTotal = rightX;
+
+      const drawItemsHeader = () => {
+        pdf.setDrawColor(180, 180, 180);
+        pdf.setLineWidth(1);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(110, 110, 110);
+        pdf.text('PLANT VARIETY', xPlant, y);
+        pdf.text('SIZE', xSize, y);
+        pdf.text('QTY', xQty, y, { align: 'right' });
+        pdf.text('UNIT PRICE', xPrice, y, { align: 'right' });
+        pdf.text('TOTAL', xTotal, y, { align: 'right' });
+        y += 6;
+        pdf.line(margin, y, rightX, y);
+        y += 12;
+      };
+
+      ensureSpace(40);
+      drawItemsHeader();
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      order.items.forEach((item) => {
+        const qty = getItemQty(item);
+        const price =
+          itemPrices[item.id] !== undefined
+            ? itemPrices[item.id]
+            : getDefaultPriceForSize(item.containerSize);
+        const total = qty * price;
+
+        const nameLines = pdf.splitTextToSize(item.plantName || '—', xSize - xPlant - 10);
+        const rowHeight = Math.max(14, nameLines.length * 11 + 3);
+        if (y + rowHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+          drawItemsHeader();
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+        }
+
+        pdf.setTextColor(20, 20, 20);
+        nameLines.forEach((l: string, i: number) => {
+          pdf.text(l, xPlant, y + i * 11);
+        });
+        pdf.setTextColor(90, 90, 90);
+        pdf.text(String(item.containerSize || ''), xSize, y);
+        pdf.setTextColor(20, 20, 20);
+        pdf.text(String(qty), xQty, y, { align: 'right' });
+        pdf.text(money(price), xPrice, y, { align: 'right' });
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(money(total), xTotal, y, { align: 'right' });
+        pdf.setFont('helvetica', 'normal');
+
+        y += rowHeight;
+        pdf.setDrawColor(230, 230, 230);
+        pdf.setLineWidth(0.5);
+        pdf.line(margin, y - 4, rightX, y - 4);
+      });
+
+      // Totals
+      y += 10;
+      ensureSpace(90);
+      const labelX = margin + contentWidth - 170;
+      const writeTotal = (label: string, value: string, bold = false, big = false) => {
+        pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+        pdf.setFontSize(big ? 12 : 9);
+        pdf.setTextColor(bold ? 6 : 90, bold ? 46 : 90, bold ? 30 : 90);
+        pdf.text(label, labelX, y);
+        pdf.setTextColor(20, 20, 20);
+        pdf.text(value, xTotal, y, { align: 'right' });
+        y += big ? 20 : 14;
+      };
+
+      writeTotal('Subtotal', money(subtotal));
+      if (discountAmount > 0) writeTotal('Discount', `-${money(discountAmount)}`);
+      if (freightCharge > 0) writeTotal('Freight / Shipping', money(freightCharge));
+      if (salesTax > 0) writeTotal(`Sales Tax (${taxRate}%)`, money(salesTax));
+      pdf.setDrawColor(180, 180, 180);
+      pdf.setLineWidth(1);
+      pdf.line(labelX, y - 4, rightX, y - 4);
+      y += 8;
+      writeTotal('GRAND TOTAL', money(grandTotal), true, true);
+
+      // Notes
+      if (invoiceNotes.trim()) {
+        y += 10;
+        ensureSpace(40);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(110, 110, 110);
+        pdf.text('NOTES', margin, y);
+        y += 12;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(70, 70, 70);
+        pdf.splitTextToSize(invoiceNotes.trim(), contentWidth).forEach((l: string) => {
+          ensureSpace(12);
+          pdf.text(l, margin, y);
+          y += 12;
+        });
+      }
+
       pdf.save(`${invoiceNumber || docLabel}.pdf`);
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert('PDF export failed. Try again, or copy the preview and paste into a doc to print.');
+      alert('PDF export failed. Please try again.');
     }
   };
 

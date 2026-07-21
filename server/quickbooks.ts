@@ -286,6 +286,21 @@ function sanitizeQbString(value: unknown, maxLen = 4000): string {
   return out.trim().slice(0, maxLen);
 }
 
+/**
+ * QuickBooks names (Customer DisplayName / CompanyName, Item Name) additionally
+ * forbid a colon — it's reserved as the parent:sub-customer / sub-item
+ * separator — and can't contain tabs/newlines. Apply the general string
+ * sanitizer, then strip those reserved characters so names never trigger
+ * "Element contains invalid characters".
+ */
+function sanitizeQbName(value: unknown, maxLen = 100): string {
+  return sanitizeQbString(value, maxLen)
+    .replace(/[:\t\r\n]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, maxLen);
+}
+
 function sizeToQbNameSuffix(containerSize: string): string[] {
   const size = String(containerSize || '').trim();
   const out: string[] = [];
@@ -315,7 +330,8 @@ function preferredQbItemName(plantName: string, containerSize: string): string {
   const plant = String(plantName || '').trim() || 'Plant';
   const suffix = sizeToQbNameSuffix(containerSize)[0];
   const full = suffix ? `${plant} ${suffix}` : plant;
-  return full.slice(0, 100);
+  // Item Name can't contain a colon (sub-item separator) or control chars.
+  return sanitizeQbName(full, 100) || 'Plant';
 }
 
 async function getIncomeAccountId(tenantId: string): Promise<string> {
@@ -466,9 +482,7 @@ async function findOrCreateCustomer(
   tenantId: string,
   doc: Record<string, any>
 ): Promise<{ id: string; displayName: string }> {
-  const displayName = String(doc.billToName || doc.customerName || '')
-    .trim()
-    .slice(0, 100);
+  const displayName = sanitizeQbName(doc.billToName || doc.customerName || '', 100);
   if (!displayName) {
     throw Object.assign(new Error('Invoice is missing bill-to / customer name.'), {
       status: 400

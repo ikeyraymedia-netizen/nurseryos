@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, CustomerOrder, ContainerWeight } from '../types';
 import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { downloadPdfBlob } from '../lib/downloadPdf';
 
 interface BillOfLadingModalProps {
   isOpen: boolean;
@@ -320,18 +321,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.text('Carrier / Driver Signature', margin + 280, y);
 
       const fileName = `${bolNumber}.pdf`;
-      const pdfBlob = pdf.output('blob');
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+      await downloadPdfBlob(pdf.output('blob'), fileName);
     } catch (err) {
       console.error('Failed to generate BOL PDF:', err);
-      alert('Could not generate PDF. Please try again.');
+      alert(
+        `Could not generate BOL PDF: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -505,16 +500,26 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200 flex flex-col space-y-2">
+          {/* Sticky on mobile so Download stays reachable after scrolling the long form. */}
+          <div className="pt-4 border-t border-gray-200 flex flex-col space-y-2 sticky bottom-0 bg-slate-50 -mx-6 px-6 pb-2 md:static md:mx-0 md:px-0 md:pb-0">
             <button
+              type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
-              className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+              className="w-full py-3 px-4 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Printer className="h-4 w-4" />
-              <span>{isGeneratingPdf ? 'Generating PDF...' : `Download ${selectedBOLType === 'consolidated' ? 'Consolidated BOL' : 'Order BOL'} PDF`}</span>
+              <span>
+                {isGeneratingPdf
+                  ? 'Generating PDF...'
+                  : `Download ${selectedBOLType === 'consolidated' ? 'Consolidated BOL' : 'Order BOL'} PDF`}
+              </span>
             </button>
+            <p className="text-[10px] text-slate-500 text-center md:hidden">
+              On phone: opens Share / Save so you can keep or print the PDF.
+            </p>
             <button
+              type="button"
               onClick={onClose}
               className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center"
             >

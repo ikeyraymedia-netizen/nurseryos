@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Truck, CustomerOrder, ContainerWeight } from '../types';
 import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { downloadPdfBlob } from '../lib/downloadPdf';
+import { deliverPdfBlob } from '../lib/downloadPdf';
+import { PdfShareSheet } from './PdfShareSheet';
 
 interface BillOfLadingModalProps {
   isOpen: boolean;
@@ -54,6 +55,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [poNumber, setPoNumber] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState(truck.notes || 'Handle with care. Protect from extreme heat. Secure loads.');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfSheet, setPdfSheet] = useState<{
+    url: string;
+    fileName: string;
+    blob: Blob;
+  } | null>(null);
 
   if (!isOpen) return null;
 
@@ -321,7 +327,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.text('Carrier / Driver Signature', margin + 280, y);
 
       const fileName = `${bolNumber}.pdf`;
-      await downloadPdfBlob(pdf.output('blob'), fileName);
+      const result = await deliverPdfBlob(pdf.output('blob'), fileName);
+      if (result.method === 'preview') {
+        setPdfSheet({
+          url: result.url,
+          fileName: result.fileName,
+          blob: result.blob
+        });
+      }
     } catch (err) {
       console.error('Failed to generate BOL PDF:', err);
       alert(
@@ -334,6 +347,15 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-50 print:p-0 print:bg-white print:backdrop-blur-none">
+      {pdfSheet && (
+        <PdfShareSheet
+          url={pdfSheet.url}
+          fileName={pdfSheet.fileName}
+          blob={pdfSheet.blob}
+          title="Bill of Lading ready"
+          onClose={() => setPdfSheet(null)}
+        />
+      )}
       
       {/* Modal Container */}
       <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">
@@ -516,7 +538,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               </span>
             </button>
             <p className="text-[10px] text-slate-500 text-center md:hidden">
-              On phone: opens Share / Save so you can keep or print the PDF.
+              On phone: Share sheet or in-app preview — the app stays open.
             </p>
             <button
               type="button"

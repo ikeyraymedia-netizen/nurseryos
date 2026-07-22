@@ -46,7 +46,8 @@ import {
   FreightShare
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks } from '../lib/quickbooks';
-import { downloadPdfBlob } from '../lib/downloadPdf';
+import { deliverPdfBlob } from '../lib/downloadPdf';
+import { PdfShareSheet } from './PdfShareSheet';
 import jsPDF from 'jspdf';
 
 interface InvoiceModalProps {
@@ -119,6 +120,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [showFreightAllocation, setShowFreightAllocation] = useState(false);
   const [isPushingQb, setIsPushingQb] = useState(false);
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
+  const [pdfSheet, setPdfSheet] = useState<{
+    url: string;
+    fileName: string;
+    blob: Blob;
+  } | null>(null);
 
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
@@ -1065,9 +1071,16 @@ Thank you for choosing ${nurseryName}!
         });
       }
 
-      // Mobile-safe download (iOS ignores <a download> for blob URLs).
+      // Mobile-safe delivery — never navigates the SPA away (that blanked phones).
       const fileName = `${(invoiceNumber || docLabel).replace(/[^\w.-]+/g, '_')}.pdf`;
-      await downloadPdfBlob(pdf.output('blob'), fileName);
+      const result = await deliverPdfBlob(pdf.output('blob'), fileName);
+      if (result.method === 'preview') {
+        setPdfSheet({
+          url: result.url,
+          fileName: result.fileName,
+          blob: result.blob
+        });
+      }
     } catch (err) {
       console.error('PDF export failed:', err);
       alert(`PDF export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -1087,6 +1100,15 @@ Thank you for choosing ${nurseryName}!
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-50 print:p-0 print:bg-white print:backdrop-blur-none">
+      {pdfSheet && (
+        <PdfShareSheet
+          url={pdfSheet.url}
+          fileName={pdfSheet.fileName}
+          blob={pdfSheet.blob}
+          title={`${docLabel} ready`}
+          onClose={() => setPdfSheet(null)}
+        />
+      )}
       {showFreightAllocation && (
         <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">

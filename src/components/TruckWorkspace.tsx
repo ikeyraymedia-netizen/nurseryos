@@ -538,7 +538,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   };
 
   return (
-    <div className="bg-emerald-50/50 rounded-2xl border-2 border-emerald-600/30 shadow-md overflow-hidden h-full flex flex-col">
+    <div className="bg-emerald-50/50 rounded-2xl border-2 border-emerald-600/30 shadow-md h-full flex flex-col overflow-x-hidden overflow-y-auto">
       {/* Summary Header banner */}
       <div className="bg-emerald-950 text-white p-6 border-b border-emerald-900 relative shrink-0 lg:sticky lg:top-0 lg:z-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -615,7 +615,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             {permissions.canViewBOL && (
               <button
                 type="button"
-                onClick={() => setIsBOLOpen(true)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsBOLOpen(true);
+                }}
                 className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-colors border border-emerald-400 shadow-sm font-sans"
               >
                 <FileText className="h-3.5 w-3.5 mr-1.5 text-emerald-950" />

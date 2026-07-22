@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Truck, CustomerOrder, ContainerWeight } from '../types';
 import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -20,17 +21,22 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   isOpen,
   onClose,
   truck,
-  orders,
-  containerWeights,
+  orders = [],
+  containerWeights = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
 }) => {
+  const truckName = String(truck?.name || 'Truck');
+  const orderIds = Array.isArray(truck?.orderIds) ? truck.orderIds : [];
+  const safeWeights = Array.isArray(containerWeights) ? containerWeights : [];
+  const safeOrders = Array.isArray(orders) ? orders : [];
+
   // Sort orders by the designated loading sequence on the truck
-  const sortedOrders = orders
-    .filter((o) => (truck.orderIds || []).includes(o.id) || o.truckId === truck.id)
+  const sortedOrders = safeOrders
+    .filter((o) => orderIds.includes(o.id) || o.truckId === truck?.id)
     .sort((a, b) => {
-      const idxA = (truck.orderIds || []).indexOf(a.id);
-      const idxB = (truck.orderIds || []).indexOf(b.id);
+      const idxA = orderIds.indexOf(a.id);
+      const idxB = orderIds.indexOf(b.id);
       if (idxA === -1) return 1;
       if (idxB === -1) return -1;
       return idxA - idxB;
@@ -45,15 +51,22 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       ? `${nurseryName}\n${nurseryAddress}`
       : `${nurseryName}\nNursery Loading Facility`
   );
-  const [shipDate, setShipDate] = useState(truck.loadingDate || new Date().toISOString().split('T')[0]);
+  const [shipDate, setShipDate] = useState(
+    truck?.loadingDate || new Date().toISOString().split('T')[0]
+  );
   const [driverName, setDriverName] = useState('');
-  const [truckNumber, setTruckNumber] = useState(truck.name.match(/\d+/) ? `Truck #${truck.name.match(/\d+/)![0]}` : 'Unit 401');
+  const [truckNumber, setTruckNumber] = useState(() => {
+    const match = truckName.match(/\d+/);
+    return match ? `Truck #${match[0]}` : 'Unit 401';
+  });
   const [trailerNumber, setTrailerNumber] = useState('');
   const [sealNumber, setSealNumber] = useState('');
   const [receiverAddress, setReceiverAddress] = useState('');
   const [receiverContact, setReceiverContact] = useState('');
   const [poNumber, setPoNumber] = useState('');
-  const [specialInstructions, setSpecialInstructions] = useState(truck.notes || 'Handle with care. Protect from extreme heat. Secure loads.');
+  const [specialInstructions, setSpecialInstructions] = useState(
+    truck?.notes || 'Handle with care. Protect from extreme heat. Secure loads.'
+  );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
@@ -63,8 +76,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   // Prefill the customer PO # from the selected order(s)' saved invoice details.
   // MUST stay above any early return — calling useEffect only when isOpen flips
-  // true crashes React ("Rendered more hooks than during the previous render")
-  // and is why Generate BOL appeared to do nothing.
+  // true crashes React ("Rendered more hooks than during the previous render").
   useEffect(() => {
     if (!isOpen) return;
     const scoped =
@@ -81,6 +93,16 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     setPoNumber(pos.join(', '));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, selectedBOLType]);
+
+  // Lock body scroll while open (helps mobile Safari keep the overlay visible).
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -116,39 +138,43 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   const bolConsolidatedMap = new Map<string, BOLConsolidatedItem>();
 
-  currentBOLOrders.forEach((order) => {
-    (order.items || []).forEach((item) => {
-      const key = `${(item.plantName || '').toLowerCase()}::${(item.containerSize || '').toLowerCase()}`;
-      
-      // Look up weight for this container size
-      const sizeLower = (item.containerSize || '').toLowerCase();
-      const weightObj = containerWeights.find((w) => {
-        if (w.id === item.containerSize || w.name === item.containerSize) return true;
-        const aliases = String(w.label || '')
-          .split(',')
-          .map((l) => l.trim().toLowerCase())
-          .filter(Boolean);
-        return aliases.includes(sizeLower);
-      });
-      const itemWeight = weightObj ? weightObj.weightLbs : 5; // Fallback estimate
-      const itemTotalWeight = (item.quantity || 0) * itemWeight;
-
-      if (!bolConsolidatedMap.has(key)) {
-        bolConsolidatedMap.set(key, {
-          plantName: item.plantName,
-          containerSize: item.containerSize,
-          totalQty: 0,
-          loadedQty: 0,
-          estimatedWeightLbs: 0,
+  try {
+    currentBOLOrders.forEach((order) => {
+      (order.items || []).forEach((item) => {
+        const key = `${(item.plantName || '').toLowerCase()}::${(item.containerSize || '').toLowerCase()}`;
+        
+        // Look up weight for this container size
+        const sizeLower = (item.containerSize || '').toLowerCase();
+        const weightObj = safeWeights.find((w) => {
+          if (w.id === item.containerSize || w.name === item.containerSize) return true;
+          const aliases = String(w.label || '')
+            .split(',')
+            .map((l) => l.trim().toLowerCase())
+            .filter(Boolean);
+          return aliases.includes(sizeLower);
         });
-      }
+        const itemWeight = weightObj ? weightObj.weightLbs : 5; // Fallback estimate
+        const itemTotalWeight = (item.quantity || 0) * itemWeight;
 
-      const existing = bolConsolidatedMap.get(key)!;
-      existing.totalQty += item.quantity || 0;
-      existing.loadedQty += item.loadedQuantity || 0;
-      existing.estimatedWeightLbs += itemTotalWeight;
+        if (!bolConsolidatedMap.has(key)) {
+          bolConsolidatedMap.set(key, {
+            plantName: item.plantName || 'Plant',
+            containerSize: item.containerSize || '',
+            totalQty: 0,
+            loadedQty: 0,
+            estimatedWeightLbs: 0,
+          });
+        }
+
+        const existing = bolConsolidatedMap.get(key)!;
+        existing.totalQty += item.quantity || 0;
+        existing.loadedQty += item.loadedQuantity || 0;
+        existing.estimatedWeightLbs += itemTotalWeight;
+      });
     });
-  });
+  } catch (err) {
+    console.error('[BOL] Failed consolidating cargo:', err);
+  }
 
   const consolidatedItems = Array.from(bolConsolidatedMap.values()).sort((a, b) => 
     a.plantName.localeCompare(b.plantName)
@@ -156,7 +182,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   // Dynamic BOL Number
   const bolNumber = selectedBOLType === 'consolidated'
-    ? `BOL-${String(truck.id || 'TRUCK').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
+    ? `BOL-${String(truck?.id || 'TRUCK').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
     : `BOL-ORD-${(singleOrder?.orderNumber || '').toUpperCase()}-${new Date(shipDate).getFullYear()}`;
 
   const handleDownloadPdf = async () => {
@@ -359,8 +385,13 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-50 print:p-0 print:bg-white print:backdrop-blur-none">
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-[200] print:p-0 print:bg-white print:backdrop-blur-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bill of Lading"
+    >
       {pdfSheet && (
         <PdfShareSheet
           url={pdfSheet.url}
@@ -372,7 +403,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       )}
       
       {/* Modal Container */}
-      <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">
+      <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none my-auto">
         
         {/* Left Side: Customize Form (Hidden during print) */}
         <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-5 shrink-0 print:hidden">
@@ -403,7 +434,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 <option value="consolidated">Consolidated Truck BOL (All Orders)</option>
                 {sortedOrders.map((order, idx) => (
                   <option key={order.id} value={order.id}>
-                    Stop {idx + 1}: Order #{order.orderNumber} - {order.customerName.substring(0, 25)}
+                    Stop {idx + 1}: Order #{order.orderNumber || '—'} -{' '}
+                    {String(order.customerName || 'Customer').slice(0, 25)}
                   </option>
                 ))}
               </select>
@@ -930,6 +962,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 };

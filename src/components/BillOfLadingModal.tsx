@@ -27,10 +27,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 }) => {
   // Sort orders by the designated loading sequence on the truck
   const sortedOrders = orders
-    .filter((o) => truck.orderIds.includes(o.id) || o.truckId === truck.id)
+    .filter((o) => (truck.orderIds || []).includes(o.id) || o.truckId === truck.id)
     .sort((a, b) => {
-      const idxA = truck.orderIds.indexOf(a.id);
-      const idxB = truck.orderIds.indexOf(b.id);
+      const idxA = (truck.orderIds || []).indexOf(a.id);
+      const idxB = (truck.orderIds || []).indexOf(b.id);
       if (idxA === -1) return 1;
       if (idxB === -1) return -1;
       return idxA - idxB;
@@ -61,6 +61,27 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     blob: Blob;
   } | null>(null);
 
+  // Prefill the customer PO # from the selected order(s)' saved invoice details.
+  // MUST stay above any early return — calling useEffect only when isOpen flips
+  // true crashes React ("Rendered more hooks than during the previous render")
+  // and is why Generate BOL appeared to do nothing.
+  useEffect(() => {
+    if (!isOpen) return;
+    const scoped =
+      selectedBOLType === 'consolidated'
+        ? sortedOrders
+        : sortedOrders.filter((o) => o.id === selectedBOLType);
+    const pos = Array.from(
+      new Set(
+        scoped
+          .map((o) => (o.invoiceDetails?.poNumber || '').trim())
+          .filter(Boolean)
+      )
+    );
+    setPoNumber(pos.join(', '));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, selectedBOLType]);
+
   if (!isOpen) return null;
 
   // Filter orders based on the BOL selection type
@@ -77,10 +98,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   let totalWeight = 0;
 
   currentBOLOrders.forEach((order) => {
-    totalWeight += order.totalWeightLbs;
-    order.items.forEach((item) => {
-      totalPlants += item.quantity;
-      totalLoaded += item.loadedQuantity;
+    totalWeight += order.totalWeightLbs || 0;
+    (order.items || []).forEach((item) => {
+      totalPlants += item.quantity || 0;
+      totalLoaded += item.loadedQuantity || 0;
     });
   });
 
@@ -96,15 +117,21 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const bolConsolidatedMap = new Map<string, BOLConsolidatedItem>();
 
   currentBOLOrders.forEach((order) => {
-    order.items.forEach((item) => {
-      const key = `${item.plantName.toLowerCase()}::${item.containerSize.toLowerCase()}`;
+    (order.items || []).forEach((item) => {
+      const key = `${(item.plantName || '').toLowerCase()}::${(item.containerSize || '').toLowerCase()}`;
       
       // Look up weight for this container size
-      const weightObj = containerWeights.find(
-        (w) => w.id === item.containerSize || w.name === item.containerSize || w.label.split(',').map(l => l.trim().toLowerCase()).includes(item.containerSize.toLowerCase())
-      );
+      const sizeLower = (item.containerSize || '').toLowerCase();
+      const weightObj = containerWeights.find((w) => {
+        if (w.id === item.containerSize || w.name === item.containerSize) return true;
+        const aliases = String(w.label || '')
+          .split(',')
+          .map((l) => l.trim().toLowerCase())
+          .filter(Boolean);
+        return aliases.includes(sizeLower);
+      });
       const itemWeight = weightObj ? weightObj.weightLbs : 5; // Fallback estimate
-      const itemTotalWeight = item.quantity * itemWeight;
+      const itemTotalWeight = (item.quantity || 0) * itemWeight;
 
       if (!bolConsolidatedMap.has(key)) {
         bolConsolidatedMap.set(key, {
@@ -117,8 +144,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       }
 
       const existing = bolConsolidatedMap.get(key)!;
-      existing.totalQty += item.quantity;
-      existing.loadedQty += item.loadedQuantity;
+      existing.totalQty += item.quantity || 0;
+      existing.loadedQty += item.loadedQuantity || 0;
       existing.estimatedWeightLbs += itemTotalWeight;
     });
   });
@@ -129,21 +156,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   // Dynamic BOL Number
   const bolNumber = selectedBOLType === 'consolidated'
-    ? `BOL-${truck.id.substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
+    ? `BOL-${String(truck.id || 'TRUCK').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
     : `BOL-ORD-${(singleOrder?.orderNumber || '').toUpperCase()}-${new Date(shipDate).getFullYear()}`;
-
-  // Prefill the customer PO # from the selected order(s)' saved invoice details.
-  useEffect(() => {
-    const pos = Array.from(
-      new Set(
-        currentBOLOrders
-          .map((o) => (o.invoiceDetails?.poNumber || '').trim())
-          .filter(Boolean)
-      )
-    );
-    setPoNumber(pos.join(', '));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBOLType]);
 
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);

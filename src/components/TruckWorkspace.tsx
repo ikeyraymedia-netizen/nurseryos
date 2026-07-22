@@ -614,6 +614,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
 
             {permissions.canViewBOL && (
               <button
+                type="button"
                 onClick={() => setIsBOLOpen(true)}
                 className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-colors border border-emerald-400 shadow-sm font-sans"
               >

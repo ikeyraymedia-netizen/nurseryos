@@ -17,6 +17,8 @@ export interface Tenant {
   ownerId: string;
   /** Ship-from / origin address shown on invoices and bills of lading. */
   shippingAddress?: string;
+  /** Optional nursery logo URL (HTTPS or data URL) for BOL/invoice headers. */
+  logoUrl?: string;
   /**
    * Enabled paid modules for this nursery.
    * Omit/undefined = legacy (standard add-ons on; opt-in modules like vendors stay off).

@@ -5,6 +5,7 @@ import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, 
 import jsPDF from 'jspdf';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
+import { imageSrcToDataUrl, resolveNurseryLogoSrc } from '../lib/nurseryBranding';
 
 interface BillOfLadingModalProps {
   isOpen: boolean;
@@ -15,6 +16,8 @@ interface BillOfLadingModalProps {
   nurseryName?: string;
   /** Ship-from / origin address for the nursery. */
   nurseryAddress?: string;
+  /** Nursery logo image URL (resolved from tenant branding). */
+  nurseryLogoSrc?: string | null;
 }
 
 export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
@@ -25,7 +28,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   containerWeights = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryLogoSrc = null,
 }) => {
+  const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const truckName = String(truck?.name || 'Truck');
   const orderIds = Array.isArray(truck?.orderIds) ? truck.orderIds : [];
   const safeWeights = Array.isArray(containerWeights) ? containerWeights : [];
@@ -246,16 +251,37 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         pdf.roundedRect(x, top, w, h, 6, 6);
       };
 
-      // Header
-      writeLine('BAYOU STATE PLANT CO.', margin, 18, true, 20);
-      writeLine('BILL OF LADING', margin, 13, true, 18);
-      writeLine(
-        selectedBOLType === 'consolidated' ? 'Consolidated Truck Shipment' : 'Individual Order Shipment',
-        margin,
-        10,
-        false,
-        14
+      // Header with nursery logo (when available)
+      const headerTop = y;
+      let textX = margin;
+      if (logoSrc) {
+        try {
+          const logo = await imageSrcToDataUrl(logoSrc);
+          const logoSize = 52;
+          pdf.addImage(logo.dataUrl, logo.format, margin, headerTop, logoSize, logoSize);
+          textX = margin + logoSize + 12;
+        } catch (logoErr) {
+          console.warn('BOL logo could not be embedded in PDF:', logoErr);
+        }
+      }
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.setTextColor(20, 20, 20);
+      pdf.text((nurseryName || 'NurseryOS').toUpperCase(), textX, headerTop + 18);
+      pdf.setFontSize(12);
+      pdf.text('BILL OF LADING', textX, headerTop + 34);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.setTextColor(60, 60, 60);
+      pdf.text(
+        selectedBOLType === 'consolidated'
+          ? 'Consolidated Truck Shipment'
+          : 'Individual Order Shipment',
+        textX,
+        headerTop + 48
       );
+      y = headerTop + (logoSrc ? 64 : 56);
 
       const infoTop = y + 4;
       box(margin, infoTop, pageWidth - margin * 2, 78);
@@ -656,16 +682,25 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
               {/* Document Header */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
-                <div>
-                  <h1 className="text-xl font-black tracking-tight text-emerald-950 uppercase">
-                    {nurseryName}
-                  </h1>
-                  <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-wide">
-                    Wholesale Foliage & Landscape Liners
-                  </p>
-                  <p className="text-[11px] text-gray-600 mt-3 whitespace-pre-line font-mono font-bold leading-relaxed text-emerald-900/90">
-                    {shipperAddress}
-                  </p>
+                <div className="flex items-start gap-3">
+                  {logoSrc ? (
+                    <img
+                      src={logoSrc}
+                      alt={`${nurseryName} logo`}
+                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-emerald-100 bg-white shadow-sm shrink-0"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-black tracking-tight text-emerald-950 uppercase">
+                      {nurseryName}
+                    </h1>
+                    <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-wide">
+                      Wholesale Foliage & Landscape Liners
+                    </p>
+                    <p className="text-[11px] text-gray-600 mt-3 whitespace-pre-line font-mono font-bold leading-relaxed text-emerald-900/90">
+                      {shipperAddress}
+                    </p>
+                  </div>
                 </div>
                 <div className="sm:text-right flex flex-col sm:justify-between items-start sm:items-end">
                   <div className="border border-gray-300 rounded-lg p-3 bg-slate-50 inline-block text-left">

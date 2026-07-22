@@ -37,6 +37,7 @@ import {
 } from './lib/whatsNew';
 import { PlatformDashboard } from './components/PlatformDashboard';
 import { resolveNurseryShippingAddress } from './lib/tenants';
+import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -135,6 +136,7 @@ function NurseryApp({
   const [tenant, setTenant] = useState(tenantProp);
   const [memberState, setMemberState] = useState(member);
   const nurseryAddress = resolveNurseryShippingAddress(tenant);
+  const nurseryLogoSrc = resolveNurseryLogoSrc(tenant);
   useEffect(() => {
     setTenant(tenantProp);
   }, [tenantProp]);
@@ -765,6 +767,7 @@ function NurseryApp({
               customers={customers}
               nurseryName={tenant.name}
               nurseryAddress={nurseryAddress}
+              nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
               onEditTruck={() => {
                 setActiveTab('trucks');

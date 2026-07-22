@@ -49,6 +49,7 @@ interface TruckWorkspaceProps {
   customers?: Customer[];
   nurseryName?: string;
   nurseryAddress?: string;
+  nurseryLogoSrc?: string | null;
   tenantId?: string;
   onEditTruck: () => void;
   onSelectOrder: (orderId: string) => void;
@@ -62,6 +63,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   customers = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryLogoSrc = null,
   tenantId,
   onEditTruck,
   onSelectOrder
@@ -1502,6 +1504,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         containerWeights={containerWeights}
         nurseryName={nurseryName}
         nurseryAddress={nurseryAddress}
+        nurseryLogoSrc={nurseryLogoSrc}
       />
       )}
 

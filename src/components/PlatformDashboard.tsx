@@ -140,8 +140,8 @@ export function PlatformDashboard({
   const selected = tenants.find((t) => t.id === selectedId) || null;
 
   function moduleSummary(tenant: Tenant): string {
-    if (tenant.modules == null) return 'Legacy · standard add-ons';
-    if (tenant.modules.length === 0) return 'Core only';
+    if (tenant.modules == null) return 'Legacy · all standard modules';
+    if (tenant.modules.length === 0) return 'Not activated · no workspaces';
     return tenant.modules
       .map((id) => TENANT_MODULE_DEFS.find((m) => m.id === id)?.label || id)
       .join(', ');
@@ -188,8 +188,8 @@ export function PlatformDashboard({
         <div className="mb-6">
           <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
             Signed in as <span className="font-bold text-white">{userEmail}</span>. This is your seller
-            console — separate from any nursery workspace. Turn add-on modules on or off for each
-            customer nursery below.
+            console — separate from any nursery workspace. New nurseries start with no workspaces;
+            turn modules on below to activate them.
           </p>
         </div>
 
@@ -243,22 +243,23 @@ export function PlatformDashboard({
               <p className="p-4 text-sm text-slate-400">Pick a nursery on the left to edit its package.</p>
             ) : (
               <div className="p-4 space-y-4 flex-1 flex flex-col">
-                <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5">
-                  <p className="text-xs font-bold text-emerald-200">Core (always included)</p>
-                  <p className="text-[11px] text-emerald-200/70 mt-0.5">
-                    Orders, trucks, loading checkoff, customers, team, container weights
+                <div className="rounded-xl border border-amber-900/40 bg-amber-950/30 px-3 py-2.5">
+                  <p className="text-xs font-bold text-amber-200">Activation</p>
+                  <p className="text-[11px] text-amber-200/70 mt-0.5">
+                    New nurseries start with no workspaces. Toggle the modules below, then Save
+                    package to activate them.
                   </p>
                 </div>
 
                 {legacyAllOn && (
                   <p className="text-[11px] text-amber-200 bg-amber-950/40 border border-amber-800/50 rounded-xl px-3 py-2">
-                    Legacy plan (standard add-ons). Saving will lock in the toggles below.
+                    Legacy plan (all standard modules). Saving will lock in the toggles below.
                   </p>
                 )}
 
                 <div className="space-y-2 flex-1">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Add-on modules
+                    Workspaces & modules
                   </p>
                   {TENANT_MODULE_DEFS.map((mod) => {
                     const on = draft.includes(mod.id);

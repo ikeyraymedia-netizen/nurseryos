@@ -25,7 +25,7 @@ import {
 } from './lib/db';
 import { subscribeToCustomers } from './lib/customers';
 import { getPermissionsForMember } from './lib/permissions';
-import { applyModuleGates } from './lib/modules';
+import { applyModuleGates, tenantHasAnyWorkspace } from './lib/modules';
 import { listAllDocuments } from './lib/documents';
 import { buildOrdersNeedingInvoiceSet } from './lib/invoicing';
 import {
@@ -428,6 +428,49 @@ function NurseryApp({
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
         <BrandLogo variant="icon" size="lg" showText={false} nurseryName={tenant.name} />
         <p className="text-sm font-bold text-gray-800 uppercase tracking-wider mt-6">Loading workspace...</p>
+      </div>
+    );
+  }
+
+  if (!tenantHasAnyWorkspace(tenant)) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <Header
+          orders={[]}
+          nurseryName={tenant.name}
+          userEmail={userEmail}
+          role={memberState.role}
+          member={memberState}
+          onSignOut={onSignOut}
+          onManageTeam={
+            permissions.canManageTeam ? () => setShowTeamManager(true) : undefined
+          }
+          onBackToSeller={onBackToSeller}
+        />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-md w-full rounded-2xl border border-amber-200 bg-white shadow-sm p-6 text-center">
+            <div className="flex justify-center">
+              <BrandLogo variant="icon" size="lg" showText={false} nurseryName={tenant.name} />
+            </div>
+            <h2 className="mt-4 text-lg font-black text-gray-900">Workspace not activated yet</h2>
+            <p className="mt-2 text-sm text-gray-600 leading-relaxed">
+              <span className="font-bold text-gray-900">{tenant.name}</span> is registered, but no
+              workspaces have been turned on. NurseryOS will enable Orders, Trucks, Customers, and
+              other modules from the seller console.
+            </p>
+            <p className="mt-3 text-xs text-gray-500">
+              Team stays available from the header. Workspace tabs appear after activation.
+            </p>
+          </div>
+        </div>
+        {showTeamManager && (
+          <TeamManager
+            tenant={tenant}
+            currentUserId={userId}
+            onClose={() => setShowTeamManager(false)}
+            onMemberUpdated={setMemberState}
+          />
+        )}
       </div>
     );
   }

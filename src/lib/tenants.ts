@@ -97,7 +97,7 @@ export async function signUpWithNursery(params: {
     name: trimmedNursery,
     createdAt: now,
     ownerId: cred.user.uid,
-    modules: [...DEFAULT_NEW_TENANT_MODULES]
+    modules: [...DEFAULT_NEW_TENANT_MODULES] // empty until seller console activates
   };
 
   const member: TenantMember = {

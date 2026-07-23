@@ -378,10 +378,12 @@ export function TeamManager({
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-bold uppercase text-gray-500 mb-1">Workspace package</p>
             <p className="text-[11px] text-gray-600 mb-2">
-              Core always includes orders, trucks, customers, team, and weights.
+              Workspaces are enabled by NurseryOS in the seller console.
               {tenant.modules == null
-                ? ' This nursery is on a legacy plan (standard add-ons).'
-                : ''}
+                ? ' This nursery is on a legacy plan (all standard modules).'
+                : tenant.modules.length === 0
+                  ? ' This nursery is not activated yet.'
+                  : ''}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {TENANT_MODULE_DEFS.map((mod) => {

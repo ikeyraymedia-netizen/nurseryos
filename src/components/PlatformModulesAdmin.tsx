@@ -137,21 +137,22 @@ export function PlatformModulesAdmin({
                 )}
               </div>
 
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5">
-                <p className="text-xs font-bold text-emerald-900">Core (always included)</p>
-                <p className="text-[11px] text-emerald-800/80 mt-0.5">
-                  Orders, trucks, loading checkoff, customers, team, container weights
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-bold text-amber-900">Activation</p>
+                <p className="text-[11px] text-amber-800/80 mt-0.5">
+                  New nurseries start with no workspaces. Toggle modules below, then save.
                 </p>
               </div>
 
               {legacyAllOn && (
                 <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                  This nursery is on a legacy plan (standard add-ons). Saving will lock in the toggles below.
+                  This nursery is on a legacy plan (all standard modules). Saving will lock in the
+                  toggles below.
                 </p>
               )}
 
               <div className="space-y-2">
-                <p className="text-xs font-bold uppercase text-slate-500">Add-on modules</p>
+                <p className="text-xs font-bold uppercase text-slate-500">Workspaces & modules</p>
                 {TENANT_MODULE_DEFS.map((mod) => {
                   const on = draft.includes(mod.id);
                   return (

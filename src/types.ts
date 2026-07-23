@@ -1,7 +1,10 @@
 export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'office' | 'loader' | 'inventory';
 
-/** Paid add-on modules. Core (orders, trucks, team, weights, customers) is always included. */
+/** Workspace / feature modules toggled per nursery in the seller console. */
 export type TenantModuleId =
+  | 'orders'
+  | 'trucks'
+  | 'customers'
   | 'inventory'
   | 'invoicing'
   | 'reports'
@@ -20,9 +23,9 @@ export interface Tenant {
   /** Optional nursery logo URL (HTTPS or data URL) for BOL/invoice headers. */
   logoUrl?: string;
   /**
-   * Enabled paid modules for this nursery.
-   * Omit/undefined = legacy (standard add-ons on; opt-in modules like vendors stay off).
-   * `[]` = Core only.
+   * Enabled workspace modules for this nursery.
+   * Omit/undefined = legacy (all standard modules on; vendors/profit stay off).
+   * `[]` = nothing enabled (new signups until activated in seller console).
    */
   modules?: TenantModuleId[];
 }

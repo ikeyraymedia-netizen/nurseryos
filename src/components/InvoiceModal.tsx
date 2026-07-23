@@ -46,6 +46,7 @@ import {
   FreightShare
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks } from '../lib/quickbooks';
+import { createInvoiceCheckout } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
 import jsPDF from 'jspdf';
@@ -68,6 +69,8 @@ interface InvoiceModalProps {
   tenantId?: string;
   /** Enable internal cost/profit tracking (gated by the profit module). */
   canViewProfit?: boolean;
+  /** Create Stripe Checkout pay links (gated by payments module). */
+  canCollectPayments?: boolean;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -81,7 +84,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
   tenantId,
-  canViewProfit = false
+  canViewProfit = false,
+  canCollectPayments = false
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
@@ -120,6 +124,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [showFreightAllocation, setShowFreightAllocation] = useState(false);
   const [isPushingQb, setIsPushingQb] = useState(false);
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
+  const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
+  const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
     fileName: string;
@@ -861,6 +867,46 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
+  const handleCreatePayLink = async () => {
+    if (!tenantId) {
+      alert('Nursery context missing. Close and reopen this invoice.');
+      return;
+    }
+    if (!savedDocumentId) {
+      alert(`Save this ${docLabel.toLowerCase()} to the customer first, then create a pay link.`);
+      return;
+    }
+    if (documentType !== 'invoice') {
+      alert('Only invoices can be collected via Stripe. Convert or save as an invoice first.');
+      return;
+    }
+    setIsCreatingPayLink(true);
+    setPayLinkMessage(null);
+    try {
+      const result = await createInvoiceCheckout({
+        tenantId,
+        documentId: savedDocumentId
+      });
+      await logAuditEvent({
+        action: 'stripe.checkout_created',
+        summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
+        meta: { documentId: savedDocumentId, sessionId: result.sessionId }
+      });
+      setPayLinkMessage('Pay link ready');
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+      try {
+        await navigator.clipboard.writeText(result.url);
+        alert('Stripe pay link opened in a new tab and copied to your clipboard.');
+      } catch {
+        alert(`Stripe pay link ready:\n\n${result.url}`);
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to create Stripe pay link.');
+    } finally {
+      setIsCreatingPayLink(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     try {
       // Build the PDF programmatically (not a DOM screenshot). html2canvas can't
@@ -1573,6 +1619,27 @@ Thank you for choosing ${nurseryName}!
                     : qbPushMessage ||
                       existingDocument?.qboInvoiceId ||
                       'Push to QuickBooks'}
+                </span>
+              </button>
+            )}
+
+            {tenantId && canCollectPayments && documentType === 'invoice' && (
+              <button
+                type="button"
+                onClick={() => void handleCreatePayLink()}
+                disabled={isCreatingPayLink || !savedDocumentId}
+                className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                title={
+                  savedDocumentId
+                    ? 'Create a Stripe Checkout pay link for this invoice'
+                    : 'Save to customer first'
+                }
+              >
+                <DollarSign className="h-4 w-4" />
+                <span>
+                  {isCreatingPayLink
+                    ? 'Creating pay link…'
+                    : payLinkMessage || 'Create Stripe pay link'}
                 </span>
               </button>
             )}

@@ -6,6 +6,11 @@ import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import { registerQuickbooksRoutes, isQuickbooksConfigured } from './server/quickbooks';
 import {
+  registerStripeRoutes,
+  registerStripeWebhookRoute,
+  isStripeConfigured
+} from './server/stripe';
+import {
   isSpreadsheetInventoryUpload,
   parseInventorySpreadsheetBuffer
 } from './server/inventoryParse';
@@ -18,6 +23,10 @@ import {
 dotenv.config();
 
 const app = express();
+
+// Stripe webhooks need the raw body for signature verification — before JSON parser.
+registerStripeWebhookRoute(app);
+
 // Increase payload limit to handle base64 PDFs and images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -25,6 +34,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const PORT = Number(process.env.PORT) || 3000;
 
 registerQuickbooksRoutes(app);
+registerStripeRoutes(app);
 
 // Lazy initialize Google Gen AI
 let aiClient: GoogleGenAI | null = null;
@@ -642,7 +652,8 @@ app.post('/api/send-invoice', async (req, res) => {
 app.get('/api/config-status', (req, res) => {
   res.json({
     hasGeminiKey: !!process.env.GEMINI_API_KEY,
-    hasQuickbooks: isQuickbooksConfigured()
+    hasQuickbooks: isQuickbooksConfigured(),
+    hasStripe: isStripeConfigured()
   });
 });
 

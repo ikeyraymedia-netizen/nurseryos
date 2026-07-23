@@ -25,6 +25,13 @@ import {
   QuickbooksStatus,
   startQuickbooksConnect
 } from '../lib/quickbooks';
+import {
+  disconnectStripe,
+  fetchStripeStatus,
+  startStripeConnect,
+  StripeStatus
+} from '../lib/stripe';
+import { tenantHasModule } from '../lib/modules';
 
 interface TeamManagerProps {
   tenant: Tenant;
@@ -65,6 +72,10 @@ export function TeamManager({
     }>
   >([]);
   const [qbRecentBusy, setQbRecentBusy] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
+  const [stripeBusy, setStripeBusy] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+  const paymentsEnabled = tenantHasModule(tenant, 'payments');
 
   async function refresh() {
     const [m, i] = await Promise.all([
@@ -97,6 +108,29 @@ export function TeamManager({
     }
   }
 
+  async function refreshStripe() {
+    try {
+      const status = await fetchStripeStatus(tenant.id);
+      setStripeStatus(status);
+      setStripeError(null);
+    } catch (err: any) {
+      setStripeStatus((prev) =>
+        prev
+          ? { ...prev, connected: false }
+          : {
+              connected: false,
+              accountId: null,
+              chargesEnabled: false,
+              detailsSubmitted: false,
+              payoutsEnabled: false,
+              connectedAt: null,
+              configured: true
+            }
+      );
+      setStripeError(err?.message || 'Failed to load Stripe status.');
+    }
+  }
+
   useEffect(() => {
     refresh().catch((err) => setError(err?.message || 'Failed to load team.'));
     void (async () => {
@@ -122,10 +156,10 @@ export function TeamManager({
           } else {
             setQbError('QuickBooks is not fully configured on the server yet.');
           }
-          return;
+        } else {
+          setQbError(null);
+          await refreshQuickbooks();
         }
-        setQbError(null);
-        await refreshQuickbooks();
       } catch (err: any) {
         setQbStatus({
           connected: false,
@@ -136,8 +170,93 @@ export function TeamManager({
         });
         setQbError(err?.message || 'Could not reach QuickBooks config endpoint.');
       }
+
+      if (!paymentsEnabled) {
+        setStripeStatus(null);
+        setStripeError(null);
+        return;
+      }
+      try {
+        const cfg = await fetch('/api/stripe/config-status').then((r) => r.json());
+        const ready = Boolean(cfg?.configured);
+        setStripeStatus({
+          connected: false,
+          accountId: null,
+          chargesEnabled: false,
+          detailsSubmitted: false,
+          payoutsEnabled: false,
+          connectedAt: null,
+          configured: ready
+        });
+        if (!ready) {
+          if (cfg?.stripe && !cfg?.firebaseAdmin) {
+            setStripeError(
+              'Firebase Admin is missing on the server. Set FIREBASE_SERVICE_ACCOUNT_BASE64 in Railway.'
+            );
+          } else if (!cfg?.stripe) {
+            setStripeError(
+              'Stripe keys are missing. Add STRIPE_SECRET_KEY (and STRIPE_PUBLISHABLE_KEY / STRIPE_WEBHOOK_SECRET) in Railway.'
+            );
+          } else {
+            setStripeError('Stripe is not fully configured on the server yet.');
+          }
+          return;
+        }
+        setStripeError(null);
+        await refreshStripe();
+      } catch (err: any) {
+        setStripeStatus({
+          connected: false,
+          accountId: null,
+          chargesEnabled: false,
+          detailsSubmitted: false,
+          payoutsEnabled: false,
+          connectedAt: null,
+          configured: false
+        });
+        setStripeError(err?.message || 'Could not reach Stripe config endpoint.');
+      }
     })();
-  }, [tenant.id]);
+  }, [tenant.id, paymentsEnabled]);
+
+  async function handleConnectStripe() {
+    setStripeBusy(true);
+    setStripeError(null);
+    setError(null);
+    setMessage(null);
+    try {
+      const { onboardingUrl } = await startStripeConnect(tenant.id);
+      void logAuditEvent({
+        action: 'stripe.connect_started',
+        summary: 'Started Stripe Connect onboarding'
+      });
+      window.location.href = onboardingUrl;
+    } catch (err: any) {
+      setStripeError(err?.message || 'Failed to start Stripe Connect.');
+    } finally {
+      setStripeBusy(false);
+    }
+  }
+
+  async function handleDisconnectStripe() {
+    const ok = confirm('Disconnect Stripe from this nursery? Pay links will stop working.');
+    if (!ok) return;
+    setStripeBusy(true);
+    setStripeError(null);
+    try {
+      await disconnectStripe(tenant.id);
+      void logAuditEvent({
+        action: 'stripe.disconnected',
+        summary: 'Disconnected Stripe Connect'
+      });
+      setMessage('Stripe disconnected.');
+      await refreshStripe();
+    } catch (err: any) {
+      setStripeError(err?.message || 'Failed to disconnect Stripe.');
+    } finally {
+      setStripeBusy(false);
+    }
+  }
 
   async function handleConnectQuickbooks() {
     setQbBusy(true);
@@ -504,6 +623,73 @@ export function TeamManager({
               </p>
             )}
           </div>
+
+          {paymentsEnabled && (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 space-y-2">
+              <p className="text-xs font-bold uppercase text-violet-900">Stripe Connect</p>
+              <p className="text-[11px] text-violet-950/80 leading-relaxed">
+                Connect this nursery’s Stripe account so customers can pay invoices by card. Funds
+                go to the nursery (merchant of record). Owner/admin only.
+              </p>
+              {stripeStatus?.connected ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-emerald-800">
+                    {stripeStatus.chargesEnabled
+                      ? 'Ready to collect payments'
+                      : 'Connected — finish onboarding to enable charges'}
+                    {stripeStatus.connectedAt
+                      ? ` · ${new Date(stripeStatus.connectedAt).toLocaleDateString()}`
+                      : ''}
+                  </p>
+                  {stripeStatus.accountId && (
+                    <p className="text-[11px] text-violet-950/80 font-mono truncate">
+                      {stripeStatus.accountId}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {!stripeStatus.chargesEnabled && (
+                      <button
+                        type="button"
+                        disabled={stripeBusy || busy}
+                        onClick={() => void handleConnectStripe()}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold disabled:opacity-50"
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                        {stripeBusy ? 'Opening Stripe…' : 'Continue onboarding'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={stripeBusy || busy}
+                      onClick={() => void handleDisconnectStripe()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                    >
+                      <Unlink className="h-3.5 w-3.5" />
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={stripeBusy || busy || stripeStatus?.configured === false}
+                  onClick={() => void handleConnectStripe()}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold disabled:opacity-50"
+                  title={
+                    stripeStatus?.configured === false
+                      ? 'Add Stripe and Firebase Admin env vars on the server first'
+                      : 'Connect Stripe'
+                  }
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  {stripeBusy ? 'Opening Stripe…' : 'Connect Stripe'}
+                </button>
+              )}
+              {stripeError && (
+                <p className="text-[11px] text-red-700 leading-relaxed">{stripeError}</p>
+              )}
+            </div>
+          )}
 
           <div>
             <p className="text-xs font-bold uppercase text-gray-500 mb-2">Current members</p>

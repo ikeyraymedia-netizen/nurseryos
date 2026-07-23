@@ -11,7 +11,8 @@ export type TenantModuleId =
   | 'tasks'
   | 'bol'
   | 'vendors'
-  | 'profit';
+  | 'profit'
+  | 'payments';
 
 export interface Tenant {
   id: string;
@@ -178,6 +179,13 @@ export interface CustomerDocument {
   qboDocType?: CustomerDocumentType;
   qboSyncedAt?: string;
   qboSyncedByUserId?: string;
+  /** Stripe Connect payment collection status for this invoice. */
+  paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed';
+  paidAt?: string;
+  stripeCheckoutSessionId?: string;
+  stripeCheckoutUrl?: string;
+  stripePaymentIntentId?: string;
+  stripePaidAmountCents?: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -171,19 +171,40 @@ function NurseryApp({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const qb = params.get('qb');
-    if (!qb) return;
-    const message = params.get('message');
+    const stripe = params.get('stripe');
+    const stripePay = params.get('stripe_pay');
+    if (!qb && !stripe && !stripePay) return;
+
     if (qb === 'connected') {
       alert(
         'QuickBooks connected. Open Team to confirm status, then push invoices from the invoice screen.'
       );
       setShowTeamManager(true);
     } else if (qb === 'error') {
-      alert(`QuickBooks connect failed: ${message || 'Unknown error'}`);
+      alert(`QuickBooks connect failed: ${params.get('message') || 'Unknown error'}`);
     }
+
+    if (stripe === 'return' || stripe === 'refresh') {
+      alert(
+        stripe === 'return'
+          ? 'Stripe onboarding returned. Open Team to confirm charges are enabled, then create a pay link from an invoice.'
+          : 'Stripe onboarding was refreshed. Open Team and continue Connect if needed.'
+      );
+      setShowTeamManager(true);
+    }
+
+    if (stripePay === 'success') {
+      alert('Payment submitted. The invoice will show as paid once Stripe confirms (usually seconds).');
+    } else if (stripePay === 'cancel') {
+      alert('Payment canceled. You can create a new pay link from the invoice when ready.');
+    }
+
     const url = new URL(window.location.href);
     url.searchParams.delete('qb');
     url.searchParams.delete('message');
+    url.searchParams.delete('stripe');
+    url.searchParams.delete('stripe_pay');
+    url.searchParams.delete('documentId');
     window.history.replaceState({}, '', url.pathname + url.search);
   }, []);
 
@@ -897,6 +918,7 @@ function NurseryApp({
           nurseryAddress={nurseryAddress}
           tenantId={tenant.id}
           canViewProfit={permissions.canViewProfit}
+          canCollectPayments={permissions.canCollectPayments}
         />
       )}
 

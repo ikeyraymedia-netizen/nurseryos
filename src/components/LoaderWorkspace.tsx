@@ -1301,6 +1301,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         nurseryAddress={nurseryAddress}
         tenantId={tenantId}
         canViewProfit={permissions.canViewProfit}
+        canCollectPayments={permissions.canCollectPayments}
       />
       )}
 

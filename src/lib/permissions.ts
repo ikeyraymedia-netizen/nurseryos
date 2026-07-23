@@ -21,6 +21,10 @@ export interface AppPermissions {
   canViewProfit: boolean;
   /** Enter/edit plant cost on the order workspace (gated by profit module). */
   canEditCost: boolean;
+  /** Connect / disconnect Stripe for the nursery (gated by payments module). */
+  canManageStripe: boolean;
+  /** Create invoice payment links via Stripe Connect (gated by payments + invoicing). */
+  canCollectPayments: boolean;
   canEditWeights: boolean;
   canViewInventory: boolean;
   canEditInventory: boolean;
@@ -130,6 +134,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canUseVendors: true,
         canViewProfit: true,
         canEditCost: true,
+        canManageStripe: true,
+        canCollectPayments: true,
         canEditWeights: true,
         canViewInventory: true,
         canEditInventory: true,
@@ -161,6 +167,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canUseVendors: true,
         canViewProfit: false,
         canEditCost: true,
+        canManageStripe: false,
+        canCollectPayments: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,
@@ -191,6 +199,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canUseVendors: false,
         canViewProfit: true,
         canEditCost: true,
+        canManageStripe: false,
+        canCollectPayments: true,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -220,6 +230,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canUseVendors: true,
         canViewProfit: false,
         canEditCost: false,
+        canManageStripe: false,
+        canCollectPayments: false,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -249,6 +261,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canUseVendors: false,
         canViewProfit: false,
         canEditCost: false,
+        canManageStripe: false,
+        canCollectPayments: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,

@@ -72,6 +72,12 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     label: 'Cost & Profit',
     description: 'Enter plant cost per line and see profit/margin on the order (internal only).',
     group: 'addon'
+  },
+  {
+    id: 'payments',
+    label: 'Stripe Payments',
+    description: 'Collect invoice payments via Stripe Connect (card checkout pay links).',
+    group: 'addon'
   }
 ];
 
@@ -81,7 +87,7 @@ export const ALL_TENANT_MODULE_IDS: TenantModuleId[] = TENANT_MODULE_DEFS.map((m
  * Opt-in modules stay off unless explicitly enabled for a nursery.
  * Not included in legacy grandfathering.
  */
-export const OPT_IN_MODULE_IDS: TenantModuleId[] = ['vendors', 'profit'];
+export const OPT_IN_MODULE_IDS: TenantModuleId[] = ['vendors', 'profit', 'payments'];
 
 /**
  * New nurseries start with nothing enabled — you turn workspaces on in the
@@ -154,6 +160,7 @@ export function applyModuleGates(
   const bol = mods.has('bol');
   const vendors = mods.has('vendors');
   const profit = mods.has('profit');
+  const payments = mods.has('payments');
   const ops = orders || trucks;
 
   return {
@@ -184,7 +191,9 @@ export function applyModuleGates(
     // Profit needs both the module AND invoicing (cost/margin lives in the invoice view).
     canViewProfit: permissions.canViewProfit && profit && invoicing,
     // Cost entry on the order workspace only needs the profit module.
-    canEditCost: permissions.canEditCost && profit
+    canEditCost: permissions.canEditCost && profit,
+    canManageStripe: permissions.canManageStripe && payments,
+    canCollectPayments: permissions.canCollectPayments && payments && invoicing
   };
 }
 

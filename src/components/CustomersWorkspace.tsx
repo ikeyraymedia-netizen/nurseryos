@@ -53,7 +53,9 @@ export function CustomersWorkspace({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [billingName, setBillingName] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
+  const [shippingName, setShippingName] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
   const [pointOfContact, setPointOfContact] = useState('');
   const [paymentTermsType, setPaymentTermsType] = useState<string>('NET 30');
@@ -63,7 +65,9 @@ export function CustomersWorkspace({
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editBillingName, setEditBillingName] = useState('');
   const [editBillingAddress, setEditBillingAddress] = useState('');
+  const [editShippingName, setEditShippingName] = useState('');
   const [editShippingAddress, setEditShippingAddress] = useState('');
   const [editPointOfContact, setEditPointOfContact] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -80,7 +84,9 @@ export function CustomersWorkspace({
         c.name,
         c.contactEmail || '',
         c.phone || '',
+        c.billingName || '',
         c.billingAddress || '',
+        c.shippingName || '',
         c.shippingAddress || c.receiverAddress || '',
         c.pointOfContact || '',
         c.paymentTerms || ''
@@ -140,7 +146,9 @@ export function CustomersWorkspace({
     setEditName(selectedCustomer.name || '');
     setEditEmail(selectedCustomer.contactEmail || '');
     setEditPhone(selectedCustomer.phone || '');
+    setEditBillingName(selectedCustomer.billingName || '');
     setEditBillingAddress(selectedCustomer.billingAddress || '');
+    setEditShippingName(selectedCustomer.shippingName || '');
     setEditShippingAddress(selectedCustomer.shippingAddress || selectedCustomer.receiverAddress || '');
     setEditPointOfContact(selectedCustomer.pointOfContact || '');
     setEditNotes(selectedCustomer.notes || '');
@@ -176,7 +184,9 @@ export function CustomersWorkspace({
         name: name.trim(),
         contactEmail: email.trim() || undefined,
         phone: phone.trim() || undefined,
+        billingName: billingName.trim() || undefined,
         billingAddress: billingAddress.trim() || undefined,
+        shippingName: shippingName.trim() || undefined,
         shippingAddress: shippingAddress.trim() || undefined,
         receiverAddress: shippingAddress.trim() || undefined,
         pointOfContact: pointOfContact.trim() || undefined,
@@ -189,7 +199,9 @@ export function CustomersWorkspace({
       setName('');
       setEmail('');
       setPhone('');
+      setBillingName('');
       setBillingAddress('');
+      setShippingName('');
       setShippingAddress('');
       setPointOfContact('');
       setPaymentTermsType('NET 30');
@@ -225,7 +237,9 @@ export function CustomersWorkspace({
         name: editName.trim(),
         contactEmail: editEmail.trim() || undefined,
         phone: editPhone.trim() || undefined,
+        billingName: editBillingName.trim() || undefined,
         billingAddress: editBillingAddress.trim() || undefined,
+        shippingName: editShippingName.trim() || undefined,
         shippingAddress: editShippingAddress.trim() || undefined,
         receiverAddress: editShippingAddress.trim() || undefined,
         pointOfContact: editPointOfContact.trim() || undefined,
@@ -477,28 +491,48 @@ export function CustomersWorkspace({
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
-            <div>
-              {(selectedCustomer.pointOfContact ||
-                selectedCustomer.shippingAddress ||
-                selectedCustomer.receiverAddress) && (
-                <p className="text-xs text-gray-600">
-                  {selectedCustomer.pointOfContact ? `Point of Contact: ${selectedCustomer.pointOfContact}` : ''}
-                  {selectedCustomer.pointOfContact &&
-                  (selectedCustomer.shippingAddress || selectedCustomer.receiverAddress)
-                    ? ' • '
-                    : ''}
-                  {selectedCustomer.shippingAddress || selectedCustomer.receiverAddress
-                    ? `Ship-to: ${selectedCustomer.shippingAddress || selectedCustomer.receiverAddress}`
-                    : ''}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800 mb-1.5">
+                  Bill To
                 </p>
-              )}
-              {selectedCustomer.billingAddress && (
-                <p className="text-xs text-gray-600 mt-1">Billing: {selectedCustomer.billingAddress}</p>
-              )}
-              {selectedCustomer.paymentTerms && (
-                <p className="text-xs text-gray-600 mt-1">Terms: {selectedCustomer.paymentTerms}</p>
-              )}
+                <p className="text-sm font-bold text-gray-900">
+                  {selectedCustomer.billingName?.trim() || selectedCustomer.name}
+                </p>
+                <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
+                  {selectedCustomer.billingAddress?.trim() || 'No bill-to address on file'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800 mb-1.5">
+                  Ship To
+                </p>
+                <p className="text-sm font-bold text-gray-900">
+                  {selectedCustomer.shippingName?.trim() || selectedCustomer.name}
+                </p>
+                <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
+                  {(
+                    selectedCustomer.shippingAddress ||
+                    selectedCustomer.receiverAddress ||
+                    ''
+                  ).trim() || 'No ship-to address on file'}
+                </p>
+              </div>
             </div>
+            {(selectedCustomer.pointOfContact || selectedCustomer.paymentTerms) && (
+              <div>
+                {selectedCustomer.pointOfContact && (
+                  <p className="text-xs text-gray-600">
+                    Point of Contact: {selectedCustomer.pointOfContact}
+                  </p>
+                )}
+                {selectedCustomer.paymentTerms && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Terms: {selectedCustomer.paymentTerms}
+                  </p>
+                )}
+              </div>
+            )}
 
             {permissions.canEditCustomers && (
               <div className="border-t border-gray-100 pt-4 space-y-3">
@@ -532,22 +566,49 @@ export function CustomersWorkspace({
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                     disabled={busy}
                   />
-                  <textarea
-                    rows={3}
-                    value={editBillingAddress}
-                    onChange={(e) => setEditBillingAddress(e.target.value)}
-                    placeholder="Billing address"
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm md:col-span-2"
-                    disabled={busy}
-                  />
-                  <textarea
-                    rows={3}
-                    value={editShippingAddress}
-                    onChange={(e) => setEditShippingAddress(e.target.value)}
-                    placeholder="Ship-to address"
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm md:col-span-2"
-                    disabled={busy}
-                  />
+
+                  <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                      Bill To
+                    </p>
+                    <input
+                      value={editBillingName}
+                      onChange={(e) => setEditBillingName(e.target.value)}
+                      placeholder="Bill-to name (defaults to customer name)"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                    <textarea
+                      rows={3}
+                      value={editBillingAddress}
+                      onChange={(e) => setEditBillingAddress(e.target.value)}
+                      placeholder="Bill-to address"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-sky-800">
+                      Ship To
+                    </p>
+                    <input
+                      value={editShippingName}
+                      onChange={(e) => setEditShippingName(e.target.value)}
+                      placeholder="Ship-to name (defaults to customer name)"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                    <textarea
+                      rows={3}
+                      value={editShippingAddress}
+                      onChange={(e) => setEditShippingAddress(e.target.value)}
+                      placeholder="Ship-to address"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                  </div>
+
                   <select
                     value={editPaymentTermsType}
                     onChange={(e) => setEditPaymentTermsType(e.target.value)}
@@ -831,22 +892,49 @@ export function CustomersWorkspace({
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     disabled={busy}
                   />
-                  <textarea
-                    rows={3}
-                    value={billingAddress}
-                    onChange={(e) => setBillingAddress(e.target.value)}
-                    placeholder="Billing address"
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm md:col-span-2 bg-white"
-                    disabled={busy}
-                  />
-                  <textarea
-                    rows={3}
-                    value={shippingAddress}
-                    onChange={(e) => setShippingAddress(e.target.value)}
-                    placeholder="Ship-to address"
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm md:col-span-2 bg-white"
-                    disabled={busy}
-                  />
+
+                  <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                      Bill To
+                    </p>
+                    <input
+                      value={billingName}
+                      onChange={(e) => setBillingName(e.target.value)}
+                      placeholder="Bill-to name (defaults to customer name)"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                    <textarea
+                      rows={3}
+                      value={billingAddress}
+                      onChange={(e) => setBillingAddress(e.target.value)}
+                      placeholder="Bill-to address"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-sky-800">
+                      Ship To
+                    </p>
+                    <input
+                      value={shippingName}
+                      onChange={(e) => setShippingName(e.target.value)}
+                      placeholder="Ship-to name (defaults to customer name)"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                    <textarea
+                      rows={3}
+                      value={shippingAddress}
+                      onChange={(e) => setShippingAddress(e.target.value)}
+                      placeholder="Ship-to address"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={busy}
+                    />
+                  </div>
+
                   <select
                     value={paymentTermsType}
                     onChange={(e) => setPaymentTermsType(e.target.value)}

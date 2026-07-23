@@ -116,8 +116,13 @@ export interface Customer {
   name: string;
   contactEmail?: string;
   phone?: string;
+  /** Bill-to company / person name (defaults to `name` when empty). */
+  billingName?: string;
   billingAddress?: string;
+  /** Ship-to company / person name (defaults to `name` when empty). */
+  shippingName?: string;
   shippingAddress?: string;
+  /** @deprecated Prefer shippingAddress; kept for older records. */
   receiverAddress?: string;
   pointOfContact?: string;
   paymentTerms?: string;

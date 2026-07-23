@@ -142,7 +142,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setDocumentType(type);
     setSavedDocumentId(existingDocument?.id || null);
 
-    setBillToName(existingDocument?.billToName || customer?.name || order.customerName);
+    setBillToName(
+      existingDocument?.billToName ||
+        customer?.billingName ||
+        customer?.name ||
+        order.customerName
+    );
     setBillToAddress(
       existingDocument?.billToAddress ||
         customer?.billingAddress ||

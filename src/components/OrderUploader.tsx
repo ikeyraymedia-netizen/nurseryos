@@ -314,7 +314,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           freightCharge,
           discount,
           notes: 'Estimate from uploaded paperwork. Not yet converted to a plant order.',
-          billToName: linked.name,
+          billToName: linked.billingName || linked.name,
           billToAddress: linked.billingAddress || linked.shippingAddress || undefined,
           customerEmail: linked.contactEmail || undefined,
           items: lineItems,

@@ -64,7 +64,9 @@ function customerCompletenessScore(customer: Customer): number {
   let score = 0;
   if (customer.contactEmail) score += 3;
   if (customer.phone) score += 2;
+  if (customer.billingName) score += 1;
   if (customer.billingAddress) score += 2;
+  if (customer.shippingName) score += 1;
   if (customer.shippingAddress || customer.receiverAddress) score += 2;
   if (customer.pointOfContact) score += 1;
   if (customer.paymentTerms) score += 1;
@@ -280,8 +282,10 @@ export function parseCsvCustomers(text: string): Array<Omit<Customer, 'id' | 'cr
   const emailIdx = findIdx(headers, ['email', 'e-mail', 'mail']);
   const phoneIdx = findIdx(headers, ['phone', 'mobile', 'cell', 'telephone']);
   const notesIdx = findIdx(headers, ['note', 'comment', 'memo']);
-  const billIdx = findIdx(headers, ['bill']);
-  const shipIdx = findIdx(headers, ['ship']);
+  const billIdx = findIdx(headers, ['bill to address', 'billing address', 'bill address', 'billto', 'bill']);
+  const shipIdx = findIdx(headers, ['ship to address', 'shipping address', 'ship address', 'shipto', 'ship']);
+  const billNameIdx = findIdx(headers, ['bill to name', 'billing name', 'bill name']);
+  const shipNameIdx = findIdx(headers, ['ship to name', 'shipping name', 'ship name']);
 
   const resolvedNameIdx = nameIdx >= 0 ? nameIdx : 0;
 
@@ -291,17 +295,22 @@ export function parseCsvCustomers(text: string): Array<Omit<Customer, 'id' | 'cr
       const name = (cols[resolvedNameIdx] || '').trim();
       const email = emailIdx >= 0 ? (cols[emailIdx] || '').trim() : '';
       const phone = phoneIdx >= 0 ? (cols[phoneIdx] || '').trim() : '';
-      const notesParts = [
-        notesIdx >= 0 ? (cols[notesIdx] || '').trim() : '',
-        billIdx >= 0 ? `Bill: ${(cols[billIdx] || '').trim()}` : '',
-        shipIdx >= 0 ? `Ship: ${(cols[shipIdx] || '').trim()}` : ''
-      ].filter((v) => v && !v.endsWith('Bill:') && !v.endsWith('Ship:'));
+      const notes = notesIdx >= 0 ? (cols[notesIdx] || '').trim() : '';
+      const billingAddress = billIdx >= 0 ? (cols[billIdx] || '').trim() : '';
+      const shippingAddress = shipIdx >= 0 ? (cols[shipIdx] || '').trim() : '';
+      const billingName = billNameIdx >= 0 ? (cols[billNameIdx] || '').trim() : '';
+      const shippingName = shipNameIdx >= 0 ? (cols[shipNameIdx] || '').trim() : '';
 
       return {
         name,
         contactEmail: email || undefined,
         phone: phone || undefined,
-        notes: notesParts.join(' | ') || undefined
+        billingName: billingName || undefined,
+        billingAddress: billingAddress || undefined,
+        shippingName: shippingName || undefined,
+        shippingAddress: shippingAddress || undefined,
+        receiverAddress: shippingAddress || undefined,
+        notes: notes || undefined
       };
     })
     .filter((row) => {

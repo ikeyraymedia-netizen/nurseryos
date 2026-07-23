@@ -43,7 +43,9 @@ export function exportNurseryBackup(params: {
       email: c.contactEmail || '',
       phone: c.phone || '',
       paymentTerms: c.paymentTerms || '',
+      billingName: c.billingName || '',
       billingAddress: c.billingAddress || '',
+      shippingName: c.shippingName || '',
       shippingAddress: c.shippingAddress || c.receiverAddress || '',
       pointOfContact: c.pointOfContact || '',
       notes: c.notes || ''

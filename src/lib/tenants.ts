@@ -175,6 +175,15 @@ export async function updateTenantShippingAddress(
   });
 }
 
+export async function updateTenantLogoUrl(
+  tenantId: string,
+  logoUrl: string | null
+): Promise<void> {
+  await updateDoc(doc(db, 'tenants', tenantId), {
+    logoUrl: logoUrl?.trim() || null
+  });
+}
+
 /**
  * Built-in ship-from defaults for known nurseries (used until a tenant sets its
  * own address in the seller console). Keyed by a lowercase substring of the name.

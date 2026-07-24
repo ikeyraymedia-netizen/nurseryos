@@ -46,6 +46,7 @@ interface LoaderWorkspaceProps {
   permissions: AppPermissions;
   nurseryName?: string;
   nurseryAddress?: string;
+  nurseryLogoSrc?: string | null;
   tenantId?: string;
 }
 
@@ -57,6 +58,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   permissions,
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryLogoSrc = null,
   tenantId
 }) => {
   const salesRepOptions = useSalesRepOptions(tenantId);
@@ -1301,6 +1303,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         }
         nurseryName={nurseryName}
         nurseryAddress={nurseryAddress}
+        nurseryLogoSrc={nurseryLogoSrc}
         tenantId={tenantId}
         canViewProfit={permissions.canViewProfit}
         canCollectPayments={permissions.canCollectPayments}

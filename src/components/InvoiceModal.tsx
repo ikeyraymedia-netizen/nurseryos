@@ -8,6 +8,10 @@ import {
   CustomerDocument,
   FreightAllocation
 } from '../types';
+import {
+  imageSrcToDataUrl,
+  resolveNurseryLogoSrc
+} from '../lib/nurseryBranding';
 import { 
   X, 
   Printer, 
@@ -68,6 +72,8 @@ interface InvoiceModalProps {
   nurseryName?: string;
   /** Ship-from / origin address for the nursery (invoice + BOL). */
   nurseryAddress?: string;
+  /** Nursery logo for invoice header / PDF / email (HTTPS or data URL). */
+  nurseryLogoSrc?: string | null;
   tenantId?: string;
   /** Enable internal cost/profit tracking (gated by the profit module). */
   canViewProfit?: boolean;
@@ -85,11 +91,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   truckOrders = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryLogoSrc = null,
   tenantId,
   canViewProfit = false,
   canCollectPayments = false
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
+  const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const salesRepOptions = useSalesRepOptions(tenantId);
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
     existingDocument?.type || initialDocumentType
@@ -401,6 +409,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        ${
+          logoSrc && !logoSrc.startsWith('data:')
+            ? `<img src="${logoSrc}" alt="${nurseryName} logo" style="height: 56px; width: auto; max-width: 160px; object-fit: contain; margin-bottom: 8px;" />`
+            : ''
+        }
         <h1 style="color: #064e3b; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
         <p style="font-size: 11px; color: #047857; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
         
@@ -1071,26 +1084,39 @@ Thank you for choosing ${nurseryName}!
           maximumFractionDigits: 2
         })}`;
 
-      // Header
+      // Header with nursery logo (when available)
+      const headerTop = y;
+      let textX = margin;
+      if (logoSrc) {
+        try {
+          const logo = await imageSrcToDataUrl(logoSrc);
+          const logoSize = 48;
+          pdf.addImage(logo.dataUrl, logo.format, margin, headerTop, logoSize, logoSize);
+          textX = margin + logoSize + 12;
+        } catch (logoErr) {
+          console.warn('Invoice logo could not be embedded in PDF:', logoErr);
+        }
+      }
+
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(20);
       pdf.setTextColor(6, 46, 30);
-      pdf.text((nurseryName || 'NurseryOS').toUpperCase(), margin, y + 6);
+      pdf.text((nurseryName || 'NurseryOS').toUpperCase(), textX, headerTop + 14);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setTextColor(120, 120, 120);
-      pdf.text('WHOLESALE NURSERY', margin, y + 20);
+      pdf.text('WHOLESALE NURSERY', textX, headerTop + 28);
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(20, 120, 80);
-      pdf.text(docLabelUpper, rightX, y + 2, { align: 'right' });
+      pdf.text(docLabelUpper, rightX, headerTop + 2, { align: 'right' });
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(16);
       pdf.setTextColor(20, 20, 20);
-      pdf.text(invoiceNumber || docLabel, rightX, y + 20, { align: 'right' });
+      pdf.text(invoiceNumber || docLabel, rightX, headerTop + 20, { align: 'right' });
 
-      y += 40;
+      y = headerTop + (logoSrc ? 56 : 40);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
       pdf.setTextColor(60, 60, 60);
@@ -2026,13 +2052,22 @@ Thank you for choosing ${nurseryName}!
 
               {/* Document Header */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
-                <div>
-                  <h1 className="text-2xl font-black tracking-tight text-emerald-950 uppercase leading-none">
-                    {nurseryName}
-                  </h1>
-                  <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-widest">
-                    Wholesale Nursery
-                  </p>
+                <div className="flex items-start gap-3">
+                  {logoSrc ? (
+                    <img
+                      src={logoSrc}
+                      alt={`${nurseryName} logo`}
+                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-emerald-100 bg-white shadow-sm shrink-0"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <h1 className="text-2xl font-black tracking-tight text-emerald-950 uppercase leading-none">
+                      {nurseryName}
+                    </h1>
+                    <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-widest">
+                      Wholesale Nursery
+                    </p>
+                  </div>
                 </div>
                 
                 <div className="sm:text-right flex flex-col justify-between items-start sm:items-end">

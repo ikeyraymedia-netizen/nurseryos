@@ -1113,6 +1113,7 @@ function NurseryApp({
               permissions={permissions}
               nurseryName={tenant.name}
               nurseryAddress={nurseryAddress}
+              nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
             />
           ) : (
@@ -1175,6 +1176,7 @@ function NurseryApp({
           }
           nurseryName={tenant.name}
           nurseryAddress={nurseryAddress}
+          nurseryLogoSrc={nurseryLogoSrc}
           tenantId={tenant.id}
           canViewProfit={permissions.canViewProfit}
           canCollectPayments={permissions.canCollectPayments}
@@ -1289,6 +1291,7 @@ function RootApp({
     } catch {
       /* ignore */
     }
+    void session.onRefreshTenant?.();
   }
 
   if (isPlatformAdmin && sellerView === 'platform') {

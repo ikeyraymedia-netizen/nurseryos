@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react';
-import { Building2, Check, LogOut, Package, ArrowRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Building2, Check, LogOut, Package, ArrowRight, ImagePlus } from 'lucide-react';
 import { Tenant, TenantModuleId } from '../types';
 import {
   listAllTenants,
   updateTenantModules,
   updateTenantShippingAddress,
+  updateTenantLogoUrl,
   resolveNurseryShippingAddress
 } from '../lib/tenants';
 import {
   TENANT_MODULE_DEFS,
   resolveEnabledModules
 } from '../lib/modules';
+import {
+  fileToCompressedLogoDataUrl,
+  resolveNurseryLogoSrc
+} from '../lib/nurseryBranding';
 import { BrandLogo } from './BrandLogo';
 
 interface PlatformDashboardProps {
@@ -32,12 +37,15 @@ export function PlatformDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TenantModuleId[]>([]);
   const [addressDraft, setAddressDraft] = useState('');
+  const [logoDraft, setLogoDraft] = useState('');
   const [legacyAllOn, setLegacyAllOn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [savingLogo, setSavingLogo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const logoFileRef = useRef<HTMLInputElement | null>(null);
 
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
@@ -48,6 +56,7 @@ export function PlatformDashboard({
       setDraft([...resolveEnabledModules(tenant)]);
     }
     setAddressDraft(resolveNurseryShippingAddress(tenant));
+    setLogoDraft(tenant.logoUrl?.trim() || '');
   }
 
   async function refresh() {
@@ -137,7 +146,62 @@ export function PlatformDashboard({
     }
   }
 
+  async function persistLogo(nextLogoUrl: string | null, successMessage: string) {
+    if (!selectedId) return;
+    setSavingLogo(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await updateTenantLogoUrl(selectedId, nextLogoUrl);
+      const saved = nextLogoUrl?.trim() || undefined;
+      setLogoDraft(saved || '');
+      setTenants((prev) =>
+        prev.map((t) => (t.id === selectedId ? { ...t, logoUrl: saved } : t))
+      );
+      setMessage(successMessage);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save nursery logo.');
+    } finally {
+      setSavingLogo(false);
+    }
+  }
+
+  async function handleSaveLogoUrl() {
+    await persistLogo(logoDraft.trim() || null, 'Nursery logo saved for invoices and BOLs.');
+  }
+
+  async function handleClearLogo() {
+    await persistLogo(null, 'Custom logo cleared. Built-in branding will be used if available.');
+  }
+
+  async function handleLogoFile(file: File | null) {
+    if (!file || !selectedId) return;
+    setSavingLogo(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const dataUrl = await fileToCompressedLogoDataUrl(file);
+      await updateTenantLogoUrl(selectedId, dataUrl);
+      setLogoDraft(dataUrl);
+      setTenants((prev) =>
+        prev.map((t) => (t.id === selectedId ? { ...t, logoUrl: dataUrl } : t))
+      );
+      setMessage('Nursery logo uploaded for invoices and BOLs.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to upload nursery logo.');
+    } finally {
+      setSavingLogo(false);
+      if (logoFileRef.current) logoFileRef.current.value = '';
+    }
+  }
+
   const selected = tenants.find((t) => t.id === selectedId) || null;
+  const logoPreviewSrc = selected
+    ? resolveNurseryLogoSrc({
+        name: selected.name,
+        logoUrl: logoDraft.trim() || selected.logoUrl
+      })
+    : null;
 
   function moduleSummary(tenant: Tenant): string {
     if (tenant.modules == null) return 'Legacy · all standard modules';
@@ -313,6 +377,89 @@ export function PlatformDashboard({
                     className="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-black bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-50"
                   >
                     {savingAddress ? 'Saving…' : 'Save address'}
+                  </button>
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    Nursery logo / branding
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Appears on invoices and bills of lading. Upload an image or paste an HTTPS
+                    image URL.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-16 w-16 rounded-xl border border-slate-700 bg-slate-900 flex items-center justify-center overflow-hidden shrink-0">
+                      {logoPreviewSrc ? (
+                        <img
+                          src={logoPreviewSrc}
+                          alt={`${selected?.name || 'Nursery'} logo preview`}
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <ImagePlus className="h-6 w-6 text-slate-600" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-xs text-slate-300 font-semibold truncate">
+                        {selected?.name}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {logoDraft.trim()
+                          ? 'Custom logo set'
+                          : logoPreviewSrc
+                            ? 'Using built-in default logo'
+                            : 'No logo yet'}
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    ref={logoFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => {
+                      void handleLogoFile(e.target.files?.[0] || null);
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={savingLogo}
+                      onClick={() => logoFileRef.current?.click()}
+                      className="px-4 py-2 rounded-lg text-xs font-black bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-50"
+                    >
+                      {savingLogo ? 'Saving…' : 'Upload image'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingLogo || !logoDraft.trim()}
+                      onClick={() => void handleClearLogo()}
+                      className="px-4 py-2 rounded-lg text-xs font-black bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                    >
+                      Clear logo
+                    </button>
+                  </div>
+                  <input
+                    type="url"
+                    value={logoDraft.startsWith('data:') ? '' : logoDraft}
+                    onChange={(e) => setLogoDraft(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                  />
+                  {logoDraft.startsWith('data:') && (
+                    <p className="text-[11px] text-slate-500">
+                      Uploaded image is stored on this nursery. Paste a URL above only if you want
+                      to replace it with a hosted image.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={savingLogo || logoDraft.startsWith('data:')}
+                    onClick={() => void handleSaveLogoUrl()}
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-black bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-50"
+                  >
+                    {savingLogo ? 'Saving…' : 'Save logo URL'}
                   </button>
                 </div>
 

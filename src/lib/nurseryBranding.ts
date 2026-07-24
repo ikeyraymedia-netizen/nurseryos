@@ -26,10 +26,58 @@ export function resolveNurseryLogoSrc(tenant: TenantLogoSource): string | null {
 
 export type JsPdfImageFormat = 'JPEG' | 'PNG' | 'WEBP';
 
+/**
+ * Resize/compress a picked image file into a data URL suitable for storing on
+ * the tenant doc (Firestore). Caps longest edge at `maxEdge` px.
+ */
+export async function fileToCompressedLogoDataUrl(
+  file: File,
+  maxEdge = 512
+): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please choose an image file (PNG, JPG, or WebP).');
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Could not read that image.'));
+      el.src = objectUrl;
+    });
+    const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not process logo image.');
+    ctx.drawImage(img, 0, 0, width, height);
+    // Prefer JPEG for smaller Firestore docs; keep PNG if source had transparency.
+    const usePng = file.type === 'image/png';
+    const dataUrl = usePng
+      ? canvas.toDataURL('image/png')
+      : canvas.toDataURL('image/jpeg', 0.85);
+    // Soft cap ~700KB encoded; Firestore docs max 1MB.
+    if (dataUrl.length > 700_000) {
+      throw new Error('Logo is too large after compression. Try a simpler image.');
+    }
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 /** Fetch an image URL and return a data URL + jsPDF format for addImage. */
 export async function imageSrcToDataUrl(
   src: string
 ): Promise<{ dataUrl: string; format: JsPdfImageFormat }> {
+  if (src.startsWith('data:image/')) {
+    if (src.startsWith('data:image/png')) return { dataUrl: src, format: 'PNG' };
+    if (src.startsWith('data:image/webp')) return { dataUrl: src, format: 'WEBP' };
+    return { dataUrl: src, format: 'JPEG' };
+  }
   const res = await fetch(src);
   if (!res.ok) {
     throw new Error(`Could not load logo image (${res.status}).`);

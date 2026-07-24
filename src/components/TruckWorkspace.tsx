@@ -1527,6 +1527,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           )}
           nurseryName={nurseryName}
           nurseryAddress={nurseryAddress}
+          nurseryLogoSrc={nurseryLogoSrc}
           tenantId={tenantId}
           canViewProfit={permissions.canViewProfit}
           canCollectPayments={permissions.canCollectPayments}

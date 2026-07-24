@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import { Tenant, UserProfile, TenantMember } from '../types';
 import {
@@ -21,6 +21,7 @@ import { setAuditTenant } from '../lib/audit';
 import { setTasksTenant } from '../lib/tasks';
 import { LogIn, UserPlus } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { bootstrapWorkspaceUrl } from '../lib/workspaceUrl';
 
 interface AuthSession {
   user: User;
@@ -186,6 +187,12 @@ export function AuthGate({ children }: AuthGateProps) {
       }
     };
   }, [user, profile, tenant, member]);
+
+  // Before NurseryApp mounts after Firebase auth, mirror storage ↔ URL so
+  // refresh restore cannot be lost during the auth loading gap.
+  useLayoutEffect(() => {
+    if (session) bootstrapWorkspaceUrl();
+  }, [session]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

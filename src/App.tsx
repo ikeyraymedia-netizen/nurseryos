@@ -57,8 +57,45 @@ import {
   CustomerDocument
 } from './types';
 import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList } from 'lucide-react';
+import {
+  type WorkspaceTab,
+  readPersistedWorkspaceTab,
+  readPersistedOrderId,
+  readPersistedTruckId,
+  syncWorkspaceUrl
+} from './lib/workspaceUrl';
 
-type WorkspaceTab = 'orders' | 'trucks' | 'inventory' | 'customers' | 'reports' | 'tasks';
+type WorkspacePermissions = ReturnType<typeof applyModuleGates>;
+
+function defaultWorkspaceTab(permissions: WorkspacePermissions): WorkspaceTab {
+  if (permissions.canViewOrders) return 'orders';
+  if (permissions.canViewCustomers) return 'customers';
+  if (permissions.canViewReports) return 'reports';
+  if (permissions.canViewInventory) return 'inventory';
+  if (permissions.canViewTrucks) return 'trucks';
+  if (permissions.canViewTasks) return 'tasks';
+  return 'orders';
+}
+
+function canAccessWorkspaceTab(
+  tab: WorkspaceTab,
+  permissions: WorkspacePermissions
+): boolean {
+  switch (tab) {
+    case 'orders':
+      return permissions.canViewOrders;
+    case 'trucks':
+      return permissions.canViewTrucks;
+    case 'inventory':
+      return permissions.canViewInventory;
+    case 'customers':
+      return permissions.canViewCustomers;
+    case 'reports':
+      return permissions.canViewReports;
+    case 'tasks':
+      return permissions.canViewTasks;
+  }
+}
 
 function useWhatsNewDigest(params: {
   tenantId: string;
@@ -239,17 +276,40 @@ function NurseryApp({
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => {
-    if (permissions.canViewOrders) return 'orders';
-    if (permissions.canViewCustomers) return 'customers';
-    if (permissions.canViewReports) return 'reports';
-    if (permissions.canViewInventory) return 'inventory';
-    if (permissions.canViewTrucks) return 'trucks';
-    if (permissions.canViewTasks) return 'tasks';
-    return 'orders';
-  });
+  // Restore tab/order/truck from URL (+ sessionStorage via bootstrap in main.tsx)
+  // WITHOUT permission gating. Gating here used to default to orders, then the
+  // URL sync effect permanently overwrote ?tab=customers|inventory|… .
+  const restoredTabRef = useRef<WorkspaceTab | null>(readPersistedWorkspaceTab());
+  const restorePendingRef = useRef<boolean>(!!restoredTabRef.current);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(() =>
+    readPersistedOrderId()
+  );
+  const [selectedTruckId, setSelectedTruckId] = useState<string | null>(() =>
+    readPersistedTruckId()
+  );
+  const [activeTab, setActiveTabState] = useState<WorkspaceTab>(
+    () => restoredTabRef.current || defaultWorkspaceTab(permissions)
+  );
+  const selectedOrderIdRef = useRef(selectedOrderId);
+  const selectedTruckIdRef = useRef(selectedTruckId);
+  const activeTabRef = useRef(activeTab);
+  selectedOrderIdRef.current = selectedOrderId;
+  selectedTruckIdRef.current = selectedTruckId;
+  activeTabRef.current = activeTab;
+
+  /** Persist immediately so a refresh mid-render still restores the same view. */
+  function setActiveTab(tab: WorkspaceTab) {
+    restorePendingRef.current = false;
+    restoredTabRef.current = null;
+    activeTabRef.current = tab;
+    setActiveTabState(tab);
+    syncWorkspaceUrl({
+      tab,
+      order: selectedOrderIdRef.current,
+      truck: selectedTruckIdRef.current
+    });
+  }
+
   const [isEditingTruck, setIsEditingTruck] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showTeamManager, setShowTeamManager] = useState(false);
@@ -315,6 +375,7 @@ function NurseryApp({
       alert('Payment canceled. You can create a new pay link from the invoice when ready.');
     }
 
+    // Strip OAuth/payment return params only — keep tab/order/truck.
     const url = new URL(window.location.href);
     url.searchParams.delete('qb');
     url.searchParams.delete('message');
@@ -324,6 +385,23 @@ function NurseryApp({
     url.searchParams.delete('session_id');
     window.history.replaceState({}, '', url.pathname + url.search);
   }, [tenant.id]);
+
+  useEffect(() => {
+    // While a restored tab is still pending authorization, never write a
+    // different default tab over the URL / sessionStorage.
+    if (
+      restorePendingRef.current &&
+      restoredTabRef.current &&
+      activeTab !== restoredTabRef.current
+    ) {
+      return;
+    }
+    syncWorkspaceUrl({
+      tab: activeTab,
+      order: selectedOrderId,
+      truck: selectedTruckId
+    });
+  }, [activeTab, selectedOrderId, selectedTruckId]);
 
   const [documentModal, setDocumentModal] = useState<{
     orderId: string | null;
@@ -382,18 +460,71 @@ function NurseryApp({
   }, [orders, permissions.canViewInvoices, permissions.canViewOrders, documentModal]);
 
   useEffect(() => {
-    if (activeTab === 'customers' && !permissions.canViewCustomers) {
-      setActiveTab(
-        permissions.canViewOrders
-          ? 'orders'
-          : permissions.canViewReports
-            ? 'reports'
-            : permissions.canViewInventory
-              ? 'inventory'
-              : 'trucks'
-      );
+    const restored = restoredTabRef.current;
+    if (restorePendingRef.current && restored) {
+      if (canAccessWorkspaceTab(restored, permissions)) {
+        restorePendingRef.current = false;
+        restoredTabRef.current = null;
+        if (activeTab !== restored) {
+          activeTabRef.current = restored;
+          setActiveTabState(restored);
+        }
+        return;
+      }
+      // Still denied: keep pending so sync cannot overwrite URL with a default.
+      // Only move the visible tab to an allowed default if needed.
+      if (!canAccessWorkspaceTab(activeTab, permissions)) {
+        const fallback = defaultWorkspaceTab(permissions);
+        if (activeTab !== fallback) {
+          activeTabRef.current = fallback;
+          setActiveTabState(fallback);
+        }
+      }
+      return;
     }
-  }, [activeTab, permissions.canViewCustomers, permissions.canViewOrders, permissions.canViewReports, permissions.canViewInventory]);
+    if (!canAccessWorkspaceTab(activeTab, permissions)) {
+      const fallback = defaultWorkspaceTab(permissions);
+      activeTabRef.current = fallback;
+      setActiveTabState(fallback);
+    }
+  }, [
+    activeTab,
+    permissions.canViewCustomers,
+    permissions.canViewOrders,
+    permissions.canViewReports,
+    permissions.canViewInventory,
+    permissions.canViewTrucks,
+    permissions.canViewTasks
+  ]);
+
+  // If a restored tab stays unauthorized after permissions are applied, abandon
+  // it so URL sync can settle on an allowed tab (avoids sticky ?tab= forever).
+  useEffect(() => {
+    if (!restorePendingRef.current || !restoredTabRef.current) return;
+    if (canAccessWorkspaceTab(restoredTabRef.current, permissions)) return;
+    const timer = window.setTimeout(() => {
+      if (!restorePendingRef.current || !restoredTabRef.current) return;
+      if (canAccessWorkspaceTab(restoredTabRef.current, permissions)) return;
+      restorePendingRef.current = false;
+      restoredTabRef.current = null;
+      const fallback = defaultWorkspaceTab(permissions);
+      activeTabRef.current = fallback;
+      setActiveTabState(fallback);
+      syncWorkspaceUrl({
+        tab: fallback,
+        order: selectedOrderIdRef.current,
+        truck: selectedTruckIdRef.current
+      });
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [
+    permissions.canViewCustomers,
+    permissions.canViewOrders,
+    permissions.canViewReports,
+    permissions.canViewInventory,
+    permissions.canViewTrucks,
+    permissions.canViewTasks
+  ]);
 
   useEffect(() => {
     const needsOpsData =
@@ -454,13 +585,6 @@ function NurseryApp({
             clearTimeout(safetyTimeout);
             setOrders(newOrders);
             setLoading(false);
-            if (permissions.canViewOrders) {
-              setSelectedOrderId((prev) => {
-                if (prev) return prev;
-                if (selectedTruckId) return null;
-                return newOrders.length > 0 ? newOrders[0].id : null;
-              });
-            }
           });
         } else {
           clearTimeout(safetyTimeout);

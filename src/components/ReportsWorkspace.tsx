@@ -72,6 +72,8 @@ interface ProfitByRepRow {
 }
 
 /** Aggregate invoice profit per sales rep (owner). Cost comes from saved line unitCost. */
+const NO_SALES_REP_LABEL = 'No sales rep';
+
 function buildProfitByRep(
   documents: CustomerDocument[],
   orders: CustomerOrder[]
@@ -84,9 +86,9 @@ function buildProfitByRep(
   const map = new Map<string, ProfitByRepRow>();
   for (const inv of invoices) {
     const rep =
-      inv.owner ||
-      (inv.orderId ? ownerByOrderId.get(inv.orderId) : undefined) ||
-      'Unassigned';
+      inv.owner?.trim() ||
+      (inv.orderId ? ownerByOrderId.get(inv.orderId)?.trim() : undefined) ||
+      NO_SALES_REP_LABEL;
     let revenue = 0;
     let cost = 0;
     for (const item of inv.items || []) {
@@ -107,7 +109,12 @@ function buildProfitByRep(
       profit: r.revenue - r.cost,
       margin: r.revenue > 0 ? ((r.revenue - r.cost) / r.revenue) * 100 : 0
     }))
-    .sort((a, b) => b.profit - a.profit);
+    .sort((a, b) => {
+      // Keep "No sales rep" at the bottom; otherwise sort by profit.
+      if (a.rep === NO_SALES_REP_LABEL && b.rep !== NO_SALES_REP_LABEL) return 1;
+      if (b.rep === NO_SALES_REP_LABEL && a.rep !== NO_SALES_REP_LABEL) return -1;
+      return b.profit - a.profit;
+    });
 }
 
 function buildDataSnapshot(params: {
@@ -651,8 +658,21 @@ export function ReportsWorkspace({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {profitByRep.map((row) => (
-                      <tr key={row.rep} className="bg-white">
-                        <td className="text-left font-bold text-gray-900 px-4 py-2">{row.rep}</td>
+                      <tr
+                        key={row.rep}
+                        className={
+                          row.rep === NO_SALES_REP_LABEL ? 'bg-slate-50' : 'bg-white'
+                        }
+                      >
+                        <td
+                          className={`text-left font-bold px-4 py-2 ${
+                            row.rep === NO_SALES_REP_LABEL
+                              ? 'text-slate-500 italic'
+                              : 'text-gray-900'
+                          }`}
+                        >
+                          {row.rep}
+                        </td>
                         <td className="text-right font-mono text-gray-700 px-3 py-2">
                           {row.invoiceCount}
                         </td>
@@ -676,6 +696,11 @@ export function ReportsWorkspace({
                     ))}
                   </tbody>
                 </table>
+                <p className="px-4 py-2.5 text-[10px] text-slate-500 leading-relaxed border-t border-slate-100 bg-slate-50/60">
+                  Names come from the Sales Rep saved on each invoice (or its order). Older invoices may
+                  still say &quot;Ikey&quot; / &quot;Nathan&quot; / &quot;Michael&quot; from the previous list — open those
+                  invoices and pick the current team member to update. &quot;No sales rep&quot; means none was set.
+                </p>
               </div>
             )}
           </div>

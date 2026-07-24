@@ -511,45 +511,46 @@ export function registerStripeRoutes(app: Express) {
       const customerEmail = String(doc.customerEmail || '').trim();
 
       const stripe = getStripe();
-      // Destination charges: session lives on the platform so platform webhooks receive
-      // checkout.session.completed without requiring “Listen to Connected accounts”.
-      // Funds still transfer to the nursery’s connected account.
-      const session = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency: 'usd',
-              unit_amount: amountCents,
-              product_data: {
-                name: `Invoice ${docNumber}`,
-                description: `Payment for ${customerName}`.slice(0, 500)
+      // Direct charges on the connected nursery account (SaaS Connect).
+      // Destination charges + transfer_data conflict with Stripe Managed Payments
+      // (default on some platforms). Keep confirm-payment + Connected-account webhooks
+      // to mark invoices paid.
+      const session = await stripe.checkout.sessions.create(
+        {
+          mode: 'payment',
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: 'usd',
+                unit_amount: amountCents,
+                product_data: {
+                  name: `Invoice ${docNumber}`,
+                  description: `Payment for ${customerName}`.slice(0, 500)
+                }
               }
             }
-          }
-        ],
-        // {CHECKOUT_SESSION_ID} is replaced by Stripe on redirect — used to sync paid status
-        // even if the webhook endpoint is delayed or misconfigured.
-        success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appOrigin()}/?stripe_pay=cancel&documentId=${encodeURIComponent(documentId)}`,
-        customer_email: customerEmail || undefined,
-        metadata: {
-          tenantId,
-          documentId,
-          documentNumber: docNumber
-        },
-        payment_intent_data: {
+          ],
+          // {CHECKOUT_SESSION_ID} is replaced by Stripe on redirect — used to sync paid status
+          // even if the webhook endpoint is delayed or misconfigured.
+          success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${appOrigin()}/?stripe_pay=cancel&documentId=${encodeURIComponent(documentId)}`,
+          customer_email: customerEmail || undefined,
           metadata: {
             tenantId,
             documentId,
             documentNumber: docNumber
           },
-          transfer_data: {
-            destination: integration.accountId
+          payment_intent_data: {
+            metadata: {
+              tenantId,
+              documentId,
+              documentNumber: docNumber
+            }
           }
-        }
-      });
+        },
+        { stripeAccount: integration.accountId }
+      );
 
       const now = new Date().toISOString();
       await docRef.set(

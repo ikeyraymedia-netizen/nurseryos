@@ -632,8 +632,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             )}
           </select>
           <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-            Credits this order&apos;s invoice profit to the selected rep in Reports. Options are team
-            members with the Sales role.
+            Credits this order&apos;s invoice profit to the selected rep in Reports. Options are
+            Owners, Admins, and team members with the Sales role.
           </p>
         </div>
       )}

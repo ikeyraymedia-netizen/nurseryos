@@ -12,10 +12,13 @@ export function memberSalesRepLabel(member: TenantMember): string {
   return local || email || member.userId;
 }
 
-/** Members in this nursery who have the Sales role. */
+/** Members in this nursery who can be credited as sales reps (Sales, Owner, or Admin). */
 export function salesRepLabelsFromMembers(members: TenantMember[]): string[] {
   const labels = members
-    .filter((m) => memberHasRole(m, 'sales'))
+    .filter(
+      (m) =>
+        memberHasRole(m, 'sales') || memberHasRole(m, 'owner') || memberHasRole(m, 'admin')
+    )
     .map(memberSalesRepLabel)
     .filter(Boolean);
   return Array.from(new Set(labels)).sort((a, b) => a.localeCompare(b));

@@ -26,7 +26,7 @@ import {
 import { subscribeToCustomers } from './lib/customers';
 import { getPermissionsForMember } from './lib/permissions';
 import { applyModuleGates, tenantHasAnyWorkspace } from './lib/modules';
-import { listAllDocuments } from './lib/documents';
+import { listAllDocuments, subscribeToDocuments } from './lib/documents';
 import { buildOrdersNeedingInvoiceSet } from './lib/invoicing';
 import {
   buildWhatsNewDigest,
@@ -35,10 +35,17 @@ import {
   setLastSeenAt,
   WhatsNewItem
 } from './lib/whatsNew';
+import { PaymentToast } from './components/PaymentToast';
+import {
+  getLastSeenPaymentAt,
+  paidInvoicesSince,
+  PaymentNotice,
+  setLastSeenPaymentAt
+} from './lib/paymentNotifications';
+import { confirmInvoicePayment } from './lib/stripe';
 import { PlatformDashboard } from './components/PlatformDashboard';
 import { resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
-import { confirmInvoicePayment } from './lib/stripe';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -62,6 +69,7 @@ function useWhatsNewDigest(params: {
   canViewOrders: boolean;
   canViewTrucks: boolean;
   canViewTasks: boolean;
+  canViewInvoices: boolean;
 }) {
   const [items, setItems] = useState<WhatsNewItem[]>([]);
   const ranRef = useRef(false);
@@ -81,23 +89,29 @@ function useWhatsNewDigest(params: {
         const lastSeen = getLastSeenAt(p.tenantId, p.userId);
         if (!lastSeen) {
           setLastSeenAt(p.tenantId, p.userId);
+          setLastSeenPaymentAt(p.tenantId, p.userId);
           return;
         }
 
         const tasks = p.canViewTasks
           ? await listTasksCreatedSinceForTenant(p.tenantId, lastSeen)
           : [];
+        const documents = p.canViewInvoices ? await listAllDocuments().catch(() => []) : [];
         if (cancelled) return;
 
         const digest = buildWhatsNewDigest({
           orders: p.canViewOrders ? p.orders : [],
           trucks: p.canViewTrucks ? p.trucks : [],
           tasks,
+          documents,
           since: lastSeen,
           userId: p.userId
         });
         if (digest.length > 0) setItems(digest);
-        else setLastSeenAt(p.tenantId, p.userId);
+        else {
+          setLastSeenAt(p.tenantId, p.userId);
+          setLastSeenPaymentAt(p.tenantId, p.userId);
+        }
       })().catch((err) => console.warn('Whats-new digest failed:', err));
     }, 400);
 
@@ -109,10 +123,82 @@ function useWhatsNewDigest(params: {
 
   function dismiss() {
     setLastSeenAt(params.tenantId, params.userId);
+    setLastSeenPaymentAt(params.tenantId, params.userId);
     setItems([]);
   }
 
   return { items, dismiss };
+}
+
+function useLivePaymentToasts(params: {
+  tenantId: string;
+  userId: string;
+  enabled: boolean;
+}) {
+  const [notices, setNotices] = useState<PaymentNotice[]>([]);
+  const primedRef = useRef(false);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!params.enabled) return;
+    primedRef.current = false;
+    seenIdsRef.current = new Set();
+
+    const baseline =
+      getLastSeenPaymentAt(params.tenantId, params.userId) ||
+      getLastSeenAt(params.tenantId, params.userId) ||
+      new Date().toISOString();
+
+    return subscribeToDocuments((docs) => {
+      const paid = paidInvoicesSince(docs, '1970-01-01T00:00:00.000Z');
+
+      if (!primedRef.current) {
+        for (const notice of paid) {
+          // Don't toast historical payments on first snapshot; Whats New covers those.
+          if (notice.paidAt <= baseline) seenIdsRef.current.add(notice.id);
+        }
+        primedRef.current = true;
+        return;
+      }
+
+      const fresh: PaymentNotice[] = [];
+      for (const notice of paid) {
+        if (seenIdsRef.current.has(notice.id)) continue;
+        if (notice.paidAt <= baseline) {
+          seenIdsRef.current.add(notice.id);
+          continue;
+        }
+        seenIdsRef.current.add(notice.id);
+        fresh.push(notice);
+      }
+      if (fresh.length === 0) return;
+
+      setNotices((prev) => {
+        const existing = new Set(prev.map((n) => n.id));
+        return [...fresh.filter((n) => !existing.has(n.id)), ...prev].slice(0, 6);
+      });
+      const newest = fresh[0]?.paidAt;
+      if (newest) setLastSeenPaymentAt(params.tenantId, params.userId, newest);
+    });
+  }, [params.enabled, params.tenantId, params.userId]);
+
+  useEffect(() => {
+    if (notices.length === 0) return;
+    const timers = notices.map((notice) =>
+      window.setTimeout(() => {
+        setNotices((prev) => prev.filter((n) => n.id !== notice.id));
+      }, 10000)
+    );
+    return () => {
+      for (const t of timers) window.clearTimeout(t);
+    };
+  }, [notices]);
+
+  return {
+    notices,
+    dismiss: (id: string) => setNotices((prev) => prev.filter((n) => n.id !== id)),
+    dismissAll: () => setNotices([])
+  };
 }
 
 function NurseryApp({
@@ -264,7 +350,17 @@ function NurseryApp({
     ready: whatsNewReady,
     canViewOrders: permissions.canViewOrders,
     canViewTrucks: permissions.canViewTrucks,
-    canViewTasks: permissions.canViewTasks
+    canViewTasks: permissions.canViewTasks,
+    canViewInvoices: permissions.canViewInvoices
+  });
+  const {
+    notices: paymentNotices,
+    dismiss: dismissPaymentNotice,
+    dismissAll: dismissAllPaymentNotices
+  } = useLivePaymentToasts({
+    tenantId: tenant.id,
+    userId,
+    enabled: permissions.canViewInvoices && !loading
   });
 
   useEffect(() => {
@@ -593,8 +689,16 @@ function NurseryApp({
             items={whatsNewItems}
             onDismiss={dismissWhatsNew}
             onOpenTasks={() => setActiveTab('tasks')}
+            onOpenCustomers={
+              permissions.canViewCustomers ? () => setActiveTab('customers') : undefined
+            }
           />
         )}
+        <PaymentToast
+          notices={paymentNotices}
+          onDismiss={dismissPaymentNotice}
+          onDismissAll={dismissAllPaymentNotices}
+        />
         {showTeamManager && (
           <TeamManager
             tenant={tenant}
@@ -989,8 +1093,23 @@ function NurseryApp({
             setSelectedOrderId(null);
             setIsEditingTruck(false);
           }}
+          onOpenCustomers={
+            permissions.canViewCustomers
+              ? () => {
+                  setActiveTab('customers');
+                  setSelectedTruckId(null);
+                  setSelectedOrderId(null);
+                  setIsEditingTruck(false);
+                }
+              : undefined
+          }
         />
       )}
+      <PaymentToast
+        notices={paymentNotices}
+        onDismiss={dismissPaymentNotice}
+        onDismissAll={dismissAllPaymentNotices}
+      />
     </div>
     </InventoryMatchProvider>
   );

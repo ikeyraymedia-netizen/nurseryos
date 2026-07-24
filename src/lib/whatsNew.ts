@@ -6,9 +6,9 @@ import {
   where
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { CustomerOrder, NurseryTask, Truck } from '../types';
+import { CustomerOrder, CustomerDocument, NurseryTask, Truck } from '../types';
 
-export type WhatsNewKind = 'order' | 'truck' | 'task' | 'plant';
+export type WhatsNewKind = 'order' | 'truck' | 'task' | 'plant' | 'payment';
 
 export interface WhatsNewItem {
   id: string;
@@ -50,12 +50,29 @@ export function buildWhatsNewDigest(params: {
   orders: CustomerOrder[];
   trucks: Truck[];
   tasks: NurseryTask[];
+  documents?: CustomerDocument[];
   since: string;
   userId: string;
 }): WhatsNewItem[] {
   const floor = new Date(Date.now() - MAX_LOOKBACK_MS).toISOString();
   const since = params.since > floor ? params.since : floor;
   const items: WhatsNewItem[] = [];
+
+  for (const doc of params.documents || []) {
+    if (doc.type !== 'invoice' || doc.paymentStatus !== 'paid' || !doc.paidAt) continue;
+    if (!after(doc.paidAt, since)) continue;
+    const amount =
+      typeof doc.stripePaidAmountCents === 'number'
+        ? doc.stripePaidAmountCents / 100
+        : doc.grandTotal;
+    items.push({
+      id: `payment-${doc.id}`,
+      kind: 'payment',
+      title: `Payment received · ${doc.documentNumber}`,
+      detail: `${doc.billToName || doc.customerName || 'Customer'} · $${amount.toFixed(2)}`,
+      at: doc.paidAt
+    });
+  }
 
   for (const order of params.orders) {
     if (after(order.dateCreated, since)) {

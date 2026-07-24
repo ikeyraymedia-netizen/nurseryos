@@ -155,3 +155,63 @@ export function defaultDocumentNumber(
   const base = orderNumber && orderNumber !== 'N/A' ? orderNumber : Date.now().toString().slice(-6);
   return `${prefix}-${base}`;
 }
+
+export function subscribeToDocuments(
+  callback: (docs: CustomerDocument[]) => void
+): () => void {
+  if (!activeTenantId) {
+    callback([]);
+    return () => {};
+  }
+  const tenantId = activeTenantId;
+  const q = query(documentsCol(tenantId), orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const docs: CustomerDocument[] = [];
+      snapshot.forEach((snap) => {
+        docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
+      });
+      callback(docs);
+    },
+    (error) => {
+      console.error('Error subscribing to documents:', error);
+      getDocs(documentsCol(tenantId))
+        .then((snapshot) => {
+          const docs: CustomerDocument[] = [];
+          snapshot.forEach((snap) => {
+            docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
+          });
+          docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+          callback(docs);
+        })
+        .catch((err) => console.error('Documents fallback failed:', err));
+    }
+  );
+}
+
+export function subscribeToDocument(
+  documentId: string,
+  callback: (doc: CustomerDocument | null) => void
+): () => void {
+  if (!activeTenantId || !documentId) {
+    callback(null);
+    return () => {};
+  }
+  const tenantId = activeTenantId;
+  return onSnapshot(
+    documentDoc(tenantId, documentId),
+    (snap) => {
+      if (!snap.exists()) {
+        callback(null);
+        return;
+      }
+      callback({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
+    },
+    (error) => {
+      console.error('Error subscribing to document:', error);
+      callback(null);
+    }
+  );
+}

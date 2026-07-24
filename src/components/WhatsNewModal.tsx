@@ -1,4 +1,4 @@
-import { Bell, CheckSquare, ClipboardList, FileText, Sprout, Truck as TruckIcon, X } from 'lucide-react';
+import { Bell, CheckSquare, ClipboardList, DollarSign, FileText, Sprout, Truck as TruckIcon, X } from 'lucide-react';
 import { WhatsNewItem, WhatsNewKind } from '../lib/whatsNew';
 
 interface WhatsNewModalProps {
@@ -7,6 +7,7 @@ interface WhatsNewModalProps {
   onOpenTasks?: () => void;
   onOpenOrders?: () => void;
   onOpenTrucks?: () => void;
+  onOpenCustomers?: () => void;
 }
 
 function kindIcon(kind: WhatsNewKind) {
@@ -19,6 +20,8 @@ function kindIcon(kind: WhatsNewKind) {
       return ClipboardList;
     case 'plant':
       return Sprout;
+    case 'payment':
+      return DollarSign;
     default:
       return Bell;
   }
@@ -34,6 +37,8 @@ function kindLabel(kind: WhatsNewKind) {
       return 'Task';
     case 'plant':
       return 'Plant';
+    case 'payment':
+      return 'Payment';
     default:
       return 'Update';
   }
@@ -44,7 +49,8 @@ export function WhatsNewModal({
   onDismiss,
   onOpenTasks,
   onOpenOrders,
-  onOpenTrucks
+  onOpenTrucks,
+  onOpenCustomers
 }: WhatsNewModalProps) {
   if (items.length === 0) return null;
 
@@ -52,7 +58,8 @@ export function WhatsNewModal({
     order: items.filter((i) => i.kind === 'order').length,
     truck: items.filter((i) => i.kind === 'truck').length,
     task: items.filter((i) => i.kind === 'task').length,
-    plant: items.filter((i) => i.kind === 'plant').length
+    plant: items.filter((i) => i.kind === 'plant').length,
+    payment: items.filter((i) => i.kind === 'payment').length
   };
 
   return (
@@ -67,6 +74,9 @@ export function WhatsNewModal({
               <h3 className="font-black text-base tracking-tight">Since you were last here</h3>
               <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
                 {[
+                  counts.payment
+                    ? `${counts.payment} payment${counts.payment === 1 ? '' : 's'}`
+                    : null,
                   counts.order ? `${counts.order} new order${counts.order === 1 ? '' : 's'}` : null,
                   counts.truck ? `${counts.truck} truck${counts.truck === 1 ? '' : 's'}` : null,
                   counts.task ? `${counts.task} task${counts.task === 1 ? '' : 's'}` : null,
@@ -119,6 +129,18 @@ export function WhatsNewModal({
 
         <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap gap-2 justify-between bg-slate-50/80">
           <div className="flex flex-wrap gap-2">
+            {counts.payment > 0 && onOpenCustomers && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenCustomers();
+                  onDismiss();
+                }}
+                className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+              >
+                View customers
+              </button>
+            )}
             {counts.order > 0 && onOpenOrders && (
               <button
                 type="button"

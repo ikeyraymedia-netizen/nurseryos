@@ -35,7 +35,8 @@ import {
   addCustomerDocument,
   updateCustomerDocument,
   defaultDocumentNumber,
-  listAllDocuments
+  listAllDocuments,
+  subscribeToDocument
 } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { DEFAULT_OWNERS } from '../data/owners';
@@ -131,6 +132,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [localMarkedPaid, setLocalMarkedPaid] = useState(false);
   /** When opened without existingDocument (e.g. from trucks), load saved invoice for payment status. */
   const [fetchedDocument, setFetchedDocument] = useState<CustomerDocument | null>(null);
+  /** Live Firestore copy — updates Paid status without manual refresh. */
+  const [liveDocument, setLiveDocument] = useState<CustomerDocument | null>(null);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
     fileName: string;
@@ -293,6 +296,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     };
   }, [isOpen, existingDocument, order?.id, initialDocumentType]);
 
+  useEffect(() => {
+    if (!isOpen || !savedDocumentId) {
+      setLiveDocument(null);
+      return;
+    }
+    return subscribeToDocument(savedDocumentId, (doc) => {
+      setLiveDocument(doc);
+      if (doc?.paymentStatus === 'paid') setLocalMarkedPaid(true);
+    });
+  }, [isOpen, savedDocumentId]);
+
   // Handle default due date auto-calculation when date or terms change
   useEffect(() => {
     if (!invoiceDate) return;
@@ -346,7 +360,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const salesTax = Number(((taxableAmount * taxRate) / 100).toFixed(2));
   const grandTotal = subtotal - discountAmount + salesTax + freightCharge;
-  const paymentDocument = existingDocument || fetchedDocument;
+  const paymentDocument = liveDocument || existingDocument || fetchedDocument;
   const paymentStatus = localMarkedPaid ? 'paid' : paymentDocument?.paymentStatus;
   const isPaid = documentType === 'invoice' && paymentStatus === 'paid';
   const amountPaid =

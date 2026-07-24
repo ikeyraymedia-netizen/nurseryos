@@ -1057,12 +1057,6 @@ export function ReportsWorkspace({
                     ))}
                   </tbody>
                 </table>
-                <p className="px-4 py-2.5 text-[10px] text-slate-500 leading-relaxed border-t border-slate-100 bg-slate-50/60">
-                  Names come from the Sales Rep saved on each invoice (or its order). Older invoices
-                  may still say &quot;Ikey&quot; / &quot;Nathan&quot; / &quot;Michael&quot; from the previous list — open
-                  those invoices and pick the current team member to update. &quot;No sales rep&quot; means
-                  none was set.
-                </p>
               </div>
             )}
           </div>

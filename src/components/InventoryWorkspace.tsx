@@ -110,6 +110,7 @@ export function InventoryWorkspace({
   const [newQty, setNewQty] = useState(0);
   const [newWeeks, setNewWeeks] = useState<number | ''>('');
   const [newLocation, setNewLocation] = useState('');
+  const [showAddPlant, setShowAddPlant] = useState(false);
 
   const [chemName, setChemName] = useState('');
   const [chemDate, setChemDate] = useState(new Date().toISOString().split('T')[0]);
@@ -445,38 +446,56 @@ export function InventoryWorkspace({
           </div>
         </div>
 
-        {permissions.canUploadInventory && (
+        {(permissions.canUploadInventory || permissions.canEditInventory) && (
           <div className="mt-4 space-y-3">
             {!uploadLoading ? (
               <div className="flex flex-wrap gap-2">
-                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold cursor-pointer hover:bg-emerald-800">
-                  <Upload className="h-4 w-4" />
-                  Upload CSV / Excel
-                  <input
-                    type="file"
-                    accept=".csv,.tsv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleSpreadsheetUpload(file);
-                      e.currentTarget.value = '';
-                    }}
-                  />
-                </label>
-                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer hover:bg-slate-200">
-                  <Upload className="h-4 w-4" />
-                  PDF / Photo
-                  <input
-                    type="file"
-                    accept=".pdf,image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleNonCsvUpload(file);
-                      e.currentTarget.value = '';
-                    }}
-                  />
-                </label>
+                {permissions.canUploadInventory && (
+                  <>
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold cursor-pointer hover:bg-emerald-800">
+                      <Upload className="h-4 w-4" />
+                      Upload CSV / Excel
+                      <input
+                        type="file"
+                        accept=".csv,.tsv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleSpreadsheetUpload(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer hover:bg-slate-200">
+                      <Upload className="h-4 w-4" />
+                      PDF / Photo
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleNonCsvUpload(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  </>
+                )}
+                {permissions.canEditInventory && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPlant((v) => !v)}
+                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold ${
+                      showAddPlant
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add plant manually
+                  </button>
+                )}
                 {permissions.canEditInventory && plants.length > 0 && (
                   <button
                     type="button"
@@ -496,6 +515,68 @@ export function InventoryWorkspace({
                   <p className="text-xs text-gray-500 mt-0.5">{uploadStatus}</p>
                 </div>
               </div>
+            )}
+            {permissions.canEditInventory && showAddPlant && (
+              <form
+                onSubmit={handleAddPlant}
+                className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-4 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase text-emerald-900">Add plant manually</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPlant(false)}
+                    className="text-[11px] font-bold text-emerald-800 hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
+                <input
+                  required
+                  value={newPlantName}
+                  onChange={(e) => setNewPlantName(e.target.value)}
+                  placeholder="Plant name"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={newContainerSize}
+                    onChange={(e) => setNewContainerSize(e.target.value)}
+                    placeholder="Size (#3)"
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={newQty}
+                    onChange={(e) => setNewQty(Number(e.target.value))}
+                    placeholder="Qty"
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  />
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={newWeeks}
+                  onChange={(e) => setNewWeeks(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Weeks until ready (optional)"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                />
+                <input
+                  value={newLocation}
+                  onChange={(e) => setNewLocation(e.target.value)}
+                  placeholder="Location (optional)"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                />
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add to inventory
+                </button>
+              </form>
             )}
             {uploadError && (
               <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2">
@@ -620,57 +701,6 @@ export function InventoryWorkspace({
               ))
             )}
           </div>
-
-          {permissions.canEditInventory && (
-            <form onSubmit={handleAddPlant} className="bg-white rounded-2xl border border-gray-150 p-4 space-y-2">
-              <p className="text-xs font-bold uppercase text-gray-500">Add plant manually</p>
-              <input
-                required
-                value={newPlantName}
-                onChange={(e) => setNewPlantName(e.target.value)}
-                placeholder="Plant name"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  value={newContainerSize}
-                  onChange={(e) => setNewContainerSize(e.target.value)}
-                  placeholder="Size (#3)"
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  value={newQty}
-                  onChange={(e) => setNewQty(Number(e.target.value))}
-                  placeholder="Qty"
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                />
-              </div>
-              <input
-                type="number"
-                min={0}
-                value={newWeeks}
-                onChange={(e) => setNewWeeks(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="Weeks until ready (optional)"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              />
-              <input
-                value={newLocation}
-                onChange={(e) => setNewLocation(e.target.value)}
-                placeholder="Location (optional)"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              />
-              <button
-                type="submit"
-                disabled={busy}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 text-white text-xs font-bold py-2.5"
-              >
-                <Plus className="h-4 w-4" />
-                Add to inventory
-              </button>
-            </form>
-          )}
         </div>
 
         <div className="lg:col-span-2">

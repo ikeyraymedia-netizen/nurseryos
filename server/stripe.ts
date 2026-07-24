@@ -305,6 +305,7 @@ export function registerStripeWebhookRoute(app: Express) {
           const session = event.data.object as Stripe.Checkout.Session;
           const tenantId = String(session.metadata?.tenantId || '');
           const documentId = String(session.metadata?.documentId || '');
+          // Cards are paid immediately. ACH may still be processing here.
           if (tenantId && documentId && session.payment_status === 'paid') {
             const pi =
               typeof session.payment_intent === 'string'
@@ -317,6 +318,41 @@ export function registerStripeWebhookRoute(app: Express) {
               paymentIntentId: pi || undefined,
               amountTotal: session.amount_total
             });
+          }
+        }
+
+        if (event.type === 'checkout.session.async_payment_succeeded') {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const tenantId = String(session.metadata?.tenantId || '');
+          const documentId = String(session.metadata?.documentId || '');
+          if (tenantId && documentId) {
+            const pi =
+              typeof session.payment_intent === 'string'
+                ? session.payment_intent
+                : session.payment_intent?.id;
+            await markDocumentPaid({
+              tenantId,
+              documentId,
+              sessionId: session.id,
+              paymentIntentId: pi || undefined,
+              amountTotal: session.amount_total
+            });
+          }
+        }
+
+        if (event.type === 'checkout.session.async_payment_failed') {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const tenantId = String(session.metadata?.tenantId || '');
+          const documentId = String(session.metadata?.documentId || '');
+          if (tenantId && documentId) {
+            const ref = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+            await ref.set(
+              {
+                paymentStatus: 'failed',
+                updatedAt: new Date().toISOString()
+              },
+              { merge: true }
+            );
           }
         }
 
@@ -415,7 +451,8 @@ export function registerStripeRoutes(app: Express) {
           email: email || undefined,
           capabilities: {
             card_payments: { requested: true },
-            transfers: { requested: true }
+            transfers: { requested: true },
+            us_bank_account_ach_payments: { requested: true }
           },
           business_profile: {
             name: tenantName,
@@ -515,9 +552,30 @@ export function registerStripeRoutes(app: Express) {
       // Destination charges + transfer_data conflict with Stripe Managed Payments
       // (default on some platforms). Keep confirm-payment + Connected-account webhooks
       // to mark invoices paid.
+      // Ensure ACH capability on existing Express accounts (Dashboard enable alone isn't enough).
+      try {
+        await stripe.accounts.update(integration.accountId, {
+          capabilities: {
+            us_bank_account_ach_payments: { requested: true }
+          }
+        });
+      } catch (err) {
+        console.warn('[stripe] could not request ACH capability', integration.accountId, err);
+      }
+
       const session = await stripe.checkout.sessions.create(
         {
           mode: 'payment',
+          // Explicit types so ACH appears for Connect direct charges (dynamic PM alone can hide it).
+          payment_method_types: ['card', 'us_bank_account'],
+          payment_method_options: {
+            us_bank_account: {
+              financial_connections: {
+                permissions: ['payment_method']
+              },
+              verification_method: 'automatic'
+            }
+          },
           line_items: [
             {
               quantity: 1,

@@ -292,6 +292,12 @@ export function registerStripeRoutes(app: Express) {
 
         // SaaS Connect: nursery is merchant of record; Stripe owns pricing/losses.
         // Express + Account Links is the reliable Phase-1 onboarding path.
+        // Do not prefill business_profile.url with the platform origin — Stripe
+        // crawls that URL for verification, and bot-blocking CDNs often 403 it
+        // (surfaced in onboarding as "Native fetch error: Failed to fetch").
+        // Test mode: use Stripe's accessible test site. Live: let the nursery
+        // enter their own site, with product_description as a fallback.
+        const isTestMode = requireStripeSecret().startsWith('sk_test_');
         const account = await stripe.accounts.create({
           type: 'express',
           country: 'US',
@@ -302,7 +308,8 @@ export function registerStripeRoutes(app: Express) {
           },
           business_profile: {
             name: tenantName,
-            url: appOrigin()
+            product_description: `${tenantName} nursery wholesale and plant orders`,
+            ...(isTestMode ? { url: 'https://accessible.stripe.com' } : {})
           },
           metadata: { tenantId, nurseryos: '1' }
         });
@@ -409,7 +416,9 @@ export function registerStripeRoutes(app: Express) {
               }
             }
           ],
-          success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}`,
+          // {CHECKOUT_SESSION_ID} is replaced by Stripe on redirect — used to sync paid status
+          // even if the Connect webhook endpoint is misconfigured.
+          success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${appOrigin()}/?stripe_pay=cancel&documentId=${encodeURIComponent(documentId)}`,
           customer_email: customerEmail || undefined,
           metadata: {
@@ -443,6 +452,98 @@ export function registerStripeRoutes(app: Express) {
         url: session.url,
         sessionId: session.id,
         accountId: integration.accountId
+      });
+    })
+  );
+
+  /**
+   * Fallback when Connect webhooks aren't delivering: after Checkout success redirect,
+   * the client asks us to retrieve the session on the connected account and mark paid.
+   */
+  app.post('/api/stripe/confirm-payment', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const documentId = String(req.body?.documentId || '');
+      const sessionId = String(req.body?.sessionId || '').trim();
+      if (!tenantId || !documentId) {
+        res.status(400).json({ error: 'tenantId and documentId are required.' });
+        return;
+      }
+      await assertCanCreatePayLink(tenantId, uid);
+
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.accountId) {
+        throw Object.assign(new Error('Stripe is not connected for this nursery.'), {
+          status: 400
+        });
+      }
+
+      const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+      const snap = await docRef.get();
+      if (!snap.exists) {
+        throw Object.assign(new Error('Invoice document not found.'), { status: 404 });
+      }
+      const doc = snap.data() || {};
+      if (doc.paymentStatus === 'paid') {
+        res.json({
+          paid: true,
+          alreadyPaid: true,
+          paidAt: doc.paidAt || null
+        });
+        return;
+      }
+
+      const checkoutSessionId = sessionId || String(doc.stripeCheckoutSessionId || '');
+      if (!checkoutSessionId) {
+        throw Object.assign(
+          new Error('No Stripe checkout session found for this invoice. Create a new pay link.'),
+          { status: 400 }
+        );
+      }
+
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.retrieve(checkoutSessionId, {
+        stripeAccount: integration.accountId
+      });
+
+      if (session.metadata?.documentId && session.metadata.documentId !== documentId) {
+        throw Object.assign(new Error('Checkout session does not match this invoice.'), {
+          status: 400
+        });
+      }
+      if (session.metadata?.tenantId && session.metadata.tenantId !== tenantId) {
+        throw Object.assign(new Error('Checkout session does not match this nursery.'), {
+          status: 400
+        });
+      }
+
+      if (session.payment_status !== 'paid') {
+        res.json({
+          paid: false,
+          paymentStatus: session.payment_status,
+          sessionStatus: session.status
+        });
+        return;
+      }
+
+      const pi =
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : session.payment_intent?.id;
+
+      await markDocumentPaid({
+        tenantId,
+        documentId,
+        sessionId: session.id,
+        paymentIntentId: pi || undefined,
+        amountTotal: session.amount_total
+      });
+
+      res.json({
+        paid: true,
+        alreadyPaid: false,
+        sessionId: session.id,
+        amountTotal: session.amount_total
       });
     })
   );

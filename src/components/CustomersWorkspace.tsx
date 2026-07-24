@@ -669,17 +669,32 @@ export function CustomersWorkspace({
                           <p className="text-xs text-gray-500">
                             {new Date(doc.documentDate).toLocaleDateString()} • ${doc.grandTotal.toFixed(2)}
                             {doc.orderNumber ? ` • Order #${doc.orderNumber}` : ''}
+                            {doc.type === 'invoice' && doc.paymentStatus === 'paid'
+                              ? ' • Balance $0.00'
+                              : ''}
                           </p>
                         </div>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase shrink-0 ${
-                            doc.type === 'invoice'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-sky-100 text-sky-800'
-                          }`}
-                        >
-                          {doc.type}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
+                              doc.type === 'invoice'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-sky-100 text-sky-800'
+                            }`}
+                          >
+                            {doc.type}
+                          </span>
+                          {doc.type === 'invoice' && doc.paymentStatus === 'paid' && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
+                              Paid
+                            </span>
+                          )}
+                          {doc.type === 'invoice' && doc.paymentStatus === 'pending' && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
+                              Pending
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {permissions.canViewInvoices && onOpenDocument && (

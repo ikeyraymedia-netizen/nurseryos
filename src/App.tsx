@@ -38,6 +38,7 @@ import {
 import { PlatformDashboard } from './components/PlatformDashboard';
 import { resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
+import { confirmInvoicePayment } from './lib/stripe';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -193,8 +194,37 @@ function NurseryApp({
       setShowTeamManager(true);
     }
 
+    const documentId = params.get('documentId');
+    const sessionId = params.get('session_id');
+
     if (stripePay === 'success') {
-      alert('Payment submitted. The invoice will show as paid once Stripe confirms (usually seconds).');
+      void (async () => {
+        if (documentId && tenant.id) {
+          try {
+            const result = await confirmInvoicePayment({
+              tenantId: tenant.id,
+              documentId,
+              sessionId: sessionId || undefined
+            });
+            alert(
+              result.paid
+                ? 'Payment received. Open the invoice from Customers — it should show Paid with $0.00 balance due.'
+                : `Payment submitted, but Stripe still shows status “${result.paymentStatus || 'unpaid'}”. Open the invoice and use Refresh payment status, or wait a few seconds.`
+            );
+            return;
+          } catch (err: any) {
+            console.warn('[stripe] confirm after redirect failed', err);
+            alert(
+              err?.message ||
+                'Payment submitted, but NurseryOS could not confirm it yet. Open the invoice and click Refresh payment status.'
+            );
+            return;
+          }
+        }
+        alert(
+          'Payment submitted. Open the invoice from Customers and click Refresh payment status if it is not marked Paid yet.'
+        );
+      })();
     } else if (stripePay === 'cancel') {
       alert('Payment canceled. You can create a new pay link from the invoice when ready.');
     }
@@ -205,8 +235,9 @@ function NurseryApp({
     url.searchParams.delete('stripe');
     url.searchParams.delete('stripe_pay');
     url.searchParams.delete('documentId');
+    url.searchParams.delete('session_id');
     window.history.replaceState({}, '', url.pathname + url.search);
-  }, []);
+  }, [tenant.id]);
 
   const [documentModal, setDocumentModal] = useState<{
     orderId: string | null;

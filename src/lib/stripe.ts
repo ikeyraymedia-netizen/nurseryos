@@ -82,3 +82,19 @@ export async function createInvoiceCheckout(params: {
   if (!data?.url) throw new Error('No checkout URL returned.');
   return { url: String(data.url), sessionId: String(data.sessionId || '') };
 }
+
+/** Sync invoice paid status after Checkout redirect (or when webhook is delayed/missing). */
+export async function confirmInvoicePayment(params: {
+  tenantId: string;
+  documentId: string;
+  sessionId?: string;
+}): Promise<{ paid: boolean; alreadyPaid?: boolean; paymentStatus?: string }> {
+  const res = await fetch('/api/stripe/confirm-payment', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any)?.error || 'Failed to confirm Stripe payment.');
+  return data as { paid: boolean; alreadyPaid?: boolean; paymentStatus?: string };
+}

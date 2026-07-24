@@ -46,7 +46,7 @@ import {
   FreightShare
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks } from '../lib/quickbooks';
-import { createInvoiceCheckout } from '../lib/stripe';
+import { createInvoiceCheckout, confirmInvoicePayment } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
 import jsPDF from 'jspdf';
@@ -126,6 +126,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
   const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
   const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
+  const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
+  /** Optimistic paid flag after Refresh payment status / confirm. */
+  const [localMarkedPaid, setLocalMarkedPaid] = useState(false);
+  /** When opened without existingDocument (e.g. from trucks), load saved invoice for payment status. */
+  const [fetchedDocument, setFetchedDocument] = useState<CustomerDocument | null>(null);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
     fileName: string;
@@ -255,6 +260,39 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setShowEmailPanel(false);
   }, [order, isOpen, customer, existingDocument, initialDocumentType, nurseryName]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setFetchedDocument(null);
+      setLocalMarkedPaid(false);
+      return;
+    }
+    if (existingDocument) {
+      setFetchedDocument(null);
+      return;
+    }
+    if (!order?.id || order.id.startsWith('preview-')) return;
+
+    let cancelled = false;
+    listAllDocuments()
+      .then((docs) => {
+        if (cancelled) return;
+        const match = docs.find(
+          (d) => d.orderId === order.id && d.type === (initialDocumentType || 'invoice')
+        );
+        if (match) {
+          setFetchedDocument(match);
+          setSavedDocumentId(match.id);
+        }
+      })
+      .catch(() => {
+        /* ignore — payment badge simply won't show until reopen from Customers */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, existingDocument, order?.id, initialDocumentType]);
+
   // Handle default due date auto-calculation when date or terms change
   useEffect(() => {
     if (!invoiceDate) return;
@@ -308,6 +346,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const salesTax = Number(((taxableAmount * taxRate) / 100).toFixed(2));
   const grandTotal = subtotal - discountAmount + salesTax + freightCharge;
+  const paymentDocument = existingDocument || fetchedDocument;
+  const paymentStatus = localMarkedPaid ? 'paid' : paymentDocument?.paymentStatus;
+  const isPaid = documentType === 'invoice' && paymentStatus === 'paid';
+  const amountPaid =
+    isPaid
+      ? typeof paymentDocument?.stripePaidAmountCents === 'number'
+        ? paymentDocument.stripePaidAmountCents / 100
+        : grandTotal
+      : 0;
+  const balanceDue = isPaid ? 0 : grandTotal;
 
   // Internal cost/profit (never shown to the customer)
   const totalCost = order.items.reduce((sum, item) => {
@@ -400,9 +448,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; color: #475569;">Sales Tax (${taxRate}%):</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${salesTax.toFixed(2)}</td>
             </tr>` : ''}
+            ${documentType === 'invoice' && isPaid ? `
+            <tr>
+              <td style="padding: 4px 0; color: #475569;">Invoice Total:</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${grandTotal.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; color: #047857;">Amount Paid:</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #047857;">$${amountPaid.toFixed(2)}</td>
+            </tr>` : ''}
             <tr style="border-top: 1px solid #cbd5e1;">
-              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #064e3b; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Total Due'}:</td>
-              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #064e3b;">$${grandTotal.toFixed(2)}</td>
+              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #064e3b; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Balance Due'}:</td>
+              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #064e3b;">$${balanceDue.toFixed(2)}</td>
             </tr>
           </table>
         </div>
@@ -450,7 +507,7 @@ ${itemsText}
 --------------------------------------------------------------------------------
 
 Subtotal: $${subtotal.toFixed(2)}
-${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${documentType === 'estimate' ? 'ESTIMATE TOTAL' : 'GRAND TOTAL'} (USD): $${grandTotal.toFixed(2)}
+${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${documentType === 'estimate' ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}` : isPaid ? `INVOICE TOTAL (USD): $${grandTotal.toFixed(2)}\nAmount Paid: $${amountPaid.toFixed(2)}\nBALANCE DUE (USD): $0.00` : `BALANCE DUE (USD): $${balanceDue.toFixed(2)}`}
 
 ${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}
 Thank you for choosing ${nurseryName}!
@@ -907,6 +964,33 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
+  const handleRefreshPaymentStatus = async () => {
+    if (!tenantId || !savedDocumentId) {
+      alert('Save this invoice to the customer first.');
+      return;
+    }
+    setIsRefreshingPayment(true);
+    try {
+      const result = await confirmInvoicePayment({
+        tenantId,
+        documentId: savedDocumentId,
+        sessionId: paymentDocument?.stripeCheckoutSessionId
+      });
+      if (result.paid) {
+        setLocalMarkedPaid(true);
+        alert('Payment confirmed. This invoice is now marked Paid with $0.00 balance due.');
+      } else {
+        alert(
+          `Stripe still shows this checkout as “${result.paymentStatus || 'unpaid'}”. Finish payment with the pay link, then try again.`
+        );
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to refresh payment status.');
+    } finally {
+      setIsRefreshingPayment(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     try {
       // Build the PDF programmatically (not a DOM screenshot). html2canvas can't
@@ -1101,7 +1185,13 @@ Thank you for choosing ${nurseryName}!
       pdf.setLineWidth(1);
       pdf.line(labelX, y - 4, rightX, y - 4);
       y += 8;
-      writeTotal('GRAND TOTAL', money(grandTotal), true, true);
+      if (documentType === 'invoice' && isPaid) {
+        writeTotal('Invoice Total', money(grandTotal), true, false);
+        writeTotal('Amount Paid', money(amountPaid), true, false);
+        writeTotal('BALANCE DUE', money(0), true, true);
+      } else {
+        writeTotal(documentType === 'estimate' ? 'ESTIMATE TOTAL' : 'BALANCE DUE', money(balanceDue), true, true);
+      }
 
       // Notes
       if (invoiceNotes.trim()) {
@@ -1243,6 +1333,20 @@ Thank you for choosing ${nurseryName}!
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          {documentType === 'invoice' && (isPaid || paymentStatus === 'pending') && (
+            <div
+              className={`rounded-xl border px-3 py-2 text-[11px] font-bold ${
+                isPaid
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                  : 'border-amber-200 bg-amber-50 text-amber-900'
+              }`}
+            >
+              {isPaid
+                ? `Paid${paymentDocument?.paidAt ? ` · ${new Date(paymentDocument.paidAt).toLocaleDateString()}` : ''}`
+                : 'Payment pending — waiting for Stripe confirmation'}
+            </div>
+          )}
 
           <div className="space-y-3.5 text-xs">
             {/* Estimate vs Invoice */}
@@ -1627,22 +1731,42 @@ Thank you for choosing ${nurseryName}!
               <button
                 type="button"
                 onClick={() => void handleCreatePayLink()}
-                disabled={isCreatingPayLink || !savedDocumentId}
+                disabled={isCreatingPayLink || !savedDocumentId || isPaid}
                 className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                 title={
-                  savedDocumentId
-                    ? 'Create a Stripe Checkout pay link for this invoice'
-                    : 'Save to customer first'
+                  isPaid
+                    ? 'This invoice is already paid'
+                    : savedDocumentId
+                      ? 'Create a Stripe Checkout pay link for this invoice'
+                      : 'Save to customer first'
                 }
               >
                 <DollarSign className="h-4 w-4" />
                 <span>
-                  {isCreatingPayLink
-                    ? 'Creating pay link…'
-                    : payLinkMessage || 'Create Stripe pay link'}
+                  {isPaid
+                    ? 'Invoice paid'
+                    : isCreatingPayLink
+                      ? 'Creating pay link…'
+                      : payLinkMessage || 'Create Stripe pay link'}
                 </span>
               </button>
             )}
+
+            {tenantId &&
+              canCollectPayments &&
+              documentType === 'invoice' &&
+              !isPaid &&
+              Boolean(paymentDocument?.stripeCheckoutSessionId || paymentStatus === 'pending') && (
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshPaymentStatus()}
+                  disabled={isRefreshingPayment || !savedDocumentId}
+                  className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-800 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
+                  <span>{isRefreshingPayment ? 'Checking Stripe…' : 'Refresh payment status'}</span>
+                </button>
+              )}
 
             <button
               onClick={handleExportPdf}
@@ -1866,6 +1990,16 @@ Thank you for choosing ${nurseryName}!
                     <span className="text-xl font-mono font-black text-gray-950 block">
                       {invoiceNumber}
                     </span>
+                    {isPaid && (
+                      <span className="mt-2 inline-flex items-center rounded-full bg-emerald-700 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                        Paid
+                      </span>
+                    )}
+                    {!isPaid && paymentStatus === 'pending' && (
+                      <span className="mt-2 inline-flex items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                        Payment pending
+                      </span>
+                    )}
                   </div>
                   
                   <div className="mt-4 text-left sm:text-right font-mono text-[11px] space-y-0.5">
@@ -2010,7 +2144,18 @@ Thank you for choosing ${nurseryName}!
                       <Landmark className="h-3.5 w-3.5 mr-1" /> Payment instructions:
                     </p>
                     <p className="text-gray-600 leading-normal">
-                      Please make check payable to <span className="font-bold text-gray-950">{nurseryName}</span> and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.
+                      {isPaid ? (
+                        <>
+                          This invoice has been <span className="font-bold text-emerald-800">paid in full</span>
+                          {paymentDocument?.paidAt
+                            ? ` on ${new Date(paymentDocument.paidAt).toLocaleDateString()}.`
+                            : '.'}
+                        </>
+                      ) : (
+                        <>
+                          Please make check payable to <span className="font-bold text-gray-950">{nurseryName}</span> and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -2048,10 +2193,24 @@ Thank you for choosing ${nurseryName}!
                     </div>
                   )}
 
-                  {/* Grand Total */}
+                  {/* Grand Total / Balance Due */}
+                  {documentType === 'invoice' && isPaid && (
+                    <>
+                      <div className="flex justify-between py-1 border-b border-gray-150">
+                        <span className="text-gray-500 font-medium">Invoice Total:</span>
+                        <span className="font-bold text-gray-950">${grandTotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-gray-150 text-emerald-700">
+                        <span className="font-medium">Amount Paid:</span>
+                        <span className="font-bold">${amountPaid.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between py-2 border-b-4 border-double border-emerald-800 bg-emerald-50/35 p-1.5 rounded-lg">
-                    <span className="font-sans font-black text-emerald-800 text-sm uppercase tracking-wide">Total Due (USD):</span>
-                    <span className="text-base font-black text-emerald-950">${grandTotal.toFixed(2)}</span>
+                    <span className="font-sans font-black text-emerald-800 text-sm uppercase tracking-wide">
+                      {documentType === 'estimate' ? 'Estimate Total (USD):' : 'Balance Due (USD):'}
+                    </span>
+                    <span className="text-base font-black text-emerald-950">${balanceDue.toFixed(2)}</span>
                   </div>
 
                 </div>

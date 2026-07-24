@@ -1752,11 +1752,7 @@ Thank you for choosing ${nurseryName}!
               </button>
             )}
 
-            {tenantId &&
-              canCollectPayments &&
-              documentType === 'invoice' &&
-              !isPaid &&
-              Boolean(paymentDocument?.stripeCheckoutSessionId || paymentStatus === 'pending') && (
+            {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
                 <button
                   type="button"
                   onClick={() => void handleRefreshPaymentStatus()}

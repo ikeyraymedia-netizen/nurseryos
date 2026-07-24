@@ -502,9 +502,38 @@ export function registerStripeRoutes(app: Express) {
       }
 
       const stripe = getStripe();
-      const session = await stripe.checkout.sessions.retrieve(checkoutSessionId, {
-        stripeAccount: integration.accountId
-      });
+      // retrieve(id, params, requestOptions) — stripeAccount must be request options (3rd arg),
+      // not params, or Stripe looks on the platform account and the session is "missing".
+      let session: Stripe.Checkout.Session;
+      try {
+        session = await stripe.checkout.sessions.retrieve(
+          checkoutSessionId,
+          {},
+          { stripeAccount: integration.accountId }
+        );
+      } catch (err: any) {
+        // Fallback: find a paid session for this invoice on the connected account
+        const listed = await stripe.checkout.sessions.list(
+          { limit: 25 },
+          { stripeAccount: integration.accountId }
+        );
+        const match = listed.data.find(
+          (s) =>
+            s.metadata?.documentId === documentId &&
+            s.metadata?.tenantId === tenantId &&
+            s.payment_status === 'paid'
+        );
+        if (!match) {
+          throw Object.assign(
+            new Error(
+              err?.message ||
+                'Could not find this checkout on the connected Stripe account. Open Team and confirm Connect, then try Refresh again.'
+            ),
+            { status: 400 }
+          );
+        }
+        session = match;
+      }
 
       if (session.metadata?.documentId && session.metadata.documentId !== documentId) {
         throw Object.assign(new Error('Checkout session does not match this invoice.'), {

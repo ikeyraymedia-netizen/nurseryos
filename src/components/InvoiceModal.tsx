@@ -964,9 +964,9 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
-  const handleRefreshPaymentStatus = async () => {
+  const handleRefreshPaymentStatus = async (opts?: { silent?: boolean }) => {
     if (!tenantId || !savedDocumentId) {
-      alert('Save this invoice to the customer first.');
+      if (!opts?.silent) alert('Save this invoice to the customer first.');
       return;
     }
     setIsRefreshingPayment(true);
@@ -978,18 +978,40 @@ Thank you for choosing ${nurseryName}!
       });
       if (result.paid) {
         setLocalMarkedPaid(true);
-        alert('Payment confirmed. This invoice is now marked Paid with $0.00 balance due.');
-      } else {
+        if (!opts?.silent) {
+          alert('Payment confirmed. This invoice is now marked Paid with $0.00 balance due.');
+        }
+      } else if (!opts?.silent) {
         alert(
-          `Stripe still shows this checkout as “${result.paymentStatus || 'unpaid'}”. Finish payment with the pay link, then try again.`
+          result.hint ||
+            `Stripe still shows this checkout as “${result.paymentStatus || 'unpaid'}”. Create a new pay link, complete payment, then Refresh again.`
         );
       }
     } catch (err: any) {
-      alert(err?.message || 'Failed to refresh payment status.');
+      if (!opts?.silent) alert(err?.message || 'Failed to refresh payment status.');
     } finally {
       setIsRefreshingPayment(false);
     }
   };
+
+  // When invoice is pending, try syncing from Stripe automatically (covers missed webhooks).
+  useEffect(() => {
+    if (!isOpen || !tenantId || !savedDocumentId || !canCollectPayments) return;
+    if (documentType !== 'invoice') return;
+    const status = existingDocument?.paymentStatus || fetchedDocument?.paymentStatus;
+    if (status !== 'pending' || localMarkedPaid) return;
+    void handleRefreshPaymentStatus({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per open/pending doc
+  }, [
+    isOpen,
+    tenantId,
+    savedDocumentId,
+    canCollectPayments,
+    documentType,
+    existingDocument?.paymentStatus,
+    fetchedDocument?.paymentStatus,
+    localMarkedPaid
+  ]);
 
   const handleExportPdf = async () => {
     try {

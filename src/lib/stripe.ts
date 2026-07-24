@@ -88,7 +88,12 @@ export async function confirmInvoicePayment(params: {
   tenantId: string;
   documentId: string;
   sessionId?: string;
-}): Promise<{ paid: boolean; alreadyPaid?: boolean; paymentStatus?: string }> {
+}): Promise<{
+  paid: boolean;
+  alreadyPaid?: boolean;
+  paymentStatus?: string;
+  hint?: string;
+}> {
   const res = await fetch('/api/stripe/confirm-payment', {
     method: 'POST',
     headers: await authHeaders(),
@@ -96,5 +101,10 @@ export async function confirmInvoicePayment(params: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as any)?.error || 'Failed to confirm Stripe payment.');
-  return data as { paid: boolean; alreadyPaid?: boolean; paymentStatus?: string };
+  return data as {
+    paid: boolean;
+    alreadyPaid?: boolean;
+    paymentStatus?: string;
+    hint?: string;
+  };
 }

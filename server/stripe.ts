@@ -153,6 +153,117 @@ async function markDocumentPaid(params: {
   );
 }
 
+function sessionMatchesDocument(
+  session: Stripe.Checkout.Session,
+  tenantId: string,
+  documentId: string
+): boolean {
+  const metaTenant = String(session.metadata?.tenantId || '');
+  const metaDoc = String(session.metadata?.documentId || '');
+  if (metaDoc && metaDoc !== documentId) return false;
+  if (metaTenant && metaTenant !== tenantId) return false;
+  // Prefer explicit metadata match; allow sessions with no metadata only when id was preferred.
+  return !metaDoc || metaDoc === documentId;
+}
+
+async function retrieveCheckoutSession(
+  stripe: Stripe,
+  sessionId: string,
+  connectedAccountId?: string | null
+): Promise<Stripe.Checkout.Session | null> {
+  // Destination charges live on the platform account.
+  try {
+    return await stripe.checkout.sessions.retrieve(sessionId);
+  } catch {
+    // ignore — may be a direct-charge session on the connected account
+  }
+  if (connectedAccountId) {
+    try {
+      return await stripe.checkout.sessions.retrieve(
+        sessionId,
+        { stripeAccount: connectedAccountId }
+      );
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+async function findPaidCheckoutForDocument(params: {
+  stripe: Stripe;
+  tenantId: string;
+  documentId: string;
+  preferredSessionId?: string;
+  connectedAccountId?: string | null;
+}): Promise<Stripe.Checkout.Session | null> {
+  const { stripe, tenantId, documentId, preferredSessionId, connectedAccountId } = params;
+
+  if (preferredSessionId) {
+    const preferred = await retrieveCheckoutSession(
+      stripe,
+      preferredSessionId,
+      connectedAccountId
+    );
+    if (preferred?.payment_status === 'paid' && sessionMatchesDocument(preferred, tenantId, documentId)) {
+      return preferred;
+    }
+  }
+
+  const pools: Array<{ accountId?: string }> = [{}, ...(connectedAccountId ? [{ accountId: connectedAccountId }] : [])];
+  for (const pool of pools) {
+    try {
+      const listed = await stripe.checkout.sessions.list(
+        { limit: 100 },
+        pool.accountId ? { stripeAccount: pool.accountId } : undefined
+      );
+      const paid = listed.data.find(
+        (s) =>
+          s.payment_status === 'paid' &&
+          String(s.metadata?.documentId || '') === documentId &&
+          String(s.metadata?.tenantId || '') === tenantId
+      );
+      if (paid) return paid;
+    } catch (err) {
+      console.warn('[stripe] checkout session list failed', pool.accountId || 'platform', err);
+    }
+  }
+
+  // Last resort: payment intents with our metadata on the connected account (direct charges).
+  if (connectedAccountId) {
+    try {
+      const intents = await stripe.paymentIntents.list(
+        { limit: 100 },
+        { stripeAccount: connectedAccountId }
+      );
+      const paidIntent = intents.data.find(
+        (pi) =>
+          pi.status === 'succeeded' &&
+          String(pi.metadata?.documentId || '') === documentId &&
+          String(pi.metadata?.tenantId || '') === tenantId
+      );
+      if (paidIntent) {
+        // Synthesize a minimal session-like object for markDocumentPaid callers.
+        return {
+          id: preferredSessionId || `pi-fallback-${paidIntent.id}`,
+          object: 'checkout.session',
+          payment_status: 'paid',
+          payment_intent: paidIntent.id,
+          amount_total: paidIntent.amount_received || paidIntent.amount,
+          metadata: {
+            tenantId,
+            documentId
+          }
+        } as unknown as Stripe.Checkout.Session;
+      }
+    } catch (err) {
+      console.warn('[stripe] payment intent list failed', err);
+    }
+  }
+
+  return null;
+}
+
 /**
  * Webhook must be registered BEFORE express.json() so the raw body is preserved
  * for signature verification.
@@ -400,42 +511,45 @@ export function registerStripeRoutes(app: Express) {
       const customerEmail = String(doc.customerEmail || '').trim();
 
       const stripe = getStripe();
-      const session = await stripe.checkout.sessions.create(
-        {
-          mode: 'payment',
-          line_items: [
-            {
-              quantity: 1,
-              price_data: {
-                currency: 'usd',
-                unit_amount: amountCents,
-                product_data: {
-                  name: `Invoice ${docNumber}`,
-                  description: `Payment to ${customerName}`.slice(0, 500)
-                }
+      // Destination charges: session lives on the platform so platform webhooks receive
+      // checkout.session.completed without requiring “Listen to Connected accounts”.
+      // Funds still transfer to the nursery’s connected account.
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: amountCents,
+              product_data: {
+                name: `Invoice ${docNumber}`,
+                description: `Payment for ${customerName}`.slice(0, 500)
               }
             }
-          ],
-          // {CHECKOUT_SESSION_ID} is replaced by Stripe on redirect — used to sync paid status
-          // even if the Connect webhook endpoint is misconfigured.
-          success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${appOrigin()}/?stripe_pay=cancel&documentId=${encodeURIComponent(documentId)}`,
-          customer_email: customerEmail || undefined,
+          }
+        ],
+        // {CHECKOUT_SESSION_ID} is replaced by Stripe on redirect — used to sync paid status
+        // even if the webhook endpoint is delayed or misconfigured.
+        success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appOrigin()}/?stripe_pay=cancel&documentId=${encodeURIComponent(documentId)}`,
+        customer_email: customerEmail || undefined,
+        metadata: {
+          tenantId,
+          documentId,
+          documentNumber: docNumber
+        },
+        payment_intent_data: {
           metadata: {
             tenantId,
             documentId,
             documentNumber: docNumber
           },
-          payment_intent_data: {
-            metadata: {
-              tenantId,
-              documentId,
-              documentNumber: docNumber
-            }
+          transfer_data: {
+            destination: integration.accountId
           }
-        },
-        { stripeAccount: integration.accountId }
-      );
+        }
+      });
 
       const now = new Date().toISOString();
       await docRef.set(
@@ -443,6 +557,7 @@ export function registerStripeRoutes(app: Express) {
           paymentStatus: 'pending',
           stripeCheckoutSessionId: session.id,
           stripeCheckoutUrl: session.url || null,
+          stripeConnectedAccountId: integration.accountId,
           updatedAt: now
         },
         { merge: true }
@@ -457,8 +572,8 @@ export function registerStripeRoutes(app: Express) {
   );
 
   /**
-   * Fallback when Connect webhooks aren't delivering: after Checkout success redirect,
-   * the client asks us to retrieve the session on the connected account and mark paid.
+   * Sync paid status from Stripe when webhooks are delayed/missing.
+   * Supports both destination charges (platform session) and older direct-charge sessions.
    */
   app.post('/api/stripe/confirm-payment', (req, res) =>
     withAuth(req, res, async (uid) => {
@@ -493,64 +608,29 @@ export function registerStripeRoutes(app: Express) {
         return;
       }
 
+      const connectedAccountId =
+        String(doc.stripeConnectedAccountId || integration.accountId || '') || null;
       const checkoutSessionId = sessionId || String(doc.stripeCheckoutSessionId || '');
-      if (!checkoutSessionId) {
-        throw Object.assign(
-          new Error('No Stripe checkout session found for this invoice. Create a new pay link.'),
-          { status: 400 }
-        );
-      }
 
       const stripe = getStripe();
-      // retrieve(id, params, requestOptions) — stripeAccount must be request options (3rd arg),
-      // not params, or Stripe looks on the platform account and the session is "missing".
-      let session: Stripe.Checkout.Session;
-      try {
-        session = await stripe.checkout.sessions.retrieve(
-          checkoutSessionId,
-          {},
-          { stripeAccount: integration.accountId }
-        );
-      } catch (err: any) {
-        // Fallback: find a paid session for this invoice on the connected account
-        const listed = await stripe.checkout.sessions.list(
-          { limit: 25 },
-          { stripeAccount: integration.accountId }
-        );
-        const match = listed.data.find(
-          (s) =>
-            s.metadata?.documentId === documentId &&
-            s.metadata?.tenantId === tenantId &&
-            s.payment_status === 'paid'
-        );
-        if (!match) {
-          throw Object.assign(
-            new Error(
-              err?.message ||
-                'Could not find this checkout on the connected Stripe account. Open Team and confirm Connect, then try Refresh again.'
-            ),
-            { status: 400 }
-          );
-        }
-        session = match;
-      }
+      const session = await findPaidCheckoutForDocument({
+        stripe,
+        tenantId,
+        documentId,
+        preferredSessionId: checkoutSessionId || undefined,
+        connectedAccountId
+      });
 
-      if (session.metadata?.documentId && session.metadata.documentId !== documentId) {
-        throw Object.assign(new Error('Checkout session does not match this invoice.'), {
-          status: 400
-        });
-      }
-      if (session.metadata?.tenantId && session.metadata.tenantId !== tenantId) {
-        throw Object.assign(new Error('Checkout session does not match this nursery.'), {
-          status: 400
-        });
-      }
-
-      if (session.payment_status !== 'paid') {
+      if (!session || session.payment_status !== 'paid') {
+        const preferred = checkoutSessionId
+          ? await retrieveCheckoutSession(stripe, checkoutSessionId, connectedAccountId)
+          : null;
         res.json({
           paid: false,
-          paymentStatus: session.payment_status,
-          sessionStatus: session.status
+          paymentStatus: preferred?.payment_status || 'unpaid',
+          sessionStatus: preferred?.status || null,
+          hint:
+            'No paid Checkout/PaymentIntent found for this invoice yet. Create a new pay link after this deploy, complete payment, then Refresh again.'
         });
         return;
       }
@@ -563,7 +643,7 @@ export function registerStripeRoutes(app: Express) {
       await markDocumentPaid({
         tenantId,
         documentId,
-        sessionId: session.id,
+        sessionId: session.id?.startsWith('cs_') ? session.id : checkoutSessionId || session.id,
         paymentIntentId: pi || undefined,
         amountTotal: session.amount_total
       });

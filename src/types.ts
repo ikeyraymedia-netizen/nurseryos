@@ -186,6 +186,8 @@ export interface CustomerDocument {
   stripeCheckoutUrl?: string;
   stripePaymentIntentId?: string;
   stripePaidAmountCents?: number;
+  /** Connected account id used when the pay link was created (direct or destination). */
+  stripeConnectedAccountId?: string;
   createdAt: string;
   updatedAt: string;
 }

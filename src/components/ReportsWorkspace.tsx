@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   RefreshCw,
@@ -7,12 +7,17 @@ import {
   Sparkles,
   Copy,
   Check,
-  History
+  History,
+  Users,
+  Sprout,
+  Calendar,
+  DollarSign,
+  FileText
 } from 'lucide-react';
 import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
-import { listAllDocuments } from '../lib/documents';
+import { listAllDocuments, subscribeToDocuments } from '../lib/documents';
 import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
 
 interface ReportsWorkspaceProps {
@@ -115,6 +120,44 @@ function buildProfitByRep(
       if (b.rep === NO_SALES_REP_LABEL && a.rep !== NO_SALES_REP_LABEL) return -1;
       return b.profit - a.profit;
     });
+}
+
+function buildPaymentStatus(documents: CustomerDocument[]) {
+  const invoices = documents.filter((d) => d.type === 'invoice');
+  let paidCount = 0;
+  let pendingCount = 0;
+  let unpaidCount = 0;
+  let paidTotal = 0;
+  let outstandingTotal = 0;
+  for (const inv of invoices) {
+    const status = inv.paymentStatus || 'unpaid';
+    const amount = inv.grandTotal || 0;
+    if (status === 'paid') {
+      paidCount += 1;
+      paidTotal += amount;
+    } else if (status === 'pending') {
+      pendingCount += 1;
+      outstandingTotal += amount;
+    } else {
+      unpaidCount += 1;
+      outstandingTotal += amount;
+    }
+  }
+  return {
+    paidCount,
+    pendingCount,
+    unpaidCount,
+    paidTotal,
+    outstandingTotal,
+    invoiceCount: invoices.length
+  };
+}
+
+function money(n: number) {
+  return `$${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
 }
 
 function buildDataSnapshot(params: {
@@ -338,6 +381,17 @@ export function ReportsWorkspace({
     return subscribeToInventory(setInventory);
   }, [permissions.canViewInventory]);
 
+  useEffect(() => {
+    if (!permissions.canViewReports) {
+      setDocuments([]);
+      return;
+    }
+    return subscribeToDocuments((docs) => {
+      setDocuments(docs);
+      setDocsError(null);
+    });
+  }, [permissions.canViewReports]);
+
   async function refreshDocuments() {
     try {
       const docs = await listAllDocuments();
@@ -363,22 +417,30 @@ export function ReportsWorkspace({
   }
 
   useEffect(() => {
-    void refreshDocuments();
     void refreshAudit();
   }, []);
 
-  const invoiceCount = documents.filter((d) => d.type === 'invoice').length;
-  const estimateCount = documents.filter((d) => d.type === 'estimate').length;
-  const profitByRep = buildProfitByRep(documents, orders);
-  const money = (n: number) =>
-    `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const salesPreview = buildDataSnapshot({
-    orders,
-    trucks,
-    customers,
-    inventory,
-    documents
-  }).sales;
+  const salesSnapshot = useMemo(
+    () =>
+      buildDataSnapshot({
+        orders,
+        trucks,
+        customers,
+        inventory,
+        documents
+      }).sales,
+    [orders, trucks, customers, inventory, documents]
+  );
+  const invoiceCount = salesSnapshot.invoiceCount;
+  const estimateCount = salesSnapshot.estimateCount;
+  const profitByRep = useMemo(
+    () => buildProfitByRep(documents, orders),
+    [documents, orders]
+  );
+  const paymentStatus = useMemo(() => buildPaymentStatus(documents), [documents]);
+  const topCustomers = salesSnapshot.byCustomer.slice(0, 15);
+  const topPlants = salesSnapshot.topPlantsByRevenue.slice(0, 15);
+  const byMonth = salesSnapshot.byMonth.slice(0, 12);
 
   if (!permissions.canViewReports) {
     return (
@@ -453,172 +515,259 @@ export function ReportsWorkspace({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[520px]">
-      <div className="bg-slate-900 text-white px-5 py-4 flex items-start gap-3">
-        <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-          <BarChart3 className="h-5 w-5 text-emerald-300" />
+      <div className="bg-slate-900 text-white px-5 py-4 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+            <BarChart3 className="h-5 w-5 text-emerald-300" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-black tracking-tight">Reports</h2>
+            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+              Solid numbers from invoices you saved under a customer. Ask AI below for narrative
+              insights.
+            </p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h2 className="text-lg font-black tracking-tight">Reports</h2>
-          <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-            Ask AI about loading, inventory, customers, and sales. Sales numbers come from invoices
-            you saved under a customer (Create Invoice → Save to Customer).
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void refreshDocuments();
+            void refreshAudit();
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-600 text-[11px] font-bold text-slate-200 hover:bg-slate-800 shrink-0"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
       </div>
 
-      <div className="p-5 space-y-4 flex-1 flex flex-col">
-        <div className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 leading-relaxed space-y-1">
-          <p>
-            <span className="font-bold">Sales data loaded:</span> {invoiceCount} invoice
-            {invoiceCount === 1 ? '' : 's'} · {estimateCount} estimate
-            {estimateCount === 1 ? '' : 's'} ·{' '}
-            <span className="font-bold">
-              {salesPreview.thisMonth.label}: ${salesPreview.thisMonth.salesTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            {' '}({salesPreview.thisMonth.invoiceCount} invoice
-            {salesPreview.thisMonth.invoiceCount === 1 ? '' : 's'}) · All-time invoices: $
-            {salesPreview.invoiceSalesTotal.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
+      <div className="p-5 space-y-5 flex-1 flex flex-col">
+        {docsError && (
+          <p className="text-xs text-red-700 font-semibold bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+            Could not load documents: {docsError}
           </p>
-          <p>
-            <span className="font-bold">Sales tip:</span> Only invoices saved under a customer count
-            (Create Invoice → Save to Customer). Estimates are not sales. Month uses the invoice date.
+        )}
+        {!docsError && invoiceCount === 0 && (
+          <p className="text-xs text-amber-800 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+            No saved invoices yet — totals stay $0 until you save at least one invoice under a
+            customer.
           </p>
-          {docsError && (
-            <p className="text-red-700 font-semibold">Could not load documents: {docsError}</p>
-          )}
-          {!docsError && invoiceCount === 0 && (
-            <p className="text-amber-800 font-semibold">
-              No saved invoices yet — “sales this month” will be $0 until you save at least one invoice.
-            </p>
-          )}
-        </div>
-
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-700" />
-            Suggested reports
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {SUGGESTED_REPORTS.map((suggestion) => (
-              <button
-                key={suggestion}
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  setQuestion(suggestion);
-                  void runReport(suggestion);
-                }}
-                className="text-left text-[11px] font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-emerald-50 text-gray-700 disabled:opacity-50 transition-colors"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-2">
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
-            Or type your own report request
-          </label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <textarea
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              rows={3}
-              placeholder='e.g. "Total sales this month" or "Sales by customer from invoices"'
-              className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-white resize-y min-h-[84px]"
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="sm:self-stretch inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50 shrink-0"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Running…
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Run report
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-
-        {error && (
-          <div className="flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <p className="leading-relaxed">{error}</p>
-          </div>
         )}
 
-        {(report || loading) && (
-          <div className="flex-1 border border-slate-200 rounded-2xl bg-slate-50/60 overflow-hidden flex flex-col min-h-[240px]">
-            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700/80">
+              {salesSnapshot.thisMonth.label}
+            </p>
+            <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
+              {money(salesSnapshot.thisMonth.salesTotal)}
+            </p>
+            <p className="text-[11px] text-emerald-900/70 mt-0.5">
+              {salesSnapshot.thisMonth.invoiceCount} invoice
+              {salesSnapshot.thisMonth.invoiceCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              {salesSnapshot.lastMonth.label}
+            </p>
+            <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
+              {money(salesSnapshot.lastMonth.salesTotal)}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {salesSnapshot.lastMonth.invoiceCount} invoice
+              {salesSnapshot.lastMonth.invoiceCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              All-time invoices
+            </p>
+            <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
+              {money(salesSnapshot.invoiceSalesTotal)}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {estimateCount} estimate
+              {estimateCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800/80">
+              Outstanding
+            </p>
+            <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
+              {money(paymentStatus.outstandingTotal)}
+            </p>
+            <p className="text-[11px] text-amber-900/70 mt-0.5">
+              {paymentStatus.unpaidCount} unpaid · {paymentStatus.pendingCount} awaiting payment
+            </p>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
+              <Users className="h-4 w-4 text-emerald-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  Report result
+                  Sales by customer
                 </p>
-                {lastQuestion && (
-                  <p className="text-xs font-semibold text-gray-800 truncate">{lastQuestion}</p>
-                )}
+                <p className="text-xs font-semibold text-gray-800">Top customers from saved invoices</p>
               </div>
-              {report && (
-                <button
-                  type="button"
-                  onClick={() => void handleCopy()}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 shrink-0"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy
-                    </>
-                  )}
-                </button>
-              )}
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <RefreshCw className="h-7 w-7 text-emerald-700 animate-spin mb-3" />
-                  <p className="text-sm font-bold text-gray-800">Analyzing nursery data…</p>
-                  <p className="text-xs text-gray-500 mt-1 max-w-sm">
-                    AI is reading your orders, trucks, inventory, and documents.
-                  </p>
-                </div>
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed">
-                  {report}
-                </pre>
-              )}
-            </div>
+            {topCustomers.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">No invoice sales yet.</p>
+            ) : (
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
+                      <th className="text-left font-bold px-4 py-2">Customer</th>
+                      <th className="text-right font-bold px-3 py-2">Invoices</th>
+                      <th className="text-right font-bold px-4 py-2">Sales</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {topCustomers.map((row) => (
+                      <tr key={row.customerName} className="bg-white">
+                        <td className="text-left font-bold text-gray-900 px-4 py-2">
+                          {row.customerName}
+                        </td>
+                        <td className="text-right font-mono text-gray-700 px-3 py-2">
+                          {row.invoiceCount}
+                        </td>
+                        <td className="text-right font-mono font-black text-emerald-800 px-4 py-2">
+                          {money(row.salesTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
 
-        {!report && !loading && !error && (
-          <div className="flex-1 rounded-2xl border border-dashed border-slate-200 bg-slate-50/40 flex items-center justify-center p-8 text-center">
-            <div>
-              <BarChart3 className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-bold text-gray-700">Pick a suggested report or ask your own</p>
-              <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto leading-relaxed">
-                Examples: low stock, unfinished loads, invoice totals, or customer activity.
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
+              <Sprout className="h-4 w-4 text-emerald-700 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                  Top plants by revenue
+                </p>
+                <p className="text-xs font-semibold text-gray-800">From invoice line items</p>
+              </div>
+            </div>
+            {topPlants.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">No plant sales on invoices yet.</p>
+            ) : (
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
+                      <th className="text-left font-bold px-4 py-2">Plant</th>
+                      <th className="text-right font-bold px-3 py-2">Qty</th>
+                      <th className="text-right font-bold px-4 py-2">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {topPlants.map((row) => (
+                      <tr key={`${row.plantName}||${row.containerSize}`} className="bg-white">
+                        <td className="text-left font-bold text-gray-900 px-4 py-2">
+                          {row.plantName}{' '}
+                          <span className="font-mono font-normal text-slate-500">
+                            ({row.containerSize})
+                          </span>
+                        </td>
+                        <td className="text-right font-mono text-gray-700 px-3 py-2">{row.qty}</td>
+                        <td className="text-right font-mono font-black text-emerald-800 px-4 py-2">
+                          {money(row.revenue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
+              <Calendar className="h-4 w-4 text-emerald-700 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                  Sales by month
+                </p>
+                <p className="text-xs font-semibold text-gray-800">By invoice date</p>
+              </div>
+            </div>
+            {byMonth.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">No monthly sales yet.</p>
+            ) : (
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
+                      <th className="text-left font-bold px-4 py-2">Month</th>
+                      <th className="text-right font-bold px-3 py-2">Invoices</th>
+                      <th className="text-right font-bold px-4 py-2">Sales</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {byMonth.map((row) => (
+                      <tr key={row.month} className="bg-white">
+                        <td className="text-left font-bold text-gray-900 px-4 py-2">{row.label}</td>
+                        <td className="text-right font-mono text-gray-700 px-3 py-2">
+                          {row.invoiceCount}
+                        </td>
+                        <td className="text-right font-mono font-black text-emerald-800 px-4 py-2">
+                          {money(row.salesTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
+              <DollarSign className="h-4 w-4 text-emerald-700 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                  Invoice payments
+                </p>
+                <p className="text-xs font-semibold text-gray-800">Paid vs still owed</p>
+              </div>
+            </div>
+            <div className="p-4 space-y-2.5 bg-slate-50/40">
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-emerald-100 px-3 py-2.5">
+                <span className="text-xs font-bold text-emerald-900">Paid</span>
+                <span className="text-xs font-mono font-black text-emerald-800">
+                  {paymentStatus.paidCount} · {money(paymentStatus.paidTotal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-amber-100 px-3 py-2.5">
+                <span className="text-xs font-bold text-amber-900">Pay link pending</span>
+                <span className="text-xs font-mono font-black text-amber-800">
+                  {paymentStatus.pendingCount}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2.5">
+                <span className="text-xs font-bold text-slate-700">Unpaid (no pay link)</span>
+                <span className="text-xs font-mono font-black text-slate-800">
+                  {paymentStatus.unpaidCount}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
+                Outstanding total above includes unpaid and pending invoices (
+                {money(paymentStatus.outstandingTotal)}).
               </p>
             </div>
           </div>
-        )}
+        </div>
 
         {permissions.canViewProfit && (
           <div className="border border-indigo-200 rounded-2xl overflow-hidden">
@@ -660,9 +809,7 @@ export function ReportsWorkspace({
                     {profitByRep.map((row) => (
                       <tr
                         key={row.rep}
-                        className={
-                          row.rep === NO_SALES_REP_LABEL ? 'bg-slate-50' : 'bg-white'
-                        }
+                        className={row.rep === NO_SALES_REP_LABEL ? 'bg-slate-50' : 'bg-white'}
                       >
                         <td
                           className={`text-left font-bold px-4 py-2 ${
@@ -697,9 +844,10 @@ export function ReportsWorkspace({
                   </tbody>
                 </table>
                 <p className="px-4 py-2.5 text-[10px] text-slate-500 leading-relaxed border-t border-slate-100 bg-slate-50/60">
-                  Names come from the Sales Rep saved on each invoice (or its order). Older invoices may
-                  still say &quot;Ikey&quot; / &quot;Nathan&quot; / &quot;Michael&quot; from the previous list — open those
-                  invoices and pick the current team member to update. &quot;No sales rep&quot; means none was set.
+                  Names come from the Sales Rep saved on each invoice (or its order). Older invoices
+                  may still say &quot;Ikey&quot; / &quot;Nathan&quot; / &quot;Michael&quot; from the previous list — open
+                  those invoices and pick the current team member to update. &quot;No sales rep&quot; means
+                  none was set.
                 </p>
               </div>
             )}
@@ -707,11 +855,137 @@ export function ReportsWorkspace({
         )}
 
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
+            <Sparkles className="h-4 w-4 text-emerald-700 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                Ask AI (optional)
+              </p>
+              <p className="text-xs font-semibold text-gray-800">
+                Narrative insights on top of the same saved data — not a replacement for the tables
+                above
+              </p>
+            </div>
+          </div>
+          <div className="p-4 space-y-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2">
+                Suggested questions
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SUGGESTED_REPORTS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      setQuestion(suggestion);
+                      void runReport(suggestion);
+                    }}
+                    className="text-left text-[11px] font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50 text-gray-700 disabled:opacity-50 transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                Or type your own
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  rows={2}
+                  placeholder='e.g. "What needs attention this week for loading and inventory?"'
+                  className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-white resize-y min-h-[72px]"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !question.trim()}
+                  className="sm:self-stretch inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50 shrink-0"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Running…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Ask AI
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {error && (
+              <div className="flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">{error}</p>
+              </div>
+            )}
+
+            {(report || loading) && (
+              <div className="border border-slate-200 rounded-2xl bg-white overflow-hidden flex flex-col min-h-[180px]">
+                <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                      AI response
+                    </p>
+                    {lastQuestion && (
+                      <p className="text-xs font-semibold text-gray-800 truncate">{lastQuestion}</p>
+                    )}
+                  </div>
+                  {report && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCopy()}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 shrink-0"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 max-h-80">
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <RefreshCw className="h-7 w-7 text-emerald-700 animate-spin mb-3" />
+                      <p className="text-sm font-bold text-gray-800">Analyzing nursery data…</p>
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed">
+                      {report}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
             <div className="flex items-center gap-2 min-w-0">
               <History className="h-4 w-4 text-emerald-700 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Recent activity</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                  Recent activity
+                </p>
                 <p className="text-xs font-semibold text-gray-800 truncate">Key saves and conversions</p>
               </div>
             </div>
@@ -736,11 +1010,16 @@ export function ReportsWorkspace({
             ) : (
               auditEvents.map((event) => (
                 <div key={event.id || `${event.action}-${event.createdAt}`} className="px-4 py-2.5">
-                  <p className="text-xs font-semibold text-gray-900">{event.summary}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5 font-mono">
-                    {event.action} · {new Date(event.createdAt).toLocaleString()}
-                    {event.actorEmail ? ` · ${event.actorEmail}` : ''}
-                  </p>
+                  <div className="flex items-start gap-2">
+                    <FileText className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-900">{event.summary}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5 font-mono">
+                        {event.action} · {new Date(event.createdAt).toLocaleString()}
+                        {event.actorEmail ? ` · ${event.actorEmail}` : ''}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ))
             )}

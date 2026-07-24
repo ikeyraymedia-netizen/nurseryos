@@ -25,7 +25,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   onClose,
   truck,
   orders = [],
-  containerWeights = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
   nurseryLogoSrc = null,
@@ -33,7 +32,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const truckName = String(truck?.name || 'Truck');
   const orderIds = Array.isArray(truck?.orderIds) ? truck.orderIds : [];
-  const safeWeights = Array.isArray(containerWeights) ? containerWeights : [];
   const safeOrders = Array.isArray(orders) ? orders : [];
 
   // Sort orders by the designated loading sequence on the truck
@@ -121,14 +119,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   // Compute Cargo Totals dynamically for the active scope of the BOL (Consolidated vs Individual)
   let totalPlants = 0;
-  let totalLoaded = 0;
-  let totalWeight = 0;
 
   currentBOLOrders.forEach((order) => {
-    totalWeight += order.totalWeightLbs || 0;
     (order.items || []).forEach((item) => {
       totalPlants += item.quantity || 0;
-      totalLoaded += item.loadedQuantity || 0;
     });
   });
 
@@ -137,8 +131,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     plantName: string;
     containerSize: string;
     totalQty: number;
-    loadedQty: number;
-    estimatedWeightLbs: number;
   }
 
   const bolConsolidatedMap = new Map<string, BOLConsolidatedItem>();
@@ -147,34 +139,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     currentBOLOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
         const key = `${(item.plantName || '').toLowerCase()}::${(item.containerSize || '').toLowerCase()}`;
-        
-        // Look up weight for this container size
-        const sizeLower = (item.containerSize || '').toLowerCase();
-        const weightObj = safeWeights.find((w) => {
-          if (w.id === item.containerSize || w.name === item.containerSize) return true;
-          const aliases = String(w.label || '')
-            .split(',')
-            .map((l) => l.trim().toLowerCase())
-            .filter(Boolean);
-          return aliases.includes(sizeLower);
-        });
-        const itemWeight = weightObj ? weightObj.weightLbs : 5; // Fallback estimate
-        const itemTotalWeight = (item.quantity || 0) * itemWeight;
 
         if (!bolConsolidatedMap.has(key)) {
           bolConsolidatedMap.set(key, {
             plantName: item.plantName || 'Plant',
             containerSize: item.containerSize || '',
             totalQty: 0,
-            loadedQty: 0,
-            estimatedWeightLbs: 0,
           });
         }
 
         const existing = bolConsolidatedMap.get(key)!;
         existing.totalQty += item.quantity || 0;
-        existing.loadedQty += item.loadedQuantity || 0;
-        existing.estimatedWeightLbs += itemTotalWeight;
       });
     });
   } catch (err) {
@@ -334,18 +309,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       drawSectionTitle('Cargo Manifest');
       ensureSpace(26);
       const xPlant = margin + 6;
-      const xSize = margin + 280;
-      const xOrdered = margin + 350;
-      const xLoaded = margin + 410;
-      const xWeight = margin + 470;
+      const xSize = margin + 330;
+      const xQty = margin + 440;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(80, 80, 80);
       pdf.text('Plant Name', xPlant, y);
       pdf.text('Size', xSize, y);
-      pdf.text('Ordered', xOrdered, y);
-      pdf.text('Loaded', xLoaded, y);
-      pdf.text('Weight (lbs)', xWeight, y);
+      pdf.text('Quantity', xQty, y);
       y += 8;
       pdf.setDrawColor(185, 185, 185);
       pdf.line(margin, y, pageWidth - margin, y);
@@ -359,9 +330,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         const plant = item.plantName.length > 42 ? `${item.plantName.slice(0, 42)}...` : item.plantName;
         pdf.text(plant, xPlant, y);
         pdf.text(item.containerSize, xSize, y);
-        pdf.text(String(item.totalQty), xOrdered, y);
-        pdf.text(String(item.loadedQty), xLoaded, y);
-        pdf.text(item.estimatedWeightLbs.toLocaleString(), xWeight, y);
+        pdf.text(String(item.totalQty), xQty, y);
         y += 12;
       });
       ensureSpace(16);
@@ -370,11 +339,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(10);
       pdf.setTextColor(18, 65, 46);
-      pdf.text(
-        `Totals: ${totalPlants.toLocaleString()} plants   |   Loaded: ${totalLoaded.toLocaleString()}   |   Weight: ${totalWeight.toLocaleString()} lbs`,
-        margin + 4,
-        y
-      );
+      pdf.text(`Total: ${totalPlants.toLocaleString()} plants`, margin + 4, y);
       y += 12;
 
       drawSectionTitle('Special Instructions');
@@ -788,9 +753,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                           <p className="text-xs font-black text-gray-950 truncate">
                             {order.customerName}
                           </p>
-                          <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-gray-200/50">
+                          <div className="text-[10px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-gray-200/50">
                             <span>{totalItems} plants</span>
-                            <span>{order.totalWeightLbs.toLocaleString()} lbs</span>
                           </div>
                         </div>
                       );
@@ -828,9 +792,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         <span className="font-bold text-gray-500">Point of Contact:</span> {receiverContact}
                       </p>
                     )}
-                    <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono mt-3 pt-2.5 border-t border-gray-200/50">
+                    <div className="text-[10px] text-gray-500 font-mono mt-3 pt-2.5 border-t border-gray-200/50">
                       <span>Shipment Cargo: {totalPlants} plants</span>
-                      <span>Weight Lbs: {totalWeight.toLocaleString()} lbs</span>
                     </div>
                   </div>
                 </div>
@@ -855,9 +818,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-bold font-mono uppercase tracking-wider">
                       <th className="pb-2">Plant Variety Name</th>
                       <th className="pb-2 w-28">Container Size</th>
-                      <th className="pb-2 text-center w-20">Ordered</th>
-                      <th className="pb-2 text-center w-20">Loaded</th>
-                      <th className="pb-2 text-right w-24">Est. Weight</th>
+                      <th className="pb-2 text-center w-24">Quantity</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -868,12 +829,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                       >
                         <td className="py-2.5 font-bold text-gray-950">{item.plantName}</td>
                         <td className="py-2.5 font-mono text-gray-500">{item.containerSize}</td>
-                        <td className="py-2.5 text-center font-mono">{item.totalQty}</td>
-                        <td className="py-2.5 text-center font-mono font-black text-emerald-950">
-                          {item.loadedQty}
-                        </td>
-                        <td className="py-2.5 text-right font-mono text-gray-500">
-                          {item.estimatedWeightLbs.toLocaleString()} lbs
+                        <td className="py-2.5 text-center font-mono font-black text-gray-950">
+                          {item.totalQty}
                         </td>
                       </tr>
                     ))}
@@ -882,8 +839,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         {selectedBOLType === 'consolidated' ? 'GRAND TOTAL CARGO' : 'SHIPMENT TOTAL CARGO'}
                       </td>
                       <td className="py-3 text-center">{totalPlants}</td>
-                      <td className="py-3 text-center text-emerald-900 font-black">{totalLoaded}</td>
-                      <td className="py-3 text-right">{totalWeight.toLocaleString()} lbs</td>
                     </tr>
                   </tbody>
                 </table>

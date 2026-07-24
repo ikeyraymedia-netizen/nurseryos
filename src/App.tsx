@@ -1061,6 +1061,7 @@ function NurseryApp({
           ) : selectedTruckId === 'new' && permissions.canBuildTrucks ? (
             <TruckBuilder
               orders={dynamicOrders}
+              tenantId={tenant.id}
               onCancel={() => {
                 setSelectedTruckId(null);
                 setIsEditingTruck(false);
@@ -1075,6 +1076,7 @@ function NurseryApp({
             <TruckBuilder
               truckToEdit={activeTruck}
               orders={dynamicOrders}
+              tenantId={tenant.id}
               onCancel={() => setIsEditingTruck(false)}
               onSuccess={() => {
                 setIsEditingTruck(false);

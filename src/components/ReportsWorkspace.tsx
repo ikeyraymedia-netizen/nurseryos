@@ -160,6 +160,144 @@ function money(n: number) {
   })}`;
 }
 
+function invoiceDate(doc: CustomerDocument): Date | null {
+  const raw = (doc.documentDate || doc.createdAt || '').trim();
+  if (!raw) return null;
+  // Prefer YYYY-MM-DD as local calendar date
+  const isoDay = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDay) {
+    const dt = new Date(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3]));
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function startOfWeekSunday(d: Date): Date {
+  const day = startOfLocalDay(d);
+  day.setDate(day.getDate() - day.getDay());
+  return day;
+}
+
+function startOfQuarter(d: Date): Date {
+  const q = Math.floor(d.getMonth() / 3) * 3;
+  return new Date(d.getFullYear(), q, 1);
+}
+
+function resolveInvoiceRep(
+  inv: CustomerDocument,
+  ownerByOrderId: Map<string, string>
+): string {
+  return (
+    inv.owner?.trim() ||
+    (inv.orderId ? ownerByOrderId.get(inv.orderId)?.trim() : undefined) ||
+    NO_SALES_REP_LABEL
+  );
+}
+
+interface PeriodSales {
+  label: string;
+  salesTotal: number;
+  invoiceCount: number;
+}
+
+interface RepYearSales {
+  rep: string;
+  salesTotal: number;
+  invoiceCount: number;
+}
+
+/** Calendar year / quarter / month / week sales + sales-rep YTD from invoices. */
+function buildPeriodSalesOverview(
+  documents: CustomerDocument[],
+  orders: CustomerOrder[],
+  now = new Date()
+): {
+  year: PeriodSales;
+  quarter: PeriodSales;
+  month: PeriodSales;
+  week: PeriodSales;
+  repYear: RepYearSales[];
+} {
+  const invoices = documents.filter((d) => d.type === 'invoice');
+  const ownerByOrderId = new Map<string, string>();
+  for (const o of orders) {
+    if (o.owner) ownerByOrderId.set(o.id, o.owner);
+  }
+
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const quarterStart = startOfQuarter(now);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const weekStart = startOfWeekSunday(now);
+
+  const quarterNum = Math.floor(now.getMonth() / 3) + 1;
+
+  const year: PeriodSales = {
+    label: `Sales ${now.getFullYear()}`,
+    salesTotal: 0,
+    invoiceCount: 0
+  };
+  const quarter: PeriodSales = {
+    label: `Q${quarterNum} ${now.getFullYear()}`,
+    salesTotal: 0,
+    invoiceCount: 0
+  };
+  const month: PeriodSales = {
+    label: monthLabel(
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    ),
+    salesTotal: 0,
+    invoiceCount: 0
+  };
+  const week: PeriodSales = {
+    label: 'This week',
+    salesTotal: 0,
+    invoiceCount: 0
+  };
+  const repYearMap = new Map<string, RepYearSales>();
+
+  for (const inv of invoices) {
+    const dt = invoiceDate(inv);
+    if (!dt) continue;
+    const day = startOfLocalDay(dt);
+    const amount = inv.grandTotal || 0;
+
+    if (day >= yearStart) {
+      year.salesTotal += amount;
+      year.invoiceCount += 1;
+      const rep = resolveInvoiceRep(inv, ownerByOrderId);
+      const row = repYearMap.get(rep) || { rep, salesTotal: 0, invoiceCount: 0 };
+      row.salesTotal += amount;
+      row.invoiceCount += 1;
+      repYearMap.set(rep, row);
+    }
+    if (day >= quarterStart) {
+      quarter.salesTotal += amount;
+      quarter.invoiceCount += 1;
+    }
+    if (day >= monthStart) {
+      month.salesTotal += amount;
+      month.invoiceCount += 1;
+    }
+    if (day >= weekStart) {
+      week.salesTotal += amount;
+      week.invoiceCount += 1;
+    }
+  }
+
+  const repYear = [...repYearMap.values()].sort((a, b) => {
+    if (a.rep === NO_SALES_REP_LABEL && b.rep !== NO_SALES_REP_LABEL) return 1;
+    if (b.rep === NO_SALES_REP_LABEL && a.rep !== NO_SALES_REP_LABEL) return -1;
+    return b.salesTotal - a.salesTotal;
+  });
+
+  return { year, quarter, month, week, repYear };
+}
+
 function buildDataSnapshot(params: {
   orders: CustomerOrder[];
   trucks: Truck[];
@@ -438,6 +576,10 @@ export function ReportsWorkspace({
     [documents, orders]
   );
   const paymentStatus = useMemo(() => buildPaymentStatus(documents), [documents]);
+  const periodSales = useMemo(
+    () => buildPeriodSalesOverview(documents, orders),
+    [documents, orders]
+  );
   const topCustomers = salesSnapshot.byCustomer.slice(0, 15);
   const topPlants = salesSnapshot.topPlantsByRevenue.slice(0, 15);
   const byMonth = salesSnapshot.byMonth.slice(0, 12);
@@ -557,51 +699,123 @@ export function ReportsWorkspace({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700/80">
-              {salesSnapshot.thisMonth.label}
+              Sales for the year
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
-              {money(salesSnapshot.thisMonth.salesTotal)}
+              {money(periodSales.year.salesTotal)}
             </p>
             <p className="text-[11px] text-emerald-900/70 mt-0.5">
-              {salesSnapshot.thisMonth.invoiceCount} invoice
-              {salesSnapshot.thisMonth.invoiceCount === 1 ? '' : 's'}
+              {periodSales.year.label} · {periodSales.year.invoiceCount} invoice
+              {periodSales.year.invoiceCount === 1 ? '' : 's'}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              {salesSnapshot.lastMonth.label}
+              Sales for the quarter
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
-              {money(salesSnapshot.lastMonth.salesTotal)}
+              {money(periodSales.quarter.salesTotal)}
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {salesSnapshot.lastMonth.invoiceCount} invoice
-              {salesSnapshot.lastMonth.invoiceCount === 1 ? '' : 's'}
+              {periodSales.quarter.label} · {periodSales.quarter.invoiceCount} invoice
+              {periodSales.quarter.invoiceCount === 1 ? '' : 's'}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              All-time invoices
+              Sales for the month
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
-              {money(salesSnapshot.invoiceSalesTotal)}
+              {money(periodSales.month.salesTotal)}
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {estimateCount} estimate
-              {estimateCount === 1 ? '' : 's'}
+              {periodSales.month.label} · {periodSales.month.invoiceCount} invoice
+              {periodSales.month.invoiceCount === 1 ? '' : 's'}
             </p>
           </div>
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3.5 py-3">
+          <div className="rounded-2xl border border-teal-200 bg-teal-50/50 px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800/80">
+              Sales for the week
+            </p>
+            <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
+              {money(periodSales.week.salesTotal)}
+            </p>
+            <p className="text-[11px] text-teal-900/70 mt-0.5">
+              Sun–today · {periodSales.week.invoiceCount} invoice
+              {periodSales.week.invoiceCount === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+
+        <div className="border border-indigo-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-indigo-200 bg-indigo-50/60">
+            <Users className="h-4 w-4 text-indigo-700 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">
+                Sales rep · year to date
+              </p>
+              <p className="text-xs font-semibold text-gray-800">
+                Invoice totals by Sales Rep for {new Date().getFullYear()}
+              </p>
+            </div>
+          </div>
+          {periodSales.repYear.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-gray-500">
+              No invoices dated this year yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto max-h-56 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
+                    <th className="text-left font-bold px-4 py-2">Sales Rep</th>
+                    <th className="text-right font-bold px-3 py-2">Invoices</th>
+                    <th className="text-right font-bold px-4 py-2">Sales</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {periodSales.repYear.map((row) => (
+                    <tr
+                      key={row.rep}
+                      className={row.rep === NO_SALES_REP_LABEL ? 'bg-slate-50' : 'bg-white'}
+                    >
+                      <td
+                        className={`text-left font-bold px-4 py-2 ${
+                          row.rep === NO_SALES_REP_LABEL
+                            ? 'text-slate-500 italic'
+                            : 'text-gray-900'
+                        }`}
+                      >
+                        {row.rep}
+                      </td>
+                      <td className="text-right font-mono text-gray-700 px-3 py-2">
+                        {row.invoiceCount}
+                      </td>
+                      <td className="text-right font-mono font-black text-indigo-800 px-4 py-2">
+                        {money(row.salesTotal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3.5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800/80">
               Outstanding
             </p>
-            <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
-              {money(paymentStatus.outstandingTotal)}
-            </p>
             <p className="text-[11px] text-amber-900/70 mt-0.5">
-              {paymentStatus.unpaidCount} unpaid · {paymentStatus.pendingCount} awaiting payment
+              {paymentStatus.unpaidCount} unpaid · {paymentStatus.pendingCount} awaiting payment ·{' '}
+              {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} all-time · {estimateCount}{' '}
+              estimate{estimateCount === 1 ? '' : 's'}
             </p>
           </div>
+          <p className="text-xl font-black text-gray-900 font-mono tabular-nums shrink-0">
+            {money(paymentStatus.outstandingTotal)}
+          </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-4">

@@ -162,6 +162,7 @@ export type MemberRoleName =
   | 'admin'
   | 'supervisor'
   | 'office'
+  | 'sales'
   | 'loader'
   | 'inventory'
   | 'field';

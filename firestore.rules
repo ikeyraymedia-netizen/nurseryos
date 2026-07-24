@@ -53,12 +53,16 @@ service cloud.firestore {
       return hasMemberRole(tenantId, 'office');
     }
 
+    function isSales(tenantId) {
+      return hasMemberRole(tenantId, 'sales');
+    }
+
     function canReadOps(tenantId) {
-      return isAdminOrOwner(tenantId) || isLoader(tenantId) || isSupervisor(tenantId);
+      return isAdminOrOwner(tenantId) || isLoader(tenantId) || isSupervisor(tenantId) || isSales(tenantId);
     }
 
     function canReadReportsData(tenantId) {
-      // Office needs order/truck reads for reports without yard UI access.
+      // Office/sales need order/truck reads for reports without full yard rights.
       return canReadOps(tenantId) || isOffice(tenantId);
     }
 
@@ -67,7 +71,7 @@ service cloud.firestore {
     }
 
     function canManageCustomersAndDocs(tenantId) {
-      return canWriteOps(tenantId) || isOffice(tenantId);
+      return canWriteOps(tenantId) || isOffice(tenantId) || isSales(tenantId);
     }
 
     function canWriteLoadingProgress(tenantId) {
@@ -75,7 +79,7 @@ service cloud.firestore {
     }
 
     function canEditOrderLines(tenantId) {
-      return isAdminOrOwner(tenantId) || isSupervisor(tenantId) || isLoader(tenantId);
+      return isAdminOrOwner(tenantId) || isSupervisor(tenantId) || isLoader(tenantId) || isSales(tenantId);
     }
 
     function isPlatformAdmin() {
@@ -153,13 +157,14 @@ service cloud.firestore {
 
       match /orders/{docId} {
         allow read: if canReadReportsData(tenantId);
-        allow create, delete: if canWriteOps(tenantId);
+        allow create: if canWriteOps(tenantId) || isSales(tenantId);
+        allow delete: if canWriteOps(tenantId);
         allow update: if canWriteOps(tenantId) || canEditOrderLines(tenantId);
       }
 
       match /trucks/{docId} {
         allow read: if canReadReportsData(tenantId);
-        allow create: if canWriteOps(tenantId) || isSupervisor(tenantId);
+        allow create: if canWriteOps(tenantId) || isSupervisor(tenantId) || isSales(tenantId);
         allow delete: if canWriteOps(tenantId);
         allow update: if canWriteOps(tenantId) || canEditOrderLines(tenantId);
       }
@@ -170,7 +175,7 @@ service cloud.firestore {
       }
 
       match /inventory/{docId} {
-        allow read: if isAdminOrOwner(tenantId) || isField(tenantId) || isLoader(tenantId) || isSupervisor(tenantId);
+        allow read: if isAdminOrOwner(tenantId) || isField(tenantId) || isLoader(tenantId) || isSupervisor(tenantId) || isSales(tenantId);
         allow create, delete: if isAdminOrOwner(tenantId) || isField(tenantId) || isSupervisor(tenantId);
         allow update: if isAdminOrOwner(tenantId) || isField(tenantId) || isSupervisor(tenantId)
           || (
@@ -195,7 +200,7 @@ service cloud.firestore {
       }
 
       match /auditLog/{eventId} {
-        allow read: if isAdminOrOwner(tenantId) || isOffice(tenantId);
+        allow read: if isAdminOrOwner(tenantId) || isOffice(tenantId) || isSales(tenantId);
         allow create: if isMember(tenantId);
         allow update, delete: if false;
       }

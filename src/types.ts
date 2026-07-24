@@ -1,4 +1,4 @@
-export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'office' | 'loader' | 'inventory';
+export type MemberRole = 'owner' | 'admin' | 'supervisor' | 'office' | 'sales' | 'loader' | 'inventory';
 
 /** Workspace / feature modules toggled per nursery in the seller console. */
 export type TenantModuleId =

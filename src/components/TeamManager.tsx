@@ -819,8 +819,9 @@ export function TeamManager({
             <p className="text-xs font-bold uppercase text-emerald-800 mb-2">Invite a team member</p>
             <p className="text-xs text-emerald-900/80 mb-3">
               Select one or more roles for the invite. Office gets customers, invoices, and reports
-              (no yard tabs). Supervisor runs trucks without pricing. Inventory is plant stock only.
-              Example: Inventory + Loader for stock plus truck checkoff.
+              (no yard tabs). Sales gets customers, orders, trucks, and invoices, with inventory
+              view-only and no tasks. Supervisor runs trucks without pricing. Inventory is plant stock
+              only. Example: Inventory + Loader for stock plus truck checkoff.
             </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
               {ASSIGNABLE.map((role) => {

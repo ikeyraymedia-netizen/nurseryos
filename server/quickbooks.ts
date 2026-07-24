@@ -121,7 +121,7 @@ async function assertAdminOrOwner(tenantId: string, uid: string) {
 
 async function assertCanPushInvoice(tenantId: string, uid: string) {
   const roles = await getMemberRoles(tenantId, uid);
-  if (!hasAnyRole(roles, ['owner', 'admin', 'office'])) {
+  if (!hasAnyRole(roles, ['owner', 'admin', 'office', 'sales'])) {
     throw Object.assign(new Error('You do not have permission to sync invoices to QuickBooks.'), {
       status: 403
     });

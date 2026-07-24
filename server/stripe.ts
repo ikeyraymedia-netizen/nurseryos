@@ -82,7 +82,7 @@ async function assertAdminOrOwner(tenantId: string, uid: string) {
 
 async function assertCanCreatePayLink(tenantId: string, uid: string) {
   const roles = await getMemberRoles(tenantId, uid);
-  if (!hasAnyRole(roles, ['owner', 'admin', 'office'])) {
+  if (!hasAnyRole(roles, ['owner', 'admin', 'office', 'sales'])) {
     throw Object.assign(new Error('You do not have permission to create payment links.'), {
       status: 403
     });

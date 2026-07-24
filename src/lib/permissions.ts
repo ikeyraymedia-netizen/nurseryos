@@ -41,6 +41,7 @@ const ROLE_RANK: Record<MemberRole, number> = {
   admin: 4,
   supervisor: 3,
   office: 3,
+  sales: 3,
   loader: 2,
   inventory: 1
 };
@@ -50,6 +51,7 @@ const ALL_ROLES: MemberRole[] = [
   'admin',
   'supervisor',
   'office',
+  'sales',
   'loader',
   'inventory'
 ];
@@ -58,6 +60,7 @@ const ASSIGNABLE_ROLES: Exclude<MemberRole, 'owner'>[] = [
   'admin',
   'supervisor',
   'office',
+  'sales',
   'loader',
   'inventory'
 ];
@@ -211,6 +214,38 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: false,
         canCompleteTasks: false
       };
+    case 'sales':
+      // Sales: customers, orders, trucks, invoices/pricing, reports; inventory view-only; no tasks.
+      return {
+        canViewOrders: true,
+        canViewTrucks: true,
+        canCheckOffLoading: false,
+        canEditOrders: true,
+        canDeleteOrders: false,
+        canBuildTrucks: true,
+        canEditTrucks: true,
+        canDeleteTrucks: false,
+        canUploadOrders: true,
+        canViewInvoices: true,
+        canViewPricing: true,
+        canViewCustomers: true,
+        canEditCustomers: true,
+        canViewBOL: true,
+        canUseVendors: true,
+        canViewProfit: true,
+        canEditCost: false,
+        canManageStripe: false,
+        canCollectPayments: true,
+        canEditWeights: false,
+        canViewInventory: true,
+        canEditInventory: false,
+        canUploadInventory: false,
+        canManageTeam: false,
+        canViewReports: true,
+        canViewTasks: false,
+        canAssignTasks: false,
+        canCompleteTasks: false
+      };
     case 'loader':
       return {
         canViewOrders: true,
@@ -307,6 +342,8 @@ export function roleLabel(role: MemberRole): string {
       return 'Supervisor';
     case 'office':
       return 'Office';
+    case 'sales':
+      return 'Sales';
     case 'loader':
       return 'Loader';
     case 'inventory':

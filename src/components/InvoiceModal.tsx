@@ -39,7 +39,8 @@ import {
   subscribeToDocument
 } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
-import { DEFAULT_OWNERS } from '../data/owners';
+import { DEFAULT_VENDORS } from '../data/vendors';
+import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
 import {
   allocateFreight,
@@ -89,6 +90,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   canCollectPayments = false
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
+  const salesRepOptions = useSalesRepOptions(tenantId);
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
     existingDocument?.type || initialDocumentType
   );
@@ -1498,17 +1500,17 @@ Thank you for choosing ${nurseryName}!
                 className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
               >
                 <option value="">Unassigned</option>
-                {DEFAULT_OWNERS.map((name) => (
+                {salesRepOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
                 ))}
-                {salesRep && !DEFAULT_OWNERS.includes(salesRep) && (
+                {salesRep && !salesRepOptions.includes(salesRep) && (
                   <option value={salesRep}>{salesRep}</option>
                 )}
               </select>
               <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-                Credits this invoice&apos;s profit to the rep in Reports.
+                Credits this invoice&apos;s profit to the rep in Reports. Options are team members with the Sales role.
               </p>
             </div>
 

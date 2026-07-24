@@ -35,7 +35,7 @@ import { notifyInventorySyncIssue } from '../lib/inventory';
 import { orderNeedsInvoiceSave } from '../lib/invoicing';
 import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
-import { DEFAULT_OWNERS } from '../data/owners';
+import { useSalesRepOptions } from '../lib/salesReps';
 import { InvoiceModal } from './InvoiceModal';
 
 interface LoaderWorkspaceProps {
@@ -59,6 +59,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   nurseryAddress = '',
   tenantId
 }) => {
+  const salesRepOptions = useSalesRepOptions(tenantId);
   const [activeTab, setActiveTab] = useState<'checklist' | 'plaintext'>('checklist');
   const [copied, setCopied] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -621,17 +622,18 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
           >
             <option value="">Unassigned</option>
-            {DEFAULT_OWNERS.map((name) => (
+            {salesRepOptions.map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>
             ))}
-            {order.owner && !DEFAULT_OWNERS.includes(order.owner) && (
+            {order.owner && !salesRepOptions.includes(order.owner) && (
               <option value={order.owner}>{order.owner}</option>
             )}
           </select>
           <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-            Credits this order&apos;s invoice profit to the selected rep in Reports.
+            Credits this order&apos;s invoice profit to the selected rep in Reports. Options are team
+            members with the Sales role.
           </p>
         </div>
       )}

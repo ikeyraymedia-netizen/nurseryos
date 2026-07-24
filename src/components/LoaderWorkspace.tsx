@@ -565,6 +565,33 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         </div>
       )}
 
+      {(permissions.canEditOrders || permissions.canViewInvoices) && (
+        <div className="bg-white border border-emerald-200 rounded-xl p-3 mb-5 shadow-sm">
+          <label className="block text-[10px] font-bold text-emerald-900 uppercase mb-1">
+            Sales Rep
+          </label>
+          <select
+            value={order.owner || ''}
+            onChange={(e) => handleAssignOwner(e.target.value)}
+            className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white"
+          >
+            <option value="">Select sales rep...</option>
+            {salesRepOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            {order.owner && !salesRepOptions.includes(order.owner) && (
+              <option value={order.owner}>{order.owner}</option>
+            )}
+          </select>
+          <p className="text-[10px] text-gray-500 mt-1 leading-snug">
+            Credits this order for tracking and reports. Works even if the order is never put on a
+            truck.
+          </p>
+        </div>
+      )}
+
       {/* Staging Location Card */}
       <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center space-x-3 shrink-0">
@@ -610,33 +637,6 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               </option>
             ))}
           </select>
-        </div>
-      )}
-
-      {permissions.canEditOrders && (
-        <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5">
-          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
-            Sales Rep (whose invoice)
-          </label>
-          <select
-            value={order.owner || ''}
-            onChange={(e) => handleAssignOwner(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-          >
-            <option value="">Unassigned</option>
-            {salesRepOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-            {order.owner && !salesRepOptions.includes(order.owner) && (
-              <option value={order.owner}>{order.owner}</option>
-            )}
-          </select>
-          <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-            Credits this order&apos;s invoice profit to the selected rep in Reports. Options are
-            Owners, Admins, and team members with the Sales role.
-          </p>
         </div>
       )}
 

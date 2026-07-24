@@ -4,11 +4,12 @@ import { addTruck, updateTruck } from '../lib/db';
 import { X, Check, Save, Truck as TruckIcon, HelpCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
 import { toDateKey } from '../lib/dates';
-import { DEFAULT_OWNERS } from '../data/owners';
+import { useSalesRepOptions } from '../lib/salesReps';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
   orders: CustomerOrder[];
+  tenantId?: string;
   onCancel: () => void;
   onSuccess: (truckId: string) => void;
 }
@@ -16,9 +17,11 @@ interface TruckBuilderProps {
 export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   truckToEdit,
   orders,
+  tenantId,
   onCancel,
   onSuccess
 }) => {
+  const ownerOptions = useSalesRepOptions(tenantId);
   const [name, setName] = useState('');
   const [carrier, setCarrier] = useState('');
   const [truckType, setTruckType] = useState('');
@@ -187,7 +190,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Whose Truck *
+                Sales Rep *
               </label>
               <select
                 value={owner}
@@ -195,16 +198,19 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
                 required
               >
-                <option value="">Select Owner...</option>
-                {DEFAULT_OWNERS.map((name) => (
+                <option value="">Select sales rep...</option>
+                {ownerOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
                 ))}
-                {owner && !DEFAULT_OWNERS.includes(owner) && (
+                {owner && !ownerOptions.includes(owner) && (
                   <option value={owner}>{owner}</option>
                 )}
               </select>
+              <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+                Team members with Owner, Admin, or Sales roles.
+              </p>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">

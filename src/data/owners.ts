@@ -1,5 +1,5 @@
 /**
- * Truck "whose truck" labels (Truck Builder). Order/invoice Sales Rep options
- * come from team members with the Sales role — see `lib/salesReps.ts`.
+ * @deprecated Prefer `useSalesRepOptions` / `lib/salesReps.ts` for Sales Rep
+ * dropdowns on trucks, orders, and invoices.
  */
-export const DEFAULT_OWNERS: string[] = ['Ikey', 'Nathan', 'Michael'];
+export const DEFAULT_OWNERS: string[] = [];

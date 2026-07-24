@@ -201,7 +201,8 @@ export interface Truck {
   dateCreated: string; // ISO string
   status: 'pending' | 'loading' | 'completed';
   orderIds: string[]; // List of order IDs assigned to this truck
-  owner?: string; // Who the truck is for: "Ikey" | "Nathan" | "Michael"
+  owner?: string; // Sales rep this truck is credited to
+
   loadingDate?: string; // The date when the truck is scheduled to be loaded
 }
 

@@ -218,6 +218,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                     <Calendar className="h-3.5 w-3.5 mr-1 text-gray-400" />
                     {formatDate(order.dateCreated)}
                   </span>
+                  {order.owner && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                      Sales: {order.owner}
+                    </span>
+                  )}
                 </div>
 
                 {/* Staging Location Badge */}

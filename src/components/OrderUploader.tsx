@@ -14,6 +14,7 @@ import { getDefaultPriceForSize } from '../lib/pricing';
 import { logAuditEvent } from '../lib/audit';
 import { AppPermissions } from '../lib/permissions';
 import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
+import { useSalesRepOptions } from '../lib/salesReps';
 import { ContainerWeight, Customer, InventoryPlant, PlantOrderItem, CustomerDocumentType } from '../types';
 
 interface OrderUploaderProps {
@@ -49,6 +50,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   onCreateDocument,
   onEstimateSaved
 }) => {
+  const salesRepOptions = useSalesRepOptions(tenantId);
   const [isDragging, setIsDragging] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>('file');
   const [pastedText, setPastedText] = useState('');
@@ -60,6 +62,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [pendingDraft, setPendingDraft] = useState<ParsedOrderDraft | null>(null);
   const [uploadKind, setUploadKind] = useState<UploadKind | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [salesRep, setSalesRep] = useState('');
   const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
   const [savedEstimateCustomerId, setSavedEstimateCustomerId] = useState<string | null>(null);
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
@@ -91,6 +94,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setPendingDraft(null);
     setUploadKind(null);
     setSelectedCustomerId('');
+    setSalesRep('');
     setLinkedInventoryByItemId({});
   };
 
@@ -317,6 +321,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           billToName: linked.billingName || linked.name,
           billToAddress: linked.billingAddress || linked.shippingAddress || undefined,
           customerEmail: linked.contactEmail || undefined,
+          owner: salesRep.trim() || undefined,
           items: lineItems,
           subtotal,
           salesTax,
@@ -342,7 +347,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         items: pendingDraft.items,
         originalText: pendingDraft.originalText,
         status: 'pending',
-        totalWeightLbs: pendingDraft.totalWeightLbs
+        totalWeightLbs: pendingDraft.totalWeightLbs,
+        owner: salesRep.trim() || undefined
       });
 
       await logAuditEvent({
@@ -727,6 +733,29 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">
+              Sales Rep
+            </label>
+            <select
+              value={salesRep}
+              onChange={(e) => setSalesRep(e.target.value)}
+              disabled={saving}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white disabled:bg-gray-100"
+            >
+              <option value="">Select sales rep...</option>
+              {salesRepOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-500 mt-1 leading-snug">
+              Track who this {uploadKind === 'estimate' ? 'estimate' : 'order'} belongs to — no truck
+              required.
+            </p>
           </div>
 
           {uploadKind === 'order' && (

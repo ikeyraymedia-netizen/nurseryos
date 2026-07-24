@@ -238,6 +238,68 @@ function useLivePaymentToasts(params: {
   };
 }
 
+/**
+ * Background safety net: when Stripe webhooks are delayed/missing, pull payment
+ * status for any pending invoices with a pay link — without needing to open
+ * Customers / InvoiceModal. Live toasts still fire once Firestore flips to paid.
+ */
+function usePendingPaymentReconciler(params: {
+  tenantId: string;
+  enabled: boolean;
+}) {
+  useEffect(() => {
+    if (!params.enabled) return;
+
+    const lastAttemptMs = new Map<string, number>();
+    const inFlight = new Set<string>();
+    const RETRY_MS = 5 * 60 * 1000;
+
+    async function reconcile(docs: CustomerDocument[]) {
+      const pending = docs.filter(
+        (d) =>
+          d.type === 'invoice' &&
+          d.paymentStatus === 'pending' &&
+          Boolean(d.stripeCheckoutSessionId || d.stripeCheckoutUrl)
+      );
+
+      for (const doc of pending) {
+        const last = lastAttemptMs.get(doc.id) || 0;
+        if (inFlight.has(doc.id)) continue;
+        if (last > 0 && Date.now() - last < RETRY_MS) continue;
+
+        inFlight.add(doc.id);
+        lastAttemptMs.set(doc.id, Date.now());
+        try {
+          await confirmInvoicePayment({
+            tenantId: params.tenantId,
+            documentId: doc.id,
+            sessionId: doc.stripeCheckoutSessionId
+          });
+        } catch (err) {
+          console.warn('Pending payment reconcile failed:', doc.id, err);
+        } finally {
+          inFlight.delete(doc.id);
+        }
+      }
+    }
+
+    let latestDocs: CustomerDocument[] = [];
+    const unsub = subscribeToDocuments((docs) => {
+      latestDocs = docs;
+      void reconcile(docs);
+    });
+
+    const interval = window.setInterval(() => {
+      if (latestDocs.length) void reconcile(latestDocs);
+    }, RETRY_MS);
+
+    return () => {
+      unsub();
+      window.clearInterval(interval);
+    };
+  }, [params.enabled, params.tenantId]);
+}
+
 function NurseryApp({
   tenant: tenantProp,
   member,
@@ -440,24 +502,20 @@ function NurseryApp({
     userId,
     enabled: permissions.canViewInvoices && !loading
   });
+  usePendingPaymentReconciler({
+    tenantId: tenant.id,
+    enabled: permissions.canCollectPayments && !loading
+  });
 
   useEffect(() => {
     if (!permissions.canViewInvoices || !permissions.canViewOrders) {
       setOrderIdsNeedingInvoice(new Set());
       return;
     }
-    let cancelled = false;
-    listAllDocuments()
-      .then((docs) => {
-        if (!cancelled) setOrderIdsNeedingInvoice(buildOrdersNeedingInvoiceSet(orders, docs));
-      })
-      .catch(() => {
-        if (!cancelled) setOrderIdsNeedingInvoice(new Set());
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orders, permissions.canViewInvoices, permissions.canViewOrders, documentModal]);
+    return subscribeToDocuments((docs) => {
+      setOrderIdsNeedingInvoice(buildOrdersNeedingInvoiceSet(orders, docs));
+    });
+  }, [orders, permissions.canViewInvoices, permissions.canViewOrders]);
 
   useEffect(() => {
     const restored = restoredTabRef.current;

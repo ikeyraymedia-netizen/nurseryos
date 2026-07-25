@@ -86,7 +86,6 @@ export function TeamManager({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailFromEmail, setEmailFromEmail] = useState('');
   const [emailFromName, setEmailFromName] = useState('');
-  const [emailSmtpPass, setEmailSmtpPass] = useState('');
   const paymentsEnabled = tenantHasModule(tenant, 'payments');
 
   async function refreshEmail() {
@@ -292,17 +291,14 @@ export function TeamManager({
       const status = await saveEmailConfig({
         tenantId: tenant.id,
         fromEmail: emailFromEmail.trim(),
-        fromName: emailFromName.trim() || tenant.name,
-        smtpPass: emailSmtpPass.trim() || undefined,
-        smtpUser: emailFromEmail.trim()
+        fromName: emailFromName.trim() || tenant.name
       });
       setEmailStatus(status);
-      setEmailSmtpPass('');
       void logAuditEvent({
         action: 'email.configured',
-        summary: `Configured outbound email for ${status.fromEmail}`
+        summary: `Configured outbound email reply-to ${status.fromEmail}`
       });
-      setMessage(`Invoice emails will send from ${status.fromEmail}.`);
+      setMessage(`Customer replies will go to ${status.fromEmail}.`);
     } catch (err: any) {
       setEmailError(err?.message || 'Failed to save email settings.');
     } finally {
@@ -318,7 +314,6 @@ export function TeamManager({
     try {
       await disconnectEmail(tenant.id);
       setEmailStatus(null);
-      setEmailSmtpPass('');
       void logAuditEvent({
         action: 'email.disconnected',
         summary: 'Disconnected outbound email'
@@ -770,18 +765,24 @@ export function TeamManager({
               Outbound email
             </p>
             <p className="text-[11px] text-emerald-950/80 leading-relaxed">
-              Each nursery sends invoices from its own Gmail / Google Workspace address. Create a
-              Google App Password for that mailbox, then save it here. Owner/admin only.
+              Invoices are sent through NurseryOS email (Resend). Set this nursery’s display name
+              and reply-to address so customers can answer the nursery, not the platform. Owner/admin
+              only.
             </p>
             {emailStatus?.configured ? (
               <p className="text-xs font-semibold text-emerald-800">
-                Sending from {emailStatus.fromEmail}
+                Reply-to {emailStatus.fromEmail}
                 {emailStatus.configuredAt
                   ? ` · saved ${new Date(emailStatus.configuredAt).toLocaleDateString()}`
                   : ''}
               </p>
             ) : (
               <p className="text-xs font-semibold text-amber-800">Not configured yet</p>
+            )}
+            {emailStatus && emailStatus.platformReady === false && (
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Platform email is not ready yet — add <code>RESEND_API_KEY</code> in Railway.
+              </p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
@@ -795,7 +796,7 @@ export function TeamManager({
                 />
               </label>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
-                From email
+                Reply-to email
                 <input
                   type="email"
                   value={emailFromEmail}
@@ -805,17 +806,6 @@ export function TeamManager({
                 />
               </label>
             </div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
-              Google App Password
-              <input
-                type="password"
-                value={emailSmtpPass}
-                onChange={(e) => setEmailSmtpPass(e.target.value)}
-                placeholder={emailStatus?.configured ? 'Leave blank to keep current password' : '16-character app password'}
-                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-semibold text-slate-800"
-                autoComplete="new-password"
-              />
-            </label>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"

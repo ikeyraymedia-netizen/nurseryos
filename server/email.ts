@@ -1,5 +1,4 @@
 import type { Express, Request, Response } from 'express';
-import nodemailer from 'nodemailer';
 import {
   getAdminDb,
   getMemberRoles,
@@ -9,16 +8,18 @@ import {
 } from './firebaseAdmin';
 
 interface EmailIntegration {
-  provider: 'smtp';
+  /** reply-to / customer-facing nursery contact email */
   fromName: string;
   fromEmail: string;
-  smtpHost: string;
-  smtpPort: number;
-  smtpUser: string;
-  smtpPass: string;
   configuredAt: string;
   configuredByUserId: string;
   updatedAt: string;
+  /** legacy fields kept so older docs still load */
+  provider?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
 }
 
 function integrationRef(tenantId: string) {
@@ -88,6 +89,70 @@ function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isResendConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+function platformFromAddress(): string {
+  const configured = process.env.RESEND_FROM_EMAIL?.trim();
+  // Resend test sender works immediately; replace with a verified domain in production.
+  return configured || 'NurseryOS <onboarding@resend.dev>';
+}
+
+async function sendViaResend(params: {
+  fromName: string;
+  replyTo: string;
+  to: string;
+  subject: string;
+  text?: string;
+  html?: string;
+}): Promise<string> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    throw Object.assign(
+      new Error(
+        'Email sending is not configured on the server. Add RESEND_API_KEY (and optionally RESEND_FROM_EMAIL) in Railway.'
+      ),
+      { status: 503, code: 'RESEND_NOT_CONFIGURED' }
+    );
+  }
+
+  const safeName = params.fromName.replace(/"/g, '').trim() || 'Nursery';
+  const platform = platformFromAddress();
+  const match = platform.match(/<([^>]+)>/);
+  const fromAddress = match?.[1] || (looksLikeEmail(platform) ? platform : 'onboarding@resend.dev');
+  const fromHeader = `${safeName} <${fromAddress}>`;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: fromHeader,
+      to: [params.to],
+      reply_to: params.replyTo,
+      subject: params.subject,
+      text: params.text,
+      html: params.html
+    })
+  });
+
+  const data = (await res.json().catch(() => ({}))) as {
+    id?: string;
+    message?: string;
+    error?: { message?: string };
+  };
+
+  if (!res.ok) {
+    const detail = data?.error?.message || data?.message || `Resend error (${res.status})`;
+    throw Object.assign(new Error(detail), { status: 502 });
+  }
+
+  return String(data.id || '');
+}
+
 export async function sendTenantInvoiceEmail(params: {
   tenantId: string;
   to: string;
@@ -97,36 +162,21 @@ export async function sendTenantInvoiceEmail(params: {
   fromNameOverride?: string;
 }): Promise<{ messageId: string; fromEmail: string; fromName: string }> {
   const integration = await loadIntegration(params.tenantId);
-  if (!integration?.smtpPass || !integration.smtpUser || !integration.fromEmail) {
+  if (!integration?.fromEmail) {
     throw Object.assign(
       new Error(
-        'This nursery has not configured outbound email yet. Open Team → Outbound email and add the nursery’s Gmail/Workspace address + App Password.'
+        'This nursery has not configured outbound email yet. Open Team → Outbound email and add the nursery’s reply-to address.'
       ),
       { status: 400, code: 'TENANT_SMTP_NOT_CONFIGURED' }
     );
   }
 
-  const host = integration.smtpHost || 'smtp.gmail.com';
-  const port = Number(integration.smtpPort || 465);
   const fromName = (params.fromNameOverride || integration.fromName || '').trim() || 'Nursery';
-  const fromEmail = integration.fromEmail.trim();
+  const replyTo = integration.fromEmail.trim();
 
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: {
-      user: integration.smtpUser.trim(),
-      pass: integration.smtpPass
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-  });
-
-  const info = await transporter.sendMail({
-    from: `"${fromName.replace(/"/g, '')}" <${fromEmail}>`,
-    replyTo: fromEmail,
+  const messageId = await sendViaResend({
+    fromName,
+    replyTo,
     to: params.to,
     subject: params.subject,
     text: params.text,
@@ -134,8 +184,8 @@ export async function sendTenantInvoiceEmail(params: {
   });
 
   return {
-    messageId: String(info.messageId || ''),
-    fromEmail,
+    messageId,
+    fromEmail: replyTo,
     fromName
   };
 }
@@ -151,11 +201,10 @@ export function registerEmailRoutes(app: Express) {
       await assertCanSendInvoice(tenantId, uid);
       const integration = await loadIntegration(tenantId);
       res.json({
-        configured: Boolean(integration?.smtpPass && integration?.fromEmail),
+        configured: Boolean(integration?.fromEmail),
+        platformReady: isResendConfigured(),
         fromEmail: integration?.fromEmail || null,
         fromName: integration?.fromName || null,
-        smtpHost: integration?.smtpHost || null,
-        smtpUser: integration?.smtpUser || null,
         configuredAt: integration?.configuredAt || null
       });
     })
@@ -166,10 +215,6 @@ export function registerEmailRoutes(app: Express) {
       const tenantId = String(req.body?.tenantId || '');
       const fromEmail = String(req.body?.fromEmail || '').trim();
       const fromName = String(req.body?.fromName || '').trim();
-      const smtpUser = String(req.body?.smtpUser || fromEmail).trim();
-      const smtpPass = String(req.body?.smtpPass || '').trim();
-      const smtpHost = String(req.body?.smtpHost || 'smtp.gmail.com').trim() || 'smtp.gmail.com';
-      const smtpPort = Number(req.body?.smtpPort || 465) || 465;
 
       if (!tenantId) {
         res.status(400).json({ error: 'tenantId is required.' });
@@ -178,28 +223,16 @@ export function registerEmailRoutes(app: Express) {
       await assertAdminOrOwner(tenantId, uid);
 
       if (!looksLikeEmail(fromEmail)) {
-        res.status(400).json({ error: 'Enter a valid From email address.' });
+        res.status(400).json({ error: 'Enter a valid reply-to email address.' });
         return;
-      }
-      if (!smtpPass) {
-        // Allow updating display fields without re-entering password if already configured
-        const existing = await loadIntegration(tenantId);
-        if (!existing?.smtpPass) {
-          res.status(400).json({ error: 'App Password / SMTP password is required.' });
-          return;
-        }
       }
 
       const existing = await loadIntegration(tenantId);
       const now = new Date().toISOString();
       const payload: EmailIntegration = {
-        provider: 'smtp',
+        provider: 'resend',
         fromName: fromName || fromEmail.split('@')[0] || 'Nursery',
         fromEmail,
-        smtpHost,
-        smtpPort,
-        smtpUser: smtpUser || fromEmail,
-        smtpPass: smtpPass || existing!.smtpPass,
         configuredAt: existing?.configuredAt || now,
         configuredByUserId: existing?.configuredByUserId || uid,
         updatedAt: now
@@ -208,10 +241,9 @@ export function registerEmailRoutes(app: Express) {
       await integrationRef(tenantId).set(payload, { merge: true });
       res.json({
         configured: true,
+        platformReady: isResendConfigured(),
         fromEmail: payload.fromEmail,
         fromName: payload.fromName,
-        smtpHost: payload.smtpHost,
-        smtpUser: payload.smtpUser,
         configuredAt: payload.configuredAt
       });
     })
@@ -266,10 +298,14 @@ export function registerEmailRoutes(app: Express) {
           fromName: result.fromName
         });
       } catch (err: any) {
-        if (err?.code === 'TENANT_SMTP_NOT_CONFIGURED' || err?.status === 400) {
+        if (
+          err?.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
+          err?.code === 'RESEND_NOT_CONFIGURED' ||
+          err?.status === 400
+        ) {
           res.status(200).json({
             success: false,
-            code: 'TENANT_SMTP_NOT_CONFIGURED',
+            code: err.code || 'TENANT_SMTP_NOT_CONFIGURED',
             message: err.message
           });
           return;

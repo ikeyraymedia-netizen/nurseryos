@@ -25,10 +25,11 @@ async function readApiError(res: Response): Promise<string> {
 
 export interface EmailStatus {
   configured: boolean;
+  platformReady?: boolean;
   fromEmail: string | null;
   fromName: string | null;
-  smtpHost: string | null;
-  smtpUser: string | null;
+  smtpHost?: string | null;
+  smtpUser?: string | null;
   configuredAt: string | null;
 }
 
@@ -44,10 +45,6 @@ export async function saveEmailConfig(params: {
   tenantId: string;
   fromEmail: string;
   fromName?: string;
-  smtpPass?: string;
-  smtpUser?: string;
-  smtpHost?: string;
-  smtpPort?: number;
 }): Promise<EmailStatus> {
   const res = await fetch('/api/email/config', {
     method: 'POST',

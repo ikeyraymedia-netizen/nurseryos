@@ -643,12 +643,13 @@ Thank you for choosing ${nurseryName}!
         setEmailSentStatus('success');
       } else if (
         result.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
-        result.code === 'SMTP_NOT_CONFIGURED'
+        result.code === 'SMTP_NOT_CONFIGURED' ||
+        result.code === 'RESEND_NOT_CONFIGURED'
       ) {
         setEmailSentStatus('error_smtp');
         setEmailErrorMessage(
           result.message ||
-            'This nursery has not configured outbound email. Open Team → Outbound email.'
+            'Email is not configured. Open Team → Outbound email, and make sure RESEND_API_KEY is set in Railway.'
         );
       } else {
         setEmailSentStatus('error_general');
@@ -1156,12 +1157,13 @@ Thank you for choosing ${nurseryName}!
         });
       } else if (
         result.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
-        result.code === 'SMTP_NOT_CONFIGURED'
+        result.code === 'SMTP_NOT_CONFIGURED' ||
+        result.code === 'RESEND_NOT_CONFIGURED'
       ) {
         setEmailSentStatus('error_smtp');
         setEmailErrorMessage(
           result.message ||
-            'This nursery has not configured outbound email. Open Team → Outbound email.'
+            'Email is not configured. Open Team → Outbound email, and make sure RESEND_API_KEY is set in Railway.'
         );
       } else {
         setEmailSentStatus('error_general');

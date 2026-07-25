@@ -137,7 +137,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isPushingQb, setIsPushingQb] = useState(false);
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
   const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
+  const [isEmailingPayLink, setIsEmailingPayLink] = useState(false);
   const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
+  const [payLinkUrl, setPayLinkUrl] = useState<string | null>(
+    existingDocument?.stripeCheckoutUrl || null
+  );
   const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
   /** Optimistic paid flag after Refresh payment status / confirm. */
   const [localMarkedPaid, setLocalMarkedPaid] = useState(false);
@@ -332,6 +336,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return subscribeToDocument(savedDocumentId, (doc) => {
       setLiveDocument(doc);
       if (doc?.paymentStatus === 'paid') setLocalMarkedPaid(true);
+      if (doc?.stripeCheckoutUrl) setPayLinkUrl(doc.stripeCheckoutUrl);
     });
   }, [isOpen, savedDocumentId]);
 
@@ -398,6 +403,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         : grandTotal
       : 0;
   const balanceDue = isPaid ? 0 : grandTotal;
+  const activePayLinkUrl =
+    !isPaid && documentType === 'invoice'
+      ? payLinkUrl || paymentDocument?.stripeCheckoutUrl || null
+      : null;
 
   // Internal cost/profit (never shown to the customer)
   const totalCost = order.items.reduce((sum, item) => {
@@ -409,7 +418,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const profitMargin = subtotal > 0 ? (totalProfit / subtotal) * 100 : 0;
 
   // HTML Email Layout Builder
-  const generateEmailHTML = (): string => {
+  const generateEmailHTML = (payUrlOverride?: string | null): string => {
+    const payUrl = payUrlOverride ?? activePayLinkUrl;
     const itemsRows = order.items.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
@@ -517,6 +527,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <p style="margin: 0; line-height: 1.5; white-space: pre-wrap;">${invoiceNotes}</p>
         </div>` : ''}
 
+        ${
+          payUrl
+            ? `
+        <div style="margin-top: 28px; text-align: center; font-family: Arial, sans-serif;">
+          <a href="${payUrl}" style="display: inline-block; background-color: #5b21b6; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 28px; border-radius: 10px;">
+            Pay Invoice Online — $${balanceDue.toFixed(2)}
+          </a>
+          <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+            Secure checkout powered by Stripe. If the button does not work, open this link:<br/>
+            <a href="${payUrl}" style="color: #5b21b6; word-break: break-all;">${payUrl}</a>
+          </p>
+        </div>`
+            : ''
+        }
+
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
           <p style="margin: 0;">${nurseryName}</p>
           <p style="margin: 5px 0 0 0; font-weight: bold; color: #047857;">Thank you for your business!</p>
@@ -526,7 +551,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   // Plain Text Email Builder
-  const generateEmailText = (): string => {
+  const generateEmailText = (payUrlOverride?: string | null): string => {
+    const payUrl = payUrlOverride ?? activePayLinkUrl;
     const itemsText = order.items.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
@@ -556,7 +582,11 @@ ${itemsText}
 Subtotal: $${subtotal.toFixed(2)}
 ${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${documentType === 'estimate' ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}` : isPaid ? `INVOICE TOTAL (USD): $${grandTotal.toFixed(2)}\nAmount Paid: $${amountPaid.toFixed(2)}\nBALANCE DUE (USD): $0.00` : `BALANCE DUE (USD): $${balanceDue.toFixed(2)}`}
 
-${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}
+${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}${
+      payUrl
+        ? `\nPAY ONLINE:\n${payUrl}\n`
+        : ''
+    }
 Thank you for choosing ${nurseryName}!
 `;
   };
@@ -1015,6 +1045,28 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
+  const ensurePayLink = async (): Promise<string> => {
+    if (activePayLinkUrl) return activePayLinkUrl;
+    if (!tenantId || !savedDocumentId) {
+      throw new Error('Save this invoice to the customer first, then create a pay link.');
+    }
+    const result = await createInvoiceCheckout({
+      tenantId,
+      documentId: savedDocumentId
+    });
+    if (!result.url) {
+      throw new Error('Stripe did not return a pay link URL.');
+    }
+    setPayLinkUrl(result.url);
+    setPayLinkMessage('Pay link ready');
+    await logAuditEvent({
+      action: 'stripe.checkout_created',
+      summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
+      meta: { documentId: savedDocumentId, sessionId: result.sessionId }
+    });
+    return result.url;
+  };
+
   const handleCreatePayLink = async () => {
     if (!tenantId) {
       alert('Nursery context missing. Close and reopen this invoice.');
@@ -1031,27 +1083,97 @@ Thank you for choosing ${nurseryName}!
     setIsCreatingPayLink(true);
     setPayLinkMessage(null);
     try {
-      const result = await createInvoiceCheckout({
-        tenantId,
-        documentId: savedDocumentId
-      });
-      await logAuditEvent({
-        action: 'stripe.checkout_created',
-        summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
-        meta: { documentId: savedDocumentId, sessionId: result.sessionId }
-      });
-      setPayLinkMessage('Pay link ready');
-      window.open(result.url, '_blank', 'noopener,noreferrer');
+      const url = await ensurePayLink();
       try {
-        await navigator.clipboard.writeText(result.url);
-        alert('Stripe pay link opened in a new tab and copied to your clipboard.');
+        await navigator.clipboard.writeText(url);
+        alert(
+          'Pay link created and copied to your clipboard.\n\nPaste it into a text/email to your customer — do not open it yourself unless you intend to pay the invoice.'
+        );
       } catch {
-        alert(`Stripe pay link ready:\n\n${result.url}`);
+        alert(`Pay link ready for your customer:\n\n${url}`);
       }
     } catch (err: any) {
       alert(err?.message || 'Failed to create Stripe pay link.');
     } finally {
       setIsCreatingPayLink(false);
+    }
+  };
+
+  const handleEmailPayLink = async () => {
+    if (!tenantId) {
+      alert('Nursery context missing. Close and reopen this invoice.');
+      return;
+    }
+    if (!savedDocumentId) {
+      alert('Save this invoice to the customer first, then email the pay link.');
+      return;
+    }
+    if (documentType !== 'invoice') {
+      alert('Only invoices can be collected via Stripe.');
+      return;
+    }
+    if (!customerEmail || !customerEmail.includes('@')) {
+      setShowEmailPanel(true);
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage('Enter the customer email address first, then try Email pay link again.');
+      return;
+    }
+
+    setIsEmailingPayLink(true);
+    setShowEmailPanel(true);
+    setEmailSentStatus('idle');
+    setEmailErrorMessage('');
+    try {
+      const payUrl = await ensurePayLink();
+      const emailHtml = generateEmailHTML(payUrl);
+      const emailText = generateEmailText(payUrl);
+      const response = await fetch('/api/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: customerEmail,
+          subject: emailSubject.includes('Pay')
+            ? emailSubject
+            : `${emailSubject} — Pay online`,
+          text: emailText,
+          html: emailHtml
+        })
+      });
+
+      let result: any;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error('Server returned an invalid email response.');
+      }
+
+      if (result.success) {
+        const updatedOrder: CustomerOrder = {
+          ...order,
+          customerEmail,
+          emailSentAt: new Date().toISOString()
+        };
+        await updateCustomerOrder(updatedOrder);
+        setEmailSentStatus('success');
+        setPayLinkMessage('Emailed to customer');
+        await logAuditEvent({
+          action: 'stripe.pay_link_emailed',
+          summary: `Emailed Stripe pay link for invoice ${invoiceNumber} to ${customerEmail}`,
+          meta: { documentId: savedDocumentId, to: customerEmail }
+        });
+      } else if (result.code === 'SMTP_NOT_CONFIGURED') {
+        setEmailSentStatus('error_smtp');
+        setEmailErrorMessage(result.message || 'SMTP settings are not configured on the server.');
+      } else {
+        setEmailSentStatus('error_general');
+        setEmailErrorMessage(result.error || 'Failed to email pay link.');
+      }
+    } catch (err: any) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage(err?.message || 'Failed to email pay link.');
+      alert(err?.message || 'Failed to email pay link.');
+    } finally {
+      setIsEmailingPayLink(false);
     }
   };
 
@@ -1839,13 +1961,13 @@ Thank you for choosing ${nurseryName}!
               <button
                 type="button"
                 onClick={() => void handleCreatePayLink()}
-                disabled={isCreatingPayLink || !savedDocumentId || isPaid}
+                disabled={isCreatingPayLink || isEmailingPayLink || !savedDocumentId || isPaid}
                 className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                 title={
                   isPaid
                     ? 'This invoice is already paid'
                     : savedDocumentId
-                      ? 'Create a Stripe Checkout pay link for this invoice'
+                      ? 'Create a Stripe pay link and copy it (does not open payment for you)'
                       : 'Save to customer first'
                 }
               >
@@ -1855,9 +1977,30 @@ Thank you for choosing ${nurseryName}!
                     ? 'Invoice paid'
                     : isCreatingPayLink
                       ? 'Creating pay link…'
-                      : payLinkMessage || 'Create Stripe pay link'}
+                      : payLinkMessage || 'Create & copy pay link'}
                 </span>
               </button>
+            )}
+
+            {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
+              <button
+                type="button"
+                onClick={() => void handleEmailPayLink()}
+                disabled={isEmailingPayLink || isCreatingPayLink || !savedDocumentId}
+                className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-900 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                title="Create a Stripe pay link if needed and email it to the customer"
+              >
+                <Mail className="h-4 w-4" />
+                <span>
+                  {isEmailingPayLink ? 'Emailing pay link…' : 'Email pay link to customer'}
+                </span>
+              </button>
+            )}
+
+            {activePayLinkUrl && !isPaid && (
+              <p className="text-[10px] text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
+                Pay link ready for customer — do not open it yourself unless you intend to pay.
+              </p>
             )}
 
             {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (

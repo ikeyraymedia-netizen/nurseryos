@@ -105,6 +105,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [savedDocumentId, setSavedDocumentId] = useState<string | null>(
     existingDocument?.id || null
   );
+  const documentContextRef = useRef('');
   // State for quantity basis: 'ordered' | 'pulled' | 'loaded'
   const [qtyBasis, setQtyBasis] = useState<'ordered' | 'pulled' | 'loaded'>('ordered');
 
@@ -164,7 +165,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     const type = existingDocument?.type || initialDocumentType;
     setDocumentType(type);
-    setSavedDocumentId(existingDocument?.id || null);
+    const documentContext = `${order.id}:${type}`;
+    if (documentContextRef.current !== documentContext) {
+      documentContextRef.current = documentContext;
+      setSavedDocumentId(existingDocument?.id || null);
+    } else if (existingDocument?.id) {
+      setSavedDocumentId(existingDocument.id);
+    }
 
     setBillToName(
       existingDocument?.billToName ||

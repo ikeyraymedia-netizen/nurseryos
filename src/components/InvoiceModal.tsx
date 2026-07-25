@@ -162,6 +162,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [showEmailPanel, setShowEmailPanel] = useState(false);
+  const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(true);
 
   // Initialize or reload states when order / document type changes
   useEffect(() => {
@@ -604,8 +605,17 @@ Thank you for choosing ${nurseryName}!
     setEmailErrorMessage('');
 
     try {
-      const emailHtml = generateEmailHTML();
-      const emailText = generateEmailText();
+      const payUrl =
+        canCollectPayments &&
+        documentType === 'invoice' &&
+        !isPaid &&
+        includePayLinkInEmail &&
+        tenantId &&
+        savedDocumentId
+          ? await ensurePayLink()
+          : null;
+      const emailHtml = generateEmailHTML(payUrl);
+      const emailText = generateEmailText(payUrl);
 
       const response = await fetch('/api/send-invoice', {
         method: 'POST',
@@ -1988,11 +1998,11 @@ Thank you for choosing ${nurseryName}!
                 onClick={() => void handleEmailPayLink()}
                 disabled={isEmailingPayLink || isCreatingPayLink || !savedDocumentId}
                 className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-900 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
-                title="Create a Stripe pay link if needed and email it to the customer"
+                title="Email the full invoice with a Pay Invoice Online button inside"
               >
                 <Mail className="h-4 w-4" />
                 <span>
-                  {isEmailingPayLink ? 'Emailing pay link…' : 'Email pay link to customer'}
+                  {isEmailingPayLink ? 'Emailing invoice…' : 'Email invoice with pay link'}
                 </span>
               </button>
             )}
@@ -2114,6 +2124,24 @@ Thank you for choosing ${nurseryName}!
                         <span>Fallback: Open in Mail Client</span>
                       </button>
                     </div>
+                  )}
+
+                  {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
+                    <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/70 p-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includePayLinkInEmail}
+                        onChange={(e) => setIncludePayLinkInEmail(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-violet-700"
+                      />
+                      <span className="text-[10px] font-bold text-violet-900 leading-relaxed">
+                        Include “Pay Invoice Online” button
+                        <span className="block font-medium text-violet-700">
+                          Creates the Stripe pay link automatically and puts it inside the emailed
+                          invoice.
+                        </span>
+                      </span>
+                    </label>
                   )}
 
                   <div className="grid grid-cols-2 gap-2 pt-1">

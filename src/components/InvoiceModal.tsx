@@ -52,6 +52,7 @@ import {
   FreightShare
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks } from '../lib/quickbooks';
+import { sendInvoiceEmail } from '../lib/email';
 import { createInvoiceCheckout, confirmInvoicePayment } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -594,6 +595,11 @@ Thank you for choosing ${nurseryName}!
 
   // Direct Server Email Dispatch
   const handleSendEmailServer = async () => {
+    if (!tenantId) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage('Nursery context missing. Close and reopen this invoice.');
+      return;
+    }
     if (!customerEmail || !customerEmail.includes('@')) {
       setEmailSentStatus('error_general');
       setEmailErrorMessage('Please enter a valid customer email address.');
@@ -617,36 +623,16 @@ Thank you for choosing ${nurseryName}!
       const emailHtml = generateEmailHTML(payUrl);
       const emailText = generateEmailText(payUrl);
 
-      const response = await fetch('/api/send-invoice', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: customerEmail,
-          subject: emailSubject,
-          text: emailText,
-          html: emailHtml,
-        }),
+      const result = await sendInvoiceEmail({
+        tenantId,
+        to: customerEmail,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        fromName: nurseryName
       });
 
-      let result;
-      try {
-        result = await response.json();
-      } catch (e) {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        throw new Error('Failed to parse server response.');
-      }
-
-      if (!response.ok) {
-        throw new Error(result.details || result.error || `HTTP error! status: ${response.status}`);
-      }
-
       if (result.success) {
-        // Successfully dispatched via SMTP
-        // Save the updated email and the timestamp on the CustomerOrder
         const updatedOrder: CustomerOrder = {
           ...order,
           customerEmail,
@@ -655,9 +641,15 @@ Thank you for choosing ${nurseryName}!
 
         await updateCustomerOrder(updatedOrder);
         setEmailSentStatus('success');
-      } else if (result.code === 'SMTP_NOT_CONFIGURED') {
+      } else if (
+        result.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
+        result.code === 'SMTP_NOT_CONFIGURED'
+      ) {
         setEmailSentStatus('error_smtp');
-        setEmailErrorMessage(result.message || 'SMTP settings are not configured on the server.');
+        setEmailErrorMessage(
+          result.message ||
+            'This nursery has not configured outbound email. Open Team → Outbound email.'
+        );
       } else {
         setEmailSentStatus('error_general');
         setEmailErrorMessage(result.error || 'Failed to dispatch email.');
@@ -1137,25 +1129,16 @@ Thank you for choosing ${nurseryName}!
       const payUrl = await ensurePayLink();
       const emailHtml = generateEmailHTML(payUrl);
       const emailText = generateEmailText(payUrl);
-      const response = await fetch('/api/send-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: customerEmail,
-          subject: emailSubject.includes('Pay')
-            ? emailSubject
-            : `${emailSubject} — Pay online`,
-          text: emailText,
-          html: emailHtml
-        })
+      const result = await sendInvoiceEmail({
+        tenantId,
+        to: customerEmail,
+        subject: emailSubject.includes('Pay')
+          ? emailSubject
+          : `${emailSubject} — Pay online`,
+        text: emailText,
+        html: emailHtml,
+        fromName: nurseryName
       });
-
-      let result: any;
-      try {
-        result = await response.json();
-      } catch {
-        throw new Error('Server returned an invalid email response.');
-      }
 
       if (result.success) {
         const updatedOrder: CustomerOrder = {
@@ -1171,9 +1154,15 @@ Thank you for choosing ${nurseryName}!
           summary: `Emailed Stripe pay link for invoice ${invoiceNumber} to ${customerEmail}`,
           meta: { documentId: savedDocumentId, to: customerEmail }
         });
-      } else if (result.code === 'SMTP_NOT_CONFIGURED') {
+      } else if (
+        result.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
+        result.code === 'SMTP_NOT_CONFIGURED'
+      ) {
         setEmailSentStatus('error_smtp');
-        setEmailErrorMessage(result.message || 'SMTP settings are not configured on the server.');
+        setEmailErrorMessage(
+          result.message ||
+            'This nursery has not configured outbound email. Open Team → Outbound email.'
+        );
       } else {
         setEmailSentStatus('error_general');
         setEmailErrorMessage(result.error || 'Failed to email pay link.');
@@ -2099,9 +2088,10 @@ Thank you for choosing ${nurseryName}!
 
                   {emailSentStatus === 'error_smtp' && (
                     <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[10px] leading-normal">
-                      <p className="font-bold flex items-center mb-1 text-amber-900"><AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" /> Server SMTP Not Configured</p>
+                      <p className="font-bold flex items-center mb-1 text-amber-900"><AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" /> Nursery Email Not Configured</p>
                       <p className="text-[9px] text-amber-700 mb-2 leading-relaxed">
-                        To send directly from the server, configure SMTP variables (<code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>) in your secrets manager.
+                        {emailErrorMessage ||
+                          'Open Team → Outbound email and add this nursery’s Gmail/Workspace address + Google App Password.'}
                       </p>
                       <button
                         onClick={handleOpenMailClient}

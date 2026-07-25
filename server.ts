@@ -3,13 +3,13 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
 import { registerQuickbooksRoutes, isQuickbooksConfigured } from './server/quickbooks';
 import {
   registerStripeRoutes,
   registerStripeWebhookRoute,
   isStripeConfigured
 } from './server/stripe';
+import { registerEmailRoutes } from './server/email';
 import {
   isSpreadsheetInventoryUpload,
   parseInventorySpreadsheetBuffer
@@ -35,6 +35,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 registerQuickbooksRoutes(app);
 registerStripeRoutes(app);
+registerEmailRoutes(app);
 
 // Lazy initialize Google Gen AI
 let aiClient: GoogleGenAI | null = null;
@@ -582,67 +583,6 @@ Return strict JSON matching schema. Do not include narrative text.`;
     }
     res.status(500).json({
       error: 'Failed to process inventory file.',
-      details: error.message || error
-    });
-  }
-});
-
-// API endpoint to send invoice emails
-app.post('/api/send-invoice', async (req, res) => {
-  try {
-    const { to, subject, text, html } = req.body;
-
-    if (!to || !subject || (!text && !html)) {
-      res.status(400).json({ error: 'Missing required email fields (to, subject, text/html).' });
-      return;
-    }
-
-    const host = process.env.SMTP_HOST;
-    const port = process.env.SMTP_PORT;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const from = process.env.SENDER_EMAIL || user;
-
-    if (!host || !port || !user || !pass) {
-      res.status(200).json({
-        success: false,
-        code: 'SMTP_NOT_CONFIGURED',
-        message: 'SMTP settings (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) are not configured.'
-      });
-      return;
-    }
-
-    // Create transporter
-    const transporter = nodemailer.createTransport({
-      host,
-      port: Number(port),
-      secure: Number(port) === 465, // true for 465, false for other ports
-      auth: {
-        user,
-        pass,
-      },
-      // Increase timeout values for reliability
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
-    });
-
-    // Send mail
-    const info = await transporter.sendMail({
-      from: `"Bayou State Plant Co." <${from}>`,
-      to,
-      subject,
-      text,
-      html,
-    });
-
-    console.log('Invoice email sent successfully:', info.messageId);
-    res.json({ success: true, messageId: info.messageId });
-  } catch (error: any) {
-    console.error('Error sending invoice email:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to send email via SMTP server.',
       details: error.message || error
     });
   }

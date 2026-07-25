@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
 import {
   createTeamInvite,
@@ -31,6 +31,12 @@ import {
   startStripeConnect,
   StripeStatus
 } from '../lib/stripe';
+import {
+  disconnectEmail,
+  fetchEmailStatus,
+  saveEmailConfig,
+  EmailStatus
+} from '../lib/email';
 import { tenantHasModule } from '../lib/modules';
 
 interface TeamManagerProps {
@@ -75,7 +81,26 @@ export function TeamManager({
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailFromEmail, setEmailFromEmail] = useState('');
+  const [emailFromName, setEmailFromName] = useState('');
+  const [emailSmtpPass, setEmailSmtpPass] = useState('');
   const paymentsEnabled = tenantHasModule(tenant, 'payments');
+
+  async function refreshEmail() {
+    try {
+      const status = await fetchEmailStatus(tenant.id);
+      setEmailStatus(status);
+      setEmailFromEmail(status.fromEmail || '');
+      setEmailFromName(status.fromName || tenant.name);
+      setEmailError(null);
+    } catch (err: any) {
+      setEmailStatus(null);
+      setEmailError(err?.message || 'Failed to load email settings.');
+    }
+  }
 
   async function refresh() {
     const [m, i] = await Promise.all([
@@ -216,6 +241,7 @@ export function TeamManager({
         });
         setStripeError(err?.message || 'Could not reach Stripe config endpoint.');
       }
+      await refreshEmail();
     })();
   }, [tenant.id, paymentsEnabled]);
 
@@ -255,6 +281,53 @@ export function TeamManager({
       setStripeError(err?.message || 'Failed to disconnect Stripe.');
     } finally {
       setStripeBusy(false);
+    }
+  }
+
+  async function handleSaveEmail() {
+    setEmailBusy(true);
+    setEmailError(null);
+    setMessage(null);
+    try {
+      const status = await saveEmailConfig({
+        tenantId: tenant.id,
+        fromEmail: emailFromEmail.trim(),
+        fromName: emailFromName.trim() || tenant.name,
+        smtpPass: emailSmtpPass.trim() || undefined,
+        smtpUser: emailFromEmail.trim()
+      });
+      setEmailStatus(status);
+      setEmailSmtpPass('');
+      void logAuditEvent({
+        action: 'email.configured',
+        summary: `Configured outbound email for ${status.fromEmail}`
+      });
+      setMessage(`Invoice emails will send from ${status.fromEmail}.`);
+    } catch (err: any) {
+      setEmailError(err?.message || 'Failed to save email settings.');
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function handleDisconnectEmail() {
+    const ok = confirm('Remove this nursery’s outbound email settings? Invoice emails will stop until reconfigured.');
+    if (!ok) return;
+    setEmailBusy(true);
+    setEmailError(null);
+    try {
+      await disconnectEmail(tenant.id);
+      setEmailStatus(null);
+      setEmailSmtpPass('');
+      void logAuditEvent({
+        action: 'email.disconnected',
+        summary: 'Disconnected outbound email'
+      });
+      setMessage('Outbound email disconnected.');
+    } catch (err: any) {
+      setEmailError(err?.message || 'Failed to disconnect email.');
+    } finally {
+      setEmailBusy(false);
     }
   }
 
@@ -690,6 +763,84 @@ export function TeamManager({
               )}
             </div>
           )}
+
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-3 space-y-2">
+            <p className="text-xs font-bold uppercase text-emerald-900 flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" />
+              Outbound email
+            </p>
+            <p className="text-[11px] text-emerald-950/80 leading-relaxed">
+              Each nursery sends invoices from its own Gmail / Google Workspace address. Create a
+              Google App Password for that mailbox, then save it here. Owner/admin only.
+            </p>
+            {emailStatus?.configured ? (
+              <p className="text-xs font-semibold text-emerald-800">
+                Sending from {emailStatus.fromEmail}
+                {emailStatus.configuredAt
+                  ? ` · saved ${new Date(emailStatus.configuredAt).toLocaleDateString()}`
+                  : ''}
+              </p>
+            ) : (
+              <p className="text-xs font-semibold text-amber-800">Not configured yet</p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
+                From name
+                <input
+                  type="text"
+                  value={emailFromName}
+                  onChange={(e) => setEmailFromName(e.target.value)}
+                  placeholder={tenant.name}
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-semibold text-slate-800"
+                />
+              </label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
+                From email
+                <input
+                  type="email"
+                  value={emailFromEmail}
+                  onChange={(e) => setEmailFromEmail(e.target.value)}
+                  placeholder="billing@yournursery.com"
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-semibold text-slate-800"
+                />
+              </label>
+            </div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
+              Google App Password
+              <input
+                type="password"
+                value={emailSmtpPass}
+                onChange={(e) => setEmailSmtpPass(e.target.value)}
+                placeholder={emailStatus?.configured ? 'Leave blank to keep current password' : '16-character app password'}
+                className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-semibold text-slate-800"
+                autoComplete="new-password"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={emailBusy || busy || !emailFromEmail.trim()}
+                onClick={() => void handleSaveEmail()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-800 text-white text-xs font-bold disabled:opacity-50"
+              >
+                {emailBusy ? 'Saving…' : emailStatus?.configured ? 'Update email settings' : 'Save email settings'}
+              </button>
+              {emailStatus?.configured && (
+                <button
+                  type="button"
+                  disabled={emailBusy || busy}
+                  onClick={() => void handleDisconnectEmail()}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                >
+                  <Unlink className="h-3.5 w-3.5" />
+                  Disconnect
+                </button>
+              )}
+            </div>
+            {emailError && (
+              <p className="text-[11px] text-red-700 leading-relaxed">{emailError}</p>
+            )}
+          </div>
 
           <div>
             <p className="text-xs font-bold uppercase text-gray-500 mb-2">Current members</p>

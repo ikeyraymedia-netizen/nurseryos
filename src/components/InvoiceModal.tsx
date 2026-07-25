@@ -271,7 +271,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setEmailSentStatus('idle');
     setEmailErrorMessage('');
     setShowEmailPanel(false);
-  }, [order, isOpen, customer, existingDocument, initialDocumentType, nurseryName]);
+    // Depend on identity keys only — live order/customer object updates (e.g. after save)
+    // must not wipe savedDocumentId or the Stripe/QuickBooks buttons stay disabled.
+  }, [
+    isOpen,
+    order?.id,
+    order?.orderNumber,
+    existingDocument?.id,
+    existingDocument?.type,
+    initialDocumentType,
+    customer?.id,
+    nurseryName
+  ]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -913,7 +924,14 @@ Thank you for choosing ${nurseryName}!
       console.error('Failed to save document:', err);
       const code = err?.code || '';
       const message = err?.message || String(err);
-      if (code === 'permission-denied' || /insufficient permissions/i.test(message)) {
+      if (
+        code === 'resource-exhausted' ||
+        /RESOURCE_EXHAUSTED|Quota exceeded/i.test(message)
+      ) {
+        alert(
+          'Could not save invoice: Firebase Firestore quota exceeded.\n\nUpgrade the Firebase project to the Blaze plan (Usage and billing), wait a minute, then try Save again.\n\nUntil that works, Stripe and QuickBooks stay disabled because the invoice is not saved yet.'
+        );
+      } else if (code === 'permission-denied' || /insufficient permissions/i.test(message)) {
         alert(
           'Could not save invoice to customer: Firestore permission denied.\n\nAsk your admin to deploy firestore.rules (documents collection), then try again.'
         );

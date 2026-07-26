@@ -9,7 +9,7 @@ import {
   subscribeToInventory
 } from '../lib/inventory';
 import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
-import { addCustomerDocument, defaultDocumentNumber } from '../lib/documents';
+import { addCustomerDocument, nextDocumentNumber } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { logAuditEvent } from '../lib/audit';
 import { AppPermissions } from '../lib/permissions';
@@ -311,7 +311,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           orderNumber:
             pendingDraft.orderNumber !== 'N/A' ? pendingDraft.orderNumber : undefined,
           type: 'estimate',
-          documentNumber: defaultDocumentNumber('estimate', pendingDraft.orderNumber),
+          documentNumber: await nextDocumentNumber('estimate'),
           documentDate,
           paymentTerms: linked.paymentTerms || 'Net 30',
           taxRate,

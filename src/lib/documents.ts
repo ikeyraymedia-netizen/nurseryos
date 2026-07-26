@@ -147,13 +147,50 @@ export async function listAllDocuments(): Promise<CustomerDocument[]> {
   }
 }
 
+export const DOCUMENT_NUMBER_START = 1000;
+
+/** Extract a sequential integer from a document number, if it looks sequential. */
+export function parseSequentialDocumentNumber(
+  documentNumber: string | undefined | null,
+  type: CustomerDocumentType
+): number | null {
+  const raw = String(documentNumber || '').trim();
+  if (!raw) return null;
+  if (type === 'estimate') {
+    const est = raw.match(/^EST-(\d+)$/i);
+    if (est) return Number(est[1]);
+    return null;
+  }
+  // Invoices: plain digits (1000) or legacy INV-1000
+  const inv = raw.match(/^(?:INV-)?(\d+)$/i);
+  if (!inv) return null;
+  return Number(inv[1]);
+}
+
+/**
+ * Next invoice/estimate number for this nursery.
+ * Invoices: 1000, 1001, 1002…
+ * Estimates: EST-1000, EST-1001…
+ * Continues from the highest existing number of that type (never below 1000).
+ */
+export async function nextDocumentNumber(type: CustomerDocumentType): Promise<string> {
+  const docs = await listAllDocuments();
+  let max = DOCUMENT_NUMBER_START - 1;
+  for (const d of docs) {
+    if (d.type !== type) continue;
+    const n = parseSequentialDocumentNumber(d.documentNumber, type);
+    if (n != null && Number.isFinite(n) && n > max) max = n;
+  }
+  const next = Math.max(max + 1, DOCUMENT_NUMBER_START);
+  return type === 'estimate' ? `EST-${next}` : String(next);
+}
+
+/** Sync fallback before async allocation finishes. */
 export function defaultDocumentNumber(
   type: CustomerDocumentType,
-  orderNumber?: string
+  _orderNumber?: string
 ): string {
-  const prefix = type === 'estimate' ? 'EST' : 'INV';
-  const base = orderNumber && orderNumber !== 'N/A' ? orderNumber : Date.now().toString().slice(-6);
-  return `${prefix}-${base}`;
+  return type === 'estimate' ? `EST-${DOCUMENT_NUMBER_START}` : String(DOCUMENT_NUMBER_START);
 }
 
 export function subscribeToDocuments(

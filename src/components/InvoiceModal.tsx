@@ -39,6 +39,7 @@ import {
   addCustomerDocument,
   updateCustomerDocument,
   defaultDocumentNumber,
+  nextDocumentNumber,
   listAllDocuments,
   subscribeToDocument
 } from '../lib/documents';
@@ -118,7 +119,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [billToAddress, setBillToAddress] = useState('');
 
   // Custom invoice properties (saved in invoiceDetails)
-  const [invoiceNumber, setInvoiceNumber] = useState(`INV-${order.orderNumber}`);
+  const [invoiceNumber, setInvoiceNumber] = useState(
+    existingDocument?.documentNumber ||
+      defaultDocumentNumber(initialDocumentType === 'estimate' ? 'estimate' : 'invoice')
+  );
   const [poNumber, setPoNumber] = useState('');
   const [salesRep, setSalesRep] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -160,7 +164,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
-  const [emailSubject, setEmailSubject] = useState(`Invoice INV-${order.orderNumber}`);
+  const [emailSubject, setEmailSubject] = useState(
+    `${initialDocumentType === 'estimate' ? 'Estimate' : 'Invoice'} ${
+      existingDocument?.documentNumber ||
+      defaultDocumentNumber(initialDocumentType === 'estimate' ? 'estimate' : 'invoice')
+    }`
+  );
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
@@ -195,12 +204,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
 
     const details = order.invoiceDetails;
-    const prefix = type === 'estimate' ? 'EST' : 'INV';
-    setInvoiceNumber(
-      existingDocument?.documentNumber ||
-        details?.invoiceNumber ||
-        defaultDocumentNumber(type, order.orderNumber)
-    );
+    const existingNumber =
+      existingDocument?.documentNumber || details?.invoiceNumber || null;
+    let cancelled = false;
+    if (existingNumber) {
+      setInvoiceNumber(existingNumber);
+    } else {
+      setInvoiceNumber(defaultDocumentNumber(type));
+      void nextDocumentNumber(type).then((num) => {
+        if (!cancelled) setInvoiceNumber(num);
+      });
+    }
     setInvoiceDate(
       existingDocument?.documentDate ||
         details?.invoiceDate ||
@@ -280,7 +294,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
     setEmailSubject(
       `${type === 'estimate' ? 'Estimate' : 'Invoice'} ${
-        existingDocument?.documentNumber || `${prefix}-${order.orderNumber}`
+        existingNumber || defaultDocumentNumber(type)
       } from ${nurseryName}`
     );
     setEmailSentStatus('idle');
@@ -288,6 +302,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setShowEmailPanel(false);
     // Depend on identity keys only — live order/customer object updates (e.g. after save)
     // must not wipe savedDocumentId or the Stripe/QuickBooks buttons stay disabled.
+    return () => {
+      cancelled = true;
+    };
   }, [
     isOpen,
     order?.id,
@@ -1391,7 +1408,8 @@ Thank you for choosing ${nurseryName}!
 
   const handleDocumentTypeChange = (type: CustomerDocumentType) => {
     setDocumentType(type);
-    setInvoiceNumber(defaultDocumentNumber(type, order.orderNumber));
+    setInvoiceNumber(defaultDocumentNumber(type));
+    void nextDocumentNumber(type).then(setInvoiceNumber);
     setSaveSuccess(false);
   };
 

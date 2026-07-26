@@ -36,6 +36,12 @@ export interface AppPermissions {
   canViewTasks: boolean;
   canAssignTasks: boolean;
   canCompleteTasks: boolean;
+  /** Purchasing workspace (gated by purchasing module). */
+  canViewPurchasing: boolean;
+  canEditVendors: boolean;
+  canEditPurchaseOrders: boolean;
+  canReceivePurchases: boolean;
+  canManageVendorBills: boolean;
 }
 
 const ROLE_RANK: Record<MemberRole, number> = {
@@ -150,7 +156,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewReports: true,
         canViewTasks: true,
         canAssignTasks: true,
-        canCompleteTasks: true
+                canCompleteTasks: true,
+        canViewPurchasing: true,
+        canEditVendors: true,
+        canEditPurchaseOrders: true,
+        canReceivePurchases: true,
+        canManageVendorBills: true
       };
     case 'supervisor':
       // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
@@ -184,7 +195,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewReports: false,
         canViewTasks: true,
         canAssignTasks: true,
-        canCompleteTasks: true
+                canCompleteTasks: true,
+        canViewPurchasing: true,
+        canEditVendors: false,
+        canEditPurchaseOrders: false,
+        canReceivePurchases: true,
+        canManageVendorBills: false
       };
     case 'office':
       // Front office: customers, invoices, pricing, reports. No yard/ops tabs.
@@ -217,7 +233,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewReports: true,
         canViewTasks: false,
         canAssignTasks: false,
-        canCompleteTasks: false
+                canCompleteTasks: false,
+        canViewPurchasing: true,
+        canEditVendors: true,
+        canEditPurchaseOrders: true,
+        canReceivePurchases: true,
+        canManageVendorBills: true
       };
     case 'sales':
       // Sales: customers, orders, trucks, invoices/pricing, reports; inventory view-only; no tasks.
@@ -250,7 +271,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewReports: true,
         canViewTasks: false,
         canAssignTasks: false,
-        canCompleteTasks: false
+                canCompleteTasks: false,
+        canViewPurchasing: true,
+        canEditVendors: true,
+        canEditPurchaseOrders: true,
+        canReceivePurchases: true,
+        canManageVendorBills: true
       };
     case 'loader':
       return {
@@ -282,7 +308,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewReports: false,
         canViewTasks: true,
         canAssignTasks: false,
-        canCompleteTasks: true
+                canCompleteTasks: true,
+        canViewPurchasing: false,
+        canEditVendors: false,
+        canEditPurchaseOrders: false,
+        canReceivePurchases: false,
+        canManageVendorBills: false
       };
     case 'inventory':
       return {
@@ -314,7 +345,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewReports: false,
         canViewTasks: true,
         canAssignTasks: false,
-        canCompleteTasks: true
+                canCompleteTasks: true,
+        canViewPurchasing: true,
+        canEditVendors: false,
+        canEditPurchaseOrders: false,
+        canReceivePurchases: true,
+        canManageVendorBills: false
       };
     default:
       return getPermissionsForRole('loader');

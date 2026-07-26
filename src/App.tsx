@@ -15,6 +15,7 @@ import { TeamManager } from './components/TeamManager';
 import { CustomersWorkspace } from './components/CustomersWorkspace';
 import { ReportsWorkspace } from './components/ReportsWorkspace';
 import { TasksWorkspace } from './components/TasksWorkspace';
+import { PurchasingWorkspace } from './components/PurchasingWorkspace';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import {
@@ -56,7 +57,7 @@ import {
   CustomerDocumentType,
   CustomerDocument
 } from './types';
-import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList } from 'lucide-react';
+import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList, PackagePlus } from 'lucide-react';
 import {
   type WorkspaceTab,
   readPersistedWorkspaceTab,
@@ -70,6 +71,7 @@ type WorkspacePermissions = ReturnType<typeof applyModuleGates>;
 function defaultWorkspaceTab(permissions: WorkspacePermissions): WorkspaceTab {
   if (permissions.canViewOrders) return 'orders';
   if (permissions.canViewCustomers) return 'customers';
+  if (permissions.canViewPurchasing) return 'purchasing';
   if (permissions.canViewReports) return 'reports';
   if (permissions.canViewInventory) return 'inventory';
   if (permissions.canViewTrucks) return 'trucks';
@@ -94,6 +96,8 @@ function canAccessWorkspaceTab(
       return permissions.canViewReports;
     case 'tasks':
       return permissions.canViewTasks;
+    case 'purchasing':
+      return permissions.canViewPurchasing;
   }
 }
 
@@ -552,7 +556,8 @@ function NurseryApp({
     permissions.canViewReports,
     permissions.canViewInventory,
     permissions.canViewTrucks,
-    permissions.canViewTasks
+    permissions.canViewTasks,
+    permissions.canViewPurchasing
   ]);
 
   // If a restored tab stays unauthorized after permissions are applied, abandon
@@ -581,7 +586,8 @@ function NurseryApp({
     permissions.canViewReports,
     permissions.canViewInventory,
     permissions.canViewTrucks,
-    permissions.canViewTasks
+    permissions.canViewTasks,
+    permissions.canViewPurchasing
   ]);
 
   useEffect(() => {
@@ -973,6 +979,23 @@ function NurseryApp({
                 <span>Customers</span>
               </button>
             )}
+            {permissions.canViewPurchasing && (
+              <button
+                onClick={() => {
+                  if (!leaveTruckBuilderIfNeeded()) return;
+                  setActiveTab('purchasing');
+                  setSelectedTruckId(null);
+                  setSelectedOrderId(null);
+                  setIsEditingTruck(false);
+                }}
+                className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                  activeTab === 'purchasing' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                <PackagePlus className="h-4 w-4" />
+                <span>Purchasing</span>
+              </button>
+            )}
             {permissions.canViewReports && (
               <button
                 onClick={() => {
@@ -1016,6 +1039,10 @@ function NurseryApp({
           ) : activeTab === 'customers' && permissions.canViewCustomers ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
               Manage your customer directory in the main panel.
+            </div>
+          ) : activeTab === 'purchasing' && permissions.canViewPurchasing ? (
+            <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
+              Vendors, purchase orders, receiving, and AP bills in the main panel.
             </div>
           ) : activeTab === 'reports' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
@@ -1101,6 +1128,8 @@ function NurseryApp({
                 setDocumentModal({ orderId, type, existingDocument });
               }}
             />
+          ) : activeTab === 'purchasing' && permissions.canViewPurchasing ? (
+            <PurchasingWorkspace permissions={permissions} />
           ) : activeTab === 'reports' ? (
             <ReportsWorkspace
               orders={dynamicOrders}
@@ -1192,6 +1221,7 @@ function NurseryApp({
         {permissions.canUploadOrders &&
           activeTab !== 'inventory' &&
           activeTab !== 'customers' &&
+          activeTab !== 'purchasing' &&
           activeTab !== 'reports' &&
           activeTab !== 'tasks' &&
           !isBuildingTruck && (

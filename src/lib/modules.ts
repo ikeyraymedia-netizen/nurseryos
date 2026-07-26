@@ -84,6 +84,12 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     label: 'QuickBooks',
     description: 'Connect QuickBooks Online and push saved invoices/estimates from the invoice screen.',
     group: 'addon'
+  },
+  {
+    id: 'purchasing',
+    label: 'Purchasing',
+    description: 'Vendor directory, purchase orders, receiving into inventory, and vendor bills.',
+    group: 'workspace'
   }
 ];
 
@@ -93,7 +99,13 @@ export const ALL_TENANT_MODULE_IDS: TenantModuleId[] = TENANT_MODULE_DEFS.map((m
  * Opt-in modules stay off unless explicitly enabled for a nursery.
  * Not included in legacy grandfathering.
  */
-export const OPT_IN_MODULE_IDS: TenantModuleId[] = ['vendors', 'profit', 'payments', 'quickbooks'];
+export const OPT_IN_MODULE_IDS: TenantModuleId[] = [
+  'vendors',
+  'profit',
+  'payments',
+  'quickbooks',
+  'purchasing'
+];
 
 /**
  * New nurseries start with nothing enabled — you turn workspaces on in the
@@ -168,6 +180,7 @@ export function applyModuleGates(
   const profit = mods.has('profit');
   const payments = mods.has('payments');
   const quickbooks = mods.has('quickbooks');
+  const purchasing = mods.has('purchasing');
   const ops = orders || trucks;
 
   return {
@@ -201,7 +214,12 @@ export function applyModuleGates(
     canEditCost: permissions.canEditCost && profit,
     canManageStripe: permissions.canManageStripe && payments,
     canCollectPayments: permissions.canCollectPayments && payments && invoicing,
-    canUseQuickbooks: permissions.canUseQuickbooks && quickbooks && invoicing
+    canUseQuickbooks: permissions.canUseQuickbooks && quickbooks && invoicing,
+    canViewPurchasing: permissions.canViewPurchasing && purchasing,
+    canEditVendors: permissions.canEditVendors && purchasing,
+    canEditPurchaseOrders: permissions.canEditPurchaseOrders && purchasing,
+    canReceivePurchases: permissions.canReceivePurchases && purchasing,
+    canManageVendorBills: permissions.canManageVendorBills && purchasing
   };
 }
 

@@ -13,7 +13,8 @@ export type TenantModuleId =
   | 'vendors'
   | 'profit'
   | 'payments'
-  | 'quickbooks';
+  | 'quickbooks'
+  | 'purchasing';
 
 export interface Tenant {
   id: string;
@@ -260,6 +261,89 @@ export interface NurseryTask {
   completed: boolean;
   completedAt?: string | null;
   completedByUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Wholesale grower / supplier the nursery buys from. */
+export interface Vendor {
+  id: string;
+  name: string;
+  contactEmail?: string;
+  phone?: string;
+  contactName?: string;
+  billingAddress?: string;
+  paymentTerms?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PurchaseOrderStatus =
+  | 'draft'
+  | 'sent'
+  | 'partial'
+  | 'received'
+  | 'cancelled';
+
+export interface PurchaseOrderLine {
+  id: string;
+  plantName: string;
+  containerSize: string;
+  quantityOrdered: number;
+  /** Cumulative qty received into inventory. */
+  quantityReceived: number;
+  unitCost: number;
+  notes?: string;
+}
+
+/** Outbound purchase order to a vendor. */
+export interface PurchaseOrder {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  poNumber: string;
+  status: PurchaseOrderStatus;
+  orderDate: string;
+  expectedDate?: string;
+  notes?: string;
+  items: PurchaseOrderLine[];
+  subtotal: number;
+  freightCharge?: number;
+  grandTotal: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type VendorBillStatus = 'unpaid' | 'paid';
+
+export interface VendorBillLine {
+  id: string;
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  unitCost: number;
+  notes?: string;
+}
+
+/** Accounts-payable bill from a vendor (their invoice to us). */
+export interface VendorBill {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  billNumber: string;
+  /** Optional link back to our PO. */
+  purchaseOrderId?: string;
+  poNumber?: string;
+  status: VendorBillStatus;
+  billDate: string;
+  dueDate?: string;
+  notes?: string;
+  items: VendorBillLine[];
+  subtotal: number;
+  freightCharge?: number;
+  grandTotal: number;
+  paidAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -19,6 +19,8 @@ import { setCustomersTenant } from '../lib/customers';
 import { setDocumentsTenant } from '../lib/documents';
 import { setAuditTenant } from '../lib/audit';
 import { setTasksTenant } from '../lib/tasks';
+import { setVendorsTenant } from '../lib/vendors';
+import { setPurchasingTenant } from '../lib/purchasing';
 import { LogIn, UserPlus } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { bootstrapWorkspaceUrl } from '../lib/workspaceUrl';
@@ -42,6 +44,8 @@ function clearTenantContexts() {
   setDocumentsTenant(null);
   setAuditTenant(null);
   setTasksTenant(null);
+  setVendorsTenant(null);
+  setPurchasingTenant(null);
 }
 
 function bindTenantContexts(tenantId: string) {
@@ -51,6 +55,8 @@ function bindTenantContexts(tenantId: string) {
   setDocumentsTenant(tenantId);
   setAuditTenant(tenantId);
   setTasksTenant(tenantId);
+  setVendorsTenant(tenantId);
+  setPurchasingTenant(tenantId);
 }
 
 export function AuthGate({ children }: AuthGateProps) {

@@ -54,6 +54,31 @@ function documentDateValue(doc: CustomerDocument): Date {
   return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
 }
 
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Unpaid/pending invoice past its due date (or invoice date when due is “Upon Receipt”). */
+function isInvoiceOverdue(doc: CustomerDocument, now = new Date()): boolean {
+  if (doc.paymentStatus === 'paid') return false;
+  const today = startOfDay(now);
+  let due: Date;
+  if (doc.dueDate) {
+    const parsed = new Date(doc.dueDate);
+    if (Number.isNaN(parsed.getTime())) return false;
+    due = startOfDay(parsed);
+  } else {
+    due = startOfDay(documentDateValue(doc));
+  }
+  return due.getTime() < today.getTime();
+}
+
+function formatMoney(n: number): string {
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
 interface CustomersWorkspaceProps {
   customers: Customer[];
   orders: CustomerOrder[];
@@ -214,14 +239,17 @@ export function CustomersWorkspace({
 
   const invoiceTotals = useMemo(() => {
     let total = 0;
-    let unpaid = 0;
-    let paid = 0;
+    let outstanding = 0;
+    let overdue = 0;
     for (const doc of filteredInvoices) {
-      total += doc.grandTotal || 0;
-      if (doc.paymentStatus === 'paid') paid += 1;
-      else unpaid += 1;
+      const amount = doc.grandTotal || 0;
+      total += amount;
+      if (doc.paymentStatus !== 'paid') {
+        outstanding += amount;
+        if (isInvoiceOverdue(doc)) overdue += amount;
+      }
     }
-    return { total, unpaid, paid, count: filteredInvoices.length };
+    return { total, outstanding, overdue, count: filteredInvoices.length };
   }, [filteredInvoices]);
 
   useEffect(() => {
@@ -1009,7 +1037,7 @@ export function CustomersWorkspace({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                     <p className="text-[10px] font-bold uppercase text-slate-500">Invoices</p>
                     <p className="text-sm font-black text-slate-900">{invoiceTotals.count}</p>
@@ -1017,12 +1045,20 @@ export function CustomersWorkspace({
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2">
                     <p className="text-[10px] font-bold uppercase text-emerald-700">Total</p>
                     <p className="text-sm font-black text-emerald-900">
-                      ${invoiceTotals.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {formatMoney(invoiceTotals.total)}
                     </p>
                   </div>
                   <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-amber-700">Unpaid</p>
-                    <p className="text-sm font-black text-amber-900">{invoiceTotals.unpaid}</p>
+                    <p className="text-[10px] font-bold uppercase text-amber-700">Outstanding</p>
+                    <p className="text-sm font-black text-amber-900">
+                      {formatMoney(invoiceTotals.outstanding)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-rose-700">Overdue</p>
+                    <p className="text-sm font-black text-rose-900">
+                      {formatMoney(invoiceTotals.overdue)}
+                    </p>
                   </div>
                 </div>
 

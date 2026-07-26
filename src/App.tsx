@@ -868,7 +868,6 @@ function NurseryApp({
                 permissions={permissions}
                 trucks={trucks}
                 orders={dynamicOrders}
-                customers={customers}
                 tenantId={tenant.id}
                 nurseryName={tenant.name}
               />
@@ -1111,7 +1110,6 @@ function NurseryApp({
               permissions={permissions}
               trucks={trucks}
               orders={dynamicOrders}
-              customers={customers}
               tenantId={tenant.id}
               nurseryName={tenant.name}
             />

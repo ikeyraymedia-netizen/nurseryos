@@ -4,9 +4,11 @@ import {
   ref,
   uploadBytes
 } from 'firebase/storage';
+import jsPDF from 'jspdf';
 import { storage } from '../firebase';
 import { InventoryPlant } from '../types';
 import { updateInventoryPlant } from './inventory';
+import { deliverPdfBlob, type PdfDelivery } from './downloadPdf';
 
 /** Compress an image file to a JPEG blob suitable for Storage upload. */
 export async function fileToCompressedJpegBlob(
@@ -92,92 +94,187 @@ export async function removeInventoryPlantPhoto(plant: InventoryPlant): Promise<
   return updated;
 }
 
-export function buildAvailabilityEmailHtml(params: {
-  nurseryName: string;
-  plants: InventoryPlant[];
-  intro?: string;
-}): string {
-  const rows = params.plants
-    .map((plant) => {
-      const photoLink =
-        plant.photoUrl && /^https?:\/\//i.test(plant.photoUrl)
-          ? `<a href="${plant.photoUrl}" target="_blank" rel="noopener noreferrer" style="color:#0e7490;font-weight:700;text-decoration:underline;">View photo</a>`
-          : `<span style="color:#94a3b8;">No photo</span>`;
-      const price =
-        plant.listPrice != null ? `$${plant.listPrice.toFixed(2)}` : '—';
-      const category = plant.category
-        ? `<div style="color:#64748b;font-size:11px;margin-top:2px;">${escapeHtml(plant.category)}</div>`
-        : '';
-      return `
-        <tr>
-          <td style="padding:12px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top;">
-            <div style="font-weight:800;color:#0f172a;">${escapeHtml(plant.plantName)}</div>
-            ${category}
-          </td>
-          <td style="padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:center;color:#475569;font-family:monospace;">${escapeHtml(plant.containerSize || '')}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:#0f172a;font-family:monospace;">${plant.quantityAvailable}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#0f172a;">${price}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid #e2e8f0;text-align:center;">${photoLink}</td>
-        </tr>`;
-    })
-    .join('');
-
-  const intro = params.intro?.trim()
-    ? `<p style="margin:0 0 18px 0;color:#475569;font-size:14px;line-height:1.5;">${escapeHtml(params.intro.trim())}</p>`
-    : `<p style="margin:0 0 18px 0;color:#475569;font-size:14px;line-height:1.5;">Here is our current availability. Click <strong>View photo</strong> to open a plant photo in your browser.</p>`;
-
-  return `<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;">
-  <div style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;padding:28px;border:1px solid #e2e8f0;">
-    <h1 style="margin:0 0 4px 0;font-size:22px;color:#0e7490;text-transform:uppercase;letter-spacing:0.5px;">${escapeHtml(params.nurseryName)}</h1>
-    <p style="margin:0 0 20px 0;font-size:12px;color:#64748b;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Current Availability</p>
-    ${intro}
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead>
-        <tr style="background:#f1f5f9;">
-          <th style="text-align:left;padding:10px 8px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Plant</th>
-          <th style="text-align:center;padding:10px 8px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Size</th>
-          <th style="text-align:center;padding:10px 8px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Qty</th>
-          <th style="text-align:right;padding:10px 8px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Price</th>
-          <th style="text-align:center;padding:10px 8px;color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Photo</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows}
-      </tbody>
-    </table>
-    <p style="margin:22px 0 0 0;font-size:12px;color:#94a3b8;">Sent via NurseryOS · Availability subject to change</p>
-  </div>
-</body>
-</html>`;
+function isHttpUrl(value?: string | null): value is string {
+  return Boolean(value && /^https?:\/\//i.test(value));
 }
 
-export function buildAvailabilityEmailText(params: {
+function money(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return '—';
+  return `$${n.toFixed(2)}`;
+}
+
+function safeFileStem(name: string): string {
+  return (name || 'availability').replace(/[^\w.\-]+/g, '_').slice(0, 60);
+}
+
+function sortPlants(plants: InventoryPlant[]): InventoryPlant[] {
+  return [...plants].sort((a, b) => a.plantName.localeCompare(b.plantName));
+}
+
+/** Build & download an Excel availability list with clickable photo links. */
+export async function exportAvailabilityExcel(params: {
   nurseryName: string;
   plants: InventoryPlant[];
-  intro?: string;
-}): string {
-  const lines = params.plants.map((plant) => {
-    const price = plant.listPrice != null ? `$${plant.listPrice.toFixed(2)}` : '—';
-    const photo = plant.photoUrl ? `Photo: ${plant.photoUrl}` : 'Photo: (none)';
-    return `${plant.plantName} · ${plant.containerSize} · Qty ${plant.quantityAvailable} · ${price}\n${photo}`;
+  inStockOnly?: boolean;
+}): Promise<void> {
+  const XLSX = await import('xlsx');
+  const plants = sortPlants(
+    params.inStockOnly === false
+      ? params.plants
+      : params.plants.filter((p) => (p.quantityAvailable || 0) > 0)
+  );
+
+  const rows = plants.map((plant) => ({
+    Plant: plant.plantName,
+    Category: plant.category || '',
+    Size: plant.containerSize || '',
+    Qty: plant.quantityAvailable ?? 0,
+    Price: plant.listPrice != null ? plant.listPrice : '',
+    Photo: isHttpUrl(plant.photoUrl) ? 'View photo' : '',
+    'Photo URL': isHttpUrl(plant.photoUrl) ? plant.photoUrl : ''
+  }));
+
+  const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [
+    { Plant: '', Category: '', Size: '', Qty: '', Price: '', Photo: '', 'Photo URL': '' }
+  ]);
+
+  // Clickable "View photo" cells (column F = index 5)
+  plants.forEach((plant, idx) => {
+    if (!isHttpUrl(plant.photoUrl)) return;
+    const cellRef = XLSX.utils.encode_cell({ r: idx + 1, c: 5 });
+    sheet[cellRef] = {
+      t: 's',
+      v: 'View photo',
+      l: { Target: plant.photoUrl, Tooltip: plant.plantName }
+    };
   });
-  return [
-    `${params.nurseryName} — Current Availability`,
-    '',
-    params.intro?.trim() || 'Here is our current availability.',
-    '',
-    ...lines,
-    '',
-    'Sent via NurseryOS'
-  ].join('\n');
+
+  sheet['!cols'] = [
+    { wch: 28 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 8 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 48 }
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Availability');
+  const fileName = `${safeFileStem(params.nurseryName)}_availability.xlsx`;
+  XLSX.writeFile(workbook, fileName);
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+/** Build a PDF availability list with clickable photo links. */
+export async function exportAvailabilityPdf(params: {
+  nurseryName: string;
+  plants: InventoryPlant[];
+  inStockOnly?: boolean;
+}): Promise<PdfDelivery> {
+  const plants = sortPlants(
+    params.inStockOnly === false
+      ? params.plants
+      : params.plants.filter((p) => (p.quantityAvailable || 0) > 0)
+  );
+
+  const pdf = new jsPDF('p', 'pt', 'letter');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 40;
+  const rightX = pageWidth - margin;
+  let y = margin;
+
+  const ensureSpace = (need: number) => {
+    if (y + need <= pageHeight - margin) return;
+    pdf.addPage();
+    y = margin;
+    drawHeaderRow();
+  };
+
+  const drawHeaderRow = () => {
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text('PLANT', margin, y);
+    pdf.text('SIZE', margin + 220, y);
+    pdf.text('QTY', margin + 300, y, { align: 'right' });
+    pdf.text('PRICE', margin + 360, y, { align: 'right' });
+    pdf.text('PHOTO', rightX, y, { align: 'right' });
+    y += 4;
+    pdf.setDrawColor(203, 213, 225);
+    pdf.setLineWidth(1);
+    pdf.line(margin, y, rightX, y);
+    y += 14;
+  };
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(16);
+  pdf.setTextColor(14, 116, 144);
+  pdf.text((params.nurseryName || 'Nursery').toUpperCase(), margin, y);
+  y += 16;
+  pdf.setFontSize(9);
+  pdf.setTextColor(100, 116, 139);
+  pdf.text('CURRENT AVAILABILITY', margin, y);
+  y += 12;
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(9);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text('Click “View photo” to open a plant photo in your browser.', margin, y);
+  y += 18;
+
+  drawHeaderRow();
+
+  if (plants.length === 0) {
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text('No plants to list.', margin, y);
+  } else {
+    for (const plant of plants) {
+      const nameLines = pdf.splitTextToSize(plant.plantName || '—', 200);
+      const rowH = Math.max(16, nameLines.length * 11 + 6);
+      ensureSpace(rowH + 4);
+
+      const baseline = y;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(15, 23, 42);
+      nameLines.forEach((line: string, i: number) => {
+        pdf.text(line, margin, baseline + i * 11);
+      });
+      if (plant.category) {
+        pdf.setFontSize(7);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(plant.category, margin, baseline + nameLines.length * 11);
+      }
+
+      pdf.setFontSize(9);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text(String(plant.containerSize || ''), margin + 220, baseline);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text(String(plant.quantityAvailable ?? 0), margin + 300, baseline, { align: 'right' });
+      pdf.text(money(plant.listPrice), margin + 360, baseline, { align: 'right' });
+
+      if (isHttpUrl(plant.photoUrl)) {
+        pdf.setTextColor(14, 116, 144);
+        pdf.setFont('helvetica', 'bold');
+        pdf.textWithLink('View photo', rightX, baseline, {
+          align: 'right',
+          url: plant.photoUrl
+        });
+        pdf.setFont('helvetica', 'normal');
+      } else {
+        pdf.setTextColor(148, 163, 184);
+        pdf.text('—', rightX, baseline, { align: 'right' });
+      }
+
+      y = baseline + rowH;
+      pdf.setDrawColor(241, 245, 249);
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, y - 4, rightX, y - 4);
+    }
+  }
+
+  const fileName = `${safeFileStem(params.nurseryName)}_availability.pdf`;
+  return deliverPdfBlob(pdf.output('blob'), fileName);
 }

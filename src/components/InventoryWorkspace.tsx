@@ -10,10 +10,11 @@ import {
   AlertCircle,
   Truck,
   Camera,
-  Mail,
+  FileSpreadsheet,
+  FileText,
   ImageIcon
 } from 'lucide-react';
-import { Customer, CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
+import { CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
@@ -28,18 +29,17 @@ import {
 } from '../lib/inventory';
 import { buildLowStockForUpcomingTrucks } from '../lib/lowStockAlerts';
 import {
-  buildAvailabilityEmailHtml,
-  buildAvailabilityEmailText,
+  exportAvailabilityExcel,
+  exportAvailabilityPdf,
   removeInventoryPlantPhoto,
   uploadInventoryPlantPhoto
 } from '../lib/inventoryPhotos';
-import { sendTenantEmail } from '../lib/email';
+import { PdfShareSheet } from './PdfShareSheet';
 
 interface InventoryWorkspaceProps {
   permissions: AppPermissions;
   trucks?: TruckType[];
   orders?: CustomerOrder[];
-  customers?: Customer[];
   tenantId?: string;
   nurseryName?: string;
 }
@@ -110,7 +110,6 @@ export function InventoryWorkspace({
   permissions,
   trucks = [],
   orders = [],
-  customers = [],
   tenantId,
   nurseryName = 'Nursery'
 }: InventoryWorkspaceProps) {
@@ -124,12 +123,13 @@ export function InventoryWorkspace({
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [showExport, setShowExport] = useState(false);
-  const [exportTo, setExportTo] = useState('');
-  const [exportCustomerId, setExportCustomerId] = useState('');
-  const [exportIntro, setExportIntro] = useState('');
-  const [exportInStockOnly, setExportInStockOnly] = useState(true);
   const [exportBusy, setExportBusy] = useState(false);
+  const [exportInStockOnly, setExportInStockOnly] = useState(true);
+  const [pdfSheet, setPdfSheet] = useState<{
+    url: string;
+    fileName: string;
+    blob: Blob;
+  } | null>(null);
   const [showLowStockUpcoming, setShowLowStockUpcoming] = useState(() => {
     try {
       return localStorage.getItem(LOW_STOCK_TOGGLE_KEY) === '1';
@@ -457,51 +457,40 @@ export function InventoryWorkspace({
     return [...list].sort((a, b) => a.plantName.localeCompare(b.plantName));
   }, [plants, exportInStockOnly]);
 
-  const canEmailAvailability =
-    Boolean(tenantId) &&
-    (permissions.canViewCustomers || permissions.canViewInvoices || permissions.canEditInventory);
-
-  async function handleSendAvailability(e: FormEvent) {
-    e.preventDefault();
-    if (!tenantId || !canEmailAvailability) return;
-    const to = exportTo.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-      setMessage('Enter a valid customer email.');
-      setMessageIsError(true);
-      return;
-    }
-    if (exportPlants.length === 0) {
-      setMessage('No plants to include in this availability list.');
-      setMessageIsError(true);
-      return;
-    }
+  async function handleExportExcel() {
     setExportBusy(true);
     try {
-      const html = buildAvailabilityEmailHtml({
+      await exportAvailabilityExcel({
         nurseryName,
         plants: exportPlants,
-        intro: exportIntro
+        inStockOnly: false
       });
-      const text = buildAvailabilityEmailText({
-        nurseryName,
-        plants: exportPlants,
-        intro: exportIntro
-      });
-      const result = await sendTenantEmail({
-        tenantId,
-        to,
-        subject: `${nurseryName} — Current Availability`,
-        html,
-        text
-      });
-      if (!result.success) {
-        throw new Error(result.message || result.error || 'Email was not sent.');
-      }
-      setShowExport(false);
-      setMessage(`Availability emailed to ${to}.`);
+      setMessage(`Exported ${exportPlants.length} plant${exportPlants.length === 1 ? '' : 's'} to Excel.`);
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to send availability email.');
+      setMessage(err?.message || 'Excel export failed.');
+      setMessageIsError(true);
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function handleExportPdf() {
+    setExportBusy(true);
+    try {
+      const result = await exportAvailabilityPdf({
+        nurseryName,
+        plants: exportPlants,
+        inStockOnly: false
+      });
+      if (result.method === 'preview') {
+        setPdfSheet({ url: result.url, fileName: result.fileName, blob: result.blob });
+      } else {
+        setMessage(`Exported ${exportPlants.length} plant${exportPlants.length === 1 ? '' : 's'} to PDF.`);
+        setMessageIsError(false);
+      }
+    } catch (err: any) {
+      setMessage(err?.message || 'PDF export failed.');
       setMessageIsError(true);
     } finally {
       setExportBusy(false);
@@ -572,21 +561,36 @@ export function InventoryWorkspace({
               </p>
             </div>
           </div>
-          {canEmailAvailability && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowExport(true);
-                setExportCustomerId('');
-                setExportTo('');
-                setExportIntro('');
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold hover:bg-ink-100"
-            >
-              <Mail className="h-3.5 w-3.5" />
-              Email availability
-            </button>
-          )}
+          <div className="flex flex-col items-stretch sm:items-end gap-2">
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                disabled={exportBusy || exportPlants.length === 0}
+                onClick={() => void handleExportExcel()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold hover:bg-ink-100 disabled:opacity-50"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Export Excel
+              </button>
+              <button
+                type="button"
+                disabled={exportBusy || exportPlants.length === 0}
+                onClick={() => void handleExportPdf()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Export PDF
+              </button>
+            </div>
+            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+              <input
+                type="checkbox"
+                checked={exportInStockOnly}
+                onChange={(e) => setExportInStockOnly(e.target.checked)}
+              />
+              In-stock only ({exportPlants.length})
+            </label>
+          </div>
         </div>
 
         {(permissions.canUploadInventory || permissions.canEditInventory) && (
@@ -1072,101 +1076,14 @@ export function InventoryWorkspace({
         </div>
       </div>
 
-      {showExport && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <form
-            onSubmit={handleSendAvailability}
-            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
-          >
-            <div className="px-5 py-4 bg-ink-950 text-white">
-              <h3 className="text-sm font-black">Email availability</h3>
-              <p className="text-[11px] text-white/70 mt-0.5">
-                Sends via Resend (same path as invoices). Photo links open the plant image.
-              </p>
-            </div>
-            <div className="p-4 space-y-3">
-              {customers.length > 0 && (
-                <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Customer</span>
-                  <select
-                    value={exportCustomerId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setExportCustomerId(id);
-                      const c = customers.find((x) => x.id === id);
-                      if (c?.contactEmail) setExportTo(c.contactEmail);
-                    }}
-                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  >
-                    <option value="">Choose…</option>
-                    {customers
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                          {c.contactEmail ? ` (${c.contactEmail})` : ''}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              )}
-              <label className="block text-xs">
-                <span className="font-bold text-slate-600">Send to email</span>
-                <input
-                  required
-                  type="email"
-                  value={exportTo}
-                  onChange={(e) => setExportTo(e.target.value)}
-                  placeholder="customer@example.com"
-                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-              </label>
-              <label className="block text-xs">
-                <span className="font-bold text-slate-600">Intro note (optional)</span>
-                <textarea
-                  value={exportIntro}
-                  onChange={(e) => setExportIntro(e.target.value)}
-                  rows={2}
-                  placeholder="Here’s what we have ready this week…"
-                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                />
-              </label>
-              <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={exportInStockOnly}
-                  onChange={(e) => setExportInStockOnly(e.target.checked)}
-                />
-                In-stock only (qty &gt; 0)
-              </label>
-              <p className="text-[11px] text-slate-500">
-                Includes {exportPlants.length} plant
-                {exportPlants.length === 1 ? '' : 's'}
-                {exportPlants.filter((p) => p.photoUrl).length
-                  ? ` · ${exportPlants.filter((p) => p.photoUrl).length} with photo links`
-                  : ''}
-                .
-              </p>
-            </div>
-            <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-              <button
-                type="button"
-                onClick={() => setShowExport(false)}
-                className="px-3 py-2 text-xs font-bold text-slate-600"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={exportBusy}
-                className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
-              >
-                {exportBusy ? 'Sending…' : 'Send email'}
-              </button>
-            </div>
-          </form>
-        </div>
+      {pdfSheet && (
+        <PdfShareSheet
+          url={pdfSheet.url}
+          fileName={pdfSheet.fileName}
+          blob={pdfSheet.blob}
+          title="Availability PDF ready"
+          onClose={() => setPdfSheet(null)}
+        />
       )}
     </div>
   );

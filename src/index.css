@@ -1,24 +1,24 @@
 @import "tailwindcss";
 
 /*
-  Brand: slate structure + teal accents.
-  - ink-50…400 → cool slate surfaces / muted text
-  - ink-500…800 → teal primary (buttons, active, focus)
-  - ink-900…950 → slate dark chrome (headers)
+  Brand: teal primary, slate secondary.
+  - ink-* is a full teal ramp: light tints for surfaces/borders,
+    mid for buttons/active/focus, dark for headers and chrome.
+  - Secondary/neutral UI uses Tailwind slate-* directly.
   Keep Tailwind emerald for paid / success only.
 */
 @theme {
-  --color-ink-50: #f8fafc;
-  --color-ink-100: #f1f5f9;
-  --color-ink-150: #e8eef5;
-  --color-ink-200: #e2e8f0;
-  --color-ink-300: #94a3b8;
-  --color-ink-400: #64748b;
+  --color-ink-50: #f0fdfa;
+  --color-ink-100: #ccfbf1;
+  --color-ink-150: #b3f0e6;
+  --color-ink-200: #99f6e4;
+  --color-ink-300: #5eead4;
+  --color-ink-400: #2dd4bf;
   --color-ink-500: #14b8a6;
   --color-ink-600: #0d9488;
   --color-ink-700: #0f766e;
   --color-ink-800: #115e59;
-  --color-ink-850: #134e4a;
-  --color-ink-900: #1e293b;
-  --color-ink-950: #0f172a;
+  --color-ink-850: #12544f;
+  --color-ink-900: #134e4a;
+  --color-ink-950: #042f2e;
 }

@@ -659,8 +659,8 @@ export function ReportsWorkspace({
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[520px]">
       <div className="bg-slate-900 text-white px-5 py-4 flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-            <BarChart3 className="h-5 w-5 text-emerald-300" />
+          <div className="h-10 w-10 rounded-xl bg-ink-500/20 flex items-center justify-center shrink-0">
+            <BarChart3 className="h-5 w-5 text-ink-300" />
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-black tracking-tight">Reports</h2>
@@ -697,14 +697,14 @@ export function ReportsWorkspace({
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700/80">
+          <div className="rounded-2xl border border-ink-200 bg-ink-50/50 px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-700/80">
               Sales for the year
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
               {money(periodSales.year.salesTotal)}
             </p>
-            <p className="text-[11px] text-emerald-900/70 mt-0.5">
+            <p className="text-[11px] text-ink-900/70 mt-0.5">
               {periodSales.year.label} · {periodSales.year.invoiceCount} invoice
               {periodSales.year.invoiceCount === 1 ? '' : 's'}
             </p>
@@ -821,7 +821,7 @@ export function ReportsWorkspace({
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
-              <Users className="h-4 w-4 text-emerald-700 shrink-0" />
+              <Users className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                   Sales by customer
@@ -850,7 +850,7 @@ export function ReportsWorkspace({
                         <td className="text-right font-mono text-gray-700 px-3 py-2">
                           {row.invoiceCount}
                         </td>
-                        <td className="text-right font-mono font-black text-emerald-800 px-4 py-2">
+                        <td className="text-right font-mono font-black text-ink-800 px-4 py-2">
                           {money(row.salesTotal)}
                         </td>
                       </tr>
@@ -863,7 +863,7 @@ export function ReportsWorkspace({
 
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
-              <Sprout className="h-4 w-4 text-emerald-700 shrink-0" />
+              <Sprout className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                   Top plants by revenue
@@ -893,7 +893,7 @@ export function ReportsWorkspace({
                           </span>
                         </td>
                         <td className="text-right font-mono text-gray-700 px-3 py-2">{row.qty}</td>
-                        <td className="text-right font-mono font-black text-emerald-800 px-4 py-2">
+                        <td className="text-right font-mono font-black text-ink-800 px-4 py-2">
                           {money(row.revenue)}
                         </td>
                       </tr>
@@ -908,7 +908,7 @@ export function ReportsWorkspace({
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
-              <Calendar className="h-4 w-4 text-emerald-700 shrink-0" />
+              <Calendar className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                   Sales by month
@@ -935,7 +935,7 @@ export function ReportsWorkspace({
                         <td className="text-right font-mono text-gray-700 px-3 py-2">
                           {row.invoiceCount}
                         </td>
-                        <td className="text-right font-mono font-black text-emerald-800 px-4 py-2">
+                        <td className="text-right font-mono font-black text-ink-800 px-4 py-2">
                           {money(row.salesTotal)}
                         </td>
                       </tr>
@@ -948,7 +948,7 @@ export function ReportsWorkspace({
 
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
-              <DollarSign className="h-4 w-4 text-emerald-700 shrink-0" />
+              <DollarSign className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                   Invoice payments
@@ -1045,7 +1045,7 @@ export function ReportsWorkspace({
                         </td>
                         <td
                           className={`text-right font-mono font-black px-3 py-2 ${
-                            row.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                            row.profit >= 0 ? 'text-ink-700' : 'text-rose-600'
                           }`}
                         >
                           {money(row.profit)}
@@ -1064,7 +1064,7 @@ export function ReportsWorkspace({
 
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-            <Sparkles className="h-4 w-4 text-emerald-700 shrink-0" />
+            <Sparkles className="h-4 w-4 text-ink-700 shrink-0" />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                 Ask AI (optional)
@@ -1090,7 +1090,7 @@ export function ReportsWorkspace({
                       setQuestion(suggestion);
                       void runReport(suggestion);
                     }}
-                    className="text-left text-[11px] font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50 text-gray-700 disabled:opacity-50 transition-colors"
+                    className="text-left text-[11px] font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-ink-300 hover:bg-ink-50 text-gray-700 disabled:opacity-50 transition-colors"
                   >
                     {suggestion}
                   </button>
@@ -1108,13 +1108,13 @@ export function ReportsWorkspace({
                   onChange={(e) => setQuestion(e.target.value)}
                   rows={2}
                   placeholder='e.g. "What needs attention this week for loading and inventory?"'
-                  className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-white resize-y min-h-[72px]"
+                  className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-white resize-y min-h-[72px]"
                   disabled={loading}
                 />
                 <button
                   type="submit"
                   disabled={loading || !question.trim()}
-                  className="sm:self-stretch inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black disabled:opacity-50 shrink-0"
+                  className="sm:self-stretch inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-700 hover:bg-ink-800 text-white text-xs font-black disabled:opacity-50 shrink-0"
                 >
                   {loading ? (
                     <>
@@ -1157,7 +1157,7 @@ export function ReportsWorkspace({
                     >
                       {copied ? (
                         <>
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <Check className="h-3.5 w-3.5 text-ink-600" />
                           Copied
                         </>
                       ) : (
@@ -1172,7 +1172,7 @@ export function ReportsWorkspace({
                 <div className="flex-1 overflow-y-auto p-4 max-h-80">
                   {loading ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <RefreshCw className="h-7 w-7 text-emerald-700 animate-spin mb-3" />
+                      <RefreshCw className="h-7 w-7 text-ink-700 animate-spin mb-3" />
                       <p className="text-sm font-bold text-gray-800">Analyzing nursery data…</p>
                     </div>
                   ) : (
@@ -1189,7 +1189,7 @@ export function ReportsWorkspace({
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
             <div className="flex items-center gap-2 min-w-0">
-              <History className="h-4 w-4 text-emerald-700 shrink-0" />
+              <History className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                   Recent activity

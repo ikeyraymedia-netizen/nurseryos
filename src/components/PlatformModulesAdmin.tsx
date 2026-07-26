@@ -102,7 +102,7 @@ export function PlatformModulesAdmin({
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-900 text-white">
           <div className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-emerald-300" />
+            <Package className="h-5 w-5 text-ink-300" />
             <div>
               <h2 className="text-base font-black">Nursery packages</h2>
               <p className="text-[11px] text-slate-300">Turn modules on/off per nursery (platform admin)</p>
@@ -162,13 +162,13 @@ export function PlatformModulesAdmin({
                       onClick={() => toggleModule(mod.id)}
                       className={`w-full text-left rounded-xl border px-3 py-3 flex items-start gap-3 transition-colors ${
                         on
-                          ? 'border-emerald-300 bg-emerald-50'
+                          ? 'border-ink-300 bg-ink-50'
                           : 'border-slate-200 bg-white hover:bg-slate-50'
                       }`}
                     >
                       <span
                         className={`mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
-                          on ? 'bg-emerald-700 border-emerald-700 text-white' : 'border-slate-300'
+                          on ? 'bg-ink-700 border-ink-700 text-white' : 'border-slate-300'
                         }`}
                       >
                         {on && <Check className="h-3.5 w-3.5" />}
@@ -183,7 +183,7 @@ export function PlatformModulesAdmin({
               </div>
 
               {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-              {message && <p className="text-xs text-emerald-800 font-semibold">{message}</p>}
+              {message && <p className="text-xs text-ink-800 font-semibold">{message}</p>}
             </>
           )}
         </div>
@@ -200,7 +200,7 @@ export function PlatformModulesAdmin({
             type="button"
             disabled={saving || loading || !selected}
             onClick={handleSave}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white disabled:opacity-50"
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-ink-700 text-white disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save modules'}
           </button>

@@ -540,21 +540,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   };
 
   return (
-    <div className="bg-emerald-50/50 rounded-2xl border-2 border-emerald-600/30 shadow-md h-full flex flex-col overflow-x-hidden overflow-y-auto">
+    <div className="bg-ink-50/50 rounded-2xl border-2 border-ink-600/30 shadow-md h-full flex flex-col overflow-x-hidden overflow-y-auto">
       {/* Summary Header banner */}
-      <div className="bg-emerald-950 text-white p-6 border-b border-emerald-900 relative shrink-0 lg:sticky lg:top-0 lg:z-10">
+      <div className="bg-ink-950 text-white p-6 border-b border-ink-900 relative shrink-0 lg:sticky lg:top-0 lg:z-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start space-x-3.5">
-            <div className="bg-emerald-900 p-3 rounded-2xl text-emerald-100 shadow-inner">
+            <div className="bg-ink-900 p-3 rounded-2xl text-ink-100 shadow-inner">
               <TruckIcon className="h-6 w-6" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-xl font-bold tracking-tight font-sans text-emerald-50">
+                <h2 className="text-xl font-bold tracking-tight font-sans text-ink-50">
                   {truck.name}
                 </h2>
                 {overallPercentage >= 100 ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-500/20 text-ink-300 border border-ink-500/30 font-mono">
                     FULLY LOADED
                   </span>
                 ) : (
@@ -564,7 +564,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                 )}
               </div>
               
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-emerald-200 font-mono">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-ink-200 font-mono">
                 {truck.owner && (
                   <span className={`flex items-center font-bold px-2.5 py-0.5 rounded shadow-sm shrink-0 ${
                     truck.owner === 'Ikey' ? 'text-teal-950 bg-teal-300' :
@@ -575,7 +575,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   </span>
                 )}
                 {truck.truckType && (
-                  <span className="flex items-center font-bold text-white bg-emerald-800/85 px-2 py-0.5 rounded border border-emerald-700/60 shadow-sm shrink-0">
+                  <span className="flex items-center font-bold text-white bg-ink-800/85 px-2 py-0.5 rounded border border-ink-700/60 shadow-sm shrink-0">
                     Type: {truck.truckType}
                   </span>
                 )}
@@ -591,11 +591,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   </span>
                 )}
                 <span className="flex items-center">
-                  <Calendar className="h-3.5 w-3.5 mr-1 text-emerald-400" />
+                  <Calendar className="h-3.5 w-3.5 mr-1 text-ink-400" />
                   Created: {new Date(truck.dateCreated).toLocaleDateString()}
                 </span>
                 <span className="flex items-center">
-                  <Package className="h-3.5 w-3.5 mr-1 text-emerald-400" />
+                  <Package className="h-3.5 w-3.5 mr-1 text-ink-400" />
                   {truckOrders.length} grouped {truckOrders.length === 1 ? 'order' : 'orders'}
                 </span>
               </div>
@@ -607,7 +607,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               type="button"
               disabled={pullSheetBusy || truckOrders.length === 0}
               onClick={handleDownloadPullSheet}
-              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-emerald-50 text-emerald-950 transition-colors border border-emerald-200 shadow-sm font-sans disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-ink-200 shadow-sm font-sans disabled:opacity-50"
               title="Download printable pull sheet PDF"
             >
               <Printer className="h-3.5 w-3.5 mr-1.5" />
@@ -622,9 +622,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   e.stopPropagation();
                   setIsBOLOpen(true);
                 }}
-                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-colors border border-emerald-400 shadow-sm font-sans"
+                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-ink-500 hover:bg-ink-400 text-ink-950 transition-colors border border-ink-400 shadow-sm font-sans"
               >
-                <FileText className="h-3.5 w-3.5 mr-1.5 text-emerald-950" />
+                <FileText className="h-3.5 w-3.5 mr-1.5 text-ink-950" />
                 Generate Bill of Lading
               </button>
             )}
@@ -660,7 +660,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           key={order.id}
                           type="button"
                           onClick={() => openInvoice(order)}
-                          className="w-full text-left px-3 py-2.5 text-xs hover:bg-emerald-50 border-b border-slate-50 last:border-b-0"
+                          className="w-full text-left px-3 py-2.5 text-xs hover:bg-ink-50 border-b border-slate-50 last:border-b-0"
                         >
                           <span className="font-bold text-gray-900 block truncate">{order.customerName}</span>
                           <span className="text-[10px] text-gray-500 font-mono">Order #{order.orderNumber}</span>
@@ -675,7 +675,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             {permissions.canEditTrucks && (
               <button
                 onClick={onEditTruck}
-                className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-800 hover:bg-emerald-700 text-white transition-colors border border-emerald-700 shadow-sm"
+                className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-ink-800 hover:bg-ink-700 text-white transition-colors border border-ink-700 shadow-sm"
               >
                 <Edit className="h-3.5 w-3.5 mr-1.5" />
                 Edit Truck Group
@@ -692,7 +692,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                 </button>
                 <button
                   onClick={handleLoadAllTruck}
-                  className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-200 hover:bg-emerald-100 text-emerald-950 transition-colors border border-emerald-100 shadow-sm"
+                  className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-ink-200 hover:bg-ink-100 text-ink-950 transition-colors border border-ink-100 shadow-sm"
                 >
                   <CheckCheck className="h-3.5 w-3.5 mr-1.5" />
                   Load All Truck
@@ -703,9 +703,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         </div>
 
         {truck.notes && (
-          <div className="mt-4 bg-emerald-900/40 border border-emerald-900 rounded-xl p-3 text-xs text-emerald-100 flex items-start space-x-2">
-            <Info className="h-4 w-4 text-emerald-300 shrink-0 mt-0.5" />
-            <p className="leading-normal"><span className="font-bold font-mono text-emerald-300 uppercase">Load Instructions:</span> {truck.notes}</p>
+          <div className="mt-4 bg-ink-900/40 border border-ink-900 rounded-xl p-3 text-xs text-ink-100 flex items-start space-x-2">
+            <Info className="h-4 w-4 text-ink-300 shrink-0 mt-0.5" />
+            <p className="leading-normal"><span className="font-bold font-mono text-ink-300 uppercase">Load Instructions:</span> {truck.notes}</p>
           </div>
         )}
 
@@ -734,27 +734,27 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       </div>
 
       {/* Stats KPI Ribbon */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 border-b border-emerald-500/20 bg-emerald-100/35 shadow-inner">
-        <div className={`p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-emerald-500/20 ${isOverweight ? 'bg-red-100/80' : ''}`}>
-          <Weight className={`h-5 w-5 shrink-0 ${isOverweight ? 'text-red-700' : 'text-emerald-800'}`} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 border-b border-ink-500/20 bg-ink-100/35 shadow-inner">
+        <div className={`p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-ink-500/20 ${isOverweight ? 'bg-red-100/80' : ''}`}>
+          <Weight className={`h-5 w-5 shrink-0 ${isOverweight ? 'text-red-700' : 'text-ink-800'}`} />
           <div>
-            <p className={`text-[10px] font-bold font-mono uppercase leading-tight ${isOverweight ? 'text-red-800' : 'text-emerald-900/60'}`}>Total Truckload Weight</p>
+            <p className={`text-[10px] font-bold font-mono uppercase leading-tight ${isOverweight ? 'text-red-800' : 'text-ink-900/60'}`}>Total Truckload Weight</p>
             <p className={`text-base font-black font-mono mt-0.5 ${isOverweight ? 'text-red-900' : 'text-gray-900'}`}>
               {totalWeight.toLocaleString()}
               {capacity > 0 ? (
-                <span className={`text-xs font-normal font-sans block sm:inline sm:ml-2 ${isOverweight ? 'text-red-800 font-bold' : 'text-emerald-950'}`}>
+                <span className={`text-xs font-normal font-sans block sm:inline sm:ml-2 ${isOverweight ? 'text-red-800 font-bold' : 'text-ink-950'}`}>
                   / {capacity.toLocaleString()} lbs ({overallWeightPercentage}%
                   {isOverweight ? ' — OVER' : ' capacity'})
                 </span>
               ) : (
-                <span className="text-xs font-semibold text-emerald-900"> lbs</span>
+                <span className="text-xs font-semibold text-ink-900"> lbs</span>
               )}
             </p>
           </div>
         </div>
 
-        <div className="p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-emerald-500/20">
-          <Package className="h-5 w-5 text-emerald-800 shrink-0" />
+        <div className="p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-ink-500/20">
+          <Package className="h-5 w-5 text-ink-800 shrink-0" />
           <div>
             <p className="text-[10px] font-bold text-gray-400 font-mono uppercase leading-tight">Total Plants Count</p>
             <p className="text-base font-black text-gray-900 font-mono mt-0.5">
@@ -766,11 +766,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         <div className="p-4">
           <div className="flex justify-between text-[10px] mb-1 font-mono leading-tight">
             <span className="font-bold text-gray-400 uppercase">Truck Load Status</span>
-            <span className="font-bold text-emerald-800">{overallPercentage}% Complete</span>
+            <span className="font-bold text-ink-800">{overallPercentage}% Complete</span>
           </div>
           <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
             <div
-              className="bg-emerald-700 h-full rounded-full transition-all duration-300"
+              className="bg-ink-700 h-full rounded-full transition-all duration-300"
               style={{ width: `${overallPercentage}%` }}
             />
           </div>
@@ -942,8 +942,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   key={order.id}
                   className={`border-2 rounded-2xl overflow-hidden transition-all ${
                     isExpanded 
-                      ? 'border-emerald-600 shadow-md ring-1 ring-emerald-500/25 bg-white' 
-                      : 'border-slate-300/80 bg-white hover:border-emerald-500 hover:shadow-md shadow-sm'
+                      ? 'border-ink-600 shadow-md ring-1 ring-ink-500/25 bg-white' 
+                      : 'border-slate-300/80 bg-white hover:border-ink-500 hover:shadow-md shadow-sm'
                   }`}
                 >
                   {/* Card Header toggle */}
@@ -954,7 +954,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
                         {loadIndex !== -1 && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-250/30 font-mono tracking-wide">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-ink-100 text-ink-800 border border-ink-250/30 font-mono tracking-wide">
                             {loadIndex === 0 ? '1ST TO LOAD' : loadIndex === 1 ? '2ND TO LOAD' : loadIndex === 2 ? '3RD TO LOAD' : `${loadIndex + 1}TH TO LOAD`}
                           </span>
                         )}
@@ -982,8 +982,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           <>
                             <span className="text-gray-300 shrink-0">•</span>
                             <span className="shrink-0 inline-flex items-center text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded gap-1">
-                              <MapPin className="h-3 w-3 text-emerald-700 shrink-0" />
-                              <span>Staged: <span className="font-extrabold text-emerald-950">{order.stagedLocation}</span></span>
+                              <MapPin className="h-3 w-3 text-ink-700 shrink-0" />
+                              <span>Staged: <span className="font-extrabold text-ink-950">{order.stagedLocation}</span></span>
                             </span>
                           </>
                         )}
@@ -1007,9 +1007,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
 
                       {/* Inner small progress ring or bar */}
                       <div className="hidden sm:flex items-center space-x-2 text-right">
-                        <span className="text-xs font-bold text-emerald-800 font-mono">{orderPercentage}%</span>
+                        <span className="text-xs font-bold text-ink-800 font-mono">{orderPercentage}%</span>
                         <div className="w-16 bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-emerald-700 h-full rounded-full" style={{ width: `${orderPercentage}%` }} />
+                          <div className="bg-ink-700 h-full rounded-full" style={{ width: `${orderPercentage}%` }} />
                         </div>
                       </div>
 
@@ -1029,7 +1029,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                         <div className="flex items-center space-x-4">
                           <button
                             onClick={() => onSelectOrder(order.id)}
-                            className="inline-flex items-center text-xs font-bold text-emerald-800 hover:text-emerald-950 hover:underline"
+                            className="inline-flex items-center text-xs font-bold text-ink-800 hover:text-ink-950 hover:underline"
                           >
                             <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                             Open Standalone Workspace
@@ -1082,7 +1082,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             className={`inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                               loadedItems >= totalItems
                                 ? 'bg-gray-50 text-gray-300 border border-gray-100 cursor-not-allowed'
-                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200'
+                                : 'bg-ink-100 text-ink-800 border border-ink-200 hover:bg-ink-200'
                             }`}
                           >
                             <CheckCheck className="h-3.5 w-3.5 mr-1" />
@@ -1134,19 +1134,19 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             setNewNotes('');
                             setAddError(null);
                           }}
-                          className="w-full py-2.5 px-3 border border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/20 hover:bg-emerald-50/50 text-emerald-850 hover:text-emerald-950 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 shadow-sm"
+                          className="w-full py-2.5 px-3 border border-dashed border-ink-300 hover:border-ink-500 bg-ink-50/20 hover:bg-ink-50/50 text-ink-850 hover:text-ink-950 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 shadow-sm"
                         >
-                          <Plus className="h-3.5 w-3.5 stroke-[2.5px] text-emerald-700" />
+                          <Plus className="h-3.5 w-3.5 stroke-[2.5px] text-ink-700" />
                           <span>Add Plant Addition / Add-on to this Order</span>
                         </button>
                       ) : (
                         <form
                           onSubmit={(e) => handleAddPlantToOrderSubmit(e, order)}
-                          className="bg-slate-50 border-2 border-emerald-500 rounded-xl p-4 shadow-sm space-y-3 animate-fade-in"
+                          className="bg-slate-50 border-2 border-ink-500 rounded-xl p-4 shadow-sm space-y-3 animate-fade-in"
                         >
                           <div className="flex items-center justify-between border-b border-gray-250 pb-2">
                             <h4 className="text-xs font-black text-gray-900 flex items-center">
-                              <Plus className="h-3.5 w-3.5 mr-1 text-emerald-700" />
+                              <Plus className="h-3.5 w-3.5 mr-1 text-ink-700" />
                               Add Plant Addition to {order.customerName}
                             </h4>
                             <button
@@ -1178,7 +1178,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                 placeholder="e.g. Dwarf Burford Holly"
                                 value={newPlantName}
                                 onChange={(e) => setNewPlantName(e.target.value)}
-                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white transition-all font-medium text-gray-800"
+                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
                                 required
                               />
                             </div>
@@ -1189,7 +1189,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                               <select
                                 value={newContainerSize}
                                 onChange={(e) => setNewContainerSize(e.target.value)}
-                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white transition-all font-medium text-gray-800"
+                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
                                 required
                               >
                                 <option value="">Select Size...</option>
@@ -1212,7 +1212,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                 min="1"
                                 value={newQuantity}
                                 onChange={(e) => setNewQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white transition-all font-mono font-bold text-gray-800"
+                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white transition-all font-mono font-bold text-gray-800"
                                 required
                               />
                             </div>
@@ -1225,7 +1225,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                 placeholder="e.g. Tag-along / Late add"
                                 value={newNotes}
                                 onChange={(e) => setNewNotes(e.target.value)}
-                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white transition-all font-medium text-gray-800"
+                                className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
                               />
                             </div>
                           </div>
@@ -1236,7 +1236,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                 type="checkbox"
                                 checked={newIsAddition}
                                 onChange={(e) => setNewIsAddition(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500 cursor-pointer"
+                                className="h-3.5 w-3.5 rounded border-gray-300 text-ink-700 focus:ring-ink-500 cursor-pointer"
                               />
                               <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                                 Mark as Addition
@@ -1245,7 +1245,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
 
                             <button
                               type="submit"
-                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
+                              className="px-3.5 py-1.5 bg-ink-700 hover:bg-ink-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
                             >
                               <CheckCheck className="h-3 w-3" />
                               <span>Save Addition</span>
@@ -1282,7 +1282,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         type="text"
                                         value={editPlantName}
                                         onChange={(e) => setEditPlantName(e.target.value)}
-                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-emerald-500 bg-white font-medium text-gray-800"
+                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                                         required
                                       />
                                     </div>
@@ -1293,7 +1293,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                       <select
                                         value={editContainerSize}
                                         onChange={(e) => setEditContainerSize(e.target.value)}
-                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-emerald-500 bg-white font-medium text-gray-800"
+                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                                         required
                                       >
                                         {containerWeights.map((w) => (
@@ -1315,7 +1315,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         min="1"
                                         value={editQuantity}
                                         onChange={(e) => setEditQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-emerald-500 bg-white font-mono font-bold text-gray-800"
+                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-mono font-bold text-gray-800"
                                         required
                                       />
                                     </div>
@@ -1327,7 +1327,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         type="text"
                                         value={editNotes}
                                         onChange={(e) => setEditNotes(e.target.value)}
-                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-emerald-500 bg-white font-medium text-gray-800"
+                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                                         placeholder="Optional notes"
                                       />
                                     </div>
@@ -1339,7 +1339,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         type="checkbox"
                                         checked={editIsAddition}
                                         onChange={(e) => setEditIsAddition(e.target.checked)}
-                                        className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500 cursor-pointer"
+                                        className="h-3.5 w-3.5 rounded border-gray-300 text-ink-700 focus:ring-ink-500 cursor-pointer"
                                       />
                                       <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                                         Addition
@@ -1356,7 +1356,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                       </button>
                                       <button
                                         type="submit"
-                                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-[10px] font-bold shadow-sm"
+                                        className="px-3 py-1 bg-ink-700 hover:bg-ink-800 text-white rounded-md text-[10px] font-bold shadow-sm"
                                       >
                                         Save
                                       </button>
@@ -1389,10 +1389,10 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                             setEditNotes(item.notes || '');
                                             setEditIsAddition(!!item.isAddition);
                                           }}
-                                          className="p-0.5 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded"
+                                          className="p-0.5 text-gray-400 hover:text-ink-700 hover:bg-ink-50 rounded"
                                           title="Edit item details"
                                         >
-                                          <Edit className="h-3 w-3 text-gray-400 hover:text-emerald-600" />
+                                          <Edit className="h-3 w-3 text-gray-400 hover:text-ink-600" />
                                         </button>
                                         <button
                                           onClick={() => handleDeleteItem(order, item.id)}
@@ -1446,8 +1446,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         </button>
                                       </div>
                                     </div>
-                                    <div className="flex flex-col items-center gap-1.5 bg-emerald-50/40 border border-emerald-200/60 rounded-xl p-2.5">
-                                      <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide cursor-pointer select-none">
+                                    <div className="flex flex-col items-center gap-1.5 bg-ink-50/40 border border-ink-200/60 rounded-xl p-2.5">
+                                      <label className="text-[10px] font-bold text-ink-700 uppercase tracking-wide cursor-pointer select-none">
                                         Loaded
                                       </label>
                                       <input
@@ -1455,7 +1455,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         checked={isFullyLoaded}
                                         onChange={() => handleMarkItemFullyLoaded(order.id, order, item.id)}
                                         disabled={!permissions.canCheckOffLoading}
-                                        className="h-8 w-8 sm:h-7 sm:w-7 rounded-md border-2 border-emerald-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
+                                        className="h-8 w-8 sm:h-7 sm:w-7 rounded-md border-2 border-ink-300 text-ink-600 focus:ring-ink-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                                         title={isFullyLoaded ? 'Undo loaded' : 'Mark all loaded'}
                                         aria-label={isFullyLoaded ? 'Undo loaded' : 'Mark all loaded'}
                                       />
@@ -1463,17 +1463,17 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         <button
                                           onClick={() => handleQuantityAdjust(order.id, order, item.id, item.loadedQuantity - 1)}
                                           disabled={item.loadedQuantity <= 0 || isUpdating || !permissions.canCheckOffLoading}
-                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-ink-300 hover:bg-ink-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                         >
                                           -
                                         </button>
-                                        <span className={`text-xs font-black font-mono w-12 text-center py-1 border border-gray-100 bg-white rounded-md ${isFullyLoaded ? 'text-emerald-800 font-black' : 'text-gray-800'}`}>
+                                        <span className={`text-xs font-black font-mono w-12 text-center py-1 border border-gray-100 bg-white rounded-md ${isFullyLoaded ? 'text-ink-800 font-black' : 'text-gray-800'}`}>
                                           {item.loadedQuantity} <span className="text-[10px] font-normal text-gray-400">/</span> {item.quantity}
                                         </span>
                                         <button
                                           onClick={() => handleQuantityAdjust(order.id, order, item.id, item.loadedQuantity + 1)}
                                           disabled={isFullyLoaded || isUpdating || !permissions.canCheckOffLoading}
-                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-ink-300 hover:bg-ink-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                         >
                                           +
                                         </button>

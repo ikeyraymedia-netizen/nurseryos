@@ -46,7 +46,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     switch (status) {
       case 'completed':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-ink-100 text-ink-800 border border-ink-200">
             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
             Loaded / Ready
           </span>
@@ -91,10 +91,10 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   };
 
   return (
-    <div id="orders-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
+    <div id="orders-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-gray-900 font-sans">Plant Orders</h3>
-        <span className="text-xs font-mono bg-emerald-100 text-emerald-950 border border-emerald-300 px-2.5 py-1 rounded-lg font-bold">
+        <span className="text-xs font-mono bg-ink-100 text-ink-950 border border-ink-300 px-2.5 py-1 rounded-lg font-bold">
           {filteredOrders.length} {filteredOrders.length === 1 ? 'Order' : 'Orders'}
         </span>
       </div>
@@ -109,7 +109,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           placeholder="Search customer or order #..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-emerald-600 bg-slate-50/50 focus:bg-white transition-all font-medium text-gray-800 placeholder:text-slate-400 shadow-inner"
+          className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ink-600 bg-slate-50/50 focus:bg-white transition-all font-medium text-gray-800 placeholder:text-slate-400 shadow-inner"
         />
       </div>
 
@@ -121,8 +121,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({
             onClick={() => setStatusFilter(tab)}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg capitalize whitespace-nowrap transition-all duration-150 ${
               statusFilter === tab
-                ? 'bg-emerald-700 text-white shadow-sm'
-                : 'text-slate-600 hover:text-emerald-800 hover:bg-emerald-50'
+                ? 'bg-ink-700 text-white shadow-sm'
+                : 'text-slate-600 hover:text-ink-800 hover:bg-ink-50'
             }`}
           >
             {tab === 'all' ? 'All Orders' : tab === 'loading' ? 'Loading' : tab === 'completed' ? 'Shipped' : 'Pending'}
@@ -152,8 +152,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                 onClick={() => onSelectOrder(order.id)}
                 className={`group relative border-2 rounded-xl p-4 cursor-pointer transition-all duration-150 flex flex-col justify-between ${
                   isSelected
-                    ? 'border-emerald-600 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/20'
-                    : 'border-slate-200/90 bg-white hover:border-emerald-600 hover:bg-emerald-50/10 hover:shadow-md shadow-sm'
+                    ? 'border-ink-600 bg-ink-50/40 shadow-sm ring-1 ring-ink-500/20'
+                    : 'border-slate-200/90 bg-white hover:border-ink-600 hover:bg-ink-50/10 hover:shadow-md shadow-sm'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -228,7 +228,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                 {/* Staging Location Badge */}
                 {order.stagedLocation && (
                   <div className="mt-2 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center space-x-1.5 w-fit">
-                    <MapPin className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
+                    <MapPin className="h-3.5 w-3.5 text-ink-700 shrink-0" />
                     <span className="truncate">Staged at: <span className="font-black text-slate-900">{order.stagedLocation}</span></span>
                   </div>
                 )}
@@ -239,11 +239,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                     <span className="font-semibold text-gray-600">
                       Loaded: <span className="font-bold text-gray-900">{loadedQty}</span> of {totalQty} plants
                     </span>
-                    <span className="font-bold text-emerald-800 font-mono">{percentage}%</span>
+                    <span className="font-bold text-ink-800 font-mono">{percentage}%</span>
                   </div>
                   <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
                     <div
-                      className="bg-emerald-700 h-full rounded-full transition-all duration-300"
+                      className="bg-ink-700 h-full rounded-full transition-all duration-300"
                       style={{ width: `${percentage}%` }}
                     />
                   </div>

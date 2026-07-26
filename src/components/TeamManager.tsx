@@ -559,7 +559,7 @@ export function TeamManager({
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-emerald-700" />
+            <Users className="h-5 w-5 text-ink-700" />
             <h3 className="font-bold text-gray-900">Team & Roles</h3>
           </div>
           <button type="button" onClick={onClose} className="text-xs font-bold text-gray-500">
@@ -586,7 +586,7 @@ export function TeamManager({
                     key={mod.id}
                     className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
                       on
-                        ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                        ? 'bg-ink-50 text-ink-900 border-ink-200'
                         : 'bg-white text-slate-400 border-slate-200'
                     }`}
                   >
@@ -607,7 +607,7 @@ export function TeamManager({
             </p>
             {qbStatus?.connected ? (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-emerald-800">
+                <p className="text-xs font-semibold text-ink-800">
                   Connected
                   {qbStatus.connectedAt
                     ? ` · ${new Date(qbStatus.connectedAt).toLocaleDateString()}`
@@ -709,7 +709,7 @@ export function TeamManager({
               </p>
               {stripeStatus?.connected ? (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-emerald-800">
+                  <p className="text-xs font-semibold text-ink-800">
                     {stripeStatus.chargesEnabled
                       ? 'Ready to collect payments'
                       : 'Connected — finish onboarding to enable charges'}
@@ -767,18 +767,18 @@ export function TeamManager({
             </div>
           )}
 
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-3 space-y-2">
-            <p className="text-xs font-bold uppercase text-emerald-900 flex items-center gap-1.5">
+          <div className="rounded-xl border border-ink-100 bg-ink-50/40 px-3 py-3 space-y-2">
+            <p className="text-xs font-bold uppercase text-ink-900 flex items-center gap-1.5">
               <Mail className="h-3.5 w-3.5" />
               Outbound email
             </p>
-            <p className="text-[11px] text-emerald-950/80 leading-relaxed">
+            <p className="text-[11px] text-ink-950/80 leading-relaxed">
               Invoices are sent through NurseryOS email (Resend). Set this nursery’s display name
               and reply-to address so customers can answer the nursery, not the platform. Owner/admin
               only.
             </p>
             {emailStatus?.configured ? (
-              <p className="text-xs font-semibold text-emerald-800">
+              <p className="text-xs font-semibold text-ink-800">
                 Reply-to {emailStatus.fromEmail}
                 {emailStatus.configuredAt
                   ? ` · saved ${new Date(emailStatus.configuredAt).toLocaleDateString()}`
@@ -793,24 +793,24 @@ export function TeamManager({
               </p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-900/70">
                 From name
                 <input
                   type="text"
                   value={emailFromName}
                   onChange={(e) => setEmailFromName(e.target.value)}
                   placeholder={tenant.name}
-                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-semibold text-slate-800"
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
                 />
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-900/70">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-900/70">
                 Reply-to email
                 <input
                   type="email"
                   value={emailFromEmail}
                   onChange={(e) => setEmailFromEmail(e.target.value)}
                   placeholder="billing@yournursery.com"
-                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-semibold text-slate-800"
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
                 />
               </label>
             </div>
@@ -819,7 +819,7 @@ export function TeamManager({
                 type="button"
                 disabled={emailBusy || busy || !emailFromEmail.trim()}
                 onClick={() => void handleSaveEmail()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-800 text-white text-xs font-bold disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-800 text-white text-xs font-bold disabled:opacity-50"
               >
                 {emailBusy ? 'Saving…' : emailStatus?.configured ? 'Update email settings' : 'Save email settings'}
               </button>
@@ -868,7 +868,7 @@ export function TeamManager({
                           roles.map((role) => (
                             <span
                               key={role}
-                              className="text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-800 px-2 py-1 rounded-full"
+                              className="text-[10px] font-bold uppercase tracking-wide bg-ink-50 text-ink-800 px-2 py-1 rounded-full"
                             >
                               {roleLabel(role)}
                             </span>
@@ -877,8 +877,8 @@ export function TeamManager({
                     </div>
 
                     {isEditing ? (
-                      <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 space-y-2">
-                        <p className="text-[10px] font-bold uppercase text-emerald-800">
+                      <div className="rounded-lg border border-ink-100 bg-ink-50/50 p-2.5 space-y-2">
+                        <p className="text-[10px] font-bold uppercase text-ink-800">
                           Assign roles
                         </p>
                         <div className="flex flex-wrap gap-1.5">
@@ -892,8 +892,8 @@ export function TeamManager({
                                 onClick={() => toggleDraftRole(role)}
                                 className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-colors ${
                                   on
-                                    ? 'bg-emerald-700 text-white border-emerald-800'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
+                                    ? 'bg-ink-700 text-white border-ink-800'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-ink-300'
                                 }`}
                               >
                                 {roleLabel(role)}
@@ -906,7 +906,7 @@ export function TeamManager({
                             type="button"
                             disabled={busy}
                             onClick={() => void handleSaveRoles(m)}
-                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white text-[11px] font-bold disabled:opacity-50"
+                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-ink-700 text-white text-[11px] font-bold disabled:opacity-50"
                           >
                             Save roles
                           </button>
@@ -927,7 +927,7 @@ export function TeamManager({
                             type="button"
                             disabled={busy}
                             onClick={() => startEditRoles(m)}
-                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-ink-50 px-2 py-1 text-[10px] font-bold text-ink-800 hover:bg-ink-100 disabled:opacity-50"
                             title="Edit roles"
                           >
                             <Shield className="h-3.5 w-3.5" />
@@ -964,9 +964,9 @@ export function TeamManager({
             </div>
           </div>
 
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-            <p className="text-xs font-bold uppercase text-emerald-800 mb-2">Invite a team member</p>
-            <p className="text-xs text-emerald-900/80 mb-3">
+          <div className="rounded-xl border border-ink-100 bg-ink-50/40 p-4">
+            <p className="text-xs font-bold uppercase text-ink-800 mb-2">Invite a team member</p>
+            <p className="text-xs text-ink-900/80 mb-3">
               Select one or more roles for the invite. Office gets customers, invoices, and reports
               (no yard tabs). Sales gets customers, orders, trucks, and invoices, with inventory
               view-only and no tasks. Supervisor runs trucks without pricing. Inventory is plant stock
@@ -983,8 +983,8 @@ export function TeamManager({
                     onClick={() => toggleInviteRole(role)}
                     className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-colors ${
                       on
-                        ? 'bg-emerald-700 text-white border-emerald-800'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
+                        ? 'bg-ink-700 text-white border-ink-800'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-ink-300'
                     }`}
                   >
                     {roleLabel(role)}
@@ -996,13 +996,13 @@ export function TeamManager({
               type="button"
               disabled={busy || inviteRoles.length === 0}
               onClick={() => void handleCreateInvite()}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
             >
               <UserPlus className="h-4 w-4" />
               Create invite ({rolesLabel(inviteRoles)})
             </button>
             {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-            {message && <p className="text-xs text-emerald-800 font-semibold mt-2">{message}</p>}
+            {message && <p className="text-xs text-ink-800 font-semibold mt-2">{message}</p>}
           </div>
 
           {invites.length > 0 && (
@@ -1027,7 +1027,7 @@ export function TeamManager({
                         setCopiedCode(inv.code);
                         setTimeout(() => setCopiedCode(null), 2000);
                       }}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-ink-700"
                     >
                       {copiedCode === inv.code ? (
                         <>

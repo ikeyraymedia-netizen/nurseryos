@@ -575,21 +575,21 @@ export function CustomersWorkspace({
     <div className="space-y-6">
       {selectedCustomer ? (
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-emerald-100 p-5">
+          <div className="bg-white rounded-2xl border border-ink-100 p-5">
             <button
               type="button"
               onClick={() => {
                 setSelectedCustomerId(null);
                 setMessage(null);
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 mb-3"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-ink-800 hover:text-ink-950 mb-3"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Back to customers
             </button>
             <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-                <Users className="h-5 w-5 text-emerald-700" />
+              <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center shrink-0">
+                <Users className="h-5 w-5 text-ink-700" />
               </div>
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-gray-900 truncate">{selectedCustomer.name}</h2>
@@ -600,7 +600,7 @@ export function CustomersWorkspace({
               </div>
             </div>
             {message && (
-              <p className="mt-3 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+              <p className="mt-3 text-xs font-medium text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-3 py-2">
                 {message}
               </p>
             )}
@@ -609,7 +609,7 @@ export function CustomersWorkspace({
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800 mb-1.5">
+                <p className="text-[10px] font-black uppercase tracking-wider text-ink-800 mb-1.5">
                   Bill To
                 </p>
                 <p className="text-sm font-bold text-gray-900">
@@ -620,7 +620,7 @@ export function CustomersWorkspace({
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800 mb-1.5">
+                <p className="text-[10px] font-black uppercase tracking-wider text-ink-800 mb-1.5">
                   Ship To
                 </p>
                 <p className="text-sm font-bold text-gray-900">
@@ -683,8 +683,8 @@ export function CustomersWorkspace({
                     disabled={busy}
                   />
 
-                  <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                  <div className="md:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-ink-800">
                       Bill To
                     </p>
                     <input
@@ -760,7 +760,7 @@ export function CustomersWorkspace({
                   type="button"
                   onClick={handleSaveSelectedCustomer}
                   disabled={busy}
-                  className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
                 >
                   Save Customer Changes
                 </button>
@@ -794,7 +794,7 @@ export function CustomersWorkspace({
                           <span
                             className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
                               doc.type === 'invoice'
-                                ? 'bg-emerald-100 text-emerald-800'
+                                ? 'bg-ink-100 text-ink-800'
                                 : 'bg-sky-100 text-sky-800'
                             }`}
                           >
@@ -817,7 +817,7 @@ export function CustomersWorkspace({
                           <button
                             type="button"
                             onClick={() => onOpenDocument(doc.orderId || null, doc.type, doc)}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                            className="inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
                             Open {doc.type}
@@ -873,7 +873,7 @@ export function CustomersWorkspace({
                         <span
                           className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
                             order.status === 'completed'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-ink-100 text-ink-800'
                               : order.status === 'loading'
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-slate-100 text-slate-700'
@@ -886,7 +886,7 @@ export function CustomersWorkspace({
                         <button
                           type="button"
                           onClick={() => onOpenOrder(order.id)}
-                          className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                         >
                           <FileText className="h-3.5 w-3.5" />
                           Open order
@@ -901,14 +901,14 @@ export function CustomersWorkspace({
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-emerald-100 p-5">
+          <div className="bg-white rounded-2xl border border-ink-100 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center">
                   {workspaceView === 'invoices' ? (
-                    <FileText className="h-5 w-5 text-emerald-700" />
+                    <FileText className="h-5 w-5 text-ink-700" />
                   ) : (
-                    <Users className="h-5 w-5 text-emerald-700" />
+                    <Users className="h-5 w-5 text-ink-700" />
                   )}
                 </div>
                 <div>
@@ -924,7 +924,7 @@ export function CustomersWorkspace({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {permissions.canViewInvoices && (
-                  <div className="inline-flex rounded-xl border border-emerald-200 overflow-hidden">
+                  <div className="inline-flex rounded-xl border border-ink-200 overflow-hidden">
                     <button
                       type="button"
                       onClick={() => {
@@ -933,8 +933,8 @@ export function CustomersWorkspace({
                       }}
                       className={`px-3 py-2 text-xs font-bold ${
                         workspaceView === 'customers'
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-white text-emerald-800 hover:bg-emerald-50'
+                          ? 'bg-ink-700 text-white'
+                          : 'bg-white text-ink-800 hover:bg-ink-50'
                       }`}
                     >
                       Customers
@@ -948,8 +948,8 @@ export function CustomersWorkspace({
                       }}
                       className={`px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 ${
                         workspaceView === 'invoices'
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-white text-emerald-800 hover:bg-emerald-50'
+                          ? 'bg-ink-700 text-white'
+                          : 'bg-white text-ink-800 hover:bg-ink-50'
                       }`}
                     >
                       <FileText className="h-3.5 w-3.5" />
@@ -964,7 +964,7 @@ export function CustomersWorkspace({
                       setShowAddForm((open) => !open);
                       setMessage(null);
                     }}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800"
                   >
                     {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                     {showAddForm ? 'Close' : 'Add Customer'}
@@ -992,7 +992,7 @@ export function CustomersWorkspace({
                       onClick={() => setInvoicePeriod(id)}
                       className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border ${
                         invoicePeriod === id
-                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          ? 'bg-ink-700 text-white border-ink-700'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
@@ -1042,9 +1042,9 @@ export function CustomersWorkspace({
                     <p className="text-[10px] font-bold uppercase text-slate-500">Invoices</p>
                     <p className="text-sm font-black text-slate-900">{invoiceTotals.count}</p>
                   </div>
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-emerald-700">Total</p>
-                    <p className="text-sm font-black text-emerald-900">
+                  <div className="rounded-xl border border-ink-100 bg-ink-50/60 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-ink-700">Total</p>
+                    <p className="text-sm font-black text-ink-900">
                       {formatMoney(invoiceTotals.total)}
                     </p>
                   </div>
@@ -1071,7 +1071,7 @@ export function CustomersWorkspace({
                     filteredInvoices.map((doc) => (
                       <div
                         key={doc.id}
-                        className="border border-gray-100 rounded-xl p-3 hover:border-emerald-200 hover:bg-emerald-50/40 transition"
+                        className="border border-gray-100 rounded-xl p-3 hover:border-ink-200 hover:bg-ink-50/40 transition"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -1105,7 +1105,7 @@ export function CustomersWorkspace({
                           <button
                             type="button"
                             onClick={() => onOpenDocument(doc.orderId || null, doc.type, doc)}
-                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
                             Open invoice
@@ -1120,7 +1120,7 @@ export function CustomersWorkspace({
               <>
             {permissions.canEditCustomers && (
               <div className="flex flex-wrap gap-2 mb-4">
-                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer hover:bg-emerald-100">
+                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold cursor-pointer hover:bg-ink-100">
                   <Upload className="h-4 w-4" />
                   Upload Customer CSV
                   <input
@@ -1167,7 +1167,7 @@ export function CustomersWorkspace({
             )}
 
             {message && (
-              <p className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-4">
+              <p className="text-xs font-medium text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-3 py-2 mb-4">
                 {message}
               </p>
             )}
@@ -1215,8 +1215,8 @@ export function CustomersWorkspace({
                     disabled={busy}
                   />
 
-                  <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                  <div className="md:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-ink-800">
                       Bill To
                     </p>
                     <input
@@ -1284,7 +1284,7 @@ export function CustomersWorkspace({
                 <button
                   type="submit"
                   disabled={busy}
-                  className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
                 >
                   Save Customer
                 </button>
@@ -1316,13 +1316,13 @@ export function CustomersWorkspace({
                         setSelectedCustomerId(c.id);
                         setMessage(null);
                       }}
-                      className="w-full text-left border border-gray-100 rounded-xl p-3 transition hover:bg-emerald-50/50 hover:border-emerald-200"
+                      className="w-full text-left border border-gray-100 rounded-xl p-3 transition hover:bg-ink-50/50 hover:border-ink-200"
                     >
                       <p className="text-sm font-bold text-gray-900">{c.name}</p>
                       <p className="text-xs text-gray-500">
                         {[c.contactEmail, c.phone].filter(Boolean).join(' • ') || 'No contact info'}
                       </p>
-                      <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                      <p className="text-[11px] text-ink-700 font-semibold mt-1">
                         {rowOrders.length} order{rowOrders.length === 1 ? '' : 's'}
                       </p>
                     </button>

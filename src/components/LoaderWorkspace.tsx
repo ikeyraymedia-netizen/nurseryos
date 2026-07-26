@@ -439,13 +439,13 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const remainingToLoad = Math.max(0, totalQuantity - loadedQuantity);
 
   return (
-    <div id="loader-workspace-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full relative pb-24 sm:pb-6">
+    <div id="loader-workspace-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full relative pb-24 sm:pb-6">
       
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-5 mb-5 gap-3">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-950 border border-emerald-300 font-mono">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-ink-100 text-ink-950 border border-ink-300 font-mono">
               ORDER IN WORKSPACE
             </span>
             <span className="text-xs text-slate-500 font-mono font-bold">ID: {order.id.slice(0, 6)}</span>
@@ -502,11 +502,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               </button>
             </div>
           ) : permissions.canCheckOffLoading && showLoadAllConfirm ? (
-            <div className="flex items-center bg-emerald-50 border border-emerald-200 rounded-lg p-1 space-x-1">
-              <span className="text-[10px] font-bold text-emerald-800 px-1">Load all plants?</span>
+            <div className="flex items-center bg-ink-50 border border-ink-200 rounded-lg p-1 space-x-1">
+              <span className="text-[10px] font-bold text-ink-800 px-1">Load all plants?</span>
               <button
                 onClick={handleLoadAll}
-                className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[10px] rounded"
+                className="px-2 py-0.5 bg-ink-700 hover:bg-ink-800 text-white font-bold text-[10px] rounded"
               >
                 Yes
               </button>
@@ -533,7 +533,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 <button
                   onClick={() => setShowLoadAllConfirm(true)}
                   disabled={loadedQuantity === totalQuantity}
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none"
+                  className="px-3 py-1.5 bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>Load All</span>
@@ -566,14 +566,14 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       )}
 
       {(permissions.canEditOrders || permissions.canViewInvoices) && (
-        <div className="bg-white border border-emerald-200 rounded-xl p-3 mb-5 shadow-sm">
-          <label className="block text-[10px] font-bold text-emerald-900 uppercase mb-1">
+        <div className="bg-white border border-ink-200 rounded-xl p-3 mb-5 shadow-sm">
+          <label className="block text-[10px] font-bold text-ink-900 uppercase mb-1">
             Sales Rep
           </label>
           <select
             value={order.owner || ''}
             onChange={(e) => handleAssignOwner(e.target.value)}
-            className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white"
+            className="w-full px-3 py-2 border border-ink-200 rounded-lg text-sm bg-white"
           >
             <option value="">Select sales rep...</option>
             {salesRepOptions.map((name) => (
@@ -595,7 +595,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       {/* Staging Location Card */}
       <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center space-x-3 shrink-0">
-          <div className="bg-emerald-100 text-emerald-800 p-2 rounded-xl border border-emerald-200 shadow-sm">
+          <div className="bg-ink-100 text-ink-800 p-2 rounded-xl border border-ink-200 shadow-sm">
             <MapPin className="h-5 w-5" />
           </div>
           <div>
@@ -611,12 +611,12 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             value={stagedLocation}
             readOnly={!permissions.canEditOrders}
             onChange={(e) => permissions.canEditOrders && handleStagedLocationChange(e.target.value)}
-            className="block w-full px-4 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 transition-all shadow-inner disabled:bg-slate-100"
+            className="block w-full px-4 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ink-500/10 focus:border-ink-600 transition-all shadow-inner disabled:bg-slate-100"
           />
           {savingStagedLocation && (
-            <div className="absolute right-3 top-2.5 flex items-center space-x-1.5 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-lg">
-              <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-ping" />
-              <span className="text-[10px] font-bold text-emerald-700 font-mono">SAVING...</span>
+            <div className="absolute right-3 top-2.5 flex items-center space-x-1.5 bg-ink-50 border border-ink-150 px-2 py-0.5 rounded-lg">
+              <span className="w-1.5 h-1.5 bg-ink-600 rounded-full animate-ping" />
+              <span className="text-[10px] font-bold text-ink-700 font-mono">SAVING...</span>
             </div>
           )}
         </div>
@@ -641,15 +641,15 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       )}
 
       {/* Weight Summary Panel */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-emerald-50/75 border border-emerald-300 rounded-2xl p-4 mb-5 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-ink-50/75 border border-ink-300 rounded-2xl p-4 mb-5 shadow-sm">
         
         {/* Total Weight Stat */}
         <div className="flex items-center space-x-3.5">
-          <div className="bg-emerald-700/10 p-2.5 rounded-xl text-emerald-800 shrink-0 border border-emerald-700/20">
+          <div className="bg-ink-700/10 p-2.5 rounded-xl text-ink-800 shrink-0 border border-ink-700/20">
             <Weight className="h-5.5 w-5.5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-emerald-800/80 uppercase tracking-wide font-mono">Total Order Weight</p>
+            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono">Total Order Weight</p>
             <p className="text-2xl font-black text-gray-900 font-mono tracking-tight">
               {totalWeight.toLocaleString()} <span className="text-xs font-semibold text-gray-500">lbs</span>
             </p>
@@ -660,8 +660,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         {/* Delivered / Pulled Progress Stat */}
         <div>
           <div className="flex justify-between items-baseline mb-1">
-            <p className="text-xs font-bold text-emerald-800/80 uppercase tracking-wide font-mono font-bold">Delivered/Pulled</p>
-            <p className="text-xs font-bold font-mono text-emerald-800">
+            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono font-bold">Delivered/Pulled</p>
+            <p className="text-xs font-bold font-mono text-ink-800">
               {pulledWeight.toLocaleString()} / {totalWeight.toLocaleString()} lbs
             </p>
           </div>
@@ -680,15 +680,15 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         {/* Loading Progress Stat */}
         <div>
           <div className="flex justify-between items-baseline mb-1">
-            <p className="text-xs font-bold text-emerald-800/80 uppercase tracking-wide font-mono">On-Truck Progress</p>
-            <p className="text-xs font-bold font-mono text-emerald-800">
+            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono">On-Truck Progress</p>
+            <p className="text-xs font-bold font-mono text-ink-800">
               {loadedWeight.toLocaleString()} / {totalWeight.toLocaleString()} lbs
             </p>
           </div>
           {/* Progress Bar */}
           <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden mb-1 border border-gray-100">
             <div
-              className="bg-emerald-700 h-full rounded-full transition-all duration-300"
+              className="bg-ink-700 h-full rounded-full transition-all duration-300"
               style={{ width: `${totalWeight > 0 ? (loadedWeight / totalWeight) * 100 : 0}%` }}
             />
           </div>
@@ -705,7 +705,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           onClick={() => setActiveTab('checklist')}
           className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 text-sm font-bold transition-all ${
             activeTab === 'checklist'
-              ? 'border-emerald-700 text-emerald-800 bg-emerald-50/20'
+              ? 'border-ink-700 text-ink-800 bg-ink-50/20'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
@@ -716,7 +716,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           onClick={() => setActiveTab('plaintext')}
           className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 text-sm font-bold transition-all ${
             activeTab === 'plaintext'
-              ? 'border-emerald-700 text-emerald-800 bg-emerald-50/20'
+              ? 'border-ink-700 text-ink-800 bg-ink-50/20'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
@@ -735,7 +735,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddingPlant(true)}
-                className="w-full py-3 px-4 border border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/20 hover:bg-emerald-50/50 text-emerald-800 hover:text-emerald-900 font-bold text-sm rounded-xl transition-all flex items-center justify-center space-x-2 shadow-sm mb-4"
+                className="w-full py-3 px-4 border border-dashed border-ink-300 hover:border-ink-500 bg-ink-50/20 hover:bg-ink-50/50 text-ink-800 hover:text-ink-900 font-bold text-sm rounded-xl transition-all flex items-center justify-center space-x-2 shadow-sm mb-4"
               >
                 <Plus className="h-4.5 w-4.5 stroke-[2.5px]" />
                 <span>Add Plant / Item to this Order</span>
@@ -743,11 +743,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             ) : (
               <form
                 onSubmit={handleAddPlantSubmit}
-                className="bg-white border-2 border-emerald-500 rounded-xl p-4 shadow-sm mb-4 space-y-3 animate-fade-in"
+                className="bg-white border-2 border-ink-500 rounded-xl p-4 shadow-sm mb-4 space-y-3 animate-fade-in"
               >
                 <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                   <h4 className="text-sm font-bold text-gray-900 flex items-center">
-                    <Plus className="h-4 w-4 mr-1 text-emerald-700" />
+                    <Plus className="h-4 w-4 mr-1 text-ink-700" />
                     Add Plant to Order
                   </h4>
                   <button
@@ -779,7 +779,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       placeholder="e.g. Dwarf Burford Holly"
                       value={newPlantName}
                       onChange={(e) => setNewPlantName(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
                       required
                     />
                   </div>
@@ -790,7 +790,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                     <select
                       value={newContainerSize}
                       onChange={(e) => setNewContainerSize(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
                       required
                     >
                       <option value="">Select Size...</option>
@@ -817,7 +817,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       min="1"
                       value={newQuantity}
                       onChange={(e) => setNewQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-mono font-bold text-gray-800"
+                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-mono font-bold text-gray-800"
                       required
                     />
                   </div>
@@ -832,7 +832,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         placeholder="Type or select vendor..."
                         value={newVendorName}
                         onChange={(e) => setNewVendorName(e.target.value)}
-                        className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                        className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
                       />
                     </div>
                   )}
@@ -845,7 +845,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       placeholder="e.g. Late addition / Tag-along"
                       value={newNotes}
                       onChange={(e) => setNewNotes(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
                     />
                   </div>
                 </div>
@@ -856,7 +856,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       type="checkbox"
                       checked={newIsAddition}
                       onChange={(e) => setNewIsAddition(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-350 text-emerald-700 focus:ring-emerald-500 cursor-pointer"
+                      className="h-4 w-4 rounded border-gray-350 text-ink-700 focus:ring-ink-500 cursor-pointer"
                     />
                     <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded border border-amber-200 flex items-center space-x-1">
                       <span>⚠️ Mark as addition (notifies loaders)</span>
@@ -865,7 +865,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
 
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
+                    className="px-4 py-2 bg-ink-700 hover:bg-ink-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
                   >
                     <Check className="h-3.5 w-3.5" />
                     <span>Save Plant to Order</span>
@@ -891,11 +891,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                     key={item.id}
                     className={`border-2 rounded-xl p-3.5 transition-all shadow-sm ${
                       isEditing
-                        ? 'border-emerald-600 bg-slate-50'
+                        ? 'border-ink-600 bg-slate-50'
                         : isFullyLoaded && isFullyPulled
-                        ? 'border-emerald-600 bg-emerald-50/30'
+                        ? 'border-ink-600 bg-ink-50/30'
                         : isFullyLoaded
-                        ? 'border-emerald-500/50 bg-emerald-50/15'
+                        ? 'border-ink-500/50 bg-ink-50/15'
                         : isFullyPulled
                         ? 'border-teal-500/40 bg-teal-50/10'
                         : 'border-slate-250 bg-white hover:border-slate-400'
@@ -918,7 +918,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               type="text"
                               value={editPlantName}
                               onChange={(e) => setEditPlantName(e.target.value)}
-                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white font-medium text-gray-800"
+                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                               required
                             />
                           </div>
@@ -929,7 +929,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             <select
                               value={editContainerSize}
                               onChange={(e) => setEditContainerSize(e.target.value)}
-                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white font-medium text-gray-800"
+                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                               required
                             >
                               {containerWeights.map((w) => (
@@ -951,7 +951,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               min="1"
                               value={editQuantity}
                               onChange={(e) => setEditQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white font-mono font-bold text-gray-800"
+                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-mono font-bold text-gray-800"
                               required
                             />
                           </div>
@@ -963,7 +963,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               type="text"
                               value={editNotes}
                               onChange={(e) => setEditNotes(e.target.value)}
-                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-emerald-500 bg-white font-medium text-gray-800"
+                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                               placeholder="Optional notes"
                             />
                           </div>
@@ -975,7 +975,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               type="checkbox"
                               checked={editIsAddition}
                               onChange={(e) => setEditIsAddition(e.target.checked)}
-                              className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-700 focus:ring-emerald-500 cursor-pointer"
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-ink-700 focus:ring-ink-500 cursor-pointer"
                             />
                             <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                               Addition
@@ -992,7 +992,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             </button>
                             <button
                               type="submit"
-                              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold shadow-sm"
+                              className="px-3.5 py-1.5 bg-ink-700 hover:bg-ink-800 text-white rounded-lg text-[10px] font-bold shadow-sm"
                             >
                               Save Changes
                             </button>
@@ -1008,7 +1008,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               {item.plantName}
                             </h4>
                             <span className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold tracking-tight ${
-                              isFullyLoaded ? 'bg-emerald-100 text-emerald-900' : isFullyPulled ? 'bg-teal-100 text-teal-900' : 'bg-gray-100 text-gray-750'
+                              isFullyLoaded ? 'bg-ink-100 text-ink-900' : isFullyPulled ? 'bg-teal-100 text-teal-900' : 'bg-gray-100 text-gray-750'
                             }`}>
                               {item.containerSize}
                             </span>
@@ -1029,7 +1029,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                   setEditNotes(item.notes || '');
                                   setEditIsAddition(!!item.isAddition);
                                 }}
-                                className="p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-ink-700 hover:bg-ink-50 rounded transition-colors"
                                 title="Edit item details"
                               >
                                 <Edit className="h-3.5 w-3.5" />
@@ -1105,12 +1105,12 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                     }}
                                     autoFocus
                                     placeholder="Type or select vendor..."
-                                    className="px-2 py-0.5 border border-emerald-400 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white font-semibold text-gray-855 w-44"
+                                    className="px-2 py-0.5 border border-ink-400 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855 w-44"
                                   />
                                 </div>
                                 <button
                                   onClick={() => handleVendorSave(item.id, tempVendorName)}
-                                  className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[10px] font-bold transition-all shadow-sm"
+                                  className="px-2 py-0.5 bg-ink-600 hover:bg-ink-700 text-white rounded-md text-[10px] font-bold transition-all shadow-sm"
                                   title="Save"
                                 >
                                   Save
@@ -1185,8 +1185,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                           </div>
 
                           {/* Loaded Box */}
-                          <div className="flex flex-col items-center bg-emerald-50/30 border border-emerald-500/20 rounded-xl p-2.5">
-                            <label className="text-[10px] font-black text-emerald-800 uppercase tracking-wider mb-1.5 cursor-pointer select-none">
+                          <div className="flex flex-col items-center bg-ink-50/30 border border-ink-500/20 rounded-xl p-2.5">
+                            <label className="text-[10px] font-black text-ink-800 uppercase tracking-wider mb-1.5 cursor-pointer select-none">
                               Loaded
                             </label>
                             <input
@@ -1194,15 +1194,15 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               checked={isFullyLoaded}
                               onChange={() => handleMarkItemFullyLoaded(item.id)}
                               disabled={!permissions.canCheckOffLoading}
-                              className="h-8 w-8 sm:h-7 sm:w-7 rounded-md border-2 border-emerald-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer mb-2 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
+                              className="h-8 w-8 sm:h-7 sm:w-7 rounded-md border-2 border-ink-300 text-ink-600 focus:ring-ink-500 cursor-pointer mb-2 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                               title={isFullyLoaded ? 'Undo loaded' : 'Mark all loaded'}
                               aria-label={isFullyLoaded ? 'Undo loaded' : 'Mark all loaded'}
                             />
-                            <div className="flex items-center space-x-1.5 bg-white border border-emerald-150 rounded-lg p-0.5 shadow-sm w-full justify-center">
+                            <div className="flex items-center space-x-1.5 bg-white border border-ink-150 rounded-lg p-0.5 shadow-sm w-full justify-center">
                               <button
                                 onClick={() => handleQuantityChange(item.id, false)}
                                 disabled={item.loadedQuantity === 0 || !permissions.canCheckOffLoading}
-                                className="p-2.5 sm:p-1.5 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                                className="p-2.5 sm:p-1.5 rounded text-ink-600 hover:text-ink-800 hover:bg-ink-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                               >
                                 <Minus className="h-5 w-5 sm:h-4 sm:w-4" />
                               </button>
@@ -1212,7 +1212,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               <button
                                 onClick={() => handleQuantityChange(item.id, true)}
                                 disabled={item.loadedQuantity === item.quantity || !permissions.canCheckOffLoading}
-                                className="p-2.5 sm:p-1.5 rounded text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                                className="p-2.5 sm:p-1.5 rounded text-ink-600 hover:text-ink-800 hover:bg-ink-50 disabled:opacity-30 transition-all touch-manipulation min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                               >
                                 <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
                               </button>
@@ -1236,8 +1236,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               >
                 {copied ? (
                   <>
-                    <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" />
-                    <span className="text-emerald-700">Copied!</span>
+                    <ClipboardCheck className="h-3.5 w-3.5 text-ink-600" />
+                    <span className="text-ink-700">Copied!</span>
                   </>
                 ) : (
                   <>
@@ -1265,7 +1265,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
 
             <div className="mt-5 pt-3.5 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-gray-500 gap-2">
               <span className="flex items-center">
-                <Info className="h-3.5 w-3.5 mr-1 text-emerald-700" />
+                <Info className="h-3.5 w-3.5 mr-1 text-ink-700" />
                 This document layout is auto-generated by NurseryOS
               </span>
               <span className="font-mono font-bold">
@@ -1312,10 +1312,10 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       )}
 
       {permissions.canCheckOffLoading && activeTab === 'checklist' && (
-        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-emerald-200 bg-white/95 backdrop-blur px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-ink-200 bg-white/95 backdrop-blur px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-800">Checkoff</p>
+              <p className="text-[10px] font-black uppercase tracking-wide text-ink-800">Checkoff</p>
               <p className="text-xs font-bold text-gray-900 truncate">
                 Pull {remainingToPull} · Load {remainingToLoad} left
               </p>
@@ -1324,7 +1324,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               <span className="text-[11px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-2 py-1">
                 {pulledQuantity}/{totalQuantity}
               </span>
-              <span className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1">
+              <span className="text-[11px] font-mono font-bold text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-2 py-1">
                 {loadedQuantity}/{totalQuantity}
               </span>
             </div>

@@ -229,7 +229,7 @@ export function PlatformDashboard({
               <button
                 type="button"
                 onClick={onOpenHomeNursery}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-800/50"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-ink-700/60 bg-ink-900/40 px-3 py-2 text-xs font-bold text-ink-200 hover:bg-ink-800/50"
               >
                 Open {homeNursery.name}
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -260,7 +260,7 @@ export function PlatformDashboard({
         <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6">
           <section className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-emerald-400" />
+              <Building2 className="h-4 w-4 text-ink-400" />
               <h2 className="text-sm font-black text-white">Nurseries ({tenants.length})</h2>
             </div>
             {loading ? (
@@ -277,7 +277,7 @@ export function PlatformDashboard({
                         type="button"
                         onClick={() => selectTenant(t.id)}
                         className={`w-full text-left px-4 py-3 transition-colors ${
-                          active ? 'bg-emerald-950/50' : 'hover:bg-slate-800/60'
+                          active ? 'bg-ink-950/50' : 'hover:bg-slate-800/60'
                         }`}
                       >
                         <span className="block text-sm font-bold text-white">{t.name}</span>
@@ -334,13 +334,13 @@ export function PlatformDashboard({
                         onClick={() => toggleModule(mod.id)}
                         className={`w-full text-left rounded-xl border px-3 py-3 flex items-start gap-3 transition-colors ${
                           on
-                            ? 'border-emerald-600/50 bg-emerald-950/40'
+                            ? 'border-ink-600/50 bg-ink-950/40'
                             : 'border-slate-700 bg-slate-950/40 hover:bg-slate-800/40'
                         }`}
                       >
                         <span
                           className={`mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
-                            on ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-slate-600'
+                            on ? 'bg-ink-600 border-ink-500 text-white' : 'border-slate-600'
                           }`}
                         >
                           {on && <Check className="h-3.5 w-3.5" />}
@@ -368,7 +368,7 @@ export function PlatformDashboard({
                     onChange={(e) => setAddressDraft(e.target.value)}
                     rows={3}
                     placeholder={'11428 US 165\nForest Hill, LA'}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none resize-none"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-ink-500 focus:outline-none resize-none"
                   />
                   <button
                     type="button"
@@ -427,7 +427,7 @@ export function PlatformDashboard({
                       type="button"
                       disabled={savingLogo}
                       onClick={() => logoFileRef.current?.click()}
-                      className="px-4 py-2 rounded-lg text-xs font-black bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-50"
+                      className="px-4 py-2 rounded-lg text-xs font-black bg-ink-700 text-white hover:bg-ink-600 disabled:opacity-50"
                     >
                       {savingLogo ? 'Saving…' : 'Upload image'}
                     </button>
@@ -445,7 +445,7 @@ export function PlatformDashboard({
                     value={logoDraft.startsWith('data:') ? '' : logoDraft}
                     onChange={(e) => setLogoDraft(e.target.value)}
                     placeholder="https://example.com/logo.png"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-ink-500 focus:outline-none"
                   />
                   {logoDraft.startsWith('data:') && (
                     <p className="text-[11px] text-slate-500">
@@ -464,13 +464,13 @@ export function PlatformDashboard({
                 </div>
 
                 {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
-                {message && <p className="text-xs text-emerald-300 font-semibold">{message}</p>}
+                {message && <p className="text-xs text-ink-300 font-semibold">{message}</p>}
 
                 <button
                   type="button"
                   disabled={saving}
                   onClick={handleSave}
-                  className="w-full sm:w-auto self-end px-5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                  className="w-full sm:w-auto self-end px-5 py-2.5 rounded-xl text-xs font-black bg-ink-600 text-white hover:bg-ink-500 disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : 'Save package'}
                 </button>

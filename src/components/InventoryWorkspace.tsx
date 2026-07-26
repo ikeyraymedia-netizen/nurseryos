@@ -433,10 +433,10 @@ export function InventoryWorkspace({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-emerald-100 p-5">
+      <div className="bg-white rounded-2xl border border-ink-100 p-5">
         <div className="flex items-center gap-3 mb-2">
-          <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-            <Sprout className="h-5 w-5 text-emerald-700" />
+          <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center">
+            <Sprout className="h-5 w-5 text-ink-700" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-900">Live Plant Inventory</h2>
@@ -452,7 +452,7 @@ export function InventoryWorkspace({
               <div className="flex flex-wrap gap-2">
                 {permissions.canUploadInventory && (
                   <>
-                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold cursor-pointer hover:bg-emerald-800">
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold cursor-pointer hover:bg-ink-800">
                       <Upload className="h-4 w-4" />
                       Upload CSV / Excel
                       <input
@@ -488,8 +488,8 @@ export function InventoryWorkspace({
                     onClick={() => setShowAddPlant((v) => !v)}
                     className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold ${
                       showAddPlant
-                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                        : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
+                        ? 'bg-ink-100 text-ink-900 border border-ink-300'
+                        : 'bg-white text-ink-800 border border-ink-300 hover:bg-ink-50'
                     }`}
                   >
                     <Plus className="h-4 w-4" />
@@ -508,8 +508,8 @@ export function InventoryWorkspace({
                 )}
               </div>
             ) : (
-              <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 flex items-center gap-3">
-                <RefreshCw className="h-5 w-5 text-emerald-700 animate-spin shrink-0" />
+              <div className="bg-ink-50/50 border border-ink-100 rounded-xl p-4 flex items-center gap-3">
+                <RefreshCw className="h-5 w-5 text-ink-700 animate-spin shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-gray-800">Processing inventory file</p>
                   <p className="text-xs text-gray-500 mt-0.5">{uploadStatus}</p>
@@ -519,14 +519,14 @@ export function InventoryWorkspace({
             {permissions.canEditInventory && showAddPlant && (
               <form
                 onSubmit={handleAddPlant}
-                className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-4 space-y-2"
+                className="bg-ink-50/40 border border-ink-200 rounded-xl p-4 space-y-2"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase text-emerald-900">Add plant manually</p>
+                  <p className="text-xs font-bold uppercase text-ink-900">Add plant manually</p>
                   <button
                     type="button"
                     onClick={() => setShowAddPlant(false)}
-                    className="text-[11px] font-bold text-emerald-800 hover:underline"
+                    className="text-[11px] font-bold text-ink-800 hover:underline"
                   >
                     Close
                   </button>
@@ -571,7 +571,7 @@ export function InventoryWorkspace({
                 <button
                   type="submit"
                   disabled={busy}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 disabled:opacity-50"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-ink-700 text-white text-xs font-bold px-4 py-2.5 disabled:opacity-50"
                 >
                   <Plus className="h-4 w-4" />
                   Add to inventory
@@ -591,7 +591,7 @@ export function InventoryWorkspace({
             className={`mt-3 text-xs font-medium rounded-lg px-3 py-2 border ${
               messageIsError
                 ? 'text-red-800 bg-red-50 border-red-100'
-                : 'text-emerald-800 bg-emerald-50 border-emerald-100'
+                : 'text-ink-800 bg-ink-50 border-ink-100'
             }`}
           >
             {message}
@@ -602,7 +602,7 @@ export function InventoryWorkspace({
       <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
-            <Truck className="h-4 w-4 text-emerald-700" />
+            <Truck className="h-4 w-4 text-ink-700" />
             Low stock for upcoming trucks
           </p>
           <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
@@ -617,7 +617,7 @@ export function InventoryWorkspace({
             aria-checked={showLowStockUpcoming}
             onClick={() => setShowLowStockUpcoming((v) => !v)}
             className={`relative h-7 w-12 rounded-full transition-colors ${
-              showLowStockUpcoming ? 'bg-emerald-700' : 'bg-slate-300'
+              showLowStockUpcoming ? 'bg-ink-700' : 'bg-slate-300'
             }`}
           >
             <span
@@ -685,8 +685,8 @@ export function InventoryWorkspace({
                   key={plant.id}
                   type="button"
                   onClick={() => setSelectedId(plant.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-emerald-50/50 ${
-                    selectedId === plant.id ? 'bg-emerald-50' : ''
+                  className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-ink-50/50 ${
+                    selectedId === plant.id ? 'bg-ink-50' : ''
                   }`}
                 >
                   <p className="font-bold text-sm text-gray-900">{plant.plantName}</p>
@@ -856,7 +856,7 @@ export function InventoryWorkspace({
                     <button
                       type="submit"
                       disabled={busy}
-                      className="rounded-lg bg-emerald-700 text-white text-xs font-bold"
+                      className="rounded-lg bg-ink-700 text-white text-xs font-bold"
                     >
                       Log spray
                     </button>

@@ -45,7 +45,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   return (
     <div className={`flex items-center space-x-3 select-none ${className}`}>
       <div
-        className={`relative flex items-center justify-center shrink-0 ${containerClasses[size]} bg-white rounded-xl shadow-md border border-emerald-500/20 overflow-hidden p-1`}
+        className={`relative flex items-center justify-center shrink-0 ${containerClasses[size]} bg-white rounded-xl shadow-md border border-ink-500/20 overflow-hidden p-1`}
       >
         <img src={imageSrc} alt={imageAlt} className="h-full w-full object-contain" />
       </div>
@@ -53,12 +53,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       {showText && (
         <div className="flex flex-col">
           <div className="flex items-baseline">
-            <span className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 font-sans uppercase">
+            <span className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-ink-300 to-emerald-400 font-sans uppercase">
               {nurseryName}
             </span>
           </div>
           {tagline && (
-            <span className="text-[10px] text-emerald-300 tracking-widest font-mono uppercase font-bold leading-none mt-0.5">
+            <span className="text-[10px] text-ink-300 tracking-widest font-mono uppercase font-bold leading-none mt-0.5">
               {tagline}
             </span>
           )}

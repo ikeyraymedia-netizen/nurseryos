@@ -158,11 +158,11 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
       : 0;
 
   return (
-    <div className="bg-emerald-50/50 rounded-2xl border-2 border-emerald-600/30 shadow-md overflow-hidden flex flex-col min-h-[min(720px,calc(100dvh-11rem))]">
+    <div className="bg-ink-50/50 rounded-2xl border-2 border-ink-600/30 shadow-md overflow-hidden flex flex-col min-h-[min(720px,calc(100dvh-11rem))]">
       {/* Form Header */}
-      <div className="bg-emerald-950 text-white px-6 py-4 flex items-center justify-between border-b border-emerald-900 shrink-0">
+      <div className="bg-ink-950 text-white px-6 py-4 flex items-center justify-between border-b border-ink-900 shrink-0">
         <div className="flex items-center space-x-2">
-          <TruckIcon className="h-5 w-5 text-emerald-300" />
+          <TruckIcon className="h-5 w-5 text-ink-300" />
           <h3 className="text-base font-bold font-sans">
             {truckToEdit ? `Edit Truck Load: ${truckToEdit.name}` : 'Build a Custom Truck Load'}
           </h3>
@@ -170,7 +170,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-emerald-200 hover:text-white p-1 rounded-lg hover:bg-emerald-900 transition-colors"
+          className="text-ink-200 hover:text-white p-1 rounded-lg hover:bg-ink-900 transition-colors"
           title="Cancel"
         >
           <X className="h-5 w-5" />
@@ -195,7 +195,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               <select
                 value={owner}
                 onChange={(e) => setOwner(e.target.value)}
-                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
+                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
                 required
               >
                 <option value="">Select sales rep...</option>
@@ -221,7 +221,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Lafayette - Flatbed #1"
-                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium"
+                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium"
                 required
               />
             </div>
@@ -234,7 +234,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 value={loadingDate}
                 onChange={(e) => setLoadingDate(e.target.value)}
                 required
-                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
+                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
               />
               <p className="text-[10px] text-gray-500 mt-1 leading-snug">
                 Places this truck on that day in the Trucks week board (Sun–Sat).
@@ -249,7 +249,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 value={carrier}
                 onChange={(e) => setCarrier(e.target.value)}
                 placeholder="e.g. Cajun Freight / driver Bobby"
-                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium"
+                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium"
               />
             </div>
             <div>
@@ -259,7 +259,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               <select
                 value={truckType}
                 onChange={(e) => setTruckType(e.target.value)}
-                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
+                className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
                 required
               >
                 <option value="">Select Type...</option>
@@ -287,7 +287,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Load heavy #45 first, tie down canvas securely, separate Lafayette orders near cab..."
               rows={2}
-              className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 bg-gray-50 focus:bg-white transition-all font-sans"
+              className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans"
             />
           </div>
 
@@ -297,7 +297,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               <label className="block text-xs font-bold text-gray-700 font-mono uppercase">
                 Select Orders to Load *
               </label>
-              <span className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+              <span className="text-[11px] font-mono font-bold text-ink-800 bg-ink-50 border border-ink-100 px-2 py-0.5 rounded-md">
                 {selectableOrders.length} Available
               </span>
             </div>
@@ -321,13 +321,13 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                       onClick={() => handleToggleOrder(order.id)}
                       className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer select-none transition-all ${
                         isChecked
-                          ? 'border-emerald-500 bg-emerald-50/50 shadow-sm'
+                          ? 'border-ink-500 bg-ink-50/50 shadow-sm'
                           : 'border-gray-200 bg-white hover:border-gray-300'
                       }`}
                     >
                       <div className="flex items-center space-x-3 min-w-0">
                         <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                          isChecked ? 'bg-emerald-700 border-emerald-700 text-white' : 'border-gray-300 bg-white'
+                          isChecked ? 'bg-ink-700 border-ink-700 text-white' : 'border-gray-300 bg-white'
                         }`}>
                           {isChecked && <Check className="h-3.5 w-3.5" />}
                         </div>
@@ -367,7 +367,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                     Specify the sequence in which these customer shipments will be physically loaded onto the truck (e.g. 1st, 2nd, 3rd). Use the arrows to reorder.
                   </p>
                 </div>
-                <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+                <span className="text-[10px] font-mono font-bold text-ink-800 bg-ink-50 border border-ink-100 px-2 py-0.5 rounded-md shrink-0">
                   {selectedOrderIds.length} Assigned
                 </span>
               </div>
@@ -388,9 +388,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                     >
                       <div className="flex items-center space-x-3 min-w-0">
                         {/* Position Badge */}
-                        <div className="w-14 shrink-0 flex flex-col items-center justify-center bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-lg py-1.5 font-mono">
+                        <div className="w-14 shrink-0 flex flex-col items-center justify-center bg-ink-50 text-ink-800 border border-ink-100 rounded-lg py-1.5 font-mono">
                           <span className="text-[9px] font-black leading-none uppercase tracking-wide opacity-80">LOAD</span>
-                          <span className="text-xs font-black mt-1 leading-none text-emerald-950">
+                          <span className="text-xs font-black mt-1 leading-none text-ink-950">
                             {index === 0 ? '1st' : index === 1 ? '2nd' : index === 2 ? '3rd' : `${index + 1}th`}
                           </span>
                         </div>
@@ -411,7 +411,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                           type="button"
                           disabled={isFirst}
                           onClick={() => handleMoveOrder(index, 'up')}
-                          className="w-8 h-8 rounded-lg border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-500 hover:text-emerald-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:hover:text-gray-500 flex items-center justify-center transition-all"
+                          className="w-8 h-8 rounded-lg border border-gray-200 hover:border-ink-500 hover:bg-ink-50 text-gray-500 hover:text-ink-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:hover:text-gray-500 flex items-center justify-center transition-all"
                           title="Move Up (Load Earlier)"
                         >
                           <ChevronUp className="h-4 w-4" />
@@ -420,7 +420,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                           type="button"
                           disabled={isLast}
                           onClick={() => handleMoveOrder(index, 'down')}
-                          className="w-8 h-8 rounded-lg border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-500 hover:text-emerald-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:hover:text-gray-500 flex items-center justify-center transition-all"
+                          className="w-8 h-8 rounded-lg border border-gray-200 hover:border-ink-500 hover:bg-ink-50 text-gray-500 hover:text-ink-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:hover:text-gray-500 flex items-center justify-center transition-all"
                           title="Move Down (Load Later)"
                         >
                           <ChevronDown className="h-4 w-4" />
@@ -440,13 +440,13 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white p-3 rounded-xl border border-gray-150 shadow-inner">
               <p className="text-[9px] font-bold text-gray-400 font-mono uppercase">Orders Selected</p>
-              <p className="text-lg font-black text-emerald-950 font-mono mt-0.5">
+              <p className="text-lg font-black text-ink-950 font-mono mt-0.5">
                 {selectedOrderIds.length} <span className="text-xs font-normal text-gray-500">loads</span>
               </p>
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-150 shadow-inner">
               <p className="text-[9px] font-bold text-gray-400 font-mono uppercase">Cumulative Weight</p>
-              <p className="text-lg font-black text-emerald-950 font-mono mt-0.5">
+              <p className="text-lg font-black text-ink-950 font-mono mt-0.5">
                 {totalWeightSelected.toLocaleString()} <span className="text-xs font-normal text-gray-500">lbs</span>
               </p>
             </div>
@@ -458,7 +458,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               <span className="font-bold text-gray-500 uppercase flex items-center">
                 {truckType ? `${truckType} Payload Gauge` : "Trailer Payload Gauge"}
               </span>
-              <span className={`font-black ${capacityLimitLbs > 0 && totalWeightSelected > capacityLimitLbs ? 'text-red-600 animate-pulse' : 'text-emerald-800'}`}>
+              <span className={`font-black ${capacityLimitLbs > 0 && totalWeightSelected > capacityLimitLbs ? 'text-red-600 animate-pulse' : 'text-ink-800'}`}>
                 {capacityLimitLbs > 0
                   ? `${totalWeightSelected.toLocaleString()} / ${capacityLimitLbs.toLocaleString()} lbs (${limitPercentage}%)`
                   : `${totalWeightSelected.toLocaleString()} lbs — select truck type for capacity`}
@@ -471,7 +471,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                     ? 'bg-red-600'
                     : limitPercentage > 85
                     ? 'bg-amber-500'
-                    : 'bg-emerald-700'
+                    : 'bg-ink-700'
                 }`}
                 style={{ width: capacityLimitLbs > 0 ? `${limitPercentage}%` : '0%' }}
               />
@@ -499,7 +499,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               className={`px-5 py-2.5 text-xs font-bold rounded-xl shadow-md transition-all flex items-center space-x-1.5 ${
                 selectedOrderIds.length === 0
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none'
-                  : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                  : 'bg-ink-700 hover:bg-ink-800 text-white'
               }`}
             >
               {saving ? (

@@ -450,7 +450,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}</td>
           <td style="padding: 10px 0; text-align: center; color: #64748b; font-family: sans-serif;">${item.containerSize}</td>
           <td style="padding: 10px 0; text-align: center; font-weight: bold; color: #0f172a; font-family: sans-serif;">${qty}</td>
-          <td style="padding: 10px 0; text-align: right; color: #047857; font-family: sans-serif;">$${price.toFixed(2)}</td>
+          <td style="padding: 10px 0; text-align: right; color: #2f4864; font-family: sans-serif;">$${price.toFixed(2)}</td>
           <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #0f172a; font-family: sans-serif;">$${total.toFixed(2)}</td>
         </tr>
       `;
@@ -463,8 +463,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ? `<img src="${logoSrc}" alt="${nurseryName} logo" style="height: 56px; width: auto; max-width: 160px; object-fit: contain; margin-bottom: 8px;" />`
             : ''
         }
-        <h1 style="color: #064e3b; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
-        <p style="font-size: 11px; color: #047857; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
+        <h1 style="color: #0f1a28; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
+        <p style="font-size: 11px; color: #2f4864; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
         
         <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
           <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumber}</h2>
@@ -475,7 +475,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </tr>
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Terms:</strong></td>
-              <td style="padding: 2px 0; text-align: right; color: #047857; font-weight: bold;">${paymentTerms}</td>
+              <td style="padding: 2px 0; text-align: right; color: #2f4864; font-weight: bold;">${paymentTerms}</td>
             </tr>
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Due Date:</strong></td>
@@ -485,7 +485,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         <div style="margin-bottom: 25px; font-size: 13px; font-family: Arial, sans-serif;">
-          <h3 style="color: #047857; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bill To Customer:</h3>
+          <h3 style="color: #2f4864; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bill To Customer:</h3>
           <p style="margin: 0; font-weight: bold; font-size: 14px; color: #0f172a;">${billToName}</p>
           <p style="margin: 5px 0 0 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${billToAddress}</p>
         </div>
@@ -536,8 +536,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #047857;">$${amountPaid.toFixed(2)}</td>
             </tr>` : ''}
             <tr style="border-top: 1px solid #cbd5e1;">
-              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #064e3b; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Balance Due'}:</td>
-              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #064e3b;">$${balanceDue.toFixed(2)}</td>
+              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #0f1a28; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Balance Due'}:</td>
+              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #0f1a28;">$${balanceDue.toFixed(2)}</td>
             </tr>
           </table>
         </div>
@@ -565,7 +565,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
           <p style="margin: 0;">${nurseryName}</p>
-          <p style="margin: 5px 0 0 0; font-weight: bold; color: #047857;">Thank you for your business!</p>
+          <p style="margin: 5px 0 0 0; font-weight: bold; color: #2f4864;">Thank you for your business!</p>
         </div>
       </div>
     `;
@@ -1191,7 +1191,7 @@ Thank you for choosing ${nurseryName}!
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(20);
-      pdf.setTextColor(6, 46, 30);
+      pdf.setTextColor(15, 26, 40);
       pdf.text((nurseryName || 'NurseryOS').toUpperCase(), textX, headerTop + 14);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
@@ -1200,7 +1200,7 @@ Thank you for choosing ${nurseryName}!
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
-      pdf.setTextColor(20, 120, 80);
+      pdf.setTextColor(47, 72, 100);
       pdf.text(docLabelUpper, rightX, headerTop + 2, { align: 'right' });
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(16);
@@ -1235,7 +1235,7 @@ Thank you for choosing ${nurseryName}!
       const partiesTop = y;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
-      pdf.setTextColor(20, 120, 80);
+      pdf.setTextColor(47, 72, 100);
       pdf.text('BILL TO', margin, partiesTop);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
@@ -1255,7 +1255,7 @@ Thank you for choosing ${nurseryName}!
       const originX = margin + contentWidth / 2;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
-      pdf.setTextColor(20, 120, 80);
+      pdf.setTextColor(47, 72, 100);
       pdf.text('SHIP FROM', originX, partiesTop);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
@@ -1343,7 +1343,7 @@ Thank you for choosing ${nurseryName}!
       const writeTotal = (label: string, value: string, bold = false, big = false) => {
         pdf.setFont('helvetica', bold ? 'bold' : 'normal');
         pdf.setFontSize(big ? 12 : 9);
-        pdf.setTextColor(bold ? 6 : 90, bold ? 46 : 90, bold ? 30 : 90);
+        pdf.setTextColor(bold ? 15 : 90, bold ? 26 : 90, bold ? 40 : 90);
         pdf.text(label, labelX, y);
         pdf.setTextColor(20, 20, 20);
         pdf.text(value, xTotal, y, { align: 'right' });
@@ -1427,9 +1427,9 @@ Thank you for choosing ${nurseryName}!
       {showFreightAllocation && (
         <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 bg-emerald-950 text-white">
+            <div className="px-5 py-4 bg-ink-950 text-white">
               <h3 className="text-base font-black">Distribute truck freight?</h3>
-              <p className="text-xs text-emerald-200 mt-1">
+              <p className="text-xs text-ink-200 mt-1">
                 This truck has {uniqueTruckOrders.length} orders and ${freightCharge.toFixed(2)} in
                 total freight.
               </p>
@@ -1438,7 +1438,7 @@ Thank you for choosing ${nurseryName}!
               <button
                 type="button"
                 onClick={() => handleFreightChoice('equal')}
-                className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 px-4 py-3 transition-colors"
+                className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-ink-500 hover:bg-ink-50 px-4 py-3 transition-colors"
               >
                 <span className="block text-sm font-black text-gray-900">Split evenly</span>
                 <span className="block text-xs text-slate-500 mt-0.5">
@@ -1448,7 +1448,7 @@ Thank you for choosing ${nurseryName}!
               <button
                 type="button"
                 onClick={() => handleFreightChoice('truckUsage')}
-                className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 px-4 py-3 transition-colors"
+                className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-ink-500 hover:bg-ink-50 px-4 py-3 transition-colors"
               >
                 <span className="block text-sm font-black text-gray-900">
                   Split by % of truck used
@@ -1497,7 +1497,7 @@ Thank you for choosing ${nurseryName}!
         <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-4 shrink-0 print:hidden overflow-y-auto max-h-[90vh] md:max-h-[85vh] lg:max-h-none">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
-              <FileCheck className="h-4 w-4 mr-2 text-emerald-800" />
+              <FileCheck className="h-4 w-4 mr-2 text-ink-800" />
               {docLabel} Settings
             </h3>
             <button
@@ -1536,7 +1536,7 @@ Thank you for choosing ${nurseryName}!
                     onClick={() => handleDocumentTypeChange(type)}
                     className={`py-1.5 text-[10px] font-bold rounded-md capitalize transition-all ${
                       documentType === type
-                        ? 'bg-emerald-700 text-white shadow-sm'
+                        ? 'bg-ink-700 text-white shadow-sm'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
                     }`}
                   >
@@ -1564,7 +1564,7 @@ Thank you for choosing ${nurseryName}!
                     onClick={() => setQtyBasis(basis)}
                     className={`py-1 text-[10px] font-bold rounded-md capitalize transition-all ${
                       qtyBasis === basis
-                        ? 'bg-emerald-700 text-white shadow-sm'
+                        ? 'bg-ink-700 text-white shadow-sm'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
                     }`}
                   >
@@ -1586,7 +1586,7 @@ Thank you for choosing ${nurseryName}!
                 type="text"
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
-                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
               />
             </div>
 
@@ -1600,7 +1600,7 @@ Thank you for choosing ${nurseryName}!
                 value={poNumber}
                 onChange={(e) => setPoNumber(e.target.value)}
                 placeholder="Customer purchase order number"
-                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
               />
               <p className="text-[10px] text-gray-400 mt-1 leading-snug">
                 Prints on the invoice & BOL, and syncs to the QuickBooks P.O. field.
@@ -1615,7 +1615,7 @@ Thank you for choosing ${nurseryName}!
               <select
                 value={salesRep}
                 onChange={(e) => setSalesRep(e.target.value)}
-                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800"
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
               >
                 <option value="">Unassigned</option>
                 {salesRepOptions.map((name) => (
@@ -1643,7 +1643,7 @@ Thank you for choosing ${nurseryName}!
                   type="date"
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
                 />
               </div>
               <div>
@@ -1653,7 +1653,7 @@ Thank you for choosing ${nurseryName}!
                 <select
                   value={paymentTerms}
                   onChange={(e) => setPaymentTerms(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
                 >
                   <option value="Due on Receipt">Due on Receipt</option>
                   <option value="COD">COD (Pickup)</option>
@@ -1673,7 +1673,7 @@ Thank you for choosing ${nurseryName}!
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -1697,7 +1697,7 @@ Thank you for choosing ${nurseryName}!
                     value={freightCharge || ''}
                     placeholder="0.00"
                     onChange={(e) => setFreightCharge(Number(e.target.value) || 0)}
-                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white font-mono font-medium"
+                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
                   />
                 </div>
               </div>
@@ -1708,7 +1708,7 @@ Thank you for choosing ${nurseryName}!
                   <span>Tax Rate (%)</span>
                   <button 
                     onClick={() => setTaxRate(taxRate === 0 ? 4.45 : 0)}
-                    className="text-[9px] text-emerald-700 hover:underline"
+                    className="text-[9px] text-ink-700 hover:underline"
                   >
                     {taxRate === 0 ? 'Use 4.45%' : 'Exempt (0%)'}
                   </button>
@@ -1723,7 +1723,7 @@ Thank you for choosing ${nurseryName}!
                     min="0"
                     value={taxRate}
                     onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
-                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white font-mono font-medium"
+                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
                   />
                 </div>
               </div>
@@ -1744,7 +1744,7 @@ Thank you for choosing ${nurseryName}!
                     value={discount || ''}
                     placeholder="0.00"
                     onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white font-mono font-medium"
+                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
                   />
                 </div>
               </div>
@@ -1759,7 +1759,7 @@ Thank you for choosing ${nurseryName}!
                 rows={3}
                 value={invoiceNotes}
                 onChange={(e) => setInvoiceNotes(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white text-[11px] leading-relaxed"
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white text-[11px] leading-relaxed"
               />
             </div>
 
@@ -1768,7 +1768,7 @@ Thank you for choosing ${nurseryName}!
               <button
                 type="button"
                 onClick={handleResetPrices}
-                className="text-emerald-700 hover:text-emerald-950 font-bold flex items-center gap-1 hover:underline text-[10px]"
+                className="text-ink-700 hover:text-ink-950 font-bold flex items-center gap-1 hover:underline text-[10px]"
               >
                 <RefreshCw className="h-3 w-3" />
                 <span>Reset to Standard Wholesale Prices</span>
@@ -1814,7 +1814,7 @@ Thank you for choosing ${nurseryName}!
                         </div>
                         <span
                           className={`w-16 text-right font-mono font-bold ${
-                            lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                            lineProfit >= 0 ? 'text-ink-700' : 'text-rose-600'
                           }`}
                         >
                           ${lineProfit.toFixed(2)}
@@ -1836,7 +1836,7 @@ Thank you for choosing ${nurseryName}!
                     <span className="font-black uppercase text-indigo-800">Profit:</span>
                     <span
                       className={`font-black ${
-                        totalProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                        totalProfit >= 0 ? 'text-ink-700' : 'text-rose-600'
                       }`}
                     >
                       ${totalProfit.toFixed(2)}
@@ -1856,7 +1856,7 @@ Thank you for choosing ${nurseryName}!
               disabled={isSaving}
               className={`w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 ${
                 saveSuccess
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-ink-600 text-white'
                   : 'bg-slate-800 hover:bg-slate-900 text-white'
               }`}
             >
@@ -1886,7 +1886,7 @@ Thank you for choosing ${nurseryName}!
                 onClick={() => setShowEmailPanel(!showEmailPanel)}
                 className={`w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 border ${
                   showEmailPanel
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                    ? 'bg-ink-50 border-ink-300 text-ink-800'
                     : 'bg-white border-gray-200 hover:bg-slate-50 text-gray-700'
                 }`}
               >
@@ -1895,7 +1895,7 @@ Thank you for choosing ${nurseryName}!
               </button>
 
               {showEmailPanel && (
-                <div className="mt-3 p-3 bg-emerald-50/45 border border-emerald-100 rounded-2xl space-y-3.5 text-xs">
+                <div className="mt-3 p-3 bg-ink-50/45 border border-ink-100 rounded-2xl space-y-3.5 text-xs">
                   <div>
                     <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                       Customer Email
@@ -1905,7 +1905,7 @@ Thank you for choosing ${nurseryName}!
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
                       placeholder="e.g. buyer@wholesale.com"
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800 text-xs"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
                     />
                   </div>
 
@@ -1917,21 +1917,21 @@ Thank you for choosing ${nurseryName}!
                       type="text"
                       value={emailSubject}
                       onChange={(e) => setEmailSubject(e.target.value)}
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-semibold text-gray-800 text-xs"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
                     />
                   </div>
 
                   {order.emailSentAt && (
-                    <div className="bg-emerald-100/40 p-2.5 rounded-xl text-[10px] text-emerald-800 font-medium flex items-center space-x-1.5 border border-emerald-200/30">
+                    <div className="bg-ink-100/40 p-2.5 rounded-xl text-[10px] text-ink-800 font-medium flex items-center space-x-1.5 border border-ink-200/30">
                       <Check className="h-3.5 w-3.5 shrink-0" />
                       <span>Last sent: {new Date(order.emailSentAt.split(' (')[0]).toLocaleDateString()} {new Date(order.emailSentAt.split(' (')[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   )}
 
                   {emailSentStatus === 'success' && (
-                    <div className="p-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl text-[10px] leading-normal font-medium">
-                      <p className="font-bold flex items-center mb-0.5 text-teal-900"><Check className="h-3.5 w-3.5 mr-1 text-teal-700" /> {docLabel} Sent Successfully!</p>
-                      <p className="text-[9px] text-teal-700">The customer was emailed a formatted HTML version of this {docLabel.toLowerCase()}.</p>
+                    <div className="p-3 bg-ink-50 border border-ink-200 text-ink-800 rounded-xl text-[10px] leading-normal font-medium">
+                      <p className="font-bold flex items-center mb-0.5 text-ink-900"><Check className="h-3.5 w-3.5 mr-1 text-ink-700" /> {docLabel} Sent Successfully!</p>
+                      <p className="text-[9px] text-ink-700">The customer was emailed a formatted HTML version of this {docLabel.toLowerCase()}.</p>
                     </div>
                   )}
 
@@ -1987,7 +1987,7 @@ Thank you for choosing ${nurseryName}!
                     <button
                       onClick={handleSendEmailServer}
                       disabled={isSendingEmail}
-                      className="py-2 px-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
+                      className="py-2 px-2.5 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
                     >
                       <Send className="h-3 w-3" />
                       <span>{isSendingEmail ? 'Sending...' : 'Send Direct'}</span>
@@ -2015,7 +2015,7 @@ Thank you for choosing ${nurseryName}!
 
             <button
               onClick={handlePrint}
-              className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+              className="w-full py-2.5 px-4 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Printer className="h-4 w-4" />
               <span>Download & Print {docLabel}</span>
@@ -2105,7 +2105,7 @@ Thank you for choosing ${nurseryName}!
           <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
             <div>
               <h2 className="text-base font-black text-gray-900 flex items-center">
-                <FileCheck className="h-5 w-5 mr-1.5 text-emerald-700" />
+                <FileCheck className="h-5 w-5 mr-1.5 text-ink-700" />
                 Invoice Preview
               </h2>
               <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
@@ -2115,7 +2115,7 @@ Thank you for choosing ${nurseryName}!
             <div className="flex items-center space-x-2">
               <button
                 onClick={handlePrint}
-                className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 hover:bg-emerald-100 transition-colors"
+                className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
                 title="Download PDF to print"
               >
                 <Printer className="h-4 w-4" />
@@ -2176,11 +2176,11 @@ Thank you for choosing ${nurseryName}!
                     <img
                       src={logoSrc}
                       alt={`${nurseryName} logo`}
-                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-emerald-100 bg-white shadow-sm shrink-0"
+                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-ink-100 bg-white shadow-sm shrink-0"
                     />
                   ) : null}
                   <div className="min-w-0">
-                    <h1 className="text-2xl font-black tracking-tight text-emerald-950 uppercase leading-none">
+                    <h1 className="text-2xl font-black tracking-tight text-ink-950 uppercase leading-none">
                       {nurseryName}
                     </h1>
                     <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-widest">
@@ -2190,8 +2190,8 @@ Thank you for choosing ${nurseryName}!
                 </div>
                 
                 <div className="sm:text-right flex flex-col justify-between items-start sm:items-end">
-                  <div className="border-2 border-emerald-900/10 rounded-xl p-3 px-4 bg-emerald-50/20 inline-block text-left sm:text-right">
-                    <span className="block text-[10px] font-black text-emerald-800 font-mono uppercase tracking-widest mb-0.5">
+                  <div className="border-2 border-ink-900/10 rounded-xl p-3 px-4 bg-ink-50/20 inline-block text-left sm:text-right">
+                    <span className="block text-[10px] font-black text-ink-800 font-mono uppercase tracking-widest mb-0.5">
                       {docLabelUpper}
                     </span>
                     <span className="text-xl font-mono font-black text-gray-950 block">
@@ -2220,7 +2220,7 @@ Thank you for choosing ${nurseryName}!
                       </p>
                     )}
                     <p className="text-gray-800">
-                      <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-emerald-800">{paymentTerms}</span>
+                      <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-ink-800">{paymentTerms}</span>
                     </p>
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Due Date:</span> <span className="font-bold">{dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}</span>
@@ -2232,7 +2232,7 @@ Thank you for choosing ${nurseryName}!
               {/* Bill To & Ship To section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6 border-b border-gray-300">
                 <div>
-                  <h3 className="text-xs font-black font-mono uppercase text-emerald-800 tracking-wider mb-2">
+                  <h3 className="text-xs font-black font-mono uppercase text-ink-800 tracking-wider mb-2">
                     Bill To Customer:
                   </h3>
                   <div className="text-xs text-gray-800 space-y-1">
@@ -2241,21 +2241,21 @@ Thank you for choosing ${nurseryName}!
                       type="text"
                       value={billToName}
                       onChange={(e) => setBillToName(e.target.value)}
-                      className="font-bold text-sm text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-emerald-600 focus:bg-white focus:outline-none w-full p-0.5 rounded transition-all print:border-none print:p-0 print:font-black"
+                      className="font-bold text-sm text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:bg-white focus:outline-none w-full p-0.5 rounded transition-all print:border-none print:p-0 print:font-black"
                       placeholder="Customer Name"
                     />
                     <textarea
                       rows={2}
                       value={billToAddress}
                       onChange={(e) => setBillToAddress(e.target.value)}
-                      className="w-full text-xs text-gray-600 bg-transparent hover:bg-slate-50 border border-transparent focus:border-emerald-600 focus:bg-white focus:outline-none p-0.5 rounded leading-normal resize-none font-sans font-medium mt-1 print:border-none print:p-0"
+                      className="w-full text-xs text-gray-600 bg-transparent hover:bg-slate-50 border border-transparent focus:border-ink-600 focus:bg-white focus:outline-none p-0.5 rounded leading-normal resize-none font-sans font-medium mt-1 print:border-none print:p-0"
                       placeholder="Billing Address"
                     />
                   </div>
                 </div>
                 
                 <div>
-                  <h3 className="text-xs font-black font-mono uppercase text-emerald-800 tracking-wider mb-2">
+                  <h3 className="text-xs font-black font-mono uppercase text-ink-800 tracking-wider mb-2">
                     Shipping Origin & Carrier:
                   </h3>
                   <div className="text-xs text-gray-800 space-y-1 font-mono">
@@ -2266,7 +2266,7 @@ Thank you for choosing ${nurseryName}!
                     </p>
                     <p>
                       <span className="font-bold text-gray-400">Cargo Basis:</span>{' '}
-                      <span className="font-bold text-emerald-900 uppercase">
+                      <span className="font-bold text-ink-900 uppercase">
                         {qtyBasis === 'ordered' ? 'Ordered Quantities' : qtyBasis === 'pulled' ? 'Delivered/Pulled Counts' : 'Loaded Counts'}
                       </span>
                     </p>
@@ -2321,7 +2321,7 @@ Thank you for choosing ${nurseryName}!
                                 min="0"
                                 value={price}
                                 onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
-                                className="price-input w-20 font-mono font-bold text-right text-emerald-800 focus:text-emerald-950 focus:outline-none focus:ring-1 focus:ring-emerald-600 bg-emerald-50/40 hover:bg-emerald-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
+                                className="price-input w-20 font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
                               />
                             </div>
                           </td>
@@ -2347,7 +2347,7 @@ Thank you for choosing ${nurseryName}!
                   </div>
                   
                   <div className="border border-gray-200 rounded-xl p-3 bg-slate-50 text-[10px] font-sans">
-                    <p className="font-bold text-emerald-800 uppercase tracking-wider mb-1 flex items-center">
+                    <p className="font-bold text-ink-800 uppercase tracking-wider mb-1 flex items-center">
                       <Landmark className="h-3.5 w-3.5 mr-1" /> Payment instructions:
                     </p>
                     <p className="text-gray-600 leading-normal">
@@ -2413,11 +2413,11 @@ Thank you for choosing ${nurseryName}!
                       </div>
                     </>
                   )}
-                  <div className="flex justify-between py-2 border-b-4 border-double border-emerald-800 bg-emerald-50/35 p-1.5 rounded-lg">
-                    <span className="font-sans font-black text-emerald-800 text-sm uppercase tracking-wide">
+                  <div className="flex justify-between py-2 border-b-4 border-double border-ink-800 bg-ink-50/35 p-1.5 rounded-lg">
+                    <span className="font-sans font-black text-ink-800 text-sm uppercase tracking-wide">
                       {documentType === 'estimate' ? 'Estimate Total (USD):' : 'Balance Due (USD):'}
                     </span>
-                    <span className="text-base font-black text-emerald-950">${balanceDue.toFixed(2)}</span>
+                    <span className="text-base font-black text-ink-950">${balanceDue.toFixed(2)}</span>
                   </div>
 
                 </div>

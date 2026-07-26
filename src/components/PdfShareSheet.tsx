@@ -84,7 +84,7 @@ export const PdfShareSheet: React.FC<PdfShareSheetProps> = ({
           <button
             type="button"
             onClick={handleShare}
-            className="flex-1 py-3 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2"
+            className="flex-1 py-3 px-4 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2"
           >
             <Share2 className="h-4 w-4" />
             Share / Save PDF

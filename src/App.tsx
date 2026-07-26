@@ -830,7 +830,7 @@ function NurseryApp({
                 onClick={() => setActiveTab('inventory')}
                 className={`flex-1 flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
                   activeTab === 'inventory' || activeTab === 'orders'
-                    ? 'bg-emerald-700 text-white shadow-sm'
+                    ? 'bg-ink-700 text-white shadow-sm'
                     : 'text-gray-500'
                 }`}
               >
@@ -842,7 +842,7 @@ function NurseryApp({
                   type="button"
                   onClick={() => setActiveTab('tasks')}
                   className={`flex-1 flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                    activeTab === 'tasks' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                    activeTab === 'tasks' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                   }`}
                 >
                   <ClipboardList className="h-4 w-4" />
@@ -930,7 +930,7 @@ function NurseryApp({
                   setIsEditingTruck(false);
                 }}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  activeTab === 'orders' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  activeTab === 'orders' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                 }`}
               >
                 <FileText className="h-4 w-4" />
@@ -944,7 +944,7 @@ function NurseryApp({
                   setSelectedOrderId(null);
                 }}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  activeTab === 'trucks' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  activeTab === 'trucks' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                 }`}
               >
                 <TruckIcon className="h-4 w-4" />
@@ -955,7 +955,7 @@ function NurseryApp({
               <button
                 onClick={() => setActiveTab('inventory')}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  activeTab === 'inventory' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  activeTab === 'inventory' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                 }`}
               >
                 <Sprout className="h-4 w-4" />
@@ -966,7 +966,7 @@ function NurseryApp({
               <button
                 onClick={() => setActiveTab('customers')}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  activeTab === 'customers' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  activeTab === 'customers' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                 }`}
               >
                 <Users className="h-4 w-4" />
@@ -983,7 +983,7 @@ function NurseryApp({
                   setIsEditingTruck(false);
                 }}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  activeTab === 'reports' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  activeTab === 'reports' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                 }`}
               >
                 <BarChart3 className="h-4 w-4" />
@@ -1000,7 +1000,7 @@ function NurseryApp({
                   setIsEditingTruck(false);
                 }}
                 className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  activeTab === 'tasks' ? 'bg-emerald-700 text-white shadow-sm' : 'text-gray-500'
+                  activeTab === 'tasks' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
                 }`}
               >
                 <ClipboardList className="h-4 w-4" />
@@ -1070,7 +1070,7 @@ function NurseryApp({
                 setSelectedOrderId(null);
                 setIsEditingTruck(false);
               }}
-              className="mb-3 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-white border border-emerald-200 rounded-xl px-3 py-2 shadow-sm"
+              className="mb-3 inline-flex items-center gap-1.5 text-xs font-bold text-ink-800 bg-white border border-ink-200 rounded-xl px-3 py-2 shadow-sm"
             >
               <ArrowLeft className="h-4 w-4" />
               {isBuildingTruck ? 'Back to trucks' : 'Back to list'}
@@ -1177,8 +1177,8 @@ function NurseryApp({
               tenantId={tenant.id}
             />
           ) : (
-            <div className="bg-white rounded-2xl border border-emerald-100 p-12 text-center min-h-[400px] flex flex-col items-center justify-center">
-              <TruckIcon className="h-10 w-10 text-emerald-800 mb-4" />
+            <div className="bg-white rounded-2xl border border-ink-100 p-12 text-center min-h-[400px] flex flex-col items-center justify-center">
+              <TruckIcon className="h-10 w-10 text-ink-800 mb-4" />
               <h3 className="text-lg font-bold">No Selection</h3>
               <p className="text-sm text-gray-500 max-w-sm mt-1">
                 {permissions.canCheckOffLoading
@@ -1380,7 +1380,7 @@ function RootApp({
           <button
             type="button"
             onClick={goPlatform}
-            className="mt-6 px-4 py-2 rounded-xl bg-emerald-600 text-xs font-black"
+            className="mt-6 px-4 py-2 rounded-xl bg-ink-600 text-xs font-black"
           >
             Back to Seller console
           </button>

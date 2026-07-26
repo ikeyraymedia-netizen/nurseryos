@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+/*
+  Brand primary: ink blue (navy).
+  Keep Tailwind emerald for paid / success / leaf accents only.
+*/
+@theme {
+  --color-ink-50: #f3f6fa;
+  --color-ink-100: #e6edf5;
+  --color-ink-150: #dce6f0;
+  --color-ink-200: #c9d8e9;
+  --color-ink-300: #9fb8d4;
+  --color-ink-400: #6f93b8;
+  --color-ink-500: #4d739a;
+  --color-ink-600: #3a5a7c;
+  --color-ink-700: #2f4864;
+  --color-ink-800: #283c53;
+  --color-ink-850: #223448;
+  --color-ink-900: #1a2b3d;
+  --color-ink-950: #0f1a28;
+}

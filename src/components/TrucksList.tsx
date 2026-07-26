@@ -195,7 +195,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
     switch (status) {
       case 'completed':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ink-100 text-ink-800 border border-ink-200">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Fully Loaded
           </span>
@@ -265,13 +265,13 @@ export const TrucksList: React.FC<TrucksListProps> = ({
           : null;
 
   return (
-    <div id="trucks-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
+    <div id="trucks-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-gray-900 font-sans">Trucks by day</h3>
         {canCreate && (
           <button
             onClick={onStartBuild}
-            className="inline-flex items-center px-2.5 py-1.5 rounded-xl text-xs font-black bg-emerald-700 text-white hover:bg-emerald-800 transition-colors shadow-sm"
+            className="inline-flex items-center px-2.5 py-1.5 rounded-xl text-xs font-black bg-ink-700 text-white hover:bg-ink-800 transition-colors shadow-sm"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
             Build Truck
@@ -300,7 +300,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
             const days = weekDateKeysFromSunday(start);
             setSelectedDay(days.includes(todayKey) ? todayKey : null);
           }}
-          className="text-[11px] font-bold text-emerald-800 hover:underline"
+          className="text-[11px] font-bold text-ink-800 hover:underline"
         >
           This week
         </button>
@@ -331,13 +331,13 @@ export const TrucksList: React.FC<TrucksListProps> = ({
               onClick={() => setSelectedDay(day)}
               className={`flex flex-col items-center rounded-xl px-0.5 py-2 border transition-all min-h-[68px] ${
                 isSelected
-                  ? 'bg-emerald-700 border-emerald-800 text-white shadow-sm'
+                  ? 'bg-ink-700 border-ink-800 text-white shadow-sm'
                   : isToday
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950 hover:bg-emerald-100'
-                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/50'
+                    ? 'bg-ink-50 border-ink-300 text-ink-950 hover:bg-ink-100'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-ink-300 hover:bg-ink-50/50'
               }`}
             >
-              <span className={`text-[9px] font-black uppercase tracking-wide ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
+              <span className={`text-[9px] font-black uppercase tracking-wide ${isSelected ? 'text-ink-100' : 'text-slate-500'}`}>
                 {labels.weekday}
               </span>
               <span className="text-[10px] font-bold leading-tight mt-0.5">{labels.monthDay.replace(/^.+ /, '')}</span>
@@ -346,7 +346,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                   isSelected
                     ? 'bg-white/20 text-white'
                     : count > 0
-                      ? 'bg-emerald-100 text-emerald-900'
+                      ? 'bg-ink-100 text-ink-900'
                       : 'bg-slate-200/70 text-slate-500'
                 }`}
               >
@@ -396,7 +396,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                 key={truck.id}
                 type="button"
                 onClick={() => jumpToOutsideTruck(truck)}
-                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white border border-slate-200 text-emerald-800 hover:border-emerald-400"
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white border border-slate-200 text-ink-800 hover:border-ink-400"
               >
                 {truck.name}
                 {truck.loadingDate ? ` · ${formatLoadingDateShort(truck.loadingDate)}` : ''}
@@ -408,7 +408,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
 
       {!selectedDay ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-10 px-4 bg-slate-50/60 rounded-xl border border-dashed border-slate-300 min-h-[220px]">
-          <Calendar className="h-8 w-8 text-emerald-700 mb-3" />
+          <Calendar className="h-8 w-8 text-ink-700 mb-3" />
           <p className="text-sm font-bold text-gray-800">Pick a day</p>
           <p className="text-xs text-slate-500 mt-1 max-w-[220px] leading-relaxed">
             Tap Sun–Sat above to see trucks scheduled to load that day, or open All trucks.
@@ -417,7 +417,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDay('all')}
-              className="mt-4 text-xs font-bold text-emerald-800 underline"
+              className="mt-4 text-xs font-bold text-ink-800 underline"
             >
               Show all {trucks.length} trucks
             </button>
@@ -429,7 +429,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDay(null)}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:underline"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-ink-800 hover:underline"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Week board
@@ -451,7 +451,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
               placeholder="Search truck or carrier..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-emerald-600 bg-slate-50/50 focus:bg-white transition-all font-medium text-gray-800 placeholder:text-slate-400 shadow-inner"
+              className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ink-600 bg-slate-50/50 focus:bg-white transition-all font-medium text-gray-800 placeholder:text-slate-400 shadow-inner"
             />
           </div>
 
@@ -462,8 +462,8 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                 onClick={() => setStatusFilter(tab)}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg capitalize whitespace-nowrap transition-all duration-150 ${
                   statusFilter === tab
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-emerald-800 hover:bg-emerald-50'
+                    ? 'bg-ink-700 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-ink-800 hover:bg-ink-50'
                 }`}
               >
                 {tab === 'all' ? 'All' : tab === 'loading' ? 'Loading' : tab === 'completed' ? 'Loaded' : 'Pending'}
@@ -487,7 +487,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                         key={day}
                         type="button"
                         onClick={() => setSelectedDay(day)}
-                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 hover:bg-emerald-100"
+                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-50 border border-ink-200 text-ink-900 hover:bg-ink-100"
                       >
                         {label} ({count})
                       </button>
@@ -498,7 +498,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedDay('all')}
-                    className="mt-3 text-xs font-bold text-emerald-800 underline"
+                    className="mt-3 text-xs font-bold text-ink-800 underline"
                   >
                     Show all trucks
                   </button>
@@ -528,16 +528,16 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                       isSelected
                         ? isOver
                           ? 'border-red-600 bg-red-50/50 shadow-sm ring-1 ring-red-500/20'
-                          : 'border-emerald-600 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/20'
+                          : 'border-ink-600 bg-ink-50/40 shadow-sm ring-1 ring-ink-500/20'
                         : isOver
                           ? 'border-red-300 bg-red-50/30 hover:border-red-500 hover:shadow-md shadow-sm'
-                          : 'border-slate-200/90 bg-white hover:border-emerald-600 hover:bg-emerald-50/10 hover:shadow-md shadow-sm'
+                          : 'border-slate-200/90 bg-white hover:border-ink-600 hover:bg-ink-50/10 hover:shadow-md shadow-sm'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h4 className="text-sm font-black text-gray-900 font-sans pr-4 flex items-center flex-wrap gap-1.5">
-                          <TruckIcon className="h-4 w-4 text-emerald-850 shrink-0" />
+                          <TruckIcon className="h-4 w-4 text-ink-850 shrink-0" />
                           <span className="truncate">{truck.name}</span>
                           {truck.owner && (
                             <span
@@ -552,7 +552,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                             <p className="text-xs text-gray-500 font-medium">Carrier: {truck.carrier}</p>
                           )}
                           {truck.truckType && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-mono text-[10px] border border-emerald-100/30 font-bold">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-ink-50 text-ink-800 font-mono text-[10px] border border-ink-100/30 font-bold">
                               {truck.truckType}
                             </span>
                           )}
@@ -644,11 +644,11 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                         <span className="font-semibold text-gray-600">
                           Loaded: <span className="font-bold text-gray-900">{loadedQty}</span>/{totalQty} pots
                         </span>
-                        <span className="font-bold text-emerald-800 font-mono">{percentage}%</span>
+                        <span className="font-bold text-ink-800 font-mono">{percentage}%</span>
                       </div>
                       <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
                         <div
-                          className="bg-emerald-700 h-full rounded-full transition-all duration-300"
+                          className="bg-ink-700 h-full rounded-full transition-all duration-300"
                           style={{ width: `${percentage}%` }}
                         />
                       </div>

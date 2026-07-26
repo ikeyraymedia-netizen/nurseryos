@@ -255,9 +255,9 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-emerald-100 overflow-hidden">
-        <div className="px-6 pt-6 pb-4 border-b border-emerald-100 bg-gradient-to-b from-white to-emerald-50/40">
+    <div className="min-h-screen bg-gradient-to-b from-ink-950 via-ink-900 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-ink-100 overflow-hidden">
+        <div className="px-6 pt-6 pb-4 border-b border-ink-100 bg-gradient-to-b from-white to-ink-50/40">
           <BrandLogo variant="full" showText={false} className="max-h-52 mx-auto" />
         </div>
 
@@ -270,7 +270,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 setFormError(null);
               }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                mode === 'signup' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'
+                mode === 'signup' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
               }`}
             >
               Create nursery
@@ -282,7 +282,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 setFormError(null);
               }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                mode === 'signin' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'
+                mode === 'signin' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
               }`}
             >
               Sign in
@@ -304,7 +304,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     type="button"
                     onClick={() => setSignupMode('create')}
                     className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signupMode === 'create' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'
+                      signupMode === 'create' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
                     }`}
                   >
                     New nursery
@@ -313,7 +313,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     type="button"
                     onClick={() => setSignupMode('join')}
                     className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signupMode === 'join' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'
+                      signupMode === 'join' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
                     }`}
                   >
                     Join with code
@@ -329,7 +329,7 @@ export function AuthGate({ children }: AuthGateProps) {
                       value={nurseryName}
                       onChange={(e) => setNurseryName(e.target.value)}
                       placeholder="Green Valley Nursery"
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
                     />
                   </label>
                 ) : (
@@ -342,7 +342,7 @@ export function AuthGate({ children }: AuthGateProps) {
                       value={inviteCode}
                       onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                       placeholder="ABC123"
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
                     />
                   </label>
                 )}
@@ -354,7 +354,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder="Alex Manager"
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
                   />
                 </label>
               </>
@@ -367,7 +367,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     type="button"
                     onClick={() => setSigninMode('normal')}
                     className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signinMode === 'normal' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'
+                      signinMode === 'normal' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
                     }`}
                   >
                     Sign in
@@ -376,7 +376,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     type="button"
                     onClick={() => setSigninMode('join')}
                     className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signinMode === 'join' ? 'bg-white shadow text-emerald-800' : 'text-slate-500'
+                      signinMode === 'join' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
                     }`}
                   >
                     Sign in + join code
@@ -393,7 +393,7 @@ export function AuthGate({ children }: AuthGateProps) {
                         value={inviteCode}
                         onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                         placeholder="ABC123"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
                       />
                     </label>
                     <label className="block">
@@ -404,7 +404,7 @@ export function AuthGate({ children }: AuthGateProps) {
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
                         placeholder="Alex Loader"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
                       />
                     </label>
                   </>
@@ -422,7 +422,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@nursery.com"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
               />
             </label>
 
@@ -437,7 +437,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600/30 focus:border-emerald-600"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
               />
             </label>
 
@@ -457,7 +457,7 @@ export function AuthGate({ children }: AuthGateProps) {
             <button
               type="submit"
               disabled={busy}
-              className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold text-sm py-3 transition-colors"
+              className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-ink-700 hover:bg-ink-800 disabled:opacity-60 text-white font-bold text-sm py-3 transition-colors"
             >
               {mode === 'signup' ? <UserPlus className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
               <span>

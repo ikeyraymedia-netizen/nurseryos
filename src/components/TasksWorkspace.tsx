@@ -184,8 +184,8 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[520px]">
       <div className="bg-slate-900 text-white px-5 py-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-            <ClipboardList className="h-5 w-5 text-emerald-300" />
+          <div className="h-10 w-10 rounded-xl bg-ink-500/20 flex items-center justify-center shrink-0">
+            <ClipboardList className="h-5 w-5 text-ink-300" />
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-black tracking-tight">Tasks</h2>
@@ -224,7 +224,7 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
       <div className="p-4 sm:p-5 space-y-4 flex-1 flex flex-col">
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1">
+            <span className="text-[11px] font-bold text-ink-900 bg-ink-50 border border-ink-100 rounded-lg px-2.5 py-1">
               {openCount} open · {doneCount} done
             </span>
             <button
@@ -243,7 +243,7 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
             <button
               type="button"
               onClick={() => setShowForm((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold"
             >
               <Plus className="h-4 w-4" />
               {showForm ? 'Close' : 'New task'}
@@ -260,9 +260,9 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
         {permissions.canAssignTasks && showForm && (
           <form
             onSubmit={handleCreate}
-            className="border border-emerald-100 bg-emerald-50/40 rounded-2xl p-4 space-y-3"
+            className="border border-ink-100 bg-ink-50/40 rounded-2xl p-4 space-y-3"
           >
-            <p className="text-xs font-bold uppercase tracking-wide text-emerald-900">Create task</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-900">Create task</p>
             <div className="grid sm:grid-cols-2 gap-3">
               <input
                 value={title}
@@ -303,7 +303,7 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
             <button
               type="submit"
               disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
             >
               Assign task
             </button>
@@ -319,14 +319,14 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
                 key={day}
                 className={`rounded-2xl border p-3 flex flex-col min-h-[160px] ${
                   isToday
-                    ? 'border-emerald-300 bg-emerald-50/40'
+                    ? 'border-ink-300 bg-ink-50/40'
                     : 'border-slate-200 bg-slate-50/50'
                 }`}
               >
                 <div className="flex items-baseline justify-between mb-2">
                   <p
                     className={`text-xs font-black uppercase tracking-wide ${
-                      isToday ? 'text-emerald-900' : 'text-slate-600'
+                      isToday ? 'text-ink-900' : 'text-slate-600'
                     }`}
                   >
                     {formatWeekdayLabel(day)}
@@ -357,7 +357,7 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
                               type="button"
                               disabled={!canToggle || busy}
                               onClick={() => void handleToggle(task)}
-                              className="mt-0.5 shrink-0 text-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
+                              className="mt-0.5 shrink-0 text-ink-700 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                               title={task.completed ? 'Mark incomplete' : 'Mark complete'}
                               aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
                             >
@@ -409,7 +409,7 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
                       setDueDate(day);
                       setShowForm(true);
                     }}
-                    className="mt-2 w-full text-[10px] font-bold text-emerald-800 hover:bg-emerald-100/60 rounded-lg py-1.5 border border-dashed border-emerald-200"
+                    className="mt-2 w-full text-[10px] font-bold text-ink-800 hover:bg-ink-100/60 rounded-lg py-1.5 border border-dashed border-ink-200"
                   >
                     + Add for this day
                   </button>

@@ -400,7 +400,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-5 shrink-0 print:hidden">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
-              <FileText className="h-4 w-4 mr-2 text-emerald-800" />
+              <FileText className="h-4 w-4 mr-2 text-ink-800" />
               Customize BOL
             </h3>
             <button
@@ -420,7 +420,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <select
                 value={selectedBOLType}
                 onChange={(e) => setSelectedBOLType(e.target.value)}
-                className="w-full px-3 py-2 border border-emerald-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-emerald-50/40 font-semibold text-gray-800 text-xs"
+                className="w-full px-3 py-2 border border-ink-200 rounded-xl focus:outline-none focus:border-ink-500 bg-ink-50/40 font-semibold text-gray-800 text-xs"
               >
                 <option value="consolidated">Consolidated Truck BOL (All Orders)</option>
                 {sortedOrders.map((order, idx) => (
@@ -440,7 +440,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 type="date"
                 value={shipDate}
                 onChange={(e) => setShipDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -453,7 +453,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 value={poNumber}
                 placeholder="Customer purchase order number"
                 onChange={(e) => setPoNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -465,7 +465,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 rows={3}
                 value={shipperAddress}
                 onChange={(e) => setShipperAddress(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -478,7 +478,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 value={driverName}
                 placeholder="e.g. Bobby Smith"
                 onChange={(e) => setDriverName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -490,7 +490,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 type="text"
                 value={truckNumber}
                 onChange={(e) => setTruckNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -503,7 +503,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 value={trailerNumber}
                 placeholder="e.g. T-502"
                 onChange={(e) => setTrailerNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -516,7 +516,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 value={sealNumber}
                 placeholder="e.g. SL-9092"
                 onChange={(e) => setSealNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -529,7 +529,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 value={receiverAddress}
                 placeholder="Type receiver destination address"
                 onChange={(e) => setReceiverAddress(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -542,7 +542,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 value={receiverContact}
                 placeholder="Name and phone/email"
                 onChange={(e) => setReceiverContact(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
 
@@ -554,7 +554,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 rows={3}
                 value={specialInstructions}
                 onChange={(e) => setSpecialInstructions(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 bg-white font-medium"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
           </div>
@@ -565,7 +565,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
-              className="w-full py-3 px-4 bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+              className="w-full py-3 px-4 bg-ink-800 hover:bg-ink-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Printer className="h-4 w-4" />
               <span>
@@ -604,7 +604,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <button
                 onClick={handleDownloadPdf}
                 disabled={isGeneratingPdf}
-                className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 hover:bg-emerald-100 transition-colors"
+                className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
                 title="Download PDF"
               >
                 <Printer className="h-4 w-4" />
@@ -652,17 +652,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     <img
                       src={logoSrc}
                       alt={`${nurseryName} logo`}
-                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-emerald-100 bg-white shadow-sm shrink-0"
+                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-ink-100 bg-white shadow-sm shrink-0"
                     />
                   ) : null}
                   <div className="min-w-0">
-                    <h1 className="text-xl font-black tracking-tight text-emerald-950 uppercase">
+                    <h1 className="text-xl font-black tracking-tight text-ink-950 uppercase">
                       {nurseryName}
                     </h1>
                     <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-wide">
                       Wholesale Foliage & Landscape Liners
                     </p>
-                    <p className="text-[11px] text-gray-600 mt-3 whitespace-pre-line font-mono font-bold leading-relaxed text-emerald-900/90">
+                    <p className="text-[11px] text-gray-600 mt-3 whitespace-pre-line font-mono font-bold leading-relaxed text-ink-900/90">
                       {shipperAddress}
                     </p>
                   </div>
@@ -743,7 +743,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                           className="border border-gray-200 p-3 rounded-lg bg-slate-50 font-sans"
                         >
                           <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black font-mono bg-emerald-100 text-emerald-900 border border-emerald-200 uppercase">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black font-mono bg-ink-100 text-ink-900 border border-ink-200 uppercase">
                               Stop {index + 1}
                             </span>
                             <span className="text-[10px] text-gray-400 font-mono font-medium">
@@ -769,7 +769,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   </h3>
                   <div className="border border-gray-300 p-4 rounded-xl bg-slate-50 font-sans max-w-xl">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black font-mono bg-emerald-100 text-emerald-900 border border-emerald-200 uppercase">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black font-mono bg-ink-100 text-ink-900 border border-ink-200 uppercase">
                         Active Consignee (Stop {sortedOrders.indexOf(singleOrder!) + 1})
                       </span>
                       <span className="text-xs font-mono font-bold text-gray-500">

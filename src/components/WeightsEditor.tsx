@@ -62,7 +62,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-emerald-700" />
+            <Settings className="h-5 w-5 text-ink-700" />
             <h3 className="font-bold text-gray-900">Container Weights</h3>
           </div>
           <button type="button" onClick={onClose} className="text-xs font-bold text-gray-500">
@@ -105,7 +105,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
             ) : (
               <button
                 onClick={() => setShowResetConfirm(true)}
-                className="shrink-0 text-xs text-emerald-800 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 font-bold px-2.5 py-1.5 rounded-lg transition-colors border border-emerald-200 shadow-sm"
+                className="shrink-0 text-xs text-ink-800 hover:text-ink-900 bg-ink-100 hover:bg-ink-200 font-bold px-2.5 py-1.5 rounded-lg transition-colors border border-ink-200 shadow-sm"
               >
                 Reset to Factory Defaults
               </button>
@@ -121,7 +121,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                 <div
                   key={cw.id}
                   className={`border rounded-xl p-3 flex items-center justify-between gap-2 transition-all ${
-                    isEditing ? 'border-emerald-500 bg-emerald-50/20 shadow-sm' : 'border-gray-150 bg-gray-50/40 hover:bg-white'
+                    isEditing ? 'border-ink-500 bg-ink-50/20 shadow-sm' : 'border-gray-150 bg-gray-50/40 hover:bg-white'
                   }`}
                 >
                   <div className="min-w-0">
@@ -138,7 +138,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                           onChange={(e) => setTempWeight(e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, cw)}
                           className={`w-16 px-1.5 py-1 text-xs font-bold font-mono text-center border rounded-lg bg-white focus:outline-none focus:ring-1 ${
-                            inputError ? 'border-red-500 focus:ring-red-500 text-red-600' : 'border-emerald-400 focus:ring-emerald-500'
+                            inputError ? 'border-red-500 focus:ring-red-500 text-red-600' : 'border-ink-400 focus:ring-ink-500'
                           }`}
                           autoFocus
                           min="0"
@@ -148,7 +148,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                         <button
                           onClick={() => handleSaveEdit(cw)}
                           disabled={isSaving}
-                          className="p-1 bg-emerald-600 text-white hover:bg-emerald-700 rounded-md shadow-sm transition-colors"
+                          className="p-1 bg-ink-600 text-white hover:bg-ink-700 rounded-md shadow-sm transition-colors"
                         >
                           {isSaving ? (
                             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -160,9 +160,9 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                     ) : (
                       <button
                         onClick={() => handleStartEdit(cw)}
-                        className="px-2 py-1 bg-white border border-gray-200 hover:border-emerald-500 rounded-lg flex items-center space-x-1 text-xs font-bold text-gray-700 hover:text-emerald-800 shadow-sm transition-all"
+                        className="px-2 py-1 bg-white border border-gray-200 hover:border-ink-500 rounded-lg flex items-center space-x-1 text-xs font-bold text-gray-700 hover:text-ink-800 shadow-sm transition-all"
                       >
-                        <Weight className="h-3 w-3 text-emerald-600" />
+                        <Weight className="h-3 w-3 text-ink-600" />
                         <span className="font-mono">{cw.weightLbs} lbs</span>
                       </button>
                     )}

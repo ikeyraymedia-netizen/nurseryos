@@ -159,7 +159,7 @@ export function InventoryMatchModal({
                   type="button"
                   disabled={busy}
                   onClick={() => pickSuggestion(plant)}
-                  className="w-full text-left px-3 py-3 rounded-lg border-2 border-gray-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 text-sm disabled:opacity-50 touch-manipulation active:scale-[0.99] transition-all"
+                  className="w-full text-left px-3 py-3 rounded-lg border-2 border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50 text-sm disabled:opacity-50 touch-manipulation active:scale-[0.99] transition-all"
                 >
                   <span className="font-bold text-gray-900">{plant.plantName}</span>
                   <span className="text-gray-500"> • {plant.containerSize}</span>
@@ -187,7 +187,7 @@ export function InventoryMatchModal({
                   type="button"
                   disabled={busy}
                   onClick={() => setShowCreateForm(true)}
-                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 border-dashed border-emerald-400 bg-emerald-50/50 text-emerald-900 text-sm font-bold hover:bg-emerald-50 disabled:opacity-50 touch-manipulation"
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 border-dashed border-ink-400 bg-ink-50/50 text-ink-900 text-sm font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
                 >
                   <Plus className="h-4 w-4" />
                   Create new and link
@@ -195,9 +195,9 @@ export function InventoryMatchModal({
               ) : (
                 <form
                   onSubmit={handleCreateSubmit}
-                  className="border border-emerald-200 rounded-xl p-3 bg-emerald-50/30 space-y-2"
+                  className="border border-ink-200 rounded-xl p-3 bg-ink-50/30 space-y-2"
                 >
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-ink-800">
                     Create new inventory item
                   </p>
                   <input
@@ -257,7 +257,7 @@ export function InventoryMatchModal({
                     <button
                       type="submit"
                       disabled={busy}
-                      className="flex-1 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold disabled:opacity-50"
+                      className="flex-1 px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold disabled:opacity-50"
                     >
                       {busy ? 'Creating…' : 'Create new and link'}
                     </button>

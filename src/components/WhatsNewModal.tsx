@@ -67,8 +67,8 @@ export function WhatsNewModal({
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3 bg-slate-900 text-white">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-              <Bell className="h-5 w-5 text-emerald-300" />
+            <div className="h-10 w-10 rounded-xl bg-ink-500/20 flex items-center justify-center shrink-0">
+              <Bell className="h-5 w-5 text-ink-300" />
             </div>
             <div className="min-w-0">
               <h3 className="font-black text-base tracking-tight">Since you were last here</h3>
@@ -102,8 +102,8 @@ export function WhatsNewModal({
             const Icon = kindIcon(item.kind);
             return (
               <div key={item.id} className="px-5 py-3 flex items-start gap-3">
-                <div className="h-8 w-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon className="h-4 w-4 text-emerald-800" />
+                <div className="h-8 w-8 rounded-lg bg-ink-50 border border-ink-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <Icon className="h-4 w-4 text-ink-800" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -111,7 +111,7 @@ export function WhatsNewModal({
                       {kindLabel(item.kind)}
                     </span>
                     {item.mine && (
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-ink-800 bg-ink-50 border border-ink-100 rounded px-1.5 py-0.5">
                         Assigned to you
                       </span>
                     )}
@@ -136,7 +136,7 @@ export function WhatsNewModal({
                   onOpenCustomers();
                   onDismiss();
                 }}
-                className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+                className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-ink-200 bg-ink-50 text-ink-900 hover:bg-ink-100"
               >
                 View customers
               </button>
@@ -181,7 +181,7 @@ export function WhatsNewModal({
           <button
             type="button"
             onClick={onDismiss}
-            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800"
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-ink-700 text-white hover:bg-ink-800"
           >
             <CheckSquare className="h-3.5 w-3.5" />
             Got it

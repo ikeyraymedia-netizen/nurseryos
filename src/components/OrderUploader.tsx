@@ -408,9 +408,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   };
 
   return (
-    <div id="uploader-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-emerald-700 border-x border-b border-slate-200/95 p-6">
+    <div id="uploader-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6">
       <div className="flex items-center space-x-2.5 mb-4">
-        <Upload className="h-5 w-5 text-emerald-800 font-bold" />
+        <Upload className="h-5 w-5 text-ink-800 font-bold" />
         <h3 className="text-lg font-bold text-gray-900 font-sans">Add Order</h3>
       </div>
 
@@ -430,7 +430,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               }}
               className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
                 inputMode === 'file'
-                  ? 'bg-white text-emerald-800 shadow-sm'
+                  ? 'bg-white text-ink-800 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -445,7 +445,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               }}
               className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
                 inputMode === 'text'
-                  ? 'bg-white text-emerald-800 shadow-sm'
+                  ? 'bg-white text-ink-800 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -462,8 +462,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               onDrop={handleDrop}
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center min-h-[180px] ${
                 isDragging
-                  ? 'border-emerald-500 bg-emerald-50/50'
-                  : 'border-slate-300 bg-slate-50/30 hover:border-emerald-500 hover:bg-emerald-50/20 shadow-inner'
+                  ? 'border-ink-500 bg-ink-50/50'
+                  : 'border-slate-300 bg-slate-50/30 hover:border-ink-500 hover:bg-ink-50/20 shadow-inner'
               }`}
             >
               <input
@@ -473,7 +473,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
                 className="hidden"
               />
-              <div className="bg-emerald-100/80 p-3 rounded-full text-emerald-800 mb-3.5 shadow-sm">
+              <div className="bg-ink-100/80 p-3 rounded-full text-ink-800 mb-3.5 shadow-sm">
                 <FileText className="h-6 w-6" />
               </div>
               <p className="text-sm font-semibold text-gray-800">
@@ -484,7 +484,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               </p>
               <button
                 type="button"
-                className="mt-4 px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg shadow transition-colors"
+                className="mt-4 px-4 py-1.5 bg-ink-700 hover:bg-ink-800 text-white text-xs font-semibold rounded-lg shadow transition-colors"
               >
                 Choose File
               </button>
@@ -506,13 +506,13 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 }}
                 rows={10}
                 placeholder={`Customer: Acme Landscape\nPO: 1042\n\n10 - #3 Live Oak\n6 - #7 Magnolia\n12 - #1 Dwarf Yaupon`}
-                className="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
+                className="w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ink-500/30 focus:border-ink-600"
               />
               <button
                 type="button"
                 onClick={processPastedText}
                 disabled={!pastedText.trim()}
-                className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold rounded-xl shadow transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Sprout className="h-4 w-4" />
                 Analyze Pasted Text
@@ -554,9 +554,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       )}
 
       {savedOrderId && !loading && !pendingDraft && (
-        <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/40 space-y-3">
+        <div className="border border-ink-200 rounded-xl p-4 bg-ink-50/40 space-y-3">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+            <CheckCircle2 className="h-5 w-5 text-ink-700" />
             <p className="text-sm font-bold text-gray-900">Order saved</p>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
@@ -571,7 +571,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                   onCreateDocument(savedOrderId, 'estimate');
                   setSavedOrderId(null);
                 }}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 text-xs font-bold hover:bg-emerald-50"
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-white border border-ink-300 text-ink-900 text-xs font-bold hover:bg-ink-50"
               >
                 <FileText className="h-4 w-4" />
                 Create estimate (set pricing)
@@ -582,7 +582,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                   onCreateDocument(savedOrderId, 'invoice');
                   setSavedOrderId(null);
                 }}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-ink-700 text-white text-xs font-bold hover:bg-ink-800"
               >
                 <DollarSign className="h-4 w-4" />
                 Create invoice (set pricing)
@@ -600,8 +600,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       )}
 
       {loading && (
-        <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-6 flex flex-col items-center text-center min-h-[180px] justify-center">
-          <RefreshCw className="h-8 w-8 text-emerald-700 animate-spin mb-3" />
+        <div className="bg-ink-50/50 border border-ink-100 rounded-xl p-6 flex flex-col items-center text-center min-h-[180px] justify-center">
+          <RefreshCw className="h-8 w-8 text-ink-700 animate-spin mb-3" />
           <p className="text-sm font-semibold text-gray-800 mb-1">Processing Paperwork</p>
           <p className="text-xs text-gray-500 max-w-[240px] leading-relaxed">{statusMessage}</p>
         </div>
@@ -632,13 +632,13 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           <button
             type="button"
             onClick={() => setUploadKind('order')}
-            className="w-full text-left px-3 py-3 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 transition-colors"
+            className="w-full text-left px-3 py-3 rounded-xl border border-ink-300 bg-white hover:bg-ink-50 transition-colors"
           >
-            <span className="flex items-center gap-2 text-sm font-bold text-emerald-900">
+            <span className="flex items-center gap-2 text-sm font-bold text-ink-900">
               <ClipboardList className="h-4 w-4" />
               No — this is a plant order
             </span>
-            <span className="block text-[11px] text-emerald-800/80 mt-1 leading-relaxed">
+            <span className="block text-[11px] text-ink-800/80 mt-1 leading-relaxed">
               Adds it to Orders so you can pull, load, and put it on a truck.
             </span>
           </button>
@@ -653,10 +653,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       )}
 
       {pendingDraft && !loading && uploadKind !== null && (
-        <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/30 space-y-3">
+        <div className="border border-ink-200 rounded-xl p-4 bg-ink-50/30 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <Users className="h-4 w-4 text-emerald-700 shrink-0" />
+              <Users className="h-4 w-4 text-ink-700 shrink-0" />
               <p className="text-sm font-bold text-gray-900 truncate">
                 {uploadKind === 'estimate' ? 'Save estimate under customer' : 'Match customer before saving'}
               </p>
@@ -664,7 +664,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             <button
               type="button"
               onClick={() => setUploadKind(null)}
-              className="text-[11px] font-bold text-emerald-800 hover:underline shrink-0"
+              className="text-[11px] font-bold text-ink-800 hover:underline shrink-0"
             >
               Change type
             </button>
@@ -687,7 +687,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           )}
 
           {pendingDraft.matchConfidence !== 'none' && pendingDraft.suggestedCustomerId && (
-            <p className="text-xs font-semibold text-emerald-800">
+            <p className="text-xs font-semibold text-ink-800">
               {pendingDraft.matchConfidence === 'exact'
                 ? 'Exact customer match found.'
                 : 'Similar customer match found — confirm or choose another.'}
@@ -704,7 +704,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                   onClick={() => setSelectedCustomerId(customer.id)}
                   className={`w-full text-left px-3 py-2 rounded-lg border text-xs ${
                     selectedCustomerId === customer.id
-                      ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-900'
+                      ? 'border-ink-500 bg-ink-50 font-bold text-ink-900'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
                 >
@@ -759,14 +759,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           </div>
 
           {uploadKind === 'order' && (
-          <div className="border-t border-emerald-200/80 pt-3 space-y-2">
+          <div className="border-t border-ink-200/80 pt-3 space-y-2">
             <div className="flex items-center gap-2">
-              <Sprout className="h-4 w-4 text-emerald-700" />
+              <Sprout className="h-4 w-4 text-ink-700" />
               <p className="text-sm font-bold text-gray-900">Link plants to inventory</p>
             </div>
             <p className="text-[11px] text-gray-500 leading-relaxed">
               Tap a suggestion to link each line. If nothing matches, use{' '}
-              <span className="font-semibold text-emerald-800">Create new and link</span>.
+              <span className="font-semibold text-ink-800">Create new and link</span>.
             </p>
 
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
@@ -796,7 +796,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                     </div>
 
                     {status.type !== 'unmatched' ? (
-                      <p className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-1">
+                      <p className="text-[11px] font-semibold text-ink-800 bg-ink-50 border border-ink-100 rounded-md px-2 py-1">
                         ✓ Linked to {status.label} ({status.containerSize})
                         {status.type === 'auto' ? ' — auto-matched' : ''}
                       </p>
@@ -813,7 +813,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                                 type="button"
                                 disabled={linkingItemId === item.id}
                                 onClick={() => linkItemToPlant(item, plant)}
-                                className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 hover:border-emerald-400 hover:bg-emerald-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
+                                className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
                               >
                                 <span className="font-bold text-gray-900">{plant.plantName}</span>
                                 <span className="text-gray-500"> • {plant.containerSize}</span>
@@ -833,7 +833,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                             type="button"
                             disabled={linkingItemId === item.id}
                             onClick={() => handleCreateAndLink(item)}
-                            className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-dashed border-emerald-400 text-emerald-900 text-[11px] font-bold hover:bg-emerald-50 disabled:opacity-50 touch-manipulation"
+                            className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-dashed border-ink-400 text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
                           >
                             {linkingItemId === item.id ? (
                               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -881,7 +881,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               type="button"
               onClick={saveDraft}
               disabled={saving || (uploadKind === 'estimate' && !selectedCustomerId)}
-              className="flex-1 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+              className="flex-1 px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
             >
               {saving ? (
                 <>

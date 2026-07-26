@@ -10,11 +10,49 @@ import {
   Truck
 } from '../types';
 import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, updateCustomer } from '../lib/customers';
-import { listAllDocuments, subscribeToCustomerDocuments, updateCustomerDocument } from '../lib/documents';
+import {
+  listAllDocuments,
+  subscribeToCustomerDocuments,
+  subscribeToDocuments,
+  updateCustomerDocument
+} from '../lib/documents';
 import { addCustomerOrder } from '../lib/db';
 import { logAuditEvent } from '../lib/audit';
 import { exportNurseryBackup } from '../lib/backup';
 import { AppPermissions } from '../lib/permissions';
+
+type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
+type CustomersView = 'customers' | 'invoices';
+
+function startOfInvoicePeriod(period: InvoicePeriod, now = new Date()): Date | null {
+  if (period === 'all') return null;
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  if (period === 'day') return d;
+  if (period === 'week') {
+    const day = d.getDay(); // 0 Sun
+    d.setDate(d.getDate() - day);
+    return d;
+  }
+  if (period === 'month') {
+    d.setDate(1);
+    return d;
+  }
+  if (period === 'quarter') {
+    const qMonth = Math.floor(d.getMonth() / 3) * 3;
+    d.setMonth(qMonth, 1);
+    return d;
+  }
+  // year
+  d.setMonth(0, 1);
+  return d;
+}
+
+function documentDateValue(doc: CustomerDocument): Date {
+  const raw = doc.documentDate || doc.createdAt;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+}
 
 interface CustomersWorkspaceProps {
   customers: Customer[];
@@ -49,6 +87,11 @@ export function CustomersWorkspace({
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<CustomersView>('customers');
+  const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod>('month');
+  const [invoiceCustomerId, setInvoiceCustomerId] = useState<string>('all');
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [allDocuments, setAllDocuments] = useState<CustomerDocument[]>([]);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -135,6 +178,51 @@ export function CustomersWorkspace({
     }
     return subscribeToCustomerDocuments(selectedCustomerId, setCustomerDocuments);
   }, [selectedCustomerId]);
+
+  useEffect(() => {
+    if (workspaceView !== 'invoices' || !permissions.canViewInvoices) {
+      return;
+    }
+    return subscribeToDocuments(setAllDocuments);
+  }, [workspaceView, permissions.canViewInvoices]);
+
+  const filteredInvoices = useMemo(() => {
+    const periodStart = startOfInvoicePeriod(invoicePeriod);
+    const q = invoiceSearch.toLowerCase().trim();
+    return allDocuments
+      .filter((doc) => doc.type === 'invoice')
+      .filter((doc) => {
+        if (invoiceCustomerId !== 'all' && doc.customerId !== invoiceCustomerId) return false;
+        if (periodStart) {
+          const docDate = documentDateValue(doc);
+          if (docDate < periodStart) return false;
+        }
+        if (!q) return true;
+        return [
+          doc.documentNumber,
+          doc.customerName,
+          doc.billToName,
+          doc.orderNumber || '',
+          doc.paymentStatus || ''
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(q);
+      })
+      .sort((a, b) => documentDateValue(b).getTime() - documentDateValue(a).getTime());
+  }, [allDocuments, invoicePeriod, invoiceCustomerId, invoiceSearch]);
+
+  const invoiceTotals = useMemo(() => {
+    let total = 0;
+    let unpaid = 0;
+    let paid = 0;
+    for (const doc of filteredInvoices) {
+      total += doc.grandTotal || 0;
+      if (doc.paymentStatus === 'paid') paid += 1;
+      else unpaid += 1;
+    }
+    return { total, unpaid, paid, count: filteredInvoices.length };
+  }, [filteredInvoices]);
 
   useEffect(() => {
     if (!initialSelectedCustomerId) return;
@@ -789,28 +877,211 @@ export function CustomersWorkspace({
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                  <Users className="h-5 w-5 text-emerald-700" />
+                  {workspaceView === 'invoices' ? (
+                    <FileText className="h-5 w-5 text-emerald-700" />
+                  ) : (
+                    <Users className="h-5 w-5 text-emerald-700" />
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Customers Workspace</h2>
-                  <p className="text-xs text-gray-500">Search customers, then open one to view details.</p>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {workspaceView === 'invoices' ? 'Invoices' : 'Customers Workspace'}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {workspaceView === 'invoices'
+                      ? 'Filter saved invoices by period or customer, then open one.'
+                      : 'Search customers, then open one to view details.'}
+                  </p>
                 </div>
               </div>
-              {permissions.canEditCustomers && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddForm((open) => !open);
-                    setMessage(null);
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
-                >
-                  {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                  {showAddForm ? 'Close' : 'Add Customer'}
-                </button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {permissions.canViewInvoices && (
+                  <div className="inline-flex rounded-xl border border-emerald-200 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceView('customers');
+                        setMessage(null);
+                      }}
+                      className={`px-3 py-2 text-xs font-bold ${
+                        workspaceView === 'customers'
+                          ? 'bg-emerald-700 text-white'
+                          : 'bg-white text-emerald-800 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Customers
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceView('invoices');
+                        setShowAddForm(false);
+                        setMessage(null);
+                      }}
+                      className={`px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 ${
+                        workspaceView === 'invoices'
+                          ? 'bg-emerald-700 text-white'
+                          : 'bg-white text-emerald-800 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Invoices
+                    </button>
+                  </div>
+                )}
+                {workspaceView === 'customers' && permissions.canEditCustomers && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddForm((open) => !open);
+                      setMessage(null);
+                    }}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+                  >
+                    {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {showAddForm ? 'Close' : 'Add Customer'}
+                  </button>
+                )}
+              </div>
             </div>
 
+            {workspaceView === 'invoices' ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      ['day', 'Today'],
+                      ['week', 'This week'],
+                      ['month', 'This month'],
+                      ['quarter', 'This quarter'],
+                      ['year', 'This year'],
+                      ['all', 'All time']
+                    ] as Array<[InvoicePeriod, string]>
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setInvoicePeriod(id)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border ${
+                        invoicePeriod === id
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Customer
+                    </span>
+                    <select
+                      value={invoiceCustomerId}
+                      onChange={(e) => setInvoiceCustomerId(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                    >
+                      <option value="all">All customers</option>
+                      {[...customers]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Search
+                    </span>
+                    <div className="relative mt-1">
+                      <Search className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
+                      <input
+                        value={invoiceSearch}
+                        onChange={(e) => setInvoiceSearch(e.target.value)}
+                        placeholder="Number, customer, order…"
+                        className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-slate-500">Invoices</p>
+                    <p className="text-sm font-black text-slate-900">{invoiceTotals.count}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-emerald-700">Total</p>
+                    <p className="text-sm font-black text-emerald-900">
+                      ${invoiceTotals.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-amber-700">Unpaid</p>
+                    <p className="text-sm font-black text-amber-900">{invoiceTotals.unpaid}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-[480px] overflow-y-auto">
+                  {filteredInvoices.length === 0 ? (
+                    <p className="text-xs text-gray-500 py-6 text-center">
+                      No invoices match these filters.
+                    </p>
+                  ) : (
+                    filteredInvoices.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="border border-gray-100 rounded-xl p-3 hover:border-emerald-200 hover:bg-emerald-50/40 transition"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate">
+                              {doc.documentNumber}
+                              <span className="font-semibold text-gray-500"> · {doc.customerName}</span>
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {documentDateValue(doc).toLocaleDateString()} • $
+                              {(doc.grandTotal || 0).toFixed(2)}
+                              {doc.orderNumber ? ` • Order #${doc.orderNumber}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            {doc.paymentStatus === 'paid' ? (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
+                                Paid
+                              </span>
+                            ) : doc.paymentStatus === 'pending' ? (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
+                                Pending
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-slate-100 text-slate-700">
+                                Unpaid
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {onOpenDocument && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenDocument(doc.orderId || null, doc.type, doc)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                          >
+                            <DollarSign className="h-3.5 w-3.5" />
+                            Open invoice
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
             {permissions.canEditCustomers && (
               <div className="flex flex-wrap gap-2 mb-4">
                 <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer hover:bg-emerald-100">
@@ -1023,6 +1294,8 @@ export function CustomersWorkspace({
                 })
               )}
             </div>
+              </>
+            )}
           </div>
         </div>
       )}

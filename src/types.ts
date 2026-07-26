@@ -243,6 +243,10 @@ export interface InventoryPlant {
   /** List / wholesale price from catalog import */
   listPrice?: number | null;
   notes?: string;
+  /** Public HTTPS URL for plant photo (Firebase Storage). */
+  photoUrl?: string | null;
+  /** Storage object path for delete/replace. */
+  photoPath?: string | null;
   dateCreated: string;
   dateUpdated: string;
 }

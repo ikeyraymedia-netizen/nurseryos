@@ -91,3 +91,6 @@ export async function sendInvoiceEmail(params: {
   }
   return data as any;
 }
+
+/** Same Resend path as invoices — availability lists, notices, etc. */
+export const sendTenantEmail = sendInvoiceEmail;

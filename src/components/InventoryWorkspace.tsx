@@ -1,6 +1,19 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Sprout, Upload, Plus, Droplets, Scissors, Search, RefreshCw, AlertCircle, Truck } from 'lucide-react';
-import { CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
+import {
+  Sprout,
+  Upload,
+  Plus,
+  Droplets,
+  Scissors,
+  Search,
+  RefreshCw,
+  AlertCircle,
+  Truck,
+  Camera,
+  Mail,
+  ImageIcon
+} from 'lucide-react';
+import { Customer, CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
@@ -14,11 +27,21 @@ import {
   updateInventoryPlant
 } from '../lib/inventory';
 import { buildLowStockForUpcomingTrucks } from '../lib/lowStockAlerts';
+import {
+  buildAvailabilityEmailHtml,
+  buildAvailabilityEmailText,
+  removeInventoryPlantPhoto,
+  uploadInventoryPlantPhoto
+} from '../lib/inventoryPhotos';
+import { sendTenantEmail } from '../lib/email';
 
 interface InventoryWorkspaceProps {
   permissions: AppPermissions;
   trucks?: TruckType[];
   orders?: CustomerOrder[];
+  customers?: Customer[];
+  tenantId?: string;
+  nurseryName?: string;
 }
 
 const LOW_STOCK_TOGGLE_KEY = 'nurseryos:inventory:showLowStockUpcoming';
@@ -86,7 +109,10 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
 export function InventoryWorkspace({
   permissions,
   trucks = [],
-  orders = []
+  orders = [],
+  customers = [],
+  tenantId,
+  nurseryName = 'Nursery'
 }: InventoryWorkspaceProps) {
   const [plants, setPlants] = useState<InventoryPlant[]>([]);
   const [search, setSearch] = useState('');
@@ -97,6 +123,13 @@ export function InventoryWorkspace({
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exportTo, setExportTo] = useState('');
+  const [exportCustomerId, setExportCustomerId] = useState('');
+  const [exportIntro, setExportIntro] = useState('');
+  const [exportInStockOnly, setExportInStockOnly] = useState(true);
+  const [exportBusy, setExportBusy] = useState(false);
   const [showLowStockUpcoming, setShowLowStockUpcoming] = useState(() => {
     try {
       return localStorage.getItem(LOW_STOCK_TOGGLE_KEY) === '1';
@@ -382,6 +415,99 @@ export function InventoryWorkspace({
     }
   }
 
+  async function handlePhotoUpload(file: File) {
+    if (!selected || !permissions.canEditInventory || !tenantId) {
+      setMessage('Sign in to a nursery before uploading plant photos.');
+      setMessageIsError(true);
+      return;
+    }
+    setPhotoBusy(true);
+    try {
+      await uploadInventoryPlantPhoto({ tenantId, plant: selected, file });
+      setMessage('Plant photo saved.');
+      setMessageIsError(false);
+    } catch (err: any) {
+      setMessage(err?.message || 'Photo upload failed.');
+      setMessageIsError(true);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function handlePhotoRemove() {
+    if (!selected || !permissions.canEditInventory) return;
+    if (!confirm('Remove this plant photo?')) return;
+    setPhotoBusy(true);
+    try {
+      await removeInventoryPlantPhoto(selected);
+      setMessage('Plant photo removed.');
+      setMessageIsError(false);
+    } catch (err: any) {
+      setMessage(err?.message || 'Could not remove photo.');
+      setMessageIsError(true);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  const exportPlants = useMemo(() => {
+    const list = exportInStockOnly
+      ? plants.filter((p) => (p.quantityAvailable || 0) > 0)
+      : plants;
+    return [...list].sort((a, b) => a.plantName.localeCompare(b.plantName));
+  }, [plants, exportInStockOnly]);
+
+  const canEmailAvailability =
+    Boolean(tenantId) &&
+    (permissions.canViewCustomers || permissions.canViewInvoices || permissions.canEditInventory);
+
+  async function handleSendAvailability(e: FormEvent) {
+    e.preventDefault();
+    if (!tenantId || !canEmailAvailability) return;
+    const to = exportTo.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      setMessage('Enter a valid customer email.');
+      setMessageIsError(true);
+      return;
+    }
+    if (exportPlants.length === 0) {
+      setMessage('No plants to include in this availability list.');
+      setMessageIsError(true);
+      return;
+    }
+    setExportBusy(true);
+    try {
+      const html = buildAvailabilityEmailHtml({
+        nurseryName,
+        plants: exportPlants,
+        intro: exportIntro
+      });
+      const text = buildAvailabilityEmailText({
+        nurseryName,
+        plants: exportPlants,
+        intro: exportIntro
+      });
+      const result = await sendTenantEmail({
+        tenantId,
+        to,
+        subject: `${nurseryName} — Current Availability`,
+        html,
+        text
+      });
+      if (!result.success) {
+        throw new Error(result.message || result.error || 'Email was not sent.');
+      }
+      setShowExport(false);
+      setMessage(`Availability emailed to ${to}.`);
+      setMessageIsError(false);
+    } catch (err: any) {
+      setMessage(err?.message || 'Failed to send availability email.');
+      setMessageIsError(true);
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
   async function handleAddChemical(e: FormEvent) {
     e.preventDefault();
     if (!selected || !permissions.canEditInventory || !chemName.trim()) return;
@@ -434,16 +560,33 @@ export function InventoryWorkspace({
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border border-ink-100 p-5">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center">
-            <Sprout className="h-5 w-5 text-ink-700" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center">
+              <Sprout className="h-5 w-5 text-ink-700" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Live Plant Inventory</h2>
+              <p className="text-xs text-gray-500">
+                Track qty, photos, weeks until ready, sprays, and cut-backs.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Live Plant Inventory</h2>
-            <p className="text-xs text-gray-500">
-              Track qty available, weeks until ready, chemical sprays, and cut-backs.
-            </p>
-          </div>
+          {canEmailAvailability && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowExport(true);
+                setExportCustomerId('');
+                setExportTo('');
+                setExportIntro('');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold hover:bg-ink-100"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              Email availability
+            </button>
+          )}
         </div>
 
         {(permissions.canUploadInventory || permissions.canEditInventory) && (
@@ -689,7 +832,12 @@ export function InventoryWorkspace({
                     selectedId === plant.id ? 'bg-ink-50' : ''
                   }`}
                 >
-                  <p className="font-bold text-sm text-gray-900">{plant.plantName}</p>
+                  <p className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                    {plant.photoUrl ? (
+                      <ImageIcon className="h-3.5 w-3.5 text-ink-600 shrink-0" />
+                    ) : null}
+                    {plant.plantName}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {plant.category ? `${plant.category} · ` : ''}
                     {plant.containerSize}
@@ -727,6 +875,58 @@ export function InventoryWorkspace({
                   >
                     Delete
                   </button>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+                <p className="text-xs font-bold uppercase text-gray-500 flex items-center gap-1">
+                  <Camera className="h-3.5 w-3.5" /> Plant photo
+                </p>
+                {selected.photoUrl ? (
+                  <a
+                    href={selected.photoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={selected.photoUrl}
+                      alt={selected.plantName}
+                      className="h-40 w-full object-cover rounded-lg border border-slate-200 bg-white"
+                    />
+                  </a>
+                ) : (
+                  <div className="h-28 rounded-lg border border-dashed border-slate-300 bg-white flex items-center justify-center text-xs text-slate-400">
+                    No photo yet
+                  </div>
+                )}
+                {permissions.canEditInventory && (
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ink-700 text-white text-[11px] font-bold cursor-pointer hover:bg-ink-800 disabled:opacity-50">
+                      {photoBusy ? 'Uploading…' : selected.photoUrl ? 'Replace photo' : 'Upload photo'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={photoBusy || !tenantId}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handlePhotoUpload(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    {selected.photoUrl && (
+                      <button
+                        type="button"
+                        disabled={photoBusy}
+                        onClick={() => void handlePhotoRemove()}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-rose-700 hover:bg-rose-50"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -871,6 +1071,103 @@ export function InventoryWorkspace({
           )}
         </div>
       </div>
+
+      {showExport && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSendAvailability}
+            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+          >
+            <div className="px-5 py-4 bg-ink-950 text-white">
+              <h3 className="text-sm font-black">Email availability</h3>
+              <p className="text-[11px] text-white/70 mt-0.5">
+                Sends via Resend (same path as invoices). Photo links open the plant image.
+              </p>
+            </div>
+            <div className="p-4 space-y-3">
+              {customers.length > 0 && (
+                <label className="block text-xs">
+                  <span className="font-bold text-slate-600">Customer</span>
+                  <select
+                    value={exportCustomerId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setExportCustomerId(id);
+                      const c = customers.find((x) => x.id === id);
+                      if (c?.contactEmail) setExportTo(c.contactEmail);
+                    }}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  >
+                    <option value="">Choose…</option>
+                    {customers
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                          {c.contactEmail ? ` (${c.contactEmail})` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+              <label className="block text-xs">
+                <span className="font-bold text-slate-600">Send to email</span>
+                <input
+                  required
+                  type="email"
+                  value={exportTo}
+                  onChange={(e) => setExportTo(e.target.value)}
+                  placeholder="customer@example.com"
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-bold text-slate-600">Intro note (optional)</span>
+                <textarea
+                  value={exportIntro}
+                  onChange={(e) => setExportIntro(e.target.value)}
+                  rows={2}
+                  placeholder="Here’s what we have ready this week…"
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </label>
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={exportInStockOnly}
+                  onChange={(e) => setExportInStockOnly(e.target.checked)}
+                />
+                In-stock only (qty &gt; 0)
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Includes {exportPlants.length} plant
+                {exportPlants.length === 1 ? '' : 's'}
+                {exportPlants.filter((p) => p.photoUrl).length
+                  ? ` · ${exportPlants.filter((p) => p.photoUrl).length} with photo links`
+                  : ''}
+                .
+              </p>
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => setShowExport(false)}
+                className="px-3 py-2 text-xs font-bold text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={exportBusy}
+                className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
+              >
+                {exportBusy ? 'Sending…' : 'Send email'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

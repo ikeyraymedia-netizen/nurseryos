@@ -80,6 +80,8 @@ interface InvoiceModalProps {
   canViewProfit?: boolean;
   /** Create Stripe Checkout pay links (gated by payments module). */
   canCollectPayments?: boolean;
+  /** Push to QuickBooks Online (gated by quickbooks module). */
+  canUseQuickbooks?: boolean;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -95,7 +97,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   nurseryLogoSrc = null,
   tenantId,
   canViewProfit = false,
-  canCollectPayments = false
+  canCollectPayments = false,
+  canUseQuickbooks = false
 }) => {
   const printRef = useRef<HTMLDivElement | null>(null);
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
@@ -2044,7 +2047,7 @@ Thank you for choosing ${nurseryName}!
                 </p>
               )}
 
-              {tenantId && (
+              {tenantId && canUseQuickbooks && (
                 <button
                   type="button"
                   onClick={() => void handlePushToQuickbooks()}

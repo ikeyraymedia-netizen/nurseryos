@@ -12,7 +12,8 @@ export type TenantModuleId =
   | 'bol'
   | 'vendors'
   | 'profit'
-  | 'payments';
+  | 'payments'
+  | 'quickbooks';
 
 export interface Tenant {
   id: string;

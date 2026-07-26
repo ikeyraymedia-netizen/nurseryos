@@ -1531,6 +1531,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           tenantId={tenantId}
           canViewProfit={permissions.canViewProfit}
           canCollectPayments={permissions.canCollectPayments}
+          canUseQuickbooks={permissions.canUseQuickbooks}
         />
       )}
     </div>

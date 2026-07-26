@@ -78,6 +78,12 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     label: 'Stripe Payments',
     description: 'Collect invoice payments via Stripe Connect (card checkout pay links).',
     group: 'addon'
+  },
+  {
+    id: 'quickbooks',
+    label: 'QuickBooks',
+    description: 'Connect QuickBooks Online and push saved invoices/estimates from the invoice screen.',
+    group: 'addon'
   }
 ];
 
@@ -87,7 +93,7 @@ export const ALL_TENANT_MODULE_IDS: TenantModuleId[] = TENANT_MODULE_DEFS.map((m
  * Opt-in modules stay off unless explicitly enabled for a nursery.
  * Not included in legacy grandfathering.
  */
-export const OPT_IN_MODULE_IDS: TenantModuleId[] = ['vendors', 'profit', 'payments'];
+export const OPT_IN_MODULE_IDS: TenantModuleId[] = ['vendors', 'profit', 'payments', 'quickbooks'];
 
 /**
  * New nurseries start with nothing enabled — you turn workspaces on in the
@@ -161,6 +167,7 @@ export function applyModuleGates(
   const vendors = mods.has('vendors');
   const profit = mods.has('profit');
   const payments = mods.has('payments');
+  const quickbooks = mods.has('quickbooks');
   const ops = orders || trucks;
 
   return {
@@ -193,7 +200,8 @@ export function applyModuleGates(
     // Cost entry on the order workspace only needs the profit module.
     canEditCost: permissions.canEditCost && profit,
     canManageStripe: permissions.canManageStripe && payments,
-    canCollectPayments: permissions.canCollectPayments && payments && invoicing
+    canCollectPayments: permissions.canCollectPayments && payments && invoicing,
+    canUseQuickbooks: permissions.canUseQuickbooks && quickbooks && invoicing
   };
 }
 

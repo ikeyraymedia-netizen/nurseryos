@@ -1240,6 +1240,7 @@ function NurseryApp({
           tenantId={tenant.id}
           canViewProfit={permissions.canViewProfit}
           canCollectPayments={permissions.canCollectPayments}
+          canUseQuickbooks={permissions.canUseQuickbooks}
         />
       )}
 

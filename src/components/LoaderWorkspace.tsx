@@ -1307,6 +1307,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         tenantId={tenantId}
         canViewProfit={permissions.canViewProfit}
         canCollectPayments={permissions.canCollectPayments}
+        canUseQuickbooks={permissions.canUseQuickbooks}
       />
       )}
 

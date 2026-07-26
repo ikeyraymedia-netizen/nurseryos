@@ -25,6 +25,8 @@ export interface AppPermissions {
   canManageStripe: boolean;
   /** Create invoice payment links via Stripe Connect (gated by payments + invoicing). */
   canCollectPayments: boolean;
+  /** Push invoices/estimates to QuickBooks Online (gated by quickbooks + invoicing). */
+  canUseQuickbooks: boolean;
   canEditWeights: boolean;
   canViewInventory: boolean;
   canEditInventory: boolean;
@@ -139,6 +141,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCost: true,
         canManageStripe: true,
         canCollectPayments: true,
+        canUseQuickbooks: true,
         canEditWeights: true,
         canViewInventory: true,
         canEditInventory: true,
@@ -172,6 +175,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCost: true,
         canManageStripe: false,
         canCollectPayments: false,
+        canUseQuickbooks: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,
@@ -204,6 +208,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCost: true,
         canManageStripe: false,
         canCollectPayments: true,
+        canUseQuickbooks: true,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -236,6 +241,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCost: false,
         canManageStripe: false,
         canCollectPayments: true,
+        canUseQuickbooks: true,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: false,
@@ -267,6 +273,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCost: false,
         canManageStripe: false,
         canCollectPayments: false,
+        canUseQuickbooks: false,
         canEditWeights: false,
         canViewInventory: false,
         canEditInventory: false,
@@ -298,6 +305,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCost: false,
         canManageStripe: false,
         canCollectPayments: false,
+        canUseQuickbooks: false,
         canEditWeights: false,
         canViewInventory: true,
         canEditInventory: true,

@@ -87,6 +87,7 @@ export function TeamManager({
   const [emailFromEmail, setEmailFromEmail] = useState('');
   const [emailFromName, setEmailFromName] = useState('');
   const paymentsEnabled = tenantHasModule(tenant, 'payments');
+  const quickbooksEnabled = tenantHasModule(tenant, 'quickbooks');
 
   async function refreshEmail() {
     try {
@@ -158,41 +159,46 @@ export function TeamManager({
   useEffect(() => {
     refresh().catch((err) => setError(err?.message || 'Failed to load team.'));
     void (async () => {
-      try {
-        const cfg = await fetch('/api/quickbooks/config-status').then((r) => r.json());
-        const ready = Boolean(cfg?.configured);
-        setQbStatus({
-          connected: false,
-          realmId: null,
-          connectedAt: null,
-          environment: cfg?.environment || 'sandbox',
-          configured: ready
-        });
-        if (!ready) {
-          if (cfg?.quickbooks && !cfg?.firebaseAdmin) {
-            setQbError(
-              'Firebase Admin is missing on the server. In Railway set FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the key file), redeploy, then try again.'
-            );
-          } else if (!cfg?.quickbooks) {
-            setQbError(
-              'QuickBooks keys are missing. Add QUICKBOOKS_CLIENT_ID / SECRET (and REDIRECT_URI or APP_URL) in Railway.'
-            );
+      if (quickbooksEnabled) {
+        try {
+          const cfg = await fetch('/api/quickbooks/config-status').then((r) => r.json());
+          const ready = Boolean(cfg?.configured);
+          setQbStatus({
+            connected: false,
+            realmId: null,
+            connectedAt: null,
+            environment: cfg?.environment || 'sandbox',
+            configured: ready
+          });
+          if (!ready) {
+            if (cfg?.quickbooks && !cfg?.firebaseAdmin) {
+              setQbError(
+                'Firebase Admin is missing on the server. In Railway set FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the key file), redeploy, then try again.'
+              );
+            } else if (!cfg?.quickbooks) {
+              setQbError(
+                'QuickBooks keys are missing. Add QUICKBOOKS_CLIENT_ID / SECRET (and REDIRECT_URI or APP_URL) in Railway.'
+              );
+            } else {
+              setQbError('QuickBooks is not fully configured on the server yet.');
+            }
           } else {
-            setQbError('QuickBooks is not fully configured on the server yet.');
+            setQbError(null);
+            await refreshQuickbooks();
           }
-        } else {
-          setQbError(null);
-          await refreshQuickbooks();
+        } catch (err: any) {
+          setQbStatus({
+            connected: false,
+            realmId: null,
+            connectedAt: null,
+            environment: 'sandbox',
+            configured: false
+          });
+          setQbError(err?.message || 'Could not reach QuickBooks config endpoint.');
         }
-      } catch (err: any) {
-        setQbStatus({
-          connected: false,
-          realmId: null,
-          connectedAt: null,
-          environment: 'sandbox',
-          configured: false
-        });
-        setQbError(err?.message || 'Could not reach QuickBooks config endpoint.');
+      } else {
+        setQbStatus(null);
+        setQbError(null);
       }
 
       if (!paymentsEnabled) {
@@ -242,7 +248,7 @@ export function TeamManager({
       }
       await refreshEmail();
     })();
-  }, [tenant.id, paymentsEnabled]);
+  }, [tenant.id, paymentsEnabled, quickbooksEnabled]);
 
   async function handleConnectStripe() {
     setStripeBusy(true);
@@ -592,6 +598,7 @@ export function TeamManager({
             </div>
           </div>
 
+          {quickbooksEnabled && (
           <div className="rounded-xl border border-sky-100 bg-sky-50/50 px-3 py-3 space-y-2">
             <p className="text-xs font-bold uppercase text-sky-900">QuickBooks Online</p>
             <p className="text-[11px] text-sky-950/80 leading-relaxed">
@@ -691,6 +698,7 @@ export function TeamManager({
               </p>
             )}
           </div>
+          )}
 
           {paymentsEnabled && (
             <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 space-y-2">

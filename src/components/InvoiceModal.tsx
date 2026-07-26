@@ -1858,88 +1858,6 @@ Thank you for choosing ${nurseryName}!
               )}
             </button>
 
-            {tenantId && (
-              <button
-                type="button"
-                onClick={() => void handlePushToQuickbooks()}
-                disabled={isPushingQb || !savedDocumentId}
-                className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-                title={
-                  savedDocumentId
-                    ? 'Push saved document to QuickBooks Online'
-                    : 'Save to customer first'
-                }
-              >
-                <Link2 className="h-4 w-4" />
-                <span>
-                  {isPushingQb
-                    ? 'Pushing to QuickBooks…'
-                    : qbPushMessage ||
-                      existingDocument?.qboInvoiceId ||
-                      'Push to QuickBooks'}
-                </span>
-              </button>
-            )}
-
-            {tenantId && canCollectPayments && documentType === 'invoice' && (
-              <button
-                type="button"
-                onClick={() => void handleCreatePayLink()}
-                disabled={isCreatingPayLink || !savedDocumentId || isPaid}
-                className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-                title={
-                  isPaid
-                    ? 'This invoice is already paid'
-                    : savedDocumentId
-                      ? 'Create a Stripe pay link and copy it (does not open payment for you)'
-                      : 'Save to customer first'
-                }
-              >
-                <DollarSign className="h-4 w-4" />
-                <span>
-                  {isPaid
-                    ? 'Invoice paid'
-                    : isCreatingPayLink
-                      ? 'Creating pay link…'
-                      : payLinkMessage || 'Create & copy pay link'}
-                </span>
-              </button>
-            )}
-
-            {activePayLinkUrl && !isPaid && (
-              <p className="text-[10px] text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
-                Pay link ready for customer — do not open it yourself unless you intend to pay.
-              </p>
-            )}
-
-            {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
-                <button
-                  type="button"
-                  onClick={() => void handleRefreshPaymentStatus()}
-                  disabled={isRefreshingPayment || !savedDocumentId}
-                  className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-800 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
-                  <span>{isRefreshingPayment ? 'Checking Stripe…' : 'Refresh payment status'}</span>
-                </button>
-              )}
-
-            <button
-              onClick={handleExportPdf}
-              className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-            >
-              <Download className="h-4 w-4" />
-              <span>Export PDF</span>
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Download & Print {docLabel}</span>
-            </button>
-
             {/* Email Invoice Panel */}
             <div className="border-t border-gray-200 pt-3">
               <button
@@ -2001,7 +1919,7 @@ Thank you for choosing ${nurseryName}!
                       <p className="font-bold flex items-center mb-1 text-amber-900"><AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" /> Nursery Email Not Configured</p>
                       <p className="text-[9px] text-amber-700 mb-2 leading-relaxed">
                         {emailErrorMessage ||
-                          'Open Team → Outbound email and add this nursery’s Gmail/Workspace address + Google App Password.'}
+                          'Open Team → Outbound email and add this nursery’s reply-to address. Make sure RESEND_API_KEY is set in Railway.'}
                       </p>
                       <button
                         onClick={handleOpenMailClient}
@@ -2063,6 +1981,90 @@ Thank you for choosing ${nurseryName}!
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleExportPdf}
+              className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+            >
+              <Download className="h-4 w-4" />
+              <span>Export PDF</span>
+            </button>
+
+            <button
+              onClick={handlePrint}
+              className="w-full py-2.5 px-4 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Download & Print {docLabel}</span>
+            </button>
+
+            {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
+              <button
+                type="button"
+                onClick={() => void handleRefreshPaymentStatus()}
+                disabled={isRefreshingPayment || !savedDocumentId}
+                className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-800 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
+                <span>{isRefreshingPayment ? 'Checking Stripe…' : 'Refresh payment status'}</span>
+              </button>
+            )}
+
+            <div className="border-t border-gray-200 pt-3 space-y-2">
+              {tenantId && canCollectPayments && documentType === 'invoice' && (
+                <button
+                  type="button"
+                  onClick={() => void handleCreatePayLink()}
+                  disabled={isCreatingPayLink || !savedDocumentId || isPaid}
+                  className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                  title={
+                    isPaid
+                      ? 'This invoice is already paid'
+                      : savedDocumentId
+                        ? 'Create a Stripe pay link and copy it (does not open payment for you)'
+                        : 'Save to customer first'
+                  }
+                >
+                  <DollarSign className="h-4 w-4" />
+                  <span>
+                    {isPaid
+                      ? 'Invoice paid'
+                      : isCreatingPayLink
+                        ? 'Creating pay link…'
+                        : payLinkMessage || 'Create & copy pay link'}
+                  </span>
+                </button>
+              )}
+
+              {activePayLinkUrl && !isPaid && (
+                <p className="text-[10px] text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
+                  Pay link ready for customer — do not open it yourself unless you intend to pay.
+                </p>
+              )}
+
+              {tenantId && (
+                <button
+                  type="button"
+                  onClick={() => void handlePushToQuickbooks()}
+                  disabled={isPushingQb || !savedDocumentId}
+                  className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                  title={
+                    savedDocumentId
+                      ? 'Push saved document to QuickBooks Online'
+                      : 'Save to customer first'
+                  }
+                >
+                  <Link2 className="h-4 w-4" />
+                  <span>
+                    {isPushingQb
+                      ? 'Pushing to QuickBooks…'
+                      : qbPushMessage ||
+                        existingDocument?.qboInvoiceId ||
+                        'Push to QuickBooks'}
+                  </span>
+                </button>
               )}
             </div>
             

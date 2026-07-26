@@ -1289,9 +1289,10 @@ Thank you for choosing ${nurseryName}!
         pdf.text('QTY', xQty, y, { align: 'right' });
         pdf.text('UNIT PRICE', xPrice, y, { align: 'right' });
         pdf.text('TOTAL', xTotal, y, { align: 'right' });
-        y += 6;
+        // jsPDF y is text baseline — rule must sit below glyphs, then leave room for next baseline
+        y += 4;
         pdf.line(margin, y, rightX, y);
-        y += 12;
+        y += 14;
       };
 
       ensureSpace(40);
@@ -1308,8 +1309,11 @@ Thank you for choosing ${nurseryName}!
         const total = qty * price;
 
         const nameLines = pdf.splitTextToSize(item.plantName || '—', xSize - xPlant - 10);
-        const rowHeight = Math.max(14, nameLines.length * 11 + 3);
-        if (y + rowHeight > pageHeight - margin) {
+        const linePitch = 11;
+        const textBlockHeight = Math.max(9, nameLines.length * linePitch);
+        // Space for text + padding under glyphs + rule + gap before next baseline
+        const rowSpan = textBlockHeight + 16;
+        if (y + rowSpan > pageHeight - margin) {
           pdf.addPage();
           y = margin;
           drawItemsHeader();
@@ -1317,23 +1321,25 @@ Thank you for choosing ${nurseryName}!
           pdf.setFontSize(9);
         }
 
+        const baseline = y;
         pdf.setTextColor(20, 20, 20);
         nameLines.forEach((l: string, i: number) => {
-          pdf.text(l, xPlant, y + i * 11);
+          pdf.text(l, xPlant, baseline + i * linePitch);
         });
         pdf.setTextColor(90, 90, 90);
-        pdf.text(String(item.containerSize || ''), xSize, y);
+        pdf.text(String(item.containerSize || ''), xSize, baseline);
         pdf.setTextColor(20, 20, 20);
-        pdf.text(String(qty), xQty, y, { align: 'right' });
-        pdf.text(money(price), xPrice, y, { align: 'right' });
+        pdf.text(String(qty), xQty, baseline, { align: 'right' });
+        pdf.text(money(price), xPrice, baseline, { align: 'right' });
         pdf.setFont('helvetica', 'bold');
-        pdf.text(money(total), xTotal, y, { align: 'right' });
+        pdf.text(money(total), xTotal, baseline, { align: 'right' });
         pdf.setFont('helvetica', 'normal');
 
-        y += rowHeight;
+        y = baseline + textBlockHeight + 4;
         pdf.setDrawColor(230, 230, 230);
         pdf.setLineWidth(0.5);
-        pdf.line(margin, y - 4, rightX, y - 4);
+        pdf.line(margin, y, rightX, y);
+        y += 12;
       });
 
       // Totals

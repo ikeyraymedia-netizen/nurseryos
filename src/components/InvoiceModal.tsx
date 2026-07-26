@@ -138,7 +138,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isPushingQb, setIsPushingQb] = useState(false);
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
   const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
-  const [isEmailingPayLink, setIsEmailingPayLink] = useState(false);
   const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
   const [payLinkUrl, setPayLinkUrl] = useState<string | null>(
     existingDocument?.stripeCheckoutUrl || null
@@ -1102,82 +1101,6 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
-  const handleEmailPayLink = async () => {
-    if (!tenantId) {
-      alert('Nursery context missing. Close and reopen this invoice.');
-      return;
-    }
-    if (!savedDocumentId) {
-      alert('Save this invoice to the customer first, then email the pay link.');
-      return;
-    }
-    if (documentType !== 'invoice') {
-      alert('Only invoices can be collected via Stripe.');
-      return;
-    }
-    if (!customerEmail || !customerEmail.includes('@')) {
-      setShowEmailPanel(true);
-      setEmailSentStatus('error_general');
-      setEmailErrorMessage('Enter the customer email address first, then try Email pay link again.');
-      return;
-    }
-
-    setIsEmailingPayLink(true);
-    setShowEmailPanel(true);
-    setEmailSentStatus('idle');
-    setEmailErrorMessage('');
-    try {
-      const payUrl = await ensurePayLink();
-      const emailHtml = generateEmailHTML(payUrl);
-      const emailText = generateEmailText(payUrl);
-      const result = await sendInvoiceEmail({
-        tenantId,
-        to: customerEmail,
-        subject: emailSubject.includes('Pay')
-          ? emailSubject
-          : `${emailSubject} — Pay online`,
-        text: emailText,
-        html: emailHtml,
-        fromName: nurseryName
-      });
-
-      if (result.success) {
-        const updatedOrder: CustomerOrder = {
-          ...order,
-          customerEmail,
-          emailSentAt: new Date().toISOString()
-        };
-        await updateCustomerOrder(updatedOrder);
-        setEmailSentStatus('success');
-        setPayLinkMessage('Emailed to customer');
-        await logAuditEvent({
-          action: 'stripe.pay_link_emailed',
-          summary: `Emailed Stripe pay link for invoice ${invoiceNumber} to ${customerEmail}`,
-          meta: { documentId: savedDocumentId, to: customerEmail }
-        });
-      } else if (
-        result.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
-        result.code === 'SMTP_NOT_CONFIGURED' ||
-        result.code === 'RESEND_NOT_CONFIGURED'
-      ) {
-        setEmailSentStatus('error_smtp');
-        setEmailErrorMessage(
-          result.message ||
-            'Email is not configured. Open Team → Outbound email, and make sure RESEND_API_KEY is set in Railway.'
-        );
-      } else {
-        setEmailSentStatus('error_general');
-        setEmailErrorMessage(result.error || 'Failed to email pay link.');
-      }
-    } catch (err: any) {
-      setEmailSentStatus('error_general');
-      setEmailErrorMessage(err?.message || 'Failed to email pay link.');
-      alert(err?.message || 'Failed to email pay link.');
-    } finally {
-      setIsEmailingPayLink(false);
-    }
-  };
-
   const handleRefreshPaymentStatus = async (opts?: { silent?: boolean }) => {
     if (!tenantId || !savedDocumentId) {
       if (!opts?.silent) alert('Save this invoice to the customer first.');
@@ -1962,7 +1885,7 @@ Thank you for choosing ${nurseryName}!
               <button
                 type="button"
                 onClick={() => void handleCreatePayLink()}
-                disabled={isCreatingPayLink || isEmailingPayLink || !savedDocumentId || isPaid}
+                disabled={isCreatingPayLink || !savedDocumentId || isPaid}
                 className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                 title={
                   isPaid
@@ -1979,21 +1902,6 @@ Thank you for choosing ${nurseryName}!
                     : isCreatingPayLink
                       ? 'Creating pay link…'
                       : payLinkMessage || 'Create & copy pay link'}
-                </span>
-              </button>
-            )}
-
-            {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
-              <button
-                type="button"
-                onClick={() => void handleEmailPayLink()}
-                disabled={isEmailingPayLink || isCreatingPayLink || !savedDocumentId}
-                className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-900 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
-                title="Email the full invoice with a Pay Invoice Online button inside"
-              >
-                <Mail className="h-4 w-4" />
-                <span>
-                  {isEmailingPayLink ? 'Emailing invoice…' : 'Email invoice with pay link'}
                 </span>
               </button>
             )}

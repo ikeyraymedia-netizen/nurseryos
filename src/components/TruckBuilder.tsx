@@ -160,9 +160,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   return (
     <div className="bg-ink-50/50 rounded-2xl border-2 border-ink-600/30 shadow-md overflow-hidden flex flex-col min-h-[min(720px,calc(100dvh-11rem))]">
       {/* Form Header */}
-      <div className="bg-ink-950 text-white px-6 py-4 flex items-center justify-between border-b border-ink-900 shrink-0">
+      <div className="bg-ink-950 text-white px-6 py-4 flex items-center justify-between border-b border-white/10 shrink-0">
         <div className="flex items-center space-x-2">
-          <TruckIcon className="h-5 w-5 text-ink-300" />
+          <TruckIcon className="h-5 w-5 text-white/70" />
           <h3 className="text-base font-bold font-sans">
             {truckToEdit ? `Edit Truck Load: ${truckToEdit.name}` : 'Build a Custom Truck Load'}
           </h3>
@@ -170,7 +170,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-ink-200 hover:text-white p-1 rounded-lg hover:bg-ink-900 transition-colors"
+          className="text-white/80 hover:text-white p-1 rounded-lg border border-transparent hover:border-white/30 hover:bg-white/10 transition-colors"
           title="Cancel"
         >
           <X className="h-5 w-5" />

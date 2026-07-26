@@ -229,7 +229,7 @@ export function PlatformDashboard({
               <button
                 type="button"
                 onClick={onOpenHomeNursery}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-ink-700/60 bg-ink-900/40 px-3 py-2 text-xs font-bold text-ink-200 hover:bg-ink-800/50"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/20"
               >
                 Open {homeNursery.name}
                 <ArrowRight className="h-3.5 w-3.5" />

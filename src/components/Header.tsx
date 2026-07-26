@@ -95,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onManageWeights}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900/50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-ink-200 hover:bg-ink-800"
+                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
               >
                 Weights
               </button>
@@ -104,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onManageTeam}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900/50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-ink-200 hover:bg-ink-800"
+                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
               >
                 Team
               </button>
@@ -113,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onBackToSeller}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-amber-900/40 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-200 hover:bg-amber-800/50"
+                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
               >
                 Seller home
               </button>
@@ -122,7 +122,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onManagePackages}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-700/50 bg-amber-900/40 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-200 hover:bg-amber-800/50"
+                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
               >
                 Packages
               </button>
@@ -131,7 +131,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => onSignOut()}
-                className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900/50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-ink-200 hover:bg-ink-800"
+                className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
                 title={userEmail || 'Sign out'}
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -144,19 +144,19 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto lg:max-w-2xl">
             
             {/* Pending Orders scroll */}
-            <div className="bg-ink-900/40 border border-ink-800/60 rounded-xl px-4 py-2.5 flex flex-col justify-center min-w-[260px] sm:max-w-xs md:max-w-md">
+            <div className="bg-white/5 border border-white/20 rounded-xl px-4 py-2.5 flex flex-col justify-center min-w-[260px] sm:max-w-xs md:max-w-md">
               <div className="flex items-center justify-between mb-1.5 gap-2">
                 <div className="flex items-center space-x-1.5">
-                  <Clock className="h-4 w-4 text-ink-400 shrink-0" />
-                  <span className="text-[10px] uppercase tracking-wider font-mono text-ink-300">Pending Orders to Load</span>
+                  <Clock className="h-4 w-4 text-white/70 shrink-0" />
+                  <span className="text-[10px] uppercase tracking-wider font-mono text-white/80">Pending Orders to Load</span>
                 </div>
-                <span className="bg-ink-800/80 text-ink-100 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">
+                <span className="bg-white/15 text-white px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border border-white/20">
                   {activeOrders.length} orders
                 </span>
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
                 {activeOrders.length === 0 ? (
-                  <span className="text-xs text-ink-400/70 font-mono italic">No pending orders</span>
+                  <span className="text-xs text-white/50 font-mono italic">No pending orders</span>
                 ) : (
                   activeOrders.map((o) => {
                     const isCurrentlyLoading = o.status === 'loading';
@@ -168,11 +168,11 @@ export const Header: React.FC<HeaderProps> = ({
                         className={`inline-flex shrink-0 items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                           isCurrentlyLoading
                             ? 'bg-amber-500 text-amber-950 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.25)] animate-pulse'
-                            : 'bg-ink-900/80 text-ink-200 border-ink-850 hover:bg-ink-800/95 hover:text-white'
+                            : 'bg-white/10 text-white border-white/30 hover:bg-white/20'
                         }`}
                         title={`Click to view ${o.customerName}`}
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isCurrentlyLoading ? 'bg-amber-950' : 'bg-ink-400'}`} />
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isCurrentlyLoading ? 'bg-amber-950' : 'bg-white/80'}`} />
                         <span className="truncate max-w-[100px]">{o.customerName}</span>
                       </button>
                     );
@@ -182,29 +182,29 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Shipped Today scroll */}
-            <div className="bg-ink-900/40 border border-ink-800/60 rounded-xl px-4 py-2.5 flex flex-col justify-center min-w-[260px] sm:max-w-xs md:max-w-md">
+            <div className="bg-white/5 border border-white/20 rounded-xl px-4 py-2.5 flex flex-col justify-center min-w-[260px] sm:max-w-xs md:max-w-md">
               <div className="flex items-center justify-between mb-1.5 gap-2">
                 <div className="flex items-center space-x-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-ink-400 shrink-0" />
-                  <span className="text-[10px] uppercase tracking-wider font-mono text-ink-300">Shipped Today</span>
+                  <CheckCircle2 className="h-4 w-4 text-white/70 shrink-0" />
+                  <span className="text-[10px] uppercase tracking-wider font-mono text-white/80">Shipped Today</span>
                 </div>
-                <span className="bg-ink-800/80 text-ink-100 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">
+                <span className="bg-white/15 text-white px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border border-white/20">
                   {completedOrders.length} shipped
                 </span>
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
                 {completedOrders.length === 0 ? (
-                  <span className="text-xs text-ink-400/70 font-mono italic">None shipped today</span>
+                  <span className="text-xs text-white/50 font-mono italic">None shipped today</span>
                 ) : (
                   completedOrders.map((o) => (
                     <button
                       key={o.id}
                       type="button"
                       onClick={() => onSelectOrder?.(o.id)}
-                      className="inline-flex shrink-0 items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-ink-900/80 text-ink-150 border border-ink-850 hover:bg-ink-800/95 hover:text-white transition-all cursor-pointer hover:scale-105 active:scale-95"
+                      className="inline-flex shrink-0 items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 text-white border border-white/30 hover:bg-white/20 transition-all cursor-pointer hover:scale-105 active:scale-95"
                       title={`Click to view completed ${o.customerName}`}
                     >
-                      <span className="h-1.5 w-1.5 rounded-full bg-ink-400 shrink-0" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-white/80 shrink-0" />
                       <span className="truncate max-w-[100px]">{o.customerName}</span>
                     </button>
                   ))

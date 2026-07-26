@@ -542,29 +542,29 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   return (
     <div className="bg-ink-50/50 rounded-2xl border-2 border-ink-600/30 shadow-md h-full flex flex-col overflow-x-hidden overflow-y-auto">
       {/* Summary Header banner */}
-      <div className="bg-ink-950 text-white p-6 border-b border-ink-900 relative shrink-0 lg:sticky lg:top-0 lg:z-10">
+      <div className="bg-ink-950 text-white p-6 border-b border-white/10 relative shrink-0 lg:sticky lg:top-0 lg:z-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start space-x-3.5">
-            <div className="bg-ink-900 p-3 rounded-2xl text-ink-100 shadow-inner">
+            <div className="bg-white/10 border border-white/25 p-3 rounded-2xl text-white shadow-inner">
               <TruckIcon className="h-6 w-6" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-xl font-bold tracking-tight font-sans text-ink-50">
+                <h2 className="text-xl font-bold tracking-tight font-sans text-white">
                   {truck.name}
                 </h2>
                 {overallPercentage >= 100 ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-ink-500/20 text-ink-300 border border-ink-500/30 font-mono">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-white border border-white/30 font-mono">
                     FULLY LOADED
                   </span>
                 ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono animate-pulse">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-200 border border-amber-300/40 font-mono animate-pulse">
                     IN PROGRESS
                   </span>
                 )}
               </div>
               
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-ink-200 font-mono">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-white/80 font-mono">
                 {truck.owner && (
                   <span className={`flex items-center font-bold px-2.5 py-0.5 rounded shadow-sm shrink-0 ${
                     truck.owner === 'Ikey' ? 'text-teal-950 bg-teal-300' :
@@ -575,7 +575,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   </span>
                 )}
                 {truck.truckType && (
-                  <span className="flex items-center font-bold text-white bg-ink-800/85 px-2 py-0.5 rounded border border-ink-700/60 shadow-sm shrink-0">
+                  <span className="flex items-center font-bold text-white bg-white/10 px-2 py-0.5 rounded border border-white/30 shadow-sm shrink-0">
                     Type: {truck.truckType}
                   </span>
                 )}
@@ -622,7 +622,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   e.stopPropagation();
                   setIsBOLOpen(true);
                 }}
-                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-ink-500 hover:bg-ink-400 text-ink-950 transition-colors border border-ink-400 shadow-sm font-sans"
+                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-sky-300 hover:bg-sky-200 text-ink-950 transition-colors border border-white/50 shadow-sm font-sans"
               >
                 <FileText className="h-3.5 w-3.5 mr-1.5 text-ink-950" />
                 Generate Bill of Lading
@@ -634,7 +634,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                 <button
                   type="button"
                   onClick={() => openInvoice(truckOrders[0])}
-                  className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-slate-800 hover:bg-slate-900 text-white transition-colors border border-slate-700 shadow-sm"
+                  className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/30 shadow-sm"
                 >
                   <Mail className="h-3.5 w-3.5 mr-1.5" />
                   Send Invoice
@@ -644,7 +644,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowInvoiceMenu((open) => !open)}
-                    className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-slate-800 hover:bg-slate-900 text-white transition-colors border border-slate-700 shadow-sm"
+                    className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/30 shadow-sm"
                   >
                     <Mail className="h-3.5 w-3.5 mr-1.5" />
                     Send Invoice
@@ -675,7 +675,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             {permissions.canEditTrucks && (
               <button
                 onClick={onEditTruck}
-                className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-ink-800 hover:bg-ink-700 text-white transition-colors border border-ink-700 shadow-sm"
+                className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/30 shadow-sm"
               >
                 <Edit className="h-3.5 w-3.5 mr-1.5" />
                 Edit Truck Group
@@ -685,14 +685,14 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               <>
                 <button
                   onClick={handleResetTruck}
-                  className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/25 shadow-sm"
+                  className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/30 shadow-sm"
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                   Reset Truck
                 </button>
                 <button
                   onClick={handleLoadAllTruck}
-                  className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-ink-200 hover:bg-ink-100 text-ink-950 transition-colors border border-ink-100 shadow-sm"
+                  className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-white shadow-sm"
                 >
                   <CheckCheck className="h-3.5 w-3.5 mr-1.5" />
                   Load All Truck
@@ -703,9 +703,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         </div>
 
         {truck.notes && (
-          <div className="mt-4 bg-ink-900/40 border border-ink-900 rounded-xl p-3 text-xs text-ink-100 flex items-start space-x-2">
-            <Info className="h-4 w-4 text-ink-300 shrink-0 mt-0.5" />
-            <p className="leading-normal"><span className="font-bold font-mono text-ink-300 uppercase">Load Instructions:</span> {truck.notes}</p>
+          <div className="mt-4 bg-white/5 border border-white/20 rounded-xl p-3 text-xs text-white/90 flex items-start space-x-2">
+            <Info className="h-4 w-4 text-white/70 shrink-0 mt-0.5" />
+            <p className="leading-normal"><span className="font-bold font-mono text-white/80 uppercase">Load Instructions:</span> {truck.notes}</p>
           </div>
         )}
 

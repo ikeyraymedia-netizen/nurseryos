@@ -622,7 +622,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   e.stopPropagation();
                   setIsBOLOpen(true);
                 }}
-                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-sky-300 hover:bg-sky-200 text-ink-950 transition-colors border border-white/50 shadow-sm font-sans"
+                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-teal-300 hover:bg-teal-200 text-ink-950 transition-colors border border-white/50 shadow-sm font-sans"
               >
                 <FileText className="h-3.5 w-3.5 mr-1.5 text-ink-950" />
                 Generate Bill of Lading

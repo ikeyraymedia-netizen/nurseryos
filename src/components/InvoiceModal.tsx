@@ -450,7 +450,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}</td>
           <td style="padding: 10px 0; text-align: center; color: #64748b; font-family: sans-serif;">${item.containerSize}</td>
           <td style="padding: 10px 0; text-align: center; font-weight: bold; color: #0f172a; font-family: sans-serif;">${qty}</td>
-          <td style="padding: 10px 0; text-align: right; color: #2f6491; font-family: sans-serif;">$${price.toFixed(2)}</td>
+          <td style="padding: 10px 0; text-align: right; color: #0f766e; font-family: sans-serif;">$${price.toFixed(2)}</td>
           <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #0f172a; font-family: sans-serif;">$${total.toFixed(2)}</td>
         </tr>
       `;
@@ -463,8 +463,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ? `<img src="${logoSrc}" alt="${nurseryName} logo" style="height: 56px; width: auto; max-width: 160px; object-fit: contain; margin-bottom: 8px;" />`
             : ''
         }
-        <h1 style="color: #1c3550; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
-        <p style="font-size: 11px; color: #2f6491; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
+        <h1 style="color: #0f172a; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
+        <p style="font-size: 11px; color: #0f766e; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
         
         <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
           <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumber}</h2>
@@ -475,7 +475,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </tr>
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Terms:</strong></td>
-              <td style="padding: 2px 0; text-align: right; color: #2f6491; font-weight: bold;">${paymentTerms}</td>
+              <td style="padding: 2px 0; text-align: right; color: #0f766e; font-weight: bold;">${paymentTerms}</td>
             </tr>
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Due Date:</strong></td>
@@ -485,7 +485,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         <div style="margin-bottom: 25px; font-size: 13px; font-family: Arial, sans-serif;">
-          <h3 style="color: #2f6491; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bill To Customer:</h3>
+          <h3 style="color: #0f766e; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bill To Customer:</h3>
           <p style="margin: 0; font-weight: bold; font-size: 14px; color: #0f172a;">${billToName}</p>
           <p style="margin: 5px 0 0 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${billToAddress}</p>
         </div>
@@ -536,8 +536,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #047857;">$${amountPaid.toFixed(2)}</td>
             </tr>` : ''}
             <tr style="border-top: 1px solid #cbd5e1;">
-              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #1c3550; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Balance Due'}:</td>
-              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #1c3550;">$${balanceDue.toFixed(2)}</td>
+              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #0f172a; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Balance Due'}:</td>
+              <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #0f172a;">$${balanceDue.toFixed(2)}</td>
             </tr>
           </table>
         </div>
@@ -565,7 +565,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
           <p style="margin: 0;">${nurseryName}</p>
-          <p style="margin: 5px 0 0 0; font-weight: bold; color: #2f6491;">Thank you for your business!</p>
+          <p style="margin: 5px 0 0 0; font-weight: bold; color: #0f766e;">Thank you for your business!</p>
         </div>
       </div>
     `;
@@ -1191,7 +1191,7 @@ Thank you for choosing ${nurseryName}!
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(20);
-      pdf.setTextColor(28, 53, 80);
+      pdf.setTextColor(15, 23, 42);
       pdf.text((nurseryName || 'NurseryOS').toUpperCase(), textX, headerTop + 14);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
@@ -1200,7 +1200,7 @@ Thank you for choosing ${nurseryName}!
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
-      pdf.setTextColor(47, 100, 145);
+      pdf.setTextColor(15, 118, 110);
       pdf.text(docLabelUpper, rightX, headerTop + 2, { align: 'right' });
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(16);
@@ -1235,7 +1235,7 @@ Thank you for choosing ${nurseryName}!
       const partiesTop = y;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
-      pdf.setTextColor(47, 100, 145);
+      pdf.setTextColor(15, 118, 110);
       pdf.text('BILL TO', margin, partiesTop);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
@@ -1255,7 +1255,7 @@ Thank you for choosing ${nurseryName}!
       const originX = margin + contentWidth / 2;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
-      pdf.setTextColor(47, 100, 145);
+      pdf.setTextColor(15, 118, 110);
       pdf.text('SHIP FROM', originX, partiesTop);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
@@ -1343,7 +1343,7 @@ Thank you for choosing ${nurseryName}!
       const writeTotal = (label: string, value: string, bold = false, big = false) => {
         pdf.setFont('helvetica', bold ? 'bold' : 'normal');
         pdf.setFontSize(big ? 12 : 9);
-        pdf.setTextColor(bold ? 28 : 90, bold ? 53 : 90, bold ? 80 : 90);
+        pdf.setTextColor(bold ? 15 : 90, bold ? 23 : 90, bold ? 42 : 90);
         pdf.text(label, labelX, y);
         pdf.setTextColor(20, 20, 20);
         pdf.text(value, xTotal, y, { align: 'right' });

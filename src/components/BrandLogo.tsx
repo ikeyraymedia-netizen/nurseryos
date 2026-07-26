@@ -53,7 +53,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       {showText && (
         <div className="flex flex-col">
           <div className="flex items-baseline">
-            <span className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-ink-300 to-emerald-400 font-sans uppercase">
+            <span className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-400 to-teal-400 font-sans uppercase">
               {nurseryName}
             </span>
           </div>

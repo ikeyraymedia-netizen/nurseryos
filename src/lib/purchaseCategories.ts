@@ -6,6 +6,7 @@ export const PURCHASE_CATEGORY_PRESETS = [
   'Chemicals',
   'Fertilizer',
   'Freight',
+  'Fuel',
   'Tools / equipment',
   'General supplies',
   'Other'
@@ -24,6 +25,9 @@ const LEGACY_CATEGORY_MAP: Record<string, string> = {
   chemicals: 'Chemicals',
   fertilizer: 'Fertilizer',
   freight: 'Freight',
+  fuel: 'Fuel',
+  gas: 'Fuel',
+  diesel: 'Fuel',
   tools: 'Tools / equipment',
   supplies: 'General supplies',
   other: 'Other',

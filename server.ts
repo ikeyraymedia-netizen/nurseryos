@@ -612,7 +612,8 @@ function getVendorInvoiceParseSchema() {
         },
         freightCharge: {
           type: Type.NUMBER,
-          description: 'Freight / shipping / delivery charge if listed, else 0'
+          description:
+            'Document-level freight / shipping / delivery charge if listed separately from line items, else 0'
         },
         notes: {
           type: Type.STRING,
@@ -620,24 +621,37 @@ function getVendorInvoiceParseSchema() {
         },
         items: {
           type: Type.ARRAY,
-          description: 'Plant / product line items with quantity and unit cost',
+          description:
+            'All purchase lines: plants, supplies, chemicals, containers, tools, freight rows, etc.',
           items: {
             type: Type.OBJECT,
             properties: {
-              plantName: { type: Type.STRING, description: 'Plant or product name' },
+              plantName: {
+                type: Type.STRING,
+                description: 'Plant name or supply / product description'
+              },
               containerSize: {
                 type: Type.STRING,
                 description:
-                  'Standardized container size (#1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other)'
+                  'For plants: standardized size (#1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other). For non-plants use empty string or Other.'
               },
               quantity: { type: Type.INTEGER, description: 'Quantity billed' },
               unitCost: {
                 type: Type.NUMBER,
                 description: 'Unit price / cost each (not line total)'
               },
+              lineType: {
+                type: Type.STRING,
+                description: 'One of: plant, supply, freight, other'
+              },
+              category: {
+                type: Type.STRING,
+                description:
+                  'One of: plants, soil, containers, chemicals, fertilizer, freight, tools, supplies, other'
+              },
               notes: { type: Type.STRING, description: 'Line notes or grade/spec if present' }
             },
-            required: ['plantName', 'containerSize', 'quantity', 'unitCost']
+            required: ['plantName', 'containerSize', 'quantity', 'unitCost', 'lineType', 'category']
           }
         }
       },
@@ -764,24 +778,28 @@ app.post('/api/parse-vendor-invoice', async (req, res) => {
       providedText ||
       (looksLikeText && cleanBase64 ? decodeBase64Text(base64Data) : undefined);
 
-    const prompt = `Analyze this vendor invoice / packing list (${fileName || 'document'}).
-This is an ACCOUNTS-PAYABLE invoice FROM a wholesale nursery grower / vendor TO our nursery (we are the buyer).
+    const prompt = `Analyze this vendor invoice / packing list / purchase receipt (${fileName || 'document'}).
+This is an ACCOUNTS-PAYABLE purchase FROM a vendor TO our nursery (we are the buyer).
+It may include plants, soil, pots, chemicals, fertilizer, tools, freight, or mixed nursery supplies.
 It is NOT a customer sales order.
 
 Extract:
-1. Vendor Name — the seller / grower (From, Sold By, Remit To, company letterhead). Not the Bill-To customer if that is us.
-2. Vendor Invoice Number (Invoice #, Inv #). Use "N/A" if missing.
+1. Vendor Name — the seller (From, Sold By, Remit To, store/letterhead). Not the Bill-To if that is us.
+2. Vendor Invoice Number (Invoice #, Inv #, receipt #). Use "N/A" if missing.
 3. billDate and dueDate as YYYY-MM-DD when clearly shown; otherwise empty string.
-4. freightCharge — shipping / freight / delivery total if listed; else 0.
+4. freightCharge — document-level shipping / freight / delivery if listed as a separate total; else 0.
+   Do NOT also invent a freight line for the same amount.
 5. notes — payment terms, our PO #, or short useful context.
-6. Line items for plants/products:
-   - plantName (clean common or botanical name)
-   - containerSize standardized to closest of: #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other
-   - quantity (integer)
+6. ALL purchase line items (plants AND supplies):
+   - plantName: plant name OR supply/product description
+   - containerSize: for plants use closest of #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other; for non-plants use "" or Other
+   - quantity (integer; use 1 if a lump sum with no qty)
    - unitCost (price EACH — if only a line total is shown, divide by quantity)
+   - lineType: exactly one of plant | supply | freight | other
+   - category: exactly one of plants | soil | containers | chemicals | fertilizer | freight | tools | supplies | other
    - notes for grade/spec if present
 
-Ignore sales tax unless it is the only total available (prefer plant lines + freight).
+Ignore sales tax unless it is the only total available.
 Return structured JSON matching the schema.`;
 
     const response = await parseVendorInvoiceWithFallback(

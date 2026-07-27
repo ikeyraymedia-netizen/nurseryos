@@ -35,7 +35,15 @@ import {
   subscribeToPurchaseOrders,
   subscribeToVendorBills
 } from '../lib/purchasing';
+import {
+  PURCHASE_CATEGORIES,
+  PURCHASE_LINE_TYPES,
+  defaultCategoryForType,
+  emptyBillLine,
+  purchaseCategoryLabel
+} from '../lib/purchaseCategories';
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
+import type { PurchaseLineCategory, PurchaseLineType } from '../types';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
@@ -113,9 +121,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
   const [billDue, setBillDue] = useState('');
   const [billNotes, setBillNotes] = useState('');
   const [billFreight, setBillFreight] = useState(0);
-  const [billLines, setBillLines] = useState([
-    { plantName: '', containerSize: '', quantity: 1, unitCost: 0 }
-  ]);
+  const [billLines, setBillLines] = useState([emptyBillLine()]);
 
   useEffect(() => {
     const unsubV = subscribeToVendors(setVendors);
@@ -162,6 +168,46 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
     }
     return { outstanding, overdue, count: bills.length };
   }, [bills]);
+
+  const monthKey = todayKey().slice(0, 7);
+
+  const monthPurchases = useMemo(() => {
+    const monthBills = bills.filter((b) => (b.billDate || '').startsWith(monthKey));
+    const byCategory = new Map<string, number>();
+    const byVendor = new Map<string, number>();
+    let total = 0;
+    let freightTotal = 0;
+
+    for (const bill of monthBills) {
+      freightTotal += bill.freightCharge || 0;
+      total += bill.grandTotal || 0;
+      byVendor.set(bill.vendorName, (byVendor.get(bill.vendorName) || 0) + (bill.grandTotal || 0));
+      for (const line of bill.items || []) {
+        const cat = line.category || (line.lineType === 'plant' ? 'plants' : 'other');
+        const amount = (line.quantity || 0) * (line.unitCost || 0);
+        byCategory.set(cat, (byCategory.get(cat) || 0) + amount);
+      }
+      if (bill.freightCharge) {
+        byCategory.set('freight', (byCategory.get('freight') || 0) + bill.freightCharge);
+      }
+    }
+
+    const categories = [...byCategory.entries()]
+      .map(([id, amount]) => ({ id, label: purchaseCategoryLabel(id), amount }))
+      .sort((a, b) => b.amount - a.amount);
+    const vendorsTop = [...byVendor.entries()]
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+
+    return {
+      billCount: monthBills.length,
+      total,
+      freightTotal,
+      categories,
+      vendorsTop
+    };
+  }, [bills, monthKey]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -284,9 +330,12 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
     const items = billLines
       .map((l) => ({
         plantName: l.plantName.trim(),
-        containerSize: l.containerSize.trim(),
+        containerSize:
+          l.lineType === 'plant' ? l.containerSize.trim() || 'Other' : l.containerSize.trim(),
         quantity: Math.max(0, Number(l.quantity) || 0),
-        unitCost: Math.max(0, Number(l.unitCost) || 0)
+        unitCost: Math.max(0, Number(l.unitCost) || 0),
+        lineType: l.lineType,
+        category: l.category
       }))
       .filter((l) => l.plantName && l.quantity > 0);
     if (items.length === 0) {
@@ -307,7 +356,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
       setBillDue('');
       setBillNotes('');
       setBillFreight(0);
-      setBillLines([{ plantName: '', containerSize: '', quantity: 1, unitCost: 0 }]);
+      setBillLines([emptyBillLine()]);
     });
   }
 
@@ -321,7 +370,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
           <div>
             <h2 className="text-base font-black text-slate-900 tracking-tight">Purchasing</h2>
             <p className="text-xs text-slate-500">
-              Vendors, purchase orders, receiving, and vendor bills
+              Upload all nursery purchases here — plants, supplies, freight, and bills
             </p>
           </div>
         </div>
@@ -373,18 +422,62 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
       )}
 
       {view === 'bills' && (
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase text-slate-500">Bills</p>
-            <p className="text-sm font-black text-slate-900">{billTotals.count}</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase text-slate-500">Bills</p>
+              <p className="text-sm font-black text-slate-900">{billTotals.count}</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase text-amber-700">Outstanding</p>
+              <p className="text-sm font-black text-amber-900">{money(billTotals.outstanding)}</p>
+            </div>
+            <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase text-rose-700">Overdue</p>
+              <p className="text-sm font-black text-rose-900">{money(billTotals.overdue)}</p>
+            </div>
           </div>
-          <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase text-amber-700">Outstanding</p>
-            <p className="text-sm font-black text-amber-900">{money(billTotals.outstanding)}</p>
-          </div>
-          <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase text-rose-700">Overdue</p>
-            <p className="text-sm font-black text-rose-900">{money(billTotals.overdue)}</p>
+
+          <div className="rounded-xl border border-ink-100 bg-ink-50/30 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-ink-900">
+                Purchases this month
+              </p>
+              <p className="text-sm font-black text-ink-900">{money(monthPurchases.total)}</p>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {monthPurchases.billCount} bill{monthPurchases.billCount === 1 ? '' : 's'}
+              {monthPurchases.freightTotal > 0
+                ? ` · freight ${money(monthPurchases.freightTotal)}`
+                : ''}
+            </p>
+            {monthPurchases.categories.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {monthPurchases.categories.map((row) => (
+                  <span
+                    key={row.id}
+                    className="text-[10px] font-bold px-2 py-1 rounded-full bg-white border border-ink-100 text-ink-800"
+                  >
+                    {row.label} {money(row.amount)}
+                  </span>
+                ))}
+              </div>
+            )}
+            {monthPurchases.vendorsTop.length > 0 && (
+              <div className="text-[11px] text-slate-600 space-y-0.5">
+                {monthPurchases.vendorsTop.map((v) => (
+                  <div key={v.name} className="flex justify-between gap-2">
+                    <span className="truncate">{v.name}</span>
+                    <span className="font-bold text-slate-800 shrink-0">{money(v.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {monthPurchases.billCount === 0 && (
+              <p className="text-[11px] text-slate-500">
+                No purchases logged this month yet — scan an invoice to start.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -859,68 +952,108 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
               </div>
               <div className="space-y-2">
                 {billLines.map((line, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-1.5">
-                    <input
-                      value={line.plantName}
-                      onChange={(e) => {
-                        const next = [...billLines];
-                        next[idx] = { ...line, plantName: e.target.value };
-                        setBillLines(next);
-                      }}
-                      placeholder="Plant"
-                      className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                    />
-                    <input
-                      value={line.containerSize}
-                      onChange={(e) => {
-                        const next = [...billLines];
-                        next[idx] = { ...line, containerSize: e.target.value };
-                        setBillLines(next);
-                      }}
-                      placeholder="Size"
-                      className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      value={line.quantity}
-                      onChange={(e) => {
-                        const next = [...billLines];
-                        next[idx] = { ...line, quantity: Number(e.target.value) || 0 };
-                        setBillLines(next);
-                      }}
-                      className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={line.unitCost}
-                      onChange={(e) => {
-                        const next = [...billLines];
-                        next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
-                        setBillLines(next);
-                      }}
-                      className="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setBillLines(billLines.filter((_, i) => i !== idx))}
-                      className="col-span-1 text-rose-600 flex items-center justify-center"
-                      disabled={billLines.length === 1}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-slate-100 bg-white p-2 space-y-1.5"
+                  >
+                    <div className="grid grid-cols-12 gap-1.5">
+                      <input
+                        value={line.plantName}
+                        onChange={(e) => {
+                          const next = [...billLines];
+                          next[idx] = { ...line, plantName: e.target.value };
+                          setBillLines(next);
+                        }}
+                        placeholder="Plant or supply description"
+                        className="col-span-11 sm:col-span-5 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                      />
+                      <select
+                        value={line.lineType}
+                        onChange={(e) => {
+                          const lineType = e.target.value as PurchaseLineType;
+                          const next = [...billLines];
+                          next[idx] = {
+                            ...line,
+                            lineType,
+                            category: defaultCategoryForType(lineType)
+                          };
+                          setBillLines(next);
+                        }}
+                        className="col-span-6 sm:col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                      >
+                        {PURCHASE_LINE_TYPES.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={line.category}
+                        onChange={(e) => {
+                          const next = [...billLines];
+                          next[idx] = {
+                            ...line,
+                            category: e.target.value as PurchaseLineCategory
+                          };
+                          setBillLines(next);
+                        }}
+                        className="col-span-5 sm:col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                      >
+                        {PURCHASE_CATEGORIES.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setBillLines(billLines.filter((_, i) => i !== idx))}
+                        className="col-span-1 text-rose-600 flex items-center justify-center"
+                        disabled={billLines.length === 1}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-12 gap-1.5">
+                      <input
+                        value={line.containerSize}
+                        onChange={(e) => {
+                          const next = [...billLines];
+                          next[idx] = { ...line, containerSize: e.target.value };
+                          setBillLines(next);
+                        }}
+                        placeholder={line.lineType === 'plant' ? 'Size' : 'Size (optional)'}
+                        className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        value={line.quantity}
+                        onChange={(e) => {
+                          const next = [...billLines];
+                          next[idx] = { ...line, quantity: Number(e.target.value) || 0 };
+                          setBillLines(next);
+                        }}
+                        className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.unitCost}
+                        onChange={(e) => {
+                          const next = [...billLines];
+                          next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
+                          setBillLines(next);
+                        }}
+                        className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                      />
+                    </div>
                   </div>
                 ))}
                 <button
                   type="button"
-                  onClick={() =>
-                    setBillLines([
-                      ...billLines,
-                      { plantName: '', containerSize: '', quantity: 1, unitCost: 0 }
-                    ])
-                  }
+                  onClick={() => setBillLines([...billLines, emptyBillLine()])}
                   className="text-[11px] font-bold text-ink-700"
                 >
                   + Add line
@@ -975,6 +1108,27 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                         >
                           View scanned invoice
                         </a>
+                      )}
+                      {bill.items?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {[
+                            ...new Set(
+                              bill.items.map((line) =>
+                                purchaseCategoryLabel(
+                                  line.category ||
+                                    (line.lineType === 'plant' ? 'plants' : 'other')
+                                )
+                              )
+                            )
+                          ].map((label) => (
+                            <span
+                              key={label}
+                              className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                     <span

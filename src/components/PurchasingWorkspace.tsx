@@ -6,6 +6,7 @@ import {
   PackagePlus,
   Plus,
   Receipt,
+  ScanLine,
   Search,
   Trash2
 } from 'lucide-react';
@@ -34,11 +35,13 @@ import {
   subscribeToPurchaseOrders,
   subscribeToVendorBills
 } from '../lib/purchasing';
+import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
 interface PurchasingWorkspaceProps {
   permissions: AppPermissions;
+  tenantId: string;
 }
 
 function money(n: number) {
@@ -74,7 +77,7 @@ function statusBadge(status: string) {
   return map[status] || 'bg-slate-100 text-slate-700';
 }
 
-export function PurchasingWorkspace({ permissions }: PurchasingWorkspaceProps) {
+export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspaceProps) {
   const [view, setView] = useState<PurchasingView>('orders');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -82,6 +85,7 @@ export function PurchasingWorkspace({ permissions }: PurchasingWorkspaceProps) {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showInvoiceScanner, setShowInvoiceScanner] = useState(false);
 
   // Vendor form
   const [vendorName, setVendorName] = useState('');
@@ -382,6 +386,32 @@ export function PurchasingWorkspace({ permissions }: PurchasingWorkspaceProps) {
             <p className="text-[10px] font-bold uppercase text-rose-700">Overdue</p>
             <p className="text-sm font-black text-rose-900">{money(billTotals.overdue)}</p>
           </div>
+        </div>
+      )}
+
+      {view === 'vendors' && permissions.canManageVendorBills && (
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowInvoiceScanner((o) => !o)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
+            >
+              <ScanLine className="h-3.5 w-3.5" />
+              {showInvoiceScanner ? 'Hide invoice scan' : 'Scan vendor invoice'}
+            </button>
+          </div>
+          {showInvoiceScanner && (
+            <VendorInvoiceScanner
+              tenantId={tenantId}
+              vendors={vendors}
+              permissions={permissions}
+              onSaved={() => {
+                setShowInvoiceScanner(false);
+                setView('bills');
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -749,16 +779,39 @@ export function PurchasingWorkspace({ permissions }: PurchasingWorkspaceProps) {
       {view === 'bills' && (
         <div className="space-y-3">
           {permissions.canManageVendorBills && (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowBillForm((o) => !o)}
+                onClick={() => {
+                  setShowInvoiceScanner((o) => !o);
+                  setShowBillForm(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-white text-ink-800 text-xs font-bold"
+              >
+                <ScanLine className="h-3.5 w-3.5" />
+                {showInvoiceScanner ? 'Hide scan' : 'Scan invoice'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBillForm((o) => !o);
+                  setShowInvoiceScanner(false);
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
               >
                 <Plus className="h-3.5 w-3.5" />
                 New vendor bill
               </button>
             </div>
+          )}
+
+          {showInvoiceScanner && permissions.canManageVendorBills && (
+            <VendorInvoiceScanner
+              tenantId={tenantId}
+              vendors={vendors}
+              permissions={permissions}
+              onSaved={() => setShowInvoiceScanner(false)}
+            />
           )}
 
           {showBillForm && permissions.canManageVendorBills && (
@@ -908,8 +961,21 @@ export function PurchasingWorkspace({ permissions }: PurchasingWorkspaceProps) {
                       <p className="text-xs text-gray-500">
                         {bill.billDate}
                         {bill.dueDate ? ` · Due ${bill.dueDate}` : ''}
+                        {bill.vendorInvoiceNumber
+                          ? ` · Inv ${bill.vendorInvoiceNumber}`
+                          : ''}
                         {bill.poNumber ? ` · ${bill.poNumber}` : ''} · {money(bill.grandTotal)}
                       </p>
+                      {bill.invoicePhotoUrl && (
+                        <a
+                          href={bill.invoicePhotoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] font-bold text-ink-700 hover:underline"
+                        >
+                          View scanned invoice
+                        </a>
+                      )}
                     </div>
                     <span
                       className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusBadge(bill.status)}`}

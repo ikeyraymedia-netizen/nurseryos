@@ -588,6 +588,259 @@ Return strict JSON matching schema. Do not include narrative text.`;
   }
 });
 
+function getVendorInvoiceParseSchema() {
+  return {
+    responseMimeType: 'application/json' as const,
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        vendorName: {
+          type: Type.STRING,
+          description: 'Wholesale grower / vendor who issued this invoice (From / Sold By / Remit To)'
+        },
+        vendorInvoiceNumber: {
+          type: Type.STRING,
+          description: 'Vendor invoice number if present, otherwise N/A'
+        },
+        billDate: {
+          type: Type.STRING,
+          description: 'Invoice date as YYYY-MM-DD if found, otherwise empty string'
+        },
+        dueDate: {
+          type: Type.STRING,
+          description: 'Due date as YYYY-MM-DD if found, otherwise empty string'
+        },
+        freightCharge: {
+          type: Type.NUMBER,
+          description: 'Freight / shipping / delivery charge if listed, else 0'
+        },
+        notes: {
+          type: Type.STRING,
+          description: 'Payment terms, PO reference, or other useful bill notes'
+        },
+        items: {
+          type: Type.ARRAY,
+          description: 'Plant / product line items with quantity and unit cost',
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              plantName: { type: Type.STRING, description: 'Plant or product name' },
+              containerSize: {
+                type: Type.STRING,
+                description:
+                  'Standardized container size (#1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other)'
+              },
+              quantity: { type: Type.INTEGER, description: 'Quantity billed' },
+              unitCost: {
+                type: Type.NUMBER,
+                description: 'Unit price / cost each (not line total)'
+              },
+              notes: { type: Type.STRING, description: 'Line notes or grade/spec if present' }
+            },
+            required: ['plantName', 'containerSize', 'quantity', 'unitCost']
+          }
+        }
+      },
+      required: ['vendorName', 'vendorInvoiceNumber', 'items', 'freightCharge']
+    }
+  };
+}
+
+async function generateVendorInvoiceParseResponse(
+  ai: GoogleGenAI,
+  model: string,
+  mimeType: string,
+  cleanBase64: string,
+  prompt: string,
+  invoiceText?: string
+) {
+  const contents = invoiceText
+    ? [`${prompt}\n\n--- PASTED VENDOR INVOICE TEXT ---\n${invoiceText}`]
+    : [
+        {
+          inlineData: {
+            mimeType,
+            data: cleanBase64
+          }
+        },
+        prompt
+      ];
+
+  return withTimeout(
+    ai.models.generateContent({
+      model,
+      contents,
+      config: getVendorInvoiceParseSchema()
+    }),
+    `Vendor invoice parse (${model})`
+  );
+}
+
+async function parseVendorInvoiceWithFallback(
+  ai: GoogleGenAI,
+  mimeType: string,
+  cleanBase64: string,
+  prompt: string,
+  invoiceText?: string
+) {
+  let lastError: any = null;
+  const maxAttemptsPerModel = 2;
+
+  for (const model of PARSE_MODELS) {
+    for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
+      try {
+        console.log(
+          `Parsing vendor invoice with ${model} (attempt ${attempt}/${maxAttemptsPerModel})...`
+        );
+        const response = await generateVendorInvoiceParseResponse(
+          ai,
+          model,
+          mimeType,
+          cleanBase64,
+          prompt,
+          invoiceText
+        );
+        console.log(`Vendor invoice parsed successfully with ${model}`);
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        const retryable = isRetryableModelError(err);
+        const skippable = isSkippableModelError(err);
+        const hasMoreAttemptsOnModel = attempt < maxAttemptsPerModel;
+        const hasMoreModels = model !== PARSE_MODELS[PARSE_MODELS.length - 1];
+
+        if (!retryable && !skippable) {
+          throw err;
+        }
+
+        if (skippable && hasMoreModels) {
+          console.warn(`${model} is unavailable, trying fallback model...`);
+          break;
+        }
+
+        if (hasMoreAttemptsOnModel) {
+          const backoffMs = 800 * attempt + Math.floor(Math.random() * 300);
+          console.warn(`${model} busy (attempt ${attempt}), retrying in ${backoffMs}ms...`);
+          await sleep(backoffMs);
+          continue;
+        }
+
+        if (hasMoreModels) {
+          console.warn(
+            `${model} unavailable after ${maxAttemptsPerModel} attempts, trying fallback model...`
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error('All Gemini models failed to parse the vendor invoice.');
+}
+
+/** Parse a vendor (accounts-payable) invoice from photo, PDF, or pasted text. */
+app.post('/api/parse-vendor-invoice', async (req, res) => {
+  try {
+    const { base64Data, mimeType, fileName, invoiceText: rawInvoiceText } = req.body;
+
+    const providedText =
+      typeof rawInvoiceText === 'string' && rawInvoiceText.trim()
+        ? rawInvoiceText.trim()
+        : '';
+    const looksLikeText =
+      Boolean(providedText) ||
+      isPlainTextMime(mimeType) ||
+      /\.txt$/i.test(String(fileName || ''));
+
+    if (!providedText && !base64Data) {
+      res.status(400).json({ error: 'Missing invoice text or file data.' });
+      return;
+    }
+
+    const ai = getAiClient();
+    const cleanBase64 = base64Data ? String(base64Data).replace(/^data:.*?;base64,/, '') : '';
+    const resolvedMime = normalizeOrderMimeType(mimeType, fileName);
+    const invoiceTextForAi =
+      providedText ||
+      (looksLikeText && cleanBase64 ? decodeBase64Text(base64Data) : undefined);
+
+    const prompt = `Analyze this vendor invoice / packing list (${fileName || 'document'}).
+This is an ACCOUNTS-PAYABLE invoice FROM a wholesale nursery grower / vendor TO our nursery (we are the buyer).
+It is NOT a customer sales order.
+
+Extract:
+1. Vendor Name — the seller / grower (From, Sold By, Remit To, company letterhead). Not the Bill-To customer if that is us.
+2. Vendor Invoice Number (Invoice #, Inv #). Use "N/A" if missing.
+3. billDate and dueDate as YYYY-MM-DD when clearly shown; otherwise empty string.
+4. freightCharge — shipping / freight / delivery total if listed; else 0.
+5. notes — payment terms, our PO #, or short useful context.
+6. Line items for plants/products:
+   - plantName (clean common or botanical name)
+   - containerSize standardized to closest of: #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other
+   - quantity (integer)
+   - unitCost (price EACH — if only a line total is shown, divide by quantity)
+   - notes for grade/spec if present
+
+Ignore sales tax unless it is the only total available (prefer plant lines + freight).
+Return structured JSON matching the schema.`;
+
+    const response = await parseVendorInvoiceWithFallback(
+      ai,
+      resolvedMime,
+      cleanBase64,
+      prompt,
+      invoiceTextForAi
+    );
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error('Gemini model returned empty response.');
+    }
+
+    const cleanedJson = responseText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    let parsedData: any;
+    try {
+      parsedData = JSON.parse(cleanedJson);
+    } catch {
+      throw new Error('AI returned invalid JSON. Please try uploading again.');
+    }
+    res.json(parsedData);
+  } catch (error: any) {
+    console.error('Error parsing vendor invoice with Gemini:', error);
+    const msg = String(error?.message || error || '');
+    if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
+      res.status(500).json({
+        error: 'GEMINI_API_KEY is missing on the server. Add it in Railway → Variables, then redeploy.',
+        details: msg
+      });
+      return;
+    }
+    const statusCode = getApiStatusCode(error);
+    if (statusCode === 429 || statusCode === 503) {
+      res.status(503).json({
+        error: 'AI service is temporarily busy. Please try again in a few seconds.',
+        details: msg
+      });
+      return;
+    }
+    if (statusCode === 401 || statusCode === 403 || msg.toLowerCase().includes('api key')) {
+      res.status(500).json({
+        error: 'Gemini API key was rejected. Check GEMINI_API_KEY in Railway Variables.',
+        details: msg
+      });
+      return;
+    }
+    res.status(500).json({
+      error: 'Failed to process vendor invoice.',
+      details: msg
+    });
+  }
+});
+
 // Check server status & API key configuration
 app.get('/api/config-status', (req, res) => {
   res.json({

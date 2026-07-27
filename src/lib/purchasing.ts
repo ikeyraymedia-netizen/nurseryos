@@ -328,6 +328,7 @@ async function applyReceivedQtyToInventory(
 }
 
 export async function createVendorBill(input: {
+  id?: string;
   vendorId: string;
   vendorName: string;
   billDate?: string;
@@ -337,10 +338,13 @@ export async function createVendorBill(input: {
   freightCharge?: number;
   purchaseOrderId?: string;
   poNumber?: string;
+  vendorInvoiceNumber?: string;
+  invoicePhotoUrl?: string | null;
+  invoicePhotoPath?: string | null;
   status?: VendorBill['status'];
 }): Promise<string> {
   const tenantId = requireTenantId();
-  const id = `vbill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const id = input.id || `vbill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const now = new Date().toISOString();
   const items: VendorBillLine[] = input.items.map((item, idx) => ({
     ...item,
@@ -353,6 +357,7 @@ export async function createVendorBill(input: {
     vendorId: input.vendorId,
     vendorName: input.vendorName,
     billNumber: await nextBillNumber(tenantId),
+    vendorInvoiceNumber: input.vendorInvoiceNumber,
     purchaseOrderId: input.purchaseOrderId,
     poNumber: input.poNumber,
     status: input.status || 'unpaid',
@@ -363,6 +368,8 @@ export async function createVendorBill(input: {
     subtotal,
     freightCharge: freight || undefined,
     grandTotal: subtotal + freight,
+    invoicePhotoUrl: input.invoicePhotoUrl ?? null,
+    invoicePhotoPath: input.invoicePhotoPath ?? null,
     createdAt: now,
     updatedAt: now
   };

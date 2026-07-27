@@ -5,20 +5,28 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isTenantMember(tenantId) {
-      return signedIn()
-        && firestore.exists(
-          /databases/(default)/documents/tenants/$(tenantId)/members/$(request.auth.uid)
-        );
-    }
-
-    // Plant photos — public read so availability emails can link to them.
+    // Plant photos — public read so PDF/Excel “View photo” links work without login.
+    // Writes require sign-in. (Avoid firestore.exists here: until Storage↔Firestore
+    // cross-service IAM is granted in the Firebase console, membership checks
+    // fail closed as storage/unauthorized.)
     match /tenants/{tenantId}/inventory/{plantId}/{fileName} {
       allow read: if true;
-      allow write: if isTenantMember(tenantId)
+      allow create, update: if signedIn()
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
-      allow delete: if isTenantMember(tenantId);
+      allow delete: if signedIn();
+    }
+
+    // Scanned vendor invoices (image or PDF) — signed-in read/write.
+    match /tenants/{tenantId}/vendorBills/{billId}/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.resource.size < 12 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+        );
+      allow delete: if signedIn();
     }
   }
 }

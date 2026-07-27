@@ -1133,7 +1133,7 @@ function NurseryApp({
               }}
             />
           ) : activeTab === 'purchasing' && permissions.canViewPurchasing ? (
-            <PurchasingWorkspace permissions={permissions} />
+            <PurchasingWorkspace permissions={permissions} tenantId={tenant.id} />
           ) : activeTab === 'reports' ? (
             <ReportsWorkspace
               orders={dynamicOrders}

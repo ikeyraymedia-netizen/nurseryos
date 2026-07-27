@@ -336,6 +336,8 @@ export interface VendorBill {
   vendorId: string;
   vendorName: string;
   billNumber: string;
+  /** Vendor's own invoice number from the paper/PDF invoice. */
+  vendorInvoiceNumber?: string;
   /** Optional link back to our PO. */
   purchaseOrderId?: string;
   poNumber?: string;
@@ -347,6 +349,9 @@ export interface VendorBill {
   subtotal: number;
   freightCharge?: number;
   grandTotal: number;
+  /** Scanned invoice image/PDF in Firebase Storage. */
+  invoicePhotoUrl?: string | null;
+  invoicePhotoPath?: string | null;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;

@@ -94,8 +94,13 @@ export function emptyBillLine(): {
   };
 }
 
-/** Select value for category UI: preset id or custom sentinel. */
+/** Select value for category UI: preset label or custom sentinel. */
 export function categorySelectValue(category: string): string {
-  const normalized = purchaseCategoryLabel(category);
-  return isPresetPurchaseCategory(normalized) ? normalized : CUSTOM_CATEGORY_VALUE;
+  const raw = String(category || '').trim();
+  // Empty means the user chose Custom and is typing a description.
+  if (!raw) return CUSTOM_CATEGORY_VALUE;
+  if (isPresetPurchaseCategory(raw)) {
+    return PRESET_LOOKUP.get(raw.toLowerCase()) || raw;
+  }
+  return CUSTOM_CATEGORY_VALUE;
 }

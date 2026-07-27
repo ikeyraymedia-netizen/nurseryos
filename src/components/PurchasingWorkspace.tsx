@@ -36,14 +36,12 @@ import {
   subscribeToVendorBills
 } from '../lib/purchasing';
 import {
-  PURCHASE_CATEGORIES,
-  PURCHASE_LINE_TYPES,
-  defaultCategoryForType,
   emptyBillLine,
+  isPlantPurchaseCategory,
   purchaseCategoryLabel
 } from '../lib/purchaseCategories';
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
-import type { PurchaseLineCategory, PurchaseLineType } from '../types';
+import { PurchaseCategoryField } from './PurchaseCategoryField';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
@@ -183,7 +181,9 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
       total += bill.grandTotal || 0;
       byVendor.set(bill.vendorName, (byVendor.get(bill.vendorName) || 0) + (bill.grandTotal || 0));
       for (const line of bill.items || []) {
-        const cat = line.category || (line.lineType === 'plant' ? 'plants' : 'other');
+        const cat = purchaseCategoryLabel(
+          line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
+        );
         const amount = (line.quantity || 0) * (line.unitCost || 0);
         byCategory.set(cat, (byCategory.get(cat) || 0) + amount);
       }
@@ -330,12 +330,12 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
     const items = billLines
       .map((l) => ({
         plantName: l.plantName.trim(),
-        containerSize:
-          l.lineType === 'plant' ? l.containerSize.trim() || 'Other' : l.containerSize.trim(),
+        containerSize: isPlantPurchaseCategory(l.category)
+          ? l.containerSize.trim() || 'Other'
+          : l.containerSize.trim(),
         quantity: Math.max(0, Number(l.quantity) || 0),
         unitCost: Math.max(0, Number(l.unitCost) || 0),
-        lineType: l.lineType,
-        category: l.category
+        category: l.category.trim() || 'Other'
       }))
       .filter((l) => l.plantName && l.quantity > 0);
     if (items.length === 0) {
@@ -956,7 +956,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                     key={idx}
                     className="rounded-lg border border-slate-100 bg-white p-2 space-y-1.5"
                   >
-                    <div className="grid grid-cols-12 gap-1.5">
+                    <div className="grid grid-cols-12 gap-1.5 items-start">
                       <input
                         value={line.plantName}
                         onChange={(e) => {
@@ -965,50 +965,22 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                           setBillLines(next);
                         }}
                         placeholder="Plant or supply description"
-                        className="col-span-11 sm:col-span-5 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                        className="col-span-11 sm:col-span-7 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                       />
-                      <select
-                        value={line.lineType}
-                        onChange={(e) => {
-                          const lineType = e.target.value as PurchaseLineType;
-                          const next = [...billLines];
-                          next[idx] = {
-                            ...line,
-                            lineType,
-                            category: defaultCategoryForType(lineType)
-                          };
-                          setBillLines(next);
-                        }}
-                        className="col-span-6 sm:col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                      >
-                        {PURCHASE_LINE_TYPES.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={line.category}
-                        onChange={(e) => {
-                          const next = [...billLines];
-                          next[idx] = {
-                            ...line,
-                            category: e.target.value as PurchaseLineCategory
-                          };
-                          setBillLines(next);
-                        }}
-                        className="col-span-5 sm:col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                      >
-                        {PURCHASE_CATEGORIES.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="col-span-11 sm:col-span-4">
+                        <PurchaseCategoryField
+                          value={line.category}
+                          onChange={(category) => {
+                            const next = [...billLines];
+                            next[idx] = { ...line, category };
+                            setBillLines(next);
+                          }}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => setBillLines(billLines.filter((_, i) => i !== idx))}
-                        className="col-span-1 text-rose-600 flex items-center justify-center"
+                        className="col-span-1 text-rose-600 flex items-center justify-center pt-2"
                         disabled={billLines.length === 1}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1022,7 +994,9 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                           next[idx] = { ...line, containerSize: e.target.value };
                           setBillLines(next);
                         }}
-                        placeholder={line.lineType === 'plant' ? 'Size' : 'Size (optional)'}
+                        placeholder={
+                          isPlantPurchaseCategory(line.category) ? 'Size' : 'Size (optional)'
+                        }
                         className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                       />
                       <input
@@ -1116,7 +1090,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                               bill.items.map((line) =>
                                 purchaseCategoryLabel(
                                   line.category ||
-                                    (line.lineType === 'plant' ? 'plants' : 'other')
+                                    (line.lineType === 'plant' ? 'Plants' : 'Other')
                                 )
                               )
                             )

@@ -640,18 +640,14 @@ function getVendorInvoiceParseSchema() {
                 type: Type.NUMBER,
                 description: 'Unit price / cost each (not line total)'
               },
-              lineType: {
-                type: Type.STRING,
-                description: 'One of: plant, supply, freight, other'
-              },
               category: {
                 type: Type.STRING,
                 description:
-                  'One of: plants, soil, containers, chemicals, fertilizer, freight, tools, supplies, other'
+                  'Spend category label. Prefer one of: Plants, Soil / media, Containers / trays, Chemicals, Fertilizer, Freight, Tools / equipment, General supplies, Other. Or a short custom label if none fit.'
               },
               notes: { type: Type.STRING, description: 'Line notes or grade/spec if present' }
             },
-            required: ['plantName', 'containerSize', 'quantity', 'unitCost', 'lineType', 'category']
+            required: ['plantName', 'containerSize', 'quantity', 'unitCost', 'category']
           }
         }
       },
@@ -795,8 +791,7 @@ Extract:
    - containerSize: for plants use closest of #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other; for non-plants use "" or Other
    - quantity (integer; use 1 if a lump sum with no qty)
    - unitCost (price EACH — if only a line total is shown, divide by quantity)
-   - lineType: exactly one of plant | supply | freight | other
-   - category: exactly one of plants | soil | containers | chemicals | fertilizer | freight | tools | supplies | other
+   - category: prefer Plants, Soil / media, Containers / trays, Chemicals, Fertilizer, Freight, Tools / equipment, General supplies, or Other. If none fit, invent a short clear custom label (e.g. "Irrigation", "Packaging").
    - notes for grade/spec if present
 
 Ignore sales tax unless it is the only total available.

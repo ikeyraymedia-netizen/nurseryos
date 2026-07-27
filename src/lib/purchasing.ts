@@ -421,7 +421,7 @@ export async function createVendorBillFromPurchaseOrder(
       quantity: line.quantityReceived > 0 ? line.quantityReceived : line.quantityOrdered,
       unitCost: line.unitCost,
       lineType: 'plant' as const,
-      category: 'plants' as const,
+      category: 'Plants',
       notes: line.notes
     }))
   });

@@ -9,7 +9,7 @@ import {
   Trash2,
   Upload
 } from 'lucide-react';
-import { Vendor, PurchaseLineCategory, PurchaseLineType } from '../types';
+import { Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
 import { findMatchingVendors } from '../lib/vendorMatch';
@@ -17,13 +17,11 @@ import { createVendorBill } from '../lib/purchasing';
 import { addVendor } from '../lib/vendors';
 import { uploadVendorInvoiceAttachment } from '../lib/vendorInvoicePhotos';
 import {
-  PURCHASE_CATEGORIES,
-  PURCHASE_LINE_TYPES,
-  defaultCategoryForType,
   emptyBillLine,
-  normalizePurchaseCategory,
-  normalizePurchaseLineType
+  isPlantPurchaseCategory,
+  normalizePurchaseCategory
 } from '../lib/purchaseCategories';
+import { PurchaseCategoryField } from './PurchaseCategoryField';
 
 type InputMode = 'file' | 'text';
 
@@ -32,8 +30,7 @@ interface DraftLine {
   containerSize: string;
   quantity: number;
   unitCost: number;
-  lineType: PurchaseLineType;
-  category: PurchaseLineCategory;
+  category: string;
   notes?: string;
 }
 
@@ -192,17 +189,15 @@ export function VendorInvoiceScanner({
       const rawItems = Array.isArray(result.items) ? result.items : [];
       const items: DraftLine[] = rawItems
         .map((item: Record<string, unknown>) => {
-          const lineType = normalizePurchaseLineType(item.lineType);
+          const category = normalizePurchaseCategory(item.category, item.lineType);
           return {
             plantName: String(item.plantName || '').trim(),
-            containerSize:
-              lineType === 'plant'
-                ? String(item.containerSize || '').trim() || 'Other'
-                : String(item.containerSize || '').trim(),
+            containerSize: isPlantPurchaseCategory(category)
+              ? String(item.containerSize || '').trim() || 'Other'
+              : String(item.containerSize || '').trim(),
             quantity: Math.max(0, Number(item.quantity) || 0) || 1,
             unitCost: Math.max(0, Number(item.unitCost) || 0),
-            lineType,
-            category: normalizePurchaseCategory(item.category, lineType),
+            category,
             notes: item.notes ? String(item.notes) : undefined
           };
         })
@@ -279,14 +274,12 @@ export function VendorInvoiceScanner({
       const items = draft.items
         .map((line) => ({
           plantName: line.plantName.trim(),
-          containerSize:
-            line.lineType === 'plant'
-              ? line.containerSize.trim() || 'Other'
-              : line.containerSize.trim(),
+          containerSize: isPlantPurchaseCategory(line.category)
+            ? line.containerSize.trim() || 'Other'
+            : line.containerSize.trim(),
           quantity: Math.max(0, Number(line.quantity) || 0),
           unitCost: Math.max(0, Number(line.unitCost) || 0),
-          lineType: line.lineType,
-          category: line.category,
+          category: line.category.trim() || 'Other',
           notes: line.notes?.trim() || undefined
         }))
         .filter((line) => line.plantName && line.quantity > 0);
@@ -570,7 +563,7 @@ export function VendorInvoiceScanner({
                 key={idx}
                 className="rounded-lg border border-slate-100 bg-white p-2 space-y-1.5"
               >
-                <div className="grid grid-cols-12 gap-1.5">
+                <div className="grid grid-cols-12 gap-1.5 items-start">
                   <input
                     value={line.plantName}
                     onChange={(e) => {
@@ -579,46 +572,18 @@ export function VendorInvoiceScanner({
                       setDraft({ ...draft, items });
                     }}
                     placeholder="Plant or supply description"
-                    className="col-span-11 sm:col-span-5 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                    className="col-span-11 sm:col-span-7 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                   />
-                  <select
-                    value={line.lineType}
-                    onChange={(e) => {
-                      const lineType = e.target.value as PurchaseLineType;
-                      const items = [...draft.items];
-                      items[idx] = {
-                        ...line,
-                        lineType,
-                        category: defaultCategoryForType(lineType)
-                      };
-                      setDraft({ ...draft, items });
-                    }}
-                    className="col-span-6 sm:col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                  >
-                    {PURCHASE_LINE_TYPES.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={line.category}
-                    onChange={(e) => {
-                      const items = [...draft.items];
-                      items[idx] = {
-                        ...line,
-                        category: e.target.value as PurchaseLineCategory
-                      };
-                      setDraft({ ...draft, items });
-                    }}
-                    className="col-span-5 sm:col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                  >
-                    {PURCHASE_CATEGORIES.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="col-span-11 sm:col-span-4">
+                    <PurchaseCategoryField
+                      value={line.category}
+                      onChange={(category) => {
+                        const items = [...draft.items];
+                        items[idx] = { ...line, category };
+                        setDraft({ ...draft, items });
+                      }}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() =>
@@ -627,7 +592,7 @@ export function VendorInvoiceScanner({
                         items: draft.items.filter((_, i) => i !== idx)
                       })
                     }
-                    className="col-span-1 text-rose-600 flex items-center justify-center"
+                    className="col-span-1 text-rose-600 flex items-center justify-center pt-2"
                     disabled={draft.items.length === 1}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -641,7 +606,9 @@ export function VendorInvoiceScanner({
                       items[idx] = { ...line, containerSize: e.target.value };
                       setDraft({ ...draft, items });
                     }}
-                    placeholder={line.lineType === 'plant' ? 'Size' : 'Size (optional)'}
+                    placeholder={
+                      isPlantPurchaseCategory(line.category) ? 'Size' : 'Size (optional)'
+                    }
                     className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                   />
                   <input

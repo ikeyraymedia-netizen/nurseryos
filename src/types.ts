@@ -321,20 +321,11 @@ export interface PurchaseOrder {
 
 export type VendorBillStatus = 'unpaid' | 'paid';
 
-/** What kind of purchase line this is (plants stay inventory-capable). */
+/**
+ * Optional legacy field from an earlier dual type/category model.
+ * New bills use `category` only (preset or custom free text).
+ */
 export type PurchaseLineType = 'plant' | 'supply' | 'freight' | 'other';
-
-/** Spend bucket for reports — nursery purchasing, not a full GL. */
-export type PurchaseLineCategory =
-  | 'plants'
-  | 'soil'
-  | 'containers'
-  | 'chemicals'
-  | 'fertilizer'
-  | 'freight'
-  | 'tools'
-  | 'supplies'
-  | 'other';
 
 export interface VendorBillLine {
   id: string;
@@ -343,8 +334,10 @@ export interface VendorBillLine {
   containerSize: string;
   quantity: number;
   unitCost: number;
+  /** Spend category — preset label or any custom text the nursery enters. */
+  category?: string;
+  /** @deprecated Prefer category; kept for older bills. */
   lineType?: PurchaseLineType;
-  category?: PurchaseLineCategory;
   notes?: string;
 }
 

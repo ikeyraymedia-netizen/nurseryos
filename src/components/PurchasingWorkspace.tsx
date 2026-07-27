@@ -987,41 +987,59 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                       </button>
                     </div>
                     <div className="grid grid-cols-12 gap-1.5">
-                      <input
-                        value={line.containerSize}
-                        onChange={(e) => {
-                          const next = [...billLines];
-                          next[idx] = { ...line, containerSize: e.target.value };
-                          setBillLines(next);
-                        }}
-                        placeholder={
-                          isPlantPurchaseCategory(line.category) ? 'Size' : 'Size (optional)'
-                        }
-                        className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        value={line.quantity}
-                        onChange={(e) => {
-                          const next = [...billLines];
-                          next[idx] = { ...line, quantity: Number(e.target.value) || 0 };
-                          setBillLines(next);
-                        }}
-                        className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={line.unitCost}
-                        onChange={(e) => {
-                          const next = [...billLines];
-                          next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
-                          setBillLines(next);
-                        }}
-                        className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                      />
+                      {isPlantPurchaseCategory(line.category) && (
+                        <label className="col-span-4 block">
+                          <span className="text-[9px] font-bold uppercase text-slate-500">
+                            Size
+                          </span>
+                          <input
+                            value={line.containerSize}
+                            onChange={(e) => {
+                              const next = [...billLines];
+                              next[idx] = { ...line, containerSize: e.target.value };
+                              setBillLines(next);
+                            }}
+                            placeholder="#3, Tray…"
+                            className="mt-0.5 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                          />
+                        </label>
+                      )}
+                      <label
+                        className={`block ${isPlantPurchaseCategory(line.category) ? 'col-span-4' : 'col-span-6'}`}
+                      >
+                        <span className="text-[9px] font-bold uppercase text-slate-500">Qty</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={line.quantity}
+                          onChange={(e) => {
+                            const next = [...billLines];
+                            next[idx] = { ...line, quantity: Number(e.target.value) || 0 };
+                            setBillLines(next);
+                          }}
+                          className="mt-0.5 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                        />
+                      </label>
+                      <label
+                        className={`block ${isPlantPurchaseCategory(line.category) ? 'col-span-4' : 'col-span-6'}`}
+                      >
+                        <span className="text-[9px] font-bold uppercase text-slate-500">
+                          Cost each
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.unitCost}
+                          onChange={(e) => {
+                            const next = [...billLines];
+                            next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
+                            setBillLines(next);
+                          }}
+                          placeholder="0.00"
+                          className="mt-0.5 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+                        />
+                      </label>
                     </div>
                   </div>
                 ))}

@@ -38,6 +38,7 @@ import {
 import {
   emptyBillLine,
   isPlantPurchaseCategory,
+  resolvePurchaseCategory,
   purchaseCategoryLabel
 } from '../lib/purchaseCategories';
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
@@ -347,7 +348,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
           : l.containerSize.trim(),
         quantity: Math.max(0, Number(l.quantity) || 0),
         unitCost: Math.max(0, Number(l.unitCost) || 0),
-        category: l.category.trim() || 'Other'
+        category: resolvePurchaseCategory(l.category)
       }))
       .filter((l) => l.plantName && l.quantity > 0);
     if (items.length === 0) {

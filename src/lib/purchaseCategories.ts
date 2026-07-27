@@ -74,7 +74,14 @@ export function normalizePurchaseCategory(value: unknown, lineTypeHint?: unknown
 
 export function purchaseCategoryLabel(category?: string | null): string {
   const raw = String(category || '').trim();
-  if (!raw) return 'Other';
+  if (!raw || raw === CUSTOM_CATEGORY_VALUE) return 'Other';
+  return normalizePurchaseCategory(raw);
+}
+
+/** Resolve a line category for save/display (never leave the Custom sentinel). */
+export function resolvePurchaseCategory(category?: string | null): string {
+  const raw = String(category || '').trim();
+  if (!raw || raw === CUSTOM_CATEGORY_VALUE) return 'Other';
   return normalizePurchaseCategory(raw);
 }
 

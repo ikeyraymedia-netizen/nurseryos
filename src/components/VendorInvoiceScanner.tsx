@@ -20,7 +20,8 @@ import {
   emptyBillLine,
   isPlantPurchaseCategory,
   normalizePurchaseCategory,
-  purchaseCategoryLabel
+  purchaseCategoryLabel,
+  resolvePurchaseCategory
 } from '../lib/purchaseCategories';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
@@ -300,7 +301,7 @@ export function VendorInvoiceScanner({
             : line.containerSize.trim(),
           quantity: Math.max(0, Number(line.quantity) || 0),
           unitCost: Math.max(0, Number(line.unitCost) || 0),
-          category: line.category.trim() || 'Other',
+          category: resolvePurchaseCategory(line.category),
           notes: line.notes?.trim() || undefined
         }))
         .filter((line) => line.plantName && line.quantity > 0);

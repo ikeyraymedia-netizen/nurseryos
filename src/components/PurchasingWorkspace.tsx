@@ -42,6 +42,7 @@ import {
 } from '../lib/purchaseCategories';
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
+import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
@@ -116,6 +117,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
   // Bill form
   const [showBillForm, setShowBillForm] = useState(false);
   const [billVendorId, setBillVendorId] = useState('');
+  const [billNewVendorName, setBillNewVendorName] = useState('');
   const [billDue, setBillDue] = useState('');
   const [billNotes, setBillNotes] = useState('');
   const [billLines, setBillLines] = useState([emptyBillLine()]);
@@ -320,11 +322,23 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
   async function handleCreateBill(e: FormEvent) {
     e.preventDefault();
     if (!permissions.canManageVendorBills) return;
-    const vendor = vendors.find((v) => v.id === billVendorId);
-    if (!vendor) {
-      setError('Pick a vendor.');
+
+    let vendor = vendors.find((v) => v.id === billVendorId) || null;
+    if (billVendorId === CREATE_NEW_VENDOR) {
+      const name = billNewVendorName.trim();
+      if (!name) {
+        setError('Enter a vendor name.');
+        return;
+      }
+      if (!permissions.canEditVendors) {
+        setError('You need permission to create vendors.');
+        return;
+      }
+    } else if (!vendor) {
+      setError('Pick a saved vendor, or create a new one.');
       return;
     }
+
     const items = billLines
       .map((l) => ({
         plantName: l.plantName.trim(),
@@ -341,6 +355,17 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
       return;
     }
     await run(async () => {
+      if (billVendorId === CREATE_NEW_VENDOR) {
+        const name = billNewVendorName.trim();
+        const id = await addVendor({ name });
+        vendor = {
+          id,
+          name,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+      if (!vendor) return;
       await createVendorBill({
         vendorId: vendor.id,
         vendorName: vendor.name,
@@ -350,6 +375,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
       });
       setShowBillForm(false);
       setBillVendorId('');
+      setBillNewVendorName('');
       setBillDue('');
       setBillNotes('');
       setBillLines([emptyBillLine()]);
@@ -905,23 +931,15 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
               onSubmit={handleCreateBill}
               className="rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-3"
             >
-              <div className="grid sm:grid-cols-2 gap-2">
-                <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Vendor</span>
-                  <select
-                    required
-                    value={billVendorId}
-                    onChange={(e) => setBillVendorId(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  >
-                    <option value="">Select…</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="grid sm:grid-cols-2 gap-2 items-start">
+                <VendorPicker
+                  vendors={vendors}
+                  vendorId={billVendorId}
+                  newVendorName={billNewVendorName}
+                  onVendorIdChange={setBillVendorId}
+                  onNewVendorNameChange={setBillNewVendorName}
+                  allowCreate={permissions.canEditVendors}
+                />
                 <label className="block text-xs">
                   <span className="font-bold text-slate-600">Due date</span>
                   <input

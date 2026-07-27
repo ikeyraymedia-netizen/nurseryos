@@ -783,11 +783,10 @@ Extract:
 1. Vendor Name — the seller (From, Sold By, Remit To, store/letterhead). Not the Bill-To if that is us.
 2. Vendor Invoice Number (Invoice #, Inv #, receipt #). Use "N/A" if missing.
 3. billDate and dueDate as YYYY-MM-DD when clearly shown; otherwise empty string.
-4. freightCharge — document-level shipping / freight / delivery if listed as a separate total; else 0.
-   Do NOT also invent a freight line for the same amount.
+4. Do NOT put freight in a separate freightCharge field — if shipping/freight appears, add it as a normal line item with category Freight (quantity 1, unitCost = freight amount). Set freightCharge to 0.
 5. notes — payment terms, our PO #, or short useful context.
-6. ALL purchase line items (plants AND supplies):
-   - plantName: plant name OR supply/product description
+6. ALL purchase line items (plants AND supplies AND freight rows):
+   - plantName: plant name OR supply/product description (use "Freight" for freight lines)
    - containerSize: for plants use closest of #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other; for non-plants use "" or Other
    - quantity (integer; use 1 if a lump sum with no qty)
    - unitCost (price EACH — if only a line total is shown, divide by quantity)

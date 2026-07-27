@@ -118,7 +118,6 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
   const [billVendorId, setBillVendorId] = useState('');
   const [billDue, setBillDue] = useState('');
   const [billNotes, setBillNotes] = useState('');
-  const [billFreight, setBillFreight] = useState(0);
   const [billLines, setBillLines] = useState([emptyBillLine()]);
 
   useEffect(() => {
@@ -174,10 +173,8 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
     const byCategory = new Map<string, number>();
     const byVendor = new Map<string, number>();
     let total = 0;
-    let freightTotal = 0;
 
     for (const bill of monthBills) {
-      freightTotal += bill.freightCharge || 0;
       total += bill.grandTotal || 0;
       byVendor.set(bill.vendorName, (byVendor.get(bill.vendorName) || 0) + (bill.grandTotal || 0));
       for (const line of bill.items || []) {
@@ -187,13 +184,15 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
         const amount = (line.quantity || 0) * (line.unitCost || 0);
         byCategory.set(cat, (byCategory.get(cat) || 0) + amount);
       }
+      // Legacy header freight on older bills (not stored as a line)
       if (bill.freightCharge) {
-        byCategory.set('freight', (byCategory.get('freight') || 0) + bill.freightCharge);
+        const label = 'Freight';
+        byCategory.set(label, (byCategory.get(label) || 0) + bill.freightCharge);
       }
     }
 
     const categories = [...byCategory.entries()]
-      .map(([id, amount]) => ({ id, label: purchaseCategoryLabel(id), amount }))
+      .map(([id, amount]) => ({ id, label: id, amount }))
       .sort((a, b) => b.amount - a.amount);
     const vendorsTop = [...byVendor.entries()]
       .map(([name, amount]) => ({ name, amount }))
@@ -203,7 +202,6 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
     return {
       billCount: monthBills.length,
       total,
-      freightTotal,
       categories,
       vendorsTop
     };
@@ -348,14 +346,12 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
         vendorName: vendor.name,
         dueDate: billDue || undefined,
         notes: billNotes.trim() || undefined,
-        freightCharge: billFreight || undefined,
         items
       });
       setShowBillForm(false);
       setBillVendorId('');
       setBillDue('');
       setBillNotes('');
-      setBillFreight(0);
       setBillLines([emptyBillLine()]);
     });
   }
@@ -447,9 +443,6 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
             </div>
             <p className="text-[11px] text-slate-500">
               {monthPurchases.billCount} bill{monthPurchases.billCount === 1 ? '' : 's'}
-              {monthPurchases.freightTotal > 0
-                ? ` · freight ${money(monthPurchases.freightTotal)}`
-                : ''}
             </p>
             {monthPurchases.categories.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -912,7 +905,7 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
               onSubmit={handleCreateBill}
               className="rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-3"
             >
-              <div className="grid sm:grid-cols-3 gap-2">
+              <div className="grid sm:grid-cols-2 gap-2">
                 <label className="block text-xs">
                   <span className="font-bold text-slate-600">Vendor</span>
                   <select
@@ -935,17 +928,6 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                     type="date"
                     value={billDue}
                     onChange={(e) => setBillDue(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  />
-                </label>
-                <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Freight</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={billFreight}
-                    onChange={(e) => setBillFreight(Number(e.target.value) || 0)}
                     className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   />
                 </label>

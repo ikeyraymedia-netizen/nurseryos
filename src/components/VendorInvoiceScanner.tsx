@@ -19,7 +19,8 @@ import { uploadVendorInvoiceAttachment } from '../lib/vendorInvoicePhotos';
 import {
   emptyBillLine,
   isPlantPurchaseCategory,
-  normalizePurchaseCategory
+  normalizePurchaseCategory,
+  purchaseCategoryLabel
 } from '../lib/purchaseCategories';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 
@@ -39,7 +40,6 @@ interface ParsedInvoiceDraft {
   vendorInvoiceNumber: string;
   billDate: string;
   dueDate: string;
-  freightCharge: number;
   notes: string;
   items: DraftLine[];
   matchConfidence: 'exact' | 'fuzzy' | 'none';
@@ -101,7 +101,7 @@ export function VendorInvoiceScanner({
     );
   }, [draft]);
 
-  const grandTotal = lineSubtotal + (draft?.freightCharge || 0);
+  const grandTotal = lineSubtotal;
 
   function resetDraft() {
     setDraft(null);
@@ -203,6 +203,21 @@ export function VendorInvoiceScanner({
         })
         .filter((item: DraftLine) => item.plantName);
 
+      // Header freight from AI → normal Freight line (same as other categories)
+      const headerFreight = Math.max(0, Number(result.freightCharge) || 0);
+      const hasFreightLine = items.some(
+        (line) => purchaseCategoryLabel(line.category).toLowerCase() === 'freight'
+      );
+      if (headerFreight > 0 && !hasFreightLine) {
+        items.push({
+          plantName: 'Freight',
+          containerSize: '',
+          quantity: 1,
+          unitCost: headerFreight,
+          category: 'Freight'
+        });
+      }
+
       if (items.length === 0) {
         throw new Error(
           'No purchase lines found. Try a clearer photo, or paste the invoice lines as text.'
@@ -220,7 +235,6 @@ export function VendorInvoiceScanner({
             : String(result.vendorInvoiceNumber || '').trim(),
         billDate: normalizeDate(result.billDate),
         dueDate: normalizeDate(result.dueDate),
-        freightCharge: Math.max(0, Number(result.freightCharge) || 0),
         notes: String(result.notes || '').trim(),
         items,
         matchConfidence: match.confidence,
@@ -311,7 +325,6 @@ export function VendorInvoiceScanner({
         billDate: draft.billDate || undefined,
         dueDate: draft.dueDate || undefined,
         notes: draft.notes || undefined,
-        freightCharge: draft.freightCharge || undefined,
         vendorInvoiceNumber: draft.vendorInvoiceNumber || undefined,
         invoicePhotoUrl,
         invoicePhotoPath,
@@ -512,7 +525,7 @@ export function VendorInvoiceScanner({
             )}
           </div>
 
-          <div className="grid sm:grid-cols-4 gap-2">
+          <div className="grid sm:grid-cols-3 gap-2">
             <label className="block text-xs">
               <span className="font-bold text-slate-600">Vendor inv #</span>
               <input
@@ -538,19 +551,6 @@ export function VendorInvoiceScanner({
                 type="date"
                 value={draft.dueDate}
                 onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })}
-                className="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
-              />
-            </label>
-            <label className="block text-xs">
-              <span className="font-bold text-slate-600">Freight</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={draft.freightCharge}
-                onChange={(e) =>
-                  setDraft({ ...draft, freightCharge: Number(e.target.value) || 0 })
-                }
                 className="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
               />
             </label>
@@ -677,10 +677,7 @@ export function VendorInvoiceScanner({
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-bold text-slate-700">
-              Subtotal {money(lineSubtotal)}
-              {draft.freightCharge > 0 ? ` + freight ${money(draft.freightCharge)}` : ''}
-              {' = '}
-              <span className="text-ink-800">{money(grandTotal)}</span>
+              Total <span className="text-ink-800">{money(grandTotal)}</span>
               {pendingFile && (
                 <span className="ml-2 font-semibold text-slate-500">· scan attached</span>
               )}

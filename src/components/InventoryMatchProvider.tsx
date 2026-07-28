@@ -3,7 +3,8 @@ import { ContainerWeight, InventoryPlant } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   InventoryMatchRequest,
-  setInventoryMatchResolver
+  setInventoryMatchResolver,
+  subscribeToInventory
 } from '../lib/inventory';
 import { InventoryMatchModal } from './InventoryMatchModal';
 
@@ -18,12 +19,15 @@ export function InventoryMatchProvider({
   containerWeights,
   permissions
 }: InventoryMatchProviderProps) {
+  const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
   const [pending, setPending] = useState<{
     request: InventoryMatchRequest;
     resolve: (result: InventoryPlant[] | null) => void;
   } | null>(null);
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
+
+  useEffect(() => subscribeToInventory(setInventoryPlants), []);
 
   useEffect(() => {
     setInventoryMatchResolver(async (request) => {
@@ -45,6 +49,7 @@ export function InventoryMatchProvider({
       {pending && (
         <InventoryMatchModal
           request={pending.request}
+          inventoryPlants={inventoryPlants}
           containerWeights={containerWeights}
           permissions={permissions}
           onResolve={handleResolve}

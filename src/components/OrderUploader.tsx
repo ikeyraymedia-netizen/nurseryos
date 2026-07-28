@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { Upload, FileText, AlertCircle, RefreshCw, CheckCircle2, Users, Sprout, Plus, DollarSign, ClipboardList } from 'lucide-react';
+import {
+  Upload,
+  FileText,
+  AlertCircle,
+  RefreshCw,
+  CheckCircle2,
+  Users,
+  Sprout,
+  Plus,
+  DollarSign,
+  ClipboardList,
+  Search
+} from 'lucide-react';
 import { addCustomerOrder } from '../lib/db';
 import { findMatchingCustomers } from '../lib/customerMatch';
 import {
@@ -57,6 +69,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
+  const [searchItemId, setSearchItemId] = useState<string | null>(null);
+  const [inventorySearch, setInventorySearch] = useState('');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<ParsedOrderDraft | null>(null);
@@ -96,6 +110,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setSelectedCustomerId('');
     setSalesRep('');
     setLinkedInventoryByItemId({});
+    setSearchItemId(null);
+    setInventorySearch('');
   };
 
   const processFile = async (file: File, orderText?: string) => {
@@ -233,7 +249,37 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         containerSize: plant.containerSize
       }
     }));
+    setSearchItemId(null);
+    setInventorySearch('');
   };
+
+  function openInventorySearch(item: PlantOrderItem) {
+    setSearchItemId(item.id);
+    setInventorySearch(item.plantName || '');
+  }
+
+  const inventorySearchResults = useMemo(() => {
+    if (!searchItemId) return [];
+    const q = inventorySearch.trim().toLowerCase();
+    const sorted = [...inventoryPlants].sort((a, b) =>
+      a.plantName.localeCompare(b.plantName, undefined, { sensitivity: 'base' })
+    );
+    if (!q) return sorted.slice(0, 40);
+    return sorted
+      .filter((plant) => {
+        const hay = [
+          plant.plantName,
+          plant.containerSize,
+          plant.category || '',
+          plant.location || '',
+          plant.notes || ''
+        ]
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q) || q.split(/\s+/).every((part) => hay.includes(part));
+      })
+      .slice(0, 40);
+  }, [searchItemId, inventorySearch, inventoryPlants]);
 
   const handleCreateAndLink = async (item: PlantOrderItem) => {
     setLinkingItemId(item.id);
@@ -765,11 +811,12 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               <p className="text-sm font-bold text-gray-900">Link plants to inventory</p>
             </div>
             <p className="text-[11px] text-gray-500 leading-relaxed">
-              Tap a suggestion to link each line. If nothing matches, use{' '}
-              <span className="font-semibold text-ink-800">Create new and link</span>.
+              Tap a suggestion to link each line. If nothing matches,{' '}
+              <span className="font-semibold text-ink-800">Search inventory</span> to find it
+              manually, or <span className="font-semibold text-ink-800">Create new and link</span>.
             </p>
 
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {pendingDraft.items.map((item) => {
                 const status = getItemInventoryStatus(item);
                 const suggestions =
@@ -781,6 +828,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                         containerWeights
                       )
                     : [];
+                const searching = searchItemId === item.id;
 
                 return (
                   <div
@@ -802,7 +850,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                       </p>
                     ) : (
                       <>
-                        {suggestions.length > 0 && (
+                        {suggestions.length > 0 && !searching && (
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                               Suggested matches — tap to link
@@ -817,7 +865,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                               >
                                 <span className="font-bold text-gray-900">{plant.plantName}</span>
                                 <span className="text-gray-500"> • {plant.containerSize}</span>
-                                <span className="text-gray-400"> • Qty {plant.quantityAvailable}</span>
+                                <span className="text-gray-400">
+                                  {' '}
+                                  • Qty {plant.quantityAvailable}
+                                </span>
                                 {score < 1 && (
                                   <span className="text-amber-600 font-semibold ml-1">
                                     ({Math.round(score * 100)}%)
@@ -826,6 +877,85 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                               </button>
                             ))}
                           </div>
+                        )}
+
+                        {searching ? (
+                          <div className="space-y-2 rounded-lg border border-ink-200 bg-ink-50/40 p-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-ink-800">
+                                Search inventory
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSearchItemId(null);
+                                  setInventorySearch('');
+                                }}
+                                className="text-[10px] font-bold text-slate-500 hover:text-slate-800"
+                              >
+                                Close
+                              </button>
+                            </div>
+                            <div className="relative">
+                              <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                              <input
+                                autoFocus
+                                value={inventorySearch}
+                                onChange={(e) => setInventorySearch(e.target.value)}
+                                placeholder="Search plant name, size, category…"
+                                className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-xs bg-white"
+                              />
+                            </div>
+                            <div className="max-h-44 overflow-y-auto space-y-1">
+                              {inventoryPlants.length === 0 ? (
+                                <p className="text-[11px] text-amber-800 px-1 py-2">
+                                  No inventory plants loaded yet.
+                                </p>
+                              ) : inventorySearchResults.length === 0 ? (
+                                <p className="text-[11px] text-slate-500 px-1 py-2">
+                                  No plants match “{inventorySearch.trim()}”.
+                                </p>
+                              ) : (
+                                inventorySearchResults.map((plant) => (
+                                  <button
+                                    key={plant.id}
+                                    type="button"
+                                    disabled={linkingItemId === item.id}
+                                    onClick={() => linkItemToPlant(item, plant)}
+                                    className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
+                                  >
+                                    <span className="font-bold text-gray-900">
+                                      {plant.plantName}
+                                    </span>
+                                    <span className="text-gray-500">
+                                      {' '}
+                                      • {plant.containerSize}
+                                    </span>
+                                    <span className="text-gray-400">
+                                      {' '}
+                                      • Qty {plant.quantityAvailable}
+                                    </span>
+                                    {plant.category && (
+                                      <span className="text-slate-400">
+                                        {' '}
+                                        · {plant.category}
+                                      </span>
+                                    )}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={linkingItemId === item.id}
+                            onClick={() => openInventorySearch(item)}
+                            className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
+                          >
+                            <Search className="h-3.5 w-3.5" />
+                            Search inventory to link
+                          </button>
                         )}
 
                         {permissions.canEditInventory ? (
@@ -842,10 +972,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                             )}
                             Create new and link
                           </button>
-                        ) : suggestions.length === 0 ? (
+                        ) : suggestions.length === 0 && !searching ? (
                           <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
-                            No inventory match — ask someone with inventory access to add this
-                            product.
+                            No auto-match — use Search inventory, or ask someone with inventory
+                            access to add this product.
                           </p>
                         ) : null}
                       </>

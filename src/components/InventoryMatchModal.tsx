@@ -1,5 +1,5 @@
-import { FormEvent, useState } from 'react';
-import { AlertCircle, Plus, Sprout, X } from 'lucide-react';
+import { FormEvent, useMemo, useState } from 'react';
+import { AlertCircle, Plus, Search, Sprout, X } from 'lucide-react';
 import { ContainerWeight, InventoryPlant } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
@@ -10,6 +10,7 @@ import {
 
 interface InventoryMatchModalProps {
   request: InventoryMatchRequest;
+  inventoryPlants: InventoryPlant[];
   containerWeights: ContainerWeight[];
   permissions: AppPermissions;
   onResolve: (plants: InventoryPlant[] | null) => void;
@@ -26,6 +27,7 @@ function defaultContainerSize(request: InventoryMatchRequest, weights: Container
 
 export function InventoryMatchModal({
   request,
+  inventoryPlants,
   containerWeights,
   permissions,
   onResolve
@@ -33,6 +35,8 @@ export function InventoryMatchModal({
   const [showCreateForm, setShowCreateForm] = useState(
     request.suggestions.length === 0 && permissions.canEditInventory
   );
+  const [showSearch, setShowSearch] = useState(request.suggestions.length === 0);
+  const [searchQuery, setSearchQuery] = useState(request.plantName || '');
   const [createPlantName, setCreatePlantName] = useState(request.plantName);
   const [createContainerSize, setCreateContainerSize] = useState(
     defaultContainerSize(request, containerWeights)
@@ -40,6 +44,29 @@ export function InventoryMatchModal({
   const [createQty, setCreateQty] = useState(request.quantityHint ?? 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const searchResults = useMemo(() => {
+    if (!showSearch) return [];
+    const q = searchQuery.trim().toLowerCase();
+    const sorted = [...inventoryPlants].sort((a, b) =>
+      a.plantName.localeCompare(b.plantName, undefined, { sensitivity: 'base' })
+    );
+    if (!q) return sorted.slice(0, 40);
+    return sorted
+      .filter((plant) => {
+        const hay = [
+          plant.plantName,
+          plant.containerSize,
+          plant.category || '',
+          plant.location || '',
+          plant.notes || ''
+        ]
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q) || q.split(/\s+/).every((part) => hay.includes(part));
+      })
+      .slice(0, 40);
+  }, [showSearch, searchQuery, inventoryPlants]);
 
   function pickSuggestion(plant: InventoryPlant) {
     rememberInventoryAlias(
@@ -174,11 +201,71 @@ export function InventoryMatchModal({
             </div>
           )}
 
-          {request.suggestions.length === 0 && permissions.canEditInventory && !showCreateForm && (
-            <p className="text-xs text-gray-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-              No similar inventory items found. Create a new product below to link this line.
-            </p>
-          )}
+          <div className="space-y-2">
+            {!showSearch ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setShowSearch(true);
+                  setShowCreateForm(false);
+                  setSearchQuery(request.plantName || '');
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 border-ink-200 bg-white text-ink-900 text-sm font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
+              >
+                <Search className="h-4 w-4" />
+                Search inventory to link
+              </button>
+            ) : (
+              <div className="border border-ink-200 rounded-xl p-3 bg-ink-50/30 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-ink-800">
+                    Search all inventory
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowSearch(false)}
+                    className="text-[11px] font-bold text-slate-500"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                  <input
+                    autoFocus
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search plant name, size, category…"
+                    className="w-full pl-8 pr-2 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {inventoryPlants.length === 0 ? (
+                    <p className="text-xs text-amber-800 py-2">No inventory plants loaded.</p>
+                  ) : searchResults.length === 0 ? (
+                    <p className="text-xs text-slate-500 py-2">
+                      No plants match “{searchQuery.trim()}”.
+                    </p>
+                  ) : (
+                    searchResults.map((plant) => (
+                      <button
+                        key={plant.id}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => pickSuggestion(plant)}
+                        className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50 text-sm disabled:opacity-50"
+                      >
+                        <span className="font-bold text-gray-900">{plant.plantName}</span>
+                        <span className="text-gray-500"> • {plant.containerSize}</span>
+                        <span className="text-gray-400"> • Qty {plant.quantityAvailable}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {permissions.canEditInventory && (
             <div className="space-y-2">
@@ -186,7 +273,10 @@ export function InventoryMatchModal({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setShowCreateForm(true)}
+                  onClick={() => {
+                    setShowCreateForm(true);
+                    setShowSearch(false);
+                  }}
                   className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 border-dashed border-ink-400 bg-ink-50/50 text-ink-900 text-sm font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
                 >
                   <Plus className="h-4 w-4" />

@@ -337,6 +337,61 @@ export async function listActiveInvites(tenantId: string): Promise<TenantInvite[
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+async function resolveJoinedTenant(
+  tenantId: string,
+  tenantName: string | undefined,
+  fallbackCreatedAt: string
+): Promise<Tenant> {
+  return (
+    (await getTenant(tenantId)) ||
+    ({
+      id: tenantId,
+      name: tenantName || 'Nursery',
+      createdAt: fallbackCreatedAt,
+      ownerId: ''
+    } satisfies Tenant)
+  );
+}
+
+/**
+ * If this user already redeemed the invite (or a concurrent retry raced),
+ * ensure their profile is linked and return the existing membership.
+ */
+async function resumeExistingInviteMembership(params: {
+  user: User;
+  tenantId: string;
+  tenantName?: string;
+  displayName?: string;
+}): Promise<{ tenant: Tenant; member: TenantMember } | null> {
+  let existing: TenantMember | null = null;
+  try {
+    existing = await getTenantMembership(params.tenantId, params.user.uid);
+  } catch {
+    // Not a member yet (or rules blocked the read) — treat as a fresh join failure upstream.
+    return null;
+  }
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const profile = await getUserProfile(params.user.uid);
+  if (!profile?.activeTenantId) {
+    await setDoc(
+      doc(db, 'users', params.user.uid),
+      {
+        uid: params.user.uid,
+        email: params.user.email || '',
+        displayName: params.displayName?.trim() || profile?.displayName || undefined,
+        activeTenantId: params.tenantId,
+        createdAt: profile?.createdAt || now
+      } satisfies UserProfile,
+      { merge: true }
+    );
+  }
+
+  const tenant = await resolveJoinedTenant(params.tenantId, params.tenantName, now);
+  return { tenant, member: existing };
+}
+
 export async function joinNurseryWithInvite(params: {
   user: User;
   inviteCode: string;
@@ -351,7 +406,7 @@ export async function joinNurseryWithInvite(params: {
   }
 
   const codeSnap = await getDoc(doc(db, 'inviteCodes', code));
-  if (!codeSnap.exists() || !codeSnap.data()?.active) {
+  if (!codeSnap.exists()) {
     throw new Error('Invalid or expired invite code.');
   }
 
@@ -361,8 +416,23 @@ export async function joinNurseryWithInvite(params: {
     role: Exclude<MemberRole, 'owner'>;
     roles?: Exclude<MemberRole, 'owner'>[];
     tenantName?: string;
+    active?: boolean;
   };
   const { tenantId, inviteId, tenantName } = codeData;
+
+  // One-time codes are deactivated after the first successful redeem. A double-submit
+  // or auth-listener race can retry after that — treat "already a member" as success.
+  if (!codeData.active) {
+    const resumed = await resumeExistingInviteMembership({
+      user: params.user,
+      tenantId,
+      tenantName,
+      displayName: params.displayName
+    });
+    if (resumed) return resumed;
+    throw new Error('Invalid or expired invite code.');
+  }
+
   const roles = normalizeMemberRoles(
     codeData.roles?.length ? codeData.roles : [codeData.role]
   ).filter((r): r is Exclude<MemberRole, 'owner'> => r !== 'owner');
@@ -395,6 +465,13 @@ export async function joinNurseryWithInvite(params: {
     if (!String(err?.message || '').toLowerCase().includes('insufficient permissions')) {
       throw err;
     }
+    const resumed = await resumeExistingInviteMembership({
+      user: params.user,
+      tenantId,
+      tenantName,
+      displayName: params.displayName
+    });
+    if (resumed) return resumed;
   }
 
   try {
@@ -410,15 +487,7 @@ export async function joinNurseryWithInvite(params: {
     throw err;
   }
 
-  const tenant =
-    (await getTenant(tenantId)) ||
-    ({
-      id: tenantId,
-      name: tenantName || 'Nursery',
-      createdAt: now,
-      ownerId: ''
-    } satisfies Tenant);
-
+  const tenant = await resolveJoinedTenant(tenantId, tenantName, now);
   return { tenant, member };
 }
 

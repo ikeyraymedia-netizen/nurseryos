@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import { Tenant, UserProfile, TenantMember } from '../types';
 import {
@@ -79,12 +79,98 @@ export function AuthGate({ children }: AuthGateProps) {
   const [nurseryName, setNurseryName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
 
+  // Skip/ignore auth-listener loads while signup/join writes the profile (avoids a flash of
+  // "no workspace" that leaves the form up after a successful join).
+  const suppressAuthLoadRef = useRef(false);
+  const submitLockRef = useRef(false);
+  const authLoadGenRef = useRef(0);
+
+  async function hydrateSession(nextUser: User): Promise<void> {
+    const loadGen = ++authLoadGenRef.current;
+    setBootError(null);
+    setUser(nextUser);
+
+    const nextProfile = await getUserProfile(nextUser.uid);
+    if (loadGen !== authLoadGenRef.current) return;
+
+    const isPlatformAdmin = !!nextProfile?.isPlatformAdmin;
+
+    if (!nextProfile) {
+      setBootError('Your account profile was not found. Create a nursery or join with an invite code.');
+      setProfile(null);
+      setTenant(null);
+      setMember(null);
+      clearTenantContexts();
+      setAuthReady(true);
+      return;
+    }
+
+    // Seller / platform admin can sign in without a nursery membership.
+    if (!nextProfile.activeTenantId) {
+      if (isPlatformAdmin) {
+        setProfile(nextProfile);
+        setTenant(null);
+        setMember(null);
+        clearTenantContexts();
+        setAuthReady(true);
+        return;
+      }
+      setBootError('Your account has no nursery workspace yet. Create a nursery or join with an invite code.');
+      setProfile(null);
+      setTenant(null);
+      setMember(null);
+      clearTenantContexts();
+      setAuthReady(true);
+      return;
+    }
+
+    const nextTenant = await getTenant(nextProfile.activeTenantId);
+    const nextMember = await getTenantMembership(nextProfile.activeTenantId, nextUser.uid);
+    if (loadGen !== authLoadGenRef.current) return;
+
+    if (!nextTenant || !nextMember) {
+      if (isPlatformAdmin) {
+        setProfile(nextProfile);
+        setTenant(null);
+        setMember(null);
+        clearTenantContexts();
+        setAuthReady(true);
+        return;
+      }
+      setBootError('Nursery workspace not found. Please contact support or create a new account.');
+      setProfile(null);
+      setTenant(null);
+      setMember(null);
+      clearTenantContexts();
+      setAuthReady(true);
+      return;
+    }
+
+    let resolvedTenant = nextTenant;
+    const lowerName = nextTenant.name.trim().toLowerCase();
+    if (lowerName === 'green valley nursery' || lowerName.startsWith('green valley nursery')) {
+      try {
+        await renameTenant(nextTenant.id, TARGET_NURSERY_NAME);
+        resolvedTenant = { ...nextTenant, name: TARGET_NURSERY_NAME };
+      } catch (renameErr) {
+        console.warn('Could not auto-rename nursery:', renameErr);
+      }
+    }
+    if (loadGen !== authLoadGenRef.current) return;
+
+    setProfile(nextProfile);
+    setTenant(resolvedTenant);
+    setMember(nextMember);
+    bindTenantContexts(resolvedTenant.id);
+    setAuthReady(true);
+  }
+
   useEffect(() => {
     const unsub = watchAuth(async (nextUser) => {
-      setBootError(null);
-      setUser(nextUser);
-
       if (!nextUser) {
+        ++authLoadGenRef.current;
+        setBootError(null);
+        setUser(null);
         setProfile(null);
         setTenant(null);
         setMember(null);
@@ -93,75 +179,15 @@ export function AuthGate({ children }: AuthGateProps) {
         return;
       }
 
+      // createUser / signIn fires onAuthStateChanged before invite/profile writes finish.
+      // handleSubmit will hydrate once those writes complete.
+      if (suppressAuthLoadRef.current) {
+        setUser(nextUser);
+        return;
+      }
+
       try {
-        const nextProfile = await getUserProfile(nextUser.uid);
-        const isPlatformAdmin = !!nextProfile?.isPlatformAdmin;
-
-        if (!nextProfile) {
-          setBootError('Your account profile was not found. Create a nursery or join with an invite code.');
-          setProfile(null);
-          setTenant(null);
-          setMember(null);
-          clearTenantContexts();
-          setAuthReady(true);
-          return;
-        }
-
-        // Seller / platform admin can sign in without a nursery membership.
-        if (!nextProfile.activeTenantId) {
-          if (isPlatformAdmin) {
-            setProfile(nextProfile);
-            setTenant(null);
-            setMember(null);
-            clearTenantContexts();
-            setAuthReady(true);
-            return;
-          }
-          setBootError('Your account has no nursery workspace yet. Create a nursery or join with an invite code.');
-          setProfile(null);
-          setTenant(null);
-          setMember(null);
-          clearTenantContexts();
-          setAuthReady(true);
-          return;
-        }
-
-        const nextTenant = await getTenant(nextProfile.activeTenantId);
-        const nextMember = await getTenantMembership(nextProfile.activeTenantId, nextUser.uid);
-        if (!nextTenant || !nextMember) {
-          if (isPlatformAdmin) {
-            setProfile(nextProfile);
-            setTenant(null);
-            setMember(null);
-            clearTenantContexts();
-            setAuthReady(true);
-            return;
-          }
-          setBootError('Nursery workspace not found. Please contact support or create a new account.');
-          setProfile(null);
-          setTenant(null);
-          setMember(null);
-          clearTenantContexts();
-          setAuthReady(true);
-          return;
-        }
-
-        let resolvedTenant = nextTenant;
-        const lowerName = nextTenant.name.trim().toLowerCase();
-        if (lowerName === 'green valley nursery' || lowerName.startsWith('green valley nursery')) {
-          try {
-            await renameTenant(nextTenant.id, TARGET_NURSERY_NAME);
-            resolvedTenant = { ...nextTenant, name: TARGET_NURSERY_NAME };
-          } catch (renameErr) {
-            console.warn('Could not auto-rename nursery:', renameErr);
-          }
-        }
-
-        setProfile(nextProfile);
-        setTenant(resolvedTenant);
-        setMember(nextMember);
-        bindTenantContexts(resolvedTenant.id);
-        setAuthReady(true);
+        await hydrateSession(nextUser);
       } catch (err: any) {
         console.error(err);
         setBootError(err?.message || 'Failed to load nursery workspace.');
@@ -202,27 +228,34 @@ export function AuthGate({ children }: AuthGateProps) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (submitLockRef.current || busy) return;
+    submitLockRef.current = true;
     setFormError(null);
     setBusy(true);
+    suppressAuthLoadRef.current = true;
     try {
+      let nextUser: User | null = null;
       if (mode === 'signup') {
         if (signupMode === 'join') {
-          await signUpAndJoinNursery({
+          const joined = await signUpAndJoinNursery({
             email,
             password,
             displayName,
             inviteCode
           });
+          nextUser = joined.user;
         } else {
-          await signUpWithNursery({
+          const created = await signUpWithNursery({
             email,
             password,
             displayName,
             nurseryName
           });
+          nextUser = created.user;
         }
       } else {
         const signedInUser = await signIn(email, password);
+        nextUser = signedInUser;
         if (signinMode === 'join') {
           await joinNurseryWithInvite({
             user: signedInUser,
@@ -230,6 +263,11 @@ export function AuthGate({ children }: AuthGateProps) {
             displayName
           });
         }
+      }
+
+      suppressAuthLoadRef.current = false;
+      if (nextUser) {
+        await hydrateSession(nextUser);
       }
     } catch (err: any) {
       console.error(err);
@@ -242,7 +280,12 @@ export function AuthGate({ children }: AuthGateProps) {
               ? 'Email/password sign-in is not enabled on this Firebase project yet.'
               : err?.message || 'Authentication failed.';
       setFormError(message);
+      // If auth already created the user but join failed, let the listener show boot state.
+      suppressAuthLoadRef.current = false;
+      setAuthReady(true);
     } finally {
+      suppressAuthLoadRef.current = false;
+      submitLockRef.current = false;
       setBusy(false);
     }
   }

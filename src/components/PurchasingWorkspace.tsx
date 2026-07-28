@@ -3,12 +3,14 @@ import {
   Building2,
   ClipboardList,
   FileText,
+  Mail,
   PackagePlus,
   Plus,
   Receipt,
   ScanLine,
   Search,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import {
   PurchaseOrder,
@@ -41,6 +43,12 @@ import {
   resolvePurchaseCategory,
   purchaseCategoryLabel
 } from '../lib/purchaseCategories';
+import { sendTenantEmail } from '../lib/email';
+import {
+  buildPurchaseOrderEmailHtml,
+  buildPurchaseOrderEmailText,
+  defaultPurchaseOrderEmailSubject
+} from '../lib/purchaseOrderEmail';
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
@@ -50,6 +58,7 @@ type PurchasingView = 'vendors' | 'orders' | 'bills';
 interface PurchasingWorkspaceProps {
   permissions: AppPermissions;
   tenantId: string;
+  nurseryName: string;
 }
 
 function money(n: number) {
@@ -85,7 +94,11 @@ function statusBadge(status: string) {
   return map[status] || 'bg-slate-100 text-slate-700';
 }
 
-export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspaceProps) {
+export function PurchasingWorkspace({
+  permissions,
+  tenantId,
+  nurseryName
+}: PurchasingWorkspaceProps) {
   const [view, setView] = useState<PurchasingView>('orders');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -94,6 +107,14 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showInvoiceScanner, setShowInvoiceScanner] = useState(false);
+
+  // Email PO
+  const [emailingOrder, setEmailingOrder] = useState<PurchaseOrder | null>(null);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   // Vendor form
   const [vendorName, setVendorName] = useState('');
@@ -309,6 +330,72 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
     }
     setReceiptQty(initial);
     setReceivingOrder(order);
+  }
+
+  function openEmailPo(order: PurchaseOrder) {
+    const vendor = vendors.find((v) => v.id === order.vendorId);
+    setEmailingOrder(order);
+    setEmailTo(vendor?.contactEmail || '');
+    setEmailSubject(defaultPurchaseOrderEmailSubject(nurseryName, order));
+    setEmailMessage('');
+    setEmailStatus(null);
+  }
+
+  async function handleSendPoEmail(e: FormEvent) {
+    e.preventDefault();
+    if (!emailingOrder || !permissions.canEditPurchaseOrders) return;
+    const to = emailTo.trim();
+    if (!to || !to.includes('@')) {
+      setEmailStatus('Enter a valid vendor email.');
+      return;
+    }
+    setEmailSending(true);
+    setEmailStatus(null);
+    try {
+      const result = await sendTenantEmail({
+        tenantId,
+        to,
+        subject: emailSubject.trim() || defaultPurchaseOrderEmailSubject(nurseryName, emailingOrder),
+        text: buildPurchaseOrderEmailText({
+          nurseryName,
+          order: emailingOrder,
+          message: emailMessage
+        }),
+        html: buildPurchaseOrderEmailHtml({
+          nurseryName,
+          order: emailingOrder,
+          message: emailMessage
+        }),
+        fromName: nurseryName
+      });
+      if (!result.success) {
+        throw new Error(
+          result.message ||
+            result.error ||
+            'Email is not configured. Open Team → Outbound email, and set RESEND_API_KEY in Railway.'
+        );
+      }
+
+      // Remember vendor email if they typed a new one
+      const vendor = vendors.find((v) => v.id === emailingOrder.vendorId);
+      if (vendor && permissions.canEditVendors && to !== (vendor.contactEmail || '')) {
+        await updateVendor({ ...vendor, contactEmail: to });
+      }
+
+      if (emailingOrder.status === 'draft') {
+        await markPurchaseOrderSent(emailingOrder);
+      }
+
+      setEmailStatus(`Sent to ${to}`);
+      window.setTimeout(() => {
+        setEmailingOrder(null);
+        setEmailStatus(null);
+      }, 1200);
+    } catch (err: unknown) {
+      setEmailStatus(err instanceof Error ? err.message : 'Could not send email.');
+    } finally {
+      setEmailSending(false);
+    }
   }
 
   async function handleReceive() {
@@ -831,6 +918,19 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
                     )}
                   </ul>
                   <div className="flex flex-wrap gap-2">
+                    {permissions.canEditPurchaseOrders &&
+                      order.status !== 'cancelled' &&
+                      order.status !== 'received' && (
+                        <button
+                          type="button"
+                          disabled={busy || emailSending}
+                          onClick={() => openEmailPo(order)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white"
+                        >
+                          <Mail className="h-3 w-3" />
+                          Email vendor
+                        </button>
+                      )}
                     {permissions.canEditPurchaseOrders && order.status === 'draft' && (
                       <button
                         type="button"
@@ -1232,6 +1332,98 @@ export function PurchasingWorkspace({ permissions, tenantId }: PurchasingWorkspa
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {emailingOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSendPoEmail}
+            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+          >
+            <div className="px-5 py-4 bg-ink-950 text-white flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Mail className="h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black">Email {emailingOrder.poNumber}</h3>
+                  <p className="text-[11px] text-white/70 truncate">
+                    {emailingOrder.vendorName} · {money(emailingOrder.grandTotal)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailingOrder(null)}
+                className="text-white/70 hover:text-white"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <label className="block text-xs">
+                <span className="font-bold text-slate-600">Vendor email</span>
+                <input
+                  type="email"
+                  required
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="vendor@example.com"
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-bold text-slate-600">Subject</span>
+                <input
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-bold text-slate-600">Message (optional)</span>
+                <textarea
+                  value={emailMessage}
+                  onChange={(e) => setEmailMessage(e.target.value)}
+                  rows={3}
+                  placeholder="Please confirm availability and ship date…"
+                  className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                />
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Email includes the full PO line items and totals. Draft POs are marked{' '}
+                <span className="font-semibold">sent</span> after a successful send.
+              </p>
+              {emailStatus && (
+                <p
+                  className={`text-xs font-semibold rounded-lg px-3 py-2 ${
+                    emailStatus.startsWith('Sent')
+                      ? 'text-emerald-800 bg-emerald-50 border border-emerald-100'
+                      : 'text-rose-700 bg-rose-50 border border-rose-100'
+                  }`}
+                >
+                  {emailStatus}
+                </p>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => setEmailingOrder(null)}
+                className="px-3 py-2 text-xs font-bold text-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={emailSending}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {emailSending ? 'Sending…' : 'Send PO'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

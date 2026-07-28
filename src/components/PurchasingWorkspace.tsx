@@ -129,7 +129,6 @@ export function PurchasingWorkspace({
   const [poVendorId, setPoVendorId] = useState('');
   const [poExpected, setPoExpected] = useState('');
   const [poNotes, setPoNotes] = useState('');
-  const [poFreight, setPoFreight] = useState(0);
   const [poLines, setPoLines] = useState([emptyLine()]);
 
   // Receive
@@ -309,7 +308,6 @@ export function PurchasingWorkspace({
         vendorName: vendor.name,
         expectedDate: poExpected || undefined,
         notes: poNotes.trim() || undefined,
-        freightCharge: poFreight || undefined,
         items,
         status: 'draft'
       });
@@ -317,7 +315,6 @@ export function PurchasingWorkspace({
       setPoVendorId('');
       setPoExpected('');
       setPoNotes('');
-      setPoFreight(0);
       setPoLines([emptyLine()]);
     });
   }
@@ -754,7 +751,7 @@ export function PurchasingWorkspace({
               onSubmit={handleCreatePo}
               className="rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-3"
             >
-              <div className="grid sm:grid-cols-3 gap-2">
+              <div className="grid sm:grid-cols-2 gap-2">
                 <label className="block text-xs">
                   <span className="font-bold text-slate-600">Vendor</span>
                   <select
@@ -777,17 +774,6 @@ export function PurchasingWorkspace({
                     type="date"
                     value={poExpected}
                     onChange={(e) => setPoExpected(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  />
-                </label>
-                <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Freight</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={poFreight}
-                    onChange={(e) => setPoFreight(Number(e.target.value) || 0)}
                     className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   />
                 </label>

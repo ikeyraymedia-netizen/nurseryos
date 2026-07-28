@@ -309,29 +309,36 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       drawSectionTitle('Cargo Manifest');
       ensureSpace(26);
       const xPlant = margin + 6;
-      const xSize = margin + 330;
-      const xQty = margin + 440;
+      const xSize = margin + 300;
+      const xQty = margin + 400;
+      const xCheck = margin + 480;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(80, 80, 80);
       pdf.text('Plant Name', xPlant, y);
       pdf.text('Size', xSize, y);
-      pdf.text('Quantity', xQty, y);
+      pdf.text('Qty', xQty, y);
+      pdf.text('Recv\'d', xCheck, y);
       y += 8;
       pdf.setDrawColor(185, 185, 185);
       pdf.line(margin, y, pageWidth - margin, y);
       y += 12;
 
       consolidatedItems.forEach((item) => {
-        ensureSpace(14);
+        ensureSpace(16);
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
         pdf.setTextColor(25, 25, 25);
-        const plant = item.plantName.length > 42 ? `${item.plantName.slice(0, 42)}...` : item.plantName;
+        const plant = item.plantName.length > 38 ? `${item.plantName.slice(0, 38)}...` : item.plantName;
         pdf.text(plant, xPlant, y);
         pdf.text(item.containerSize, xSize, y);
         pdf.text(String(item.totalQty), xQty, y);
-        y += 12;
+        // Empty checkbox for customer to check off received material
+        pdf.setDrawColor(90, 90, 90);
+        pdf.setLineWidth(0.8);
+        pdf.rect(xCheck + 4, y - 7, 10, 10);
+        pdf.setLineWidth(0.2);
+        y += 14;
       });
       ensureSpace(16);
       pdf.line(margin, y, pageWidth - margin, y);
@@ -818,7 +825,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-bold font-mono uppercase tracking-wider">
                       <th className="pb-2">Plant Variety Name</th>
                       <th className="pb-2 w-28">Container Size</th>
-                      <th className="pb-2 text-center w-24">Quantity</th>
+                      <th className="pb-2 text-center w-20">Qty</th>
+                      <th className="pb-2 text-center w-16">Recv&apos;d</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -832,6 +840,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         <td className="py-2.5 text-center font-mono font-black text-gray-950">
                           {item.totalQty}
                         </td>
+                        <td className="py-2.5 text-center">
+                          <span
+                            className="inline-block w-4 h-4 border-2 border-gray-400 rounded-sm align-middle print:border-gray-700"
+                            aria-hidden="true"
+                          />
+                        </td>
                       </tr>
                     ))}
                     <tr className="bg-slate-50 border-b-2 border-gray-300 font-bold text-gray-950 text-xs font-mono">
@@ -839,6 +853,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         {selectedBOLType === 'consolidated' ? 'GRAND TOTAL CARGO' : 'SHIPMENT TOTAL CARGO'}
                       </td>
                       <td className="py-3 text-center">{totalPlants}</td>
+                      <td className="py-3" />
                     </tr>
                   </tbody>
                 </table>

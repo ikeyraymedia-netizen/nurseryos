@@ -1,5 +1,6 @@
 import { FormEvent, ReactNode } from 'react';
 import {
+  Activity,
   BarChart3,
   CheckSquare,
   ClipboardList,
@@ -127,6 +128,23 @@ export function WelcomePage({
           </div>
 
           <div className="max-w-xl flex-1">
+            <div className="rounded-2xl border border-coral-400/25 bg-coral-500/10 px-4 py-3.5 mb-6">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-coral-500/20 text-coral-300">
+                  <Activity className="h-4 w-4" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white leading-snug">
+                    Everyone on the same live data
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    Loaders check trucks on their phone. Office sends invoices from a laptop. Same
+                    orders, same inventory, same numbers — updated in real time.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-200 mb-5">
               <Smartphone className="h-3.5 w-3.5 text-coral-400" />
               Anytime, any device
@@ -178,11 +196,6 @@ export function WelcomePage({
                 </div>
               ))}
             </div>
-
-            <p className="mt-8 text-sm text-slate-400 leading-relaxed max-w-lg">
-              Loaders check trucks on their phone. Office sends invoices from a laptop. You&apos;re always
-              on the same live data.
-            </p>
 
             <button
               type="button"

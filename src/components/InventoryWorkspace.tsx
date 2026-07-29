@@ -13,9 +13,10 @@ import {
   Camera,
   FileSpreadsheet,
   FileText,
-  ImageIcon
+  ImageIcon,
+  Building2
 } from 'lucide-react';
-import { CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
+import { CustomerOrder, InventoryPlant, Truck as TruckType, Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
@@ -29,6 +30,7 @@ import {
   subscribeToInventory,
   updateInventoryPlant
 } from '../lib/inventory';
+import { subscribeToVendors } from '../lib/vendors';
 import { buildLowStockForUpcomingTrucks } from '../lib/lowStockAlerts';
 import {
   exportAvailabilityExcel,
@@ -120,6 +122,7 @@ export function InventoryWorkspace({
   const t = useT();
   const dp = usePlantDisplay();
   const [plants, setPlants] = useState<InventoryPlant[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -158,9 +161,14 @@ export function InventoryWorkspace({
   const [fertName, setFertName] = useState('');
   const [fertDate, setFertDate] = useState(new Date().toISOString().split('T')[0]);
   const [fertNotes, setFertNotes] = useState('');
+  const [sourceCustomMode, setSourceCustomMode] = useState(false);
 
   useEffect(() => {
     return subscribeToInventory(setPlants);
+  }, []);
+
+  useEffect(() => {
+    return subscribeToVendors(setVendors);
   }, []);
 
   useEffect(() => {
@@ -172,6 +180,14 @@ export function InventoryWorkspace({
   }, [showLowStockUpcoming]);
 
   const selected = plants.find((p) => p.id === selectedId) || null;
+
+  useEffect(() => {
+    if (!selected) {
+      setSourceCustomMode(false);
+      return;
+    }
+    setSourceCustomMode(!selected.sourceVendorId && !!selected.sourceName);
+  }, [selectedId]);
 
   const lowStockAlerts = useMemo(() => {
     if (!showLowStockUpcoming) return [];
@@ -190,6 +206,7 @@ export function InventoryWorkspace({
       p.containerSize.toLowerCase().includes(q) ||
       (p.location || '').toLowerCase().includes(q) ||
       (p.category || '').toLowerCase().includes(q) ||
+      (p.sourceName || '').toLowerCase().includes(q) ||
       (p.listPrice != null && String(p.listPrice).includes(q))
     );
   });
@@ -879,6 +896,15 @@ export function InventoryWorkspace({
                     {` · ${t('common.qty')} ${plant.quantityAvailable}`}
                     {plant.weeksUntilReady != null ? ` · ${plant.weeksUntilReady} ${t('inventory.weeks')}` : ''}
                   </p>
+                  {(plant.sourceName || plant.goodLiners) && (
+                    <p className="text-[11px] text-ink-700 mt-0.5">
+                      {plant.sourceName
+                        ? t('inventory.sourceLabel', { name: plant.sourceName })
+                        : null}
+                      {plant.sourceName && plant.goodLiners ? ' · ' : null}
+                      {plant.goodLiners ? t('inventory.goodLinersShort') : null}
+                    </p>
+                  )}
                 </button>
               ))
             )}
@@ -1023,6 +1049,101 @@ export function InventoryWorkspace({
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   />
                 </label>
+              </div>
+
+              <div className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 space-y-3">
+                <p className="text-xs font-bold uppercase text-gray-500 flex items-center gap-1">
+                  <Building2 className="h-3.5 w-3.5" /> {t('inventory.source')}
+                </p>
+                <p className="text-[11px] text-slate-500 -mt-1">{t('inventory.sourceHint')}</p>
+                <label className="block text-xs">
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.boughtFrom')}</span>
+                  <select
+                    disabled={!permissions.canEditInventory}
+                    value={
+                      selected.sourceVendorId
+                        ? selected.sourceVendorId
+                        : selected.sourceName
+                          ? '__custom__'
+                          : sourceCustomMode
+                            ? '__custom__'
+                            : ''
+                    }
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (!next) {
+                        setSourceCustomMode(false);
+                        void saveSelected({ sourceVendorId: null, sourceName: '' });
+                        return;
+                      }
+                      if (next === '__custom__') {
+                        setSourceCustomMode(true);
+                        void saveSelected({
+                          sourceVendorId: null,
+                          sourceName: selected.sourceVendorId ? '' : selected.sourceName || ''
+                        });
+                        return;
+                      }
+                      setSourceCustomMode(false);
+                      const vendor = vendors.find((v) => v.id === next);
+                      void saveSelected({
+                        sourceVendorId: next,
+                        sourceName: vendor?.name || ''
+                      });
+                    }}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">{t('inventory.selectSource')}</option>
+                    {[...vendors]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    <option value="__custom__">{t('inventory.customSource')}</option>
+                  </select>
+                </label>
+                {(sourceCustomMode || (!selected.sourceVendorId && !!selected.sourceName)) && (
+                  <input
+                    disabled={!permissions.canEditInventory}
+                    value={selected.sourceName || ''}
+                    onChange={(e) =>
+                      saveSelected({ sourceVendorId: null, sourceName: e.target.value })
+                    }
+                    placeholder={t('inventory.customSourcePlaceholder')}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  />
+                )}
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">{t('inventory.goodLiners')}</p>
+                    <p className="text-[11px] text-slate-500">{t('inventory.goodLinersHint')}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-bold text-slate-600">
+                      {selected.goodLiners ? t('inventory.on') : t('inventory.off')}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!selected.goodLiners}
+                      disabled={!permissions.canEditInventory || busy}
+                      onClick={() =>
+                        void saveSelected({ goodLiners: selected.goodLiners ? null : true })
+                      }
+                      className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${
+                        selected.goodLiners ? 'bg-emerald-600' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${
+                          selected.goodLiners ? 'left-5' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div>

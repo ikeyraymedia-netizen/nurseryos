@@ -261,7 +261,9 @@ export async function receivePurchaseOrder(
         plantName: line.plantName,
         containerSize: line.containerSize,
         quantity: receiveNow,
-        unitCost: line.unitCost
+        unitCost: line.unitCost,
+        sourceVendorId: order.vendorId,
+        sourceName: order.vendorName
       });
     }
     nextItems.push({
@@ -288,7 +290,14 @@ export async function receivePurchaseOrder(
 
 async function applyReceivedQtyToInventory(
   inventory: InventoryPlant[],
-  input: { plantName: string; containerSize: string; quantity: number; unitCost?: number }
+  input: {
+    plantName: string;
+    containerSize: string;
+    quantity: number;
+    unitCost?: number;
+    sourceVendorId?: string;
+    sourceName?: string;
+  }
 ) {
   const matches = findMatchingInventoryPlants(
     inventory,
@@ -300,6 +309,9 @@ async function applyReceivedQtyToInventory(
     const updated: InventoryPlant = {
       ...plant,
       quantityAvailable: (plant.quantityAvailable || 0) + input.quantity,
+      // Keep existing source; only set if this plant has none yet
+      sourceVendorId: plant.sourceVendorId || input.sourceVendorId || null,
+      sourceName: plant.sourceName || input.sourceName || undefined,
       dateUpdated: new Date().toISOString()
     };
     await updateInventoryPlant(updated);
@@ -315,6 +327,8 @@ async function applyReceivedQtyToInventory(
     quantityAvailable: input.quantity,
     chemicals: [],
     fertilizers: [],
+    sourceVendorId: input.sourceVendorId || null,
+    sourceName: input.sourceName,
     notes: input.unitCost != null ? `Received @ $${input.unitCost.toFixed(2)}` : undefined
   });
   inventory.push({
@@ -324,6 +338,8 @@ async function applyReceivedQtyToInventory(
     quantityAvailable: input.quantity,
     chemicals: [],
     fertilizers: [],
+    sourceVendorId: input.sourceVendorId || null,
+    sourceName: input.sourceName,
     dateCreated: new Date().toISOString(),
     dateUpdated: new Date().toISOString()
   });

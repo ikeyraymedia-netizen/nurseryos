@@ -258,6 +258,11 @@ export interface InventoryPlant {
   category?: string;
   /** List / wholesale price from catalog import */
   listPrice?: number | null;
+  /** Where these plants/liners were purchased from (vendor or custom grower). */
+  sourceVendorId?: string | null;
+  sourceName?: string;
+  /** Whether this stock turned out to be good liners to start from. */
+  goodLiners?: boolean | null;
   notes?: string;
   /** Public HTTPS URL for plant photo (Firebase Storage). */
   photoUrl?: string | null;

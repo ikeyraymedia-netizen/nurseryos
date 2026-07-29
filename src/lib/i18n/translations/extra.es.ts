@@ -147,6 +147,17 @@ const extra = {
     noFertilizers: 'Sin fertilizante registrado.',
     fertilizerKind: 'Qué tipo',
     logFertilizer: 'Registrar fertilizante',
+    source: 'Origen',
+    sourceHint:
+      'Registre de quién compró estas plantas para saber qué liners rindieron bien.',
+    boughtFrom: 'Comprado de',
+    selectSource: 'Seleccionar proveedor…',
+    customSource: 'Personalizado / otro',
+    customSourcePlaceholder: 'Nombre del vivero o productor',
+    sourceLabel: 'Origen: {{name}}',
+    goodLiners: 'Buenos liners',
+    goodLinersHint: 'Active si este lote fue bueno para empezar.',
+    goodLinersShort: 'Buenos liners',
     lowStock: 'Stock bajo para camiones próximos',
     lowStockHint:
       'Compare el inventario en mano con las plantas necesarias en camiones que cargan en los próximos 14 días.',

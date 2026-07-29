@@ -331,6 +331,9 @@ export async function updateInventoryPlant(plant: InventoryPlant): Promise<void>
     inventoryDoc(tenantId, id),
     sanitizeForFirestore({
       ...rest,
+      sourceVendorId: rest.sourceVendorId || null,
+      sourceName: rest.sourceName?.trim() || null,
+      goodLiners: rest.goodLiners === true ? true : null,
       dateUpdated: new Date().toISOString()
     })
   );

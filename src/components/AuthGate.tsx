@@ -10,7 +10,6 @@ import {
   renameTenant,
   signIn,
   signUpAndJoinNursery,
-  signUpWithNursery,
   watchAuth
 } from '../lib/tenants';
 import { setActiveTenant } from '../lib/db';
@@ -21,9 +20,9 @@ import { setAuditTenant } from '../lib/audit';
 import { setTasksTenant } from '../lib/tasks';
 import { setVendorsTenant } from '../lib/vendors';
 import { setPurchasingTenant } from '../lib/purchasing';
-import { LogIn, UserPlus } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { bootstrapWorkspaceUrl } from '../lib/workspaceUrl';
+import { AuthPanel, REQUEST_ACCESS_EMAIL, WelcomePage } from './WelcomePage';
 
 interface AuthSession {
   user: User;
@@ -67,17 +66,18 @@ export function AuthGate({ children }: AuthGateProps) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [member, setMember] = useState<TenantMember | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
-  const [signupMode, setSignupMode] = useState<'create' | 'join'>('create');
-  const [signinMode, setSigninMode] = useState<'normal' | 'join'>('normal');
+  const [authPanel, setAuthPanel] = useState<AuthPanel>('signin');
+  const [signInWithInvite, setSignInWithInvite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [requestSent, setRequestSent] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [nurseryName, setNurseryName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [requestMessage, setRequestMessage] = useState('');
 
   // Skip/ignore auth-listener loads while signup/join writes the profile (avoids a flash of
   // "no workspace" that leaves the form up after a successful join).
@@ -96,7 +96,7 @@ export function AuthGate({ children }: AuthGateProps) {
     const isPlatformAdmin = !!nextProfile?.isPlatformAdmin;
 
     if (!nextProfile) {
-      setBootError('Your account profile was not found. Create a nursery or join with an invite code.');
+      setBootError('Your account profile was not found. Request access or join with an invite code.');
       setProfile(null);
       setTenant(null);
       setMember(null);
@@ -115,7 +115,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setAuthReady(true);
         return;
       }
-      setBootError('Your account has no nursery workspace yet. Create a nursery or join with an invite code.');
+      setBootError('Your account has no nursery workspace yet. Request access or join with an invite code.');
       setProfile(null);
       setTenant(null);
       setMember(null);
@@ -164,6 +164,15 @@ export function AuthGate({ children }: AuthGateProps) {
     bindTenantContexts(resolvedTenant.id);
     setAuthReady(true);
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const join = params.get('join')?.trim();
+    if (join) {
+      setInviteCode(join.toUpperCase());
+      setAuthPanel('join');
+    }
+  }, []);
 
   useEffect(() => {
     const unsub = watchAuth(async (nextUser) => {
@@ -226,6 +235,21 @@ export function AuthGate({ children }: AuthGateProps) {
     if (session) bootstrapWorkspaceUrl();
   }, [session]);
 
+  function handleRequestAccess() {
+    const subject = encodeURIComponent('NurseryOS access request');
+    const body = encodeURIComponent(
+      [
+        `Name: ${displayName.trim()}`,
+        `Nursery: ${nurseryName.trim()}`,
+        `Email: ${email.trim()}`,
+        '',
+        requestMessage.trim() || 'I would like to set up NurseryOS for our nursery.'
+      ].join('\n')
+    );
+    window.location.href = `mailto:${REQUEST_ACCESS_EMAIL}?subject=${subject}&body=${body}`;
+    setRequestSent(true);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (submitLockRef.current || busy) return;
@@ -235,28 +259,18 @@ export function AuthGate({ children }: AuthGateProps) {
     suppressAuthLoadRef.current = true;
     try {
       let nextUser: User | null = null;
-      if (mode === 'signup') {
-        if (signupMode === 'join') {
-          const joined = await signUpAndJoinNursery({
-            email,
-            password,
-            displayName,
-            inviteCode
-          });
-          nextUser = joined.user;
-        } else {
-          const created = await signUpWithNursery({
-            email,
-            password,
-            displayName,
-            nurseryName
-          });
-          nextUser = created.user;
-        }
+      if (authPanel === 'join') {
+        const joined = await signUpAndJoinNursery({
+          email,
+          password,
+          displayName,
+          inviteCode
+        });
+        nextUser = joined.user;
       } else {
         const signedInUser = await signIn(email, password);
         nextUser = signedInUser;
-        if (signinMode === 'join') {
+        if (signInWithInvite) {
           await joinNurseryWithInvite({
             user: signedInUser,
             inviteCode,
@@ -304,226 +318,34 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-ink-950 via-ink-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-ink-100 overflow-hidden">
-        <div className="px-6 pt-6 pb-4 border-b border-ink-100 bg-gradient-to-b from-white to-ink-50/40">
-          <BrandLogo variant="full" showText={false} className="max-h-52 mx-auto" />
-        </div>
-
-        <div className="px-6 pt-5">
-          <div className="flex bg-slate-100 p-1 rounded-xl mb-5">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signup');
-                setFormError(null);
-              }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                mode === 'signup' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
-              }`}
-            >
-              Create nursery
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signin');
-                setFormError(null);
-              }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                mode === 'signin' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
-              }`}
-            >
-              Sign in
-            </button>
-          </div>
-
-          {mode === 'signin' && (
-            <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-              Nursery owners sign in to their nursery. Sellers with platform admin land on the{' '}
-              <span className="font-bold text-slate-700">NurseryOS Seller</span> console.
-            </p>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-3 pb-6">
-            {mode === 'signup' && (
-              <>
-                <div className="flex bg-slate-50 p-1 rounded-lg gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setSignupMode('create')}
-                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signupMode === 'create' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
-                    }`}
-                  >
-                    New nursery
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSignupMode('join')}
-                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signupMode === 'join' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
-                    }`}
-                  >
-                    Join with code
-                  </button>
-                </div>
-                {signupMode === 'create' ? (
-                  <label className="block">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Nursery name
-                    </span>
-                    <input
-                      required
-                      value={nurseryName}
-                      onChange={(e) => setNurseryName(e.target.value)}
-                      placeholder="Green Valley Nursery"
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-                    />
-                  </label>
-                ) : (
-                  <label className="block">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Invite code
-                    </span>
-                    <input
-                      required
-                      value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                      placeholder="ABC123"
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-                    />
-                  </label>
-                )}
-                <label className="block">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Your name
-                  </span>
-                  <input
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Alex Manager"
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-                  />
-                </label>
-              </>
-            )}
-
-            {mode === 'signin' && (
-              <>
-                <div className="flex bg-slate-50 p-1 rounded-lg gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setSigninMode('normal')}
-                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signinMode === 'normal' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
-                    }`}
-                  >
-                    Sign in
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSigninMode('join')}
-                    className={`flex-1 py-1.5 text-[11px] font-bold rounded-md ${
-                      signinMode === 'join' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
-                    }`}
-                  >
-                    Sign in + join code
-                  </button>
-                </div>
-                {signinMode === 'join' && (
-                  <>
-                    <label className="block">
-                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                        Invite code
-                      </span>
-                      <input
-                        required
-                        value={inviteCode}
-                        onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                        placeholder="ABC123"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                        Your name (optional)
-                      </span>
-                      <input
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
-                        placeholder="Alex Loader"
-                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-                      />
-                    </label>
-                  </>
-                )}
-              </>
-            )}
-
-            <label className="block">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                Email
-              </span>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@nursery.com"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                Password
-              </span>
-              <input
-                required
-                type="password"
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600"
-              />
-            </label>
-
-            {(formError || bootError) && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                {formError || bootError}
-              </div>
-            )}
-
-            {mode === 'signin' && (
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Forgot your password? Ask your nursery owner or admin — they can send a reset from{' '}
-                <span className="font-semibold text-slate-700">Team</span>.
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-ink-700 hover:bg-ink-800 disabled:opacity-60 text-white font-bold text-sm py-3 transition-colors"
-            >
-              {mode === 'signup' ? <UserPlus className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
-              <span>
-                {busy
-                  ? 'Please wait...'
-                  : mode === 'signup'
-                    ? signupMode === 'join'
-                      ? 'Join nursery team'
-                      : 'Create isolated nursery'
-                    : signinMode === 'join'
-                      ? 'Sign in and join team'
-                      : 'Sign in'}
-              </span>
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+    <WelcomePage
+      authPanel={authPanel}
+      onAuthPanelChange={(panel) => {
+        setAuthPanel(panel);
+        setFormError(null);
+        setRequestSent(false);
+        if (panel !== 'signin') setSignInWithInvite(false);
+      }}
+      signInWithInvite={signInWithInvite}
+      onSignInWithInviteChange={setSignInWithInvite}
+      email={email}
+      onEmailChange={setEmail}
+      password={password}
+      onPasswordChange={setPassword}
+      displayName={displayName}
+      onDisplayNameChange={setDisplayName}
+      nurseryName={nurseryName}
+      onNurseryNameChange={setNurseryName}
+      inviteCode={inviteCode}
+      onInviteCodeChange={setInviteCode}
+      requestMessage={requestMessage}
+      onRequestMessageChange={setRequestMessage}
+      busy={busy}
+      formError={formError}
+      bootError={bootError}
+      requestSent={requestSent}
+      onSubmit={handleSubmit}
+      onRequestAccess={handleRequestAccess}
+    />
   );
 }

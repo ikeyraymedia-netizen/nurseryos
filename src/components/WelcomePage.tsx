@@ -15,40 +15,17 @@ import {
   UserPlus
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { AppLocale, useLocale, useT } from '../lib/i18n';
 
 const REQUEST_ACCESS_EMAIL = 'hello@nurseryos.app';
 
-const FEATURES = [
-  {
-    icon: Package,
-    title: 'Inventory',
-    description: 'Live plant stock, uploads, photos, and availability exports.'
-  },
-  {
-    icon: Truck,
-    title: 'Truck building',
-    description: 'Build loads, loading checkoff, pull sheets, and BOLs.'
-  },
-  {
-    icon: Receipt,
-    title: 'Invoicing',
-    description: 'Estimates and invoices from the load — email and pay links when you need them.'
-  },
-  {
-    icon: ShoppingCart,
-    title: 'Purchasing',
-    description: 'Vendors, POs, bills, and scan vendor invoices into the system.'
-  },
-  {
-    icon: CheckSquare,
-    title: 'Tasks',
-    description: 'Weekly task board — assign yard and office work, check it off.'
-  },
-  {
-    icon: BarChart3,
-    title: 'Reports',
-    description: 'Sales and operations reporting in one workspace.'
-  }
+const FEATURE_KEYS = [
+  { icon: Package, key: 'inventory' },
+  { icon: Truck, key: 'trucks' },
+  { icon: Receipt, key: 'invoicing' },
+  { icon: ShoppingCart, key: 'purchasing' },
+  { icon: CheckSquare, key: 'tasks' },
+  { icon: BarChart3, key: 'reports' }
 ] as const;
 
 export type AuthPanel = 'signin' | 'join' | 'request';
@@ -87,6 +64,25 @@ function FieldLabel({ children }: { children: ReactNode }) {
 const inputClassName =
   'mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-600/30 focus:border-ink-600';
 
+function LanguageSelect() {
+  const { locale, setLocale } = useLocale();
+  const t = useT();
+  return (
+    <label className="block">
+      <FieldLabel>{t('language.label')}</FieldLabel>
+      <select
+        value={locale}
+        onChange={(e) => setLocale(e.target.value as AppLocale)}
+        className={inputClassName}
+      >
+        <option value="en">{t('language.english')}</option>
+        <option value="es">{t('language.spanish')}</option>
+      </select>
+      <p className="mt-1 text-[10px] text-slate-500 leading-relaxed">{t('language.hint')}</p>
+    </label>
+  );
+}
+
 export function WelcomePage({
   authPanel,
   onAuthPanelChange,
@@ -111,17 +107,17 @@ export function WelcomePage({
   onSubmit,
   onRequestAccess
 }: WelcomePageProps) {
+  const t = useT();
   const submitLabel =
     authPanel === 'join'
-      ? 'Join nursery team'
+      ? t('welcome.joinNurseryTeam')
       : signInWithInvite
-        ? 'Sign in and join team'
-        : 'Sign in';
+        ? t('welcome.signInAndJoin')
+        : t('welcome.signIn');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-ink-950 via-ink-900 to-slate-900">
       <div className="min-h-screen lg:grid lg:grid-cols-[1.1fr_0.9fr]">
-        {/* Marketing */}
         <div className="relative flex flex-col px-6 py-8 sm:px-10 lg:px-12 lg:py-12 xl:px-16">
           <div className="mb-8 lg:mb-10">
             <BrandLogo variant="icon" size="md" showText={true} className="text-white" />
@@ -134,12 +130,9 @@ export function WelcomePage({
                   <Activity className="h-4 w-4" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white leading-snug">
-                    Everyone on the same live data
-                  </p>
+                  <p className="text-sm font-bold text-white leading-snug">{t('welcome.liveDataTitle')}</p>
                   <p className="mt-1 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    Loaders check trucks on their phone. Office sends invoices from a laptop. Same
-                    orders, same inventory, same numbers — updated in real time.
+                    {t('welcome.liveDataBody')}
                   </p>
                 </div>
               </div>
@@ -147,41 +140,34 @@ export function WelcomePage({
 
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-200 mb-5">
               <Smartphone className="h-3.5 w-3.5 text-coral-400" />
-              Anytime, any device
+              {t('welcome.anytimeBadge')}
             </div>
 
             <h1 className="text-3xl sm:text-4xl xl:text-[2.75rem] font-black leading-tight text-white tracking-tight">
-              Run your nursery from the{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-coral-400">
-                yard, the office, or the road
-              </span>
-              .
+              {t('welcome.headline')}
             </h1>
 
-            <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed">
-              NurseryOS keeps inventory, trucks, invoices, and purchasing in one place — on any phone,
-              tablet, or computer. No app store. Just sign in.
-            </p>
+            <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed">{t('welcome.subhead')}</p>
 
             <div className="mt-5 flex items-center gap-4 text-slate-400">
               <div className="flex items-center gap-1.5 text-xs font-semibold">
                 <Smartphone className="h-4 w-4 text-ink-300" />
-                Phone
+                {t('welcome.phone')}
               </div>
               <div className="flex items-center gap-1.5 text-xs font-semibold">
                 <Tablet className="h-4 w-4 text-ink-300" />
-                Tablet
+                {t('welcome.tablet')}
               </div>
               <div className="flex items-center gap-1.5 text-xs font-semibold">
                 <Laptop className="h-4 w-4 text-ink-300" />
-                Computer
+                {t('welcome.computer')}
               </div>
             </div>
 
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {FEATURES.map(({ icon: Icon, title, description }) => (
+              {FEATURE_KEYS.map(({ icon: Icon, key }) => (
                 <div
-                  key={title}
+                  key={key}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
                 >
                   <div className="flex items-start gap-3">
@@ -189,8 +175,12 @@ export function WelcomePage({
                       <Icon className="h-4 w-4" strokeWidth={2.25} />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white">{title}</p>
-                      <p className="mt-1 text-xs text-slate-400 leading-relaxed">{description}</p>
+                      <p className="text-sm font-bold text-white">
+                        {t(`welcome.features.${key}.title`)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400 leading-relaxed">
+                        {t(`welcome.features.${key}.description`)}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -203,12 +193,11 @@ export function WelcomePage({
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-coral-600 hover:bg-coral-500 text-white font-bold text-sm px-5 py-3 transition-colors"
             >
               <ClipboardList className="h-4 w-4" />
-              Request access
+              {t('welcome.requestAccess')}
             </button>
           </div>
         </div>
 
-        {/* Auth */}
         <div className="flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8 lg:py-12 bg-slate-50/95 lg:bg-white/98 border-t lg:border-t-0 lg:border-l border-white/10">
           <div className="w-full max-w-md">
             <div className="mb-6 hidden lg:block">
@@ -224,7 +213,7 @@ export function WelcomePage({
                     authPanel === 'signin' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
                   }`}
                 >
-                  Sign in
+                  {t('welcome.signIn')}
                 </button>
                 <button
                   type="button"
@@ -233,31 +222,26 @@ export function WelcomePage({
                     authPanel === 'join' ? 'bg-white shadow text-ink-800' : 'text-slate-500'
                   }`}
                 >
-                  Join with code
+                  {t('welcome.joinWithCode')}
                 </button>
               </div>
 
               <div className="px-5 pt-4 pb-6">
                 {authPanel === 'signin' && (
-                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                    Sign in to your nursery workspace.
-                  </p>
+                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">{t('welcome.signInHint')}</p>
                 )}
                 {authPanel === 'join' && (
-                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                    Got an invite from your nursery owner? Create your account and join the team.
-                  </p>
+                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">{t('welcome.joinHint')}</p>
                 )}
                 {authPanel === 'request' && (
-                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                    Tell us about your nursery and we&apos;ll set up your workspace.
-                  </p>
+                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">{t('welcome.requestHint')}</p>
                 )}
 
                 {authPanel === 'request' ? (
                   <div className="space-y-3">
+                    <LanguageSelect />
                     <label className="block">
-                      <FieldLabel>Your name</FieldLabel>
+                      <FieldLabel>{t('common.yourName')}</FieldLabel>
                       <input
                         required
                         value={displayName}
@@ -267,7 +251,7 @@ export function WelcomePage({
                       />
                     </label>
                     <label className="block">
-                      <FieldLabel>Nursery name</FieldLabel>
+                      <FieldLabel>{t('welcome.nurseryName')}</FieldLabel>
                       <input
                         required
                         value={nurseryName}
@@ -277,7 +261,7 @@ export function WelcomePage({
                       />
                     </label>
                     <label className="block">
-                      <FieldLabel>Email</FieldLabel>
+                      <FieldLabel>{t('common.email')}</FieldLabel>
                       <input
                         required
                         type="email"
@@ -288,7 +272,7 @@ export function WelcomePage({
                       />
                     </label>
                     <label className="block">
-                      <FieldLabel>Message (optional)</FieldLabel>
+                      <FieldLabel>{t('welcome.messageOptional')}</FieldLabel>
                       <textarea
                         value={requestMessage}
                         onChange={(e) => onRequestMessageChange(e.target.value)}
@@ -300,7 +284,7 @@ export function WelcomePage({
 
                     {requestSent && (
                       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                        Opening your email app — send the message to complete your request.
+                        {t('welcome.requestSent')}
                       </div>
                     )}
 
@@ -311,7 +295,7 @@ export function WelcomePage({
                       className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-coral-600 hover:bg-coral-500 disabled:opacity-60 text-white font-bold text-sm py-3 transition-colors"
                     >
                       <ClipboardList className="h-4 w-4" />
-                      {busy ? 'Please wait...' : 'Send access request'}
+                      {busy ? t('common.pleaseWait') : t('welcome.sendAccessRequest')}
                     </button>
 
                     <button
@@ -319,15 +303,17 @@ export function WelcomePage({
                       onClick={() => onAuthPanelChange('signin')}
                       className="w-full text-xs font-semibold text-slate-500 hover:text-ink-700"
                     >
-                      Already have an account? Sign in
+                      {t('welcome.alreadyHaveAccount')}
                     </button>
                   </div>
                 ) : (
                   <form onSubmit={onSubmit} className="space-y-3">
+                    <LanguageSelect />
+
                     {authPanel === 'join' && (
                       <>
                         <label className="block">
-                          <FieldLabel>Invite code</FieldLabel>
+                          <FieldLabel>{t('welcome.inviteCode')}</FieldLabel>
                           <input
                             required
                             value={inviteCode}
@@ -337,7 +323,7 @@ export function WelcomePage({
                           />
                         </label>
                         <label className="block">
-                          <FieldLabel>Your name</FieldLabel>
+                          <FieldLabel>{t('common.yourName')}</FieldLabel>
                           <input
                             value={displayName}
                             onChange={(e) => onDisplayNameChange(e.target.value)}
@@ -351,7 +337,7 @@ export function WelcomePage({
                     {authPanel === 'signin' && signInWithInvite && (
                       <>
                         <label className="block">
-                          <FieldLabel>Invite code</FieldLabel>
+                          <FieldLabel>{t('welcome.inviteCode')}</FieldLabel>
                           <input
                             required
                             value={inviteCode}
@@ -361,7 +347,9 @@ export function WelcomePage({
                           />
                         </label>
                         <label className="block">
-                          <FieldLabel>Your name (optional)</FieldLabel>
+                          <FieldLabel>
+                            {t('common.yourName')} ({t('common.optional')})
+                          </FieldLabel>
                           <input
                             value={displayName}
                             onChange={(e) => onDisplayNameChange(e.target.value)}
@@ -373,7 +361,7 @@ export function WelcomePage({
                     )}
 
                     <label className="block">
-                      <FieldLabel>Email</FieldLabel>
+                      <FieldLabel>{t('common.email')}</FieldLabel>
                       <input
                         required
                         type="email"
@@ -385,14 +373,14 @@ export function WelcomePage({
                     </label>
 
                     <label className="block">
-                      <FieldLabel>Password</FieldLabel>
+                      <FieldLabel>{t('common.password')}</FieldLabel>
                       <input
                         required
                         type="password"
                         minLength={6}
                         value={password}
                         onChange={(e) => onPasswordChange(e.target.value)}
-                        placeholder="At least 6 characters"
+                        placeholder={t('welcome.atLeast6Chars')}
                         className={inputClassName}
                       />
                     </label>
@@ -404,10 +392,7 @@ export function WelcomePage({
                     )}
 
                     {authPanel === 'signin' && !signInWithInvite && (
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Forgot your password? Ask your nursery owner or admin — they can send a reset
-                        from <span className="font-semibold text-slate-700">Team</span>.
-                      </p>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">{t('welcome.forgotPassword')}</p>
                     )}
 
                     <button
@@ -420,7 +405,7 @@ export function WelcomePage({
                       ) : (
                         <LogIn className="h-4 w-4" />
                       )}
-                      <span>{busy ? 'Please wait...' : submitLabel}</span>
+                      <span>{busy ? t('common.pleaseWait') : submitLabel}</span>
                     </button>
 
                     {authPanel === 'signin' && (
@@ -430,8 +415,8 @@ export function WelcomePage({
                         className="w-full text-xs font-semibold text-ink-600 hover:text-ink-800"
                       >
                         {signInWithInvite
-                          ? 'Sign in without an invite code'
-                          : 'Have an invite code? Sign in and join'}
+                          ? t('welcome.signInWithoutInvite')
+                          : t('welcome.haveInviteSignIn')}
                       </button>
                     )}
 
@@ -444,7 +429,7 @@ export function WelcomePage({
                         }}
                         className="w-full text-xs font-semibold text-ink-600 hover:text-ink-800"
                       >
-                        Already have an account? Sign in with your invite
+                        {t('welcome.alreadyHaveAccountInvite')}
                       </button>
                     )}
 
@@ -453,7 +438,7 @@ export function WelcomePage({
                       onClick={() => onAuthPanelChange('request')}
                       className="w-full text-xs font-semibold text-slate-500 hover:text-slate-700"
                     >
-                      New nursery? Request access
+                      {t('welcome.newNurseryRequest')}
                     </button>
                   </form>
                 )}
@@ -461,7 +446,7 @@ export function WelcomePage({
             </div>
 
             <p className="mt-4 text-center text-[10px] text-slate-400">
-              Questions?{' '}
+              {t('welcome.questions')}{' '}
               <a
                 href={`mailto:${REQUEST_ACCESS_EMAIL}`}
                 className="font-semibold text-ink-600 hover:text-ink-800"

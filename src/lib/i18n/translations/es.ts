@@ -1,0 +1,221 @@
+import type { TranslationDict } from './en';
+
+const es: TranslationDict = {
+  common: {
+    save: 'Guardar',
+    cancel: 'Cancelar',
+    delete: 'Eliminar',
+    loading: 'Cargando…',
+    pleaseWait: 'Espere…',
+    back: 'Atrás',
+    backToList: 'Volver a la lista',
+    backToTrucks: 'Volver a camiones',
+    copy: 'Copiar',
+    copied: '¡Copiado!',
+    yes: 'Sí',
+    no: 'No',
+    close: 'Cerrar',
+    search: 'Buscar',
+    all: 'Todos',
+    unknownDate: 'Fecha desconocida',
+    lbs: 'lbs',
+    order: 'Pedido',
+    orders: 'Pedidos',
+    signOut: 'Cerrar sesión',
+    email: 'Correo',
+    password: 'Contraseña',
+    yourName: 'Su nombre',
+    optional: 'opcional'
+  },
+  language: {
+    label: 'Idioma',
+    english: 'English',
+    spanish: 'Español',
+    hint: 'Elija el idioma de los menús y botones en NurseryOS.'
+  },
+  welcome: {
+    liveDataTitle: 'Todos con los mismos datos en vivo',
+    liveDataBody:
+      'Los cargadores revisan camiones en el teléfono. Oficina envía facturas desde la laptop. Mismos pedidos, mismo inventario, mismos números — actualizados en tiempo real.',
+    anytimeBadge: 'En cualquier momento, cualquier dispositivo',
+    headline: 'Maneje su vivero desde el patio, la oficina o el camino.',
+    subhead:
+      'NurseryOS reúne inventario, camiones, facturas y compras en un solo lugar — en cualquier teléfono, tableta u computadora. Sin app store. Solo inicie sesión.',
+    phone: 'Teléfono',
+    tablet: 'Tableta',
+    computer: 'Computadora',
+    requestAccess: 'Solicitar acceso',
+    signIn: 'Iniciar sesión',
+    joinWithCode: 'Unirse con código',
+    signInHint: 'Inicie sesión en el espacio de trabajo de su vivero.',
+    joinHint:
+      '¿Tiene una invitación de su dueño? Cree su cuenta y únase al equipo.',
+    requestHint: 'Cuéntenos sobre su vivero y configuraremos su espacio de trabajo.',
+    inviteCode: 'Código de invitación',
+    nurseryName: 'Nombre del vivero',
+    messageOptional: 'Mensaje (opcional)',
+    sendAccessRequest: 'Enviar solicitud de acceso',
+    requestSent: 'Abriendo su correo — envíe el mensaje para completar la solicitud.',
+    alreadyHaveAccount: '¿Ya tiene cuenta? Iniciar sesión',
+    joinNurseryTeam: 'Unirse al equipo',
+    signInAndJoin: 'Iniciar sesión y unirse',
+    haveInviteSignIn: '¿Tiene código? Iniciar sesión y unirse',
+    signInWithoutInvite: 'Iniciar sesión sin código',
+    alreadyHaveAccountInvite: '¿Ya tiene cuenta? Inicie sesión con su invitación',
+    newNurseryRequest: '¿Vivero nuevo? Solicitar acceso',
+    forgotPassword:
+      '¿Olvidó su contraseña? Pida al dueño o administrador que envíe un restablecimiento desde Equipo.',
+    questions: '¿Preguntas?',
+    atLeast6Chars: 'Al menos 6 caracteres',
+    features: {
+      inventory: {
+        title: 'Inventario',
+        description: 'Stock en vivo, cargas, fotos y exportaciones de disponibilidad.'
+      },
+      trucks: {
+        title: 'Armado de camiones',
+        description: 'Arme cargas, checklist de carga, hojas de extracción y BOL.'
+      },
+      invoicing: {
+        title: 'Facturación',
+        description: 'Presupuestos y facturas desde la carga — correo y enlaces de pago.'
+      },
+      purchasing: {
+        title: 'Compras',
+        description: 'Proveedores, OC, facturas y escaneo de facturas de proveedor.'
+      },
+      tasks: {
+        title: 'Tareas',
+        description: 'Tablero semanal — asigne trabajo de patio y oficina, marque completado.'
+      },
+      reports: {
+        title: 'Reportes',
+        description: 'Reportes de ventas y operaciones en un solo espacio.'
+      }
+    }
+  },
+  auth: {
+    loading: 'Cargando NurseryOS…',
+    profileNotFound:
+      'No se encontró su perfil. Solicite acceso o únase con un código de invitación.',
+    noWorkspace:
+      'Su cuenta aún no tiene un vivero. Solicite acceso o únase con un código de invitación.',
+    workspaceNotFound:
+      'No se encontró el vivero. Contacte soporte o cree una cuenta nueva.',
+    emailInUse: 'Ese correo ya tiene cuenta. Inicie sesión.',
+    wrongPassword: 'Correo o contraseña incorrectos.',
+    authFailed: 'Error de autenticación.',
+    loadFailed: 'No se pudo cargar el espacio de trabajo.'
+  },
+  header: {
+    workspace: 'Espacio NurseryOS',
+    localActive: 'Modo local',
+    weights: 'Pesos',
+    team: 'Equipo',
+    sellerHome: 'Consola vendedor',
+    packages: 'Paquetes',
+    pendingOrders: 'Pedidos pendientes',
+    completedOrders: 'Pedidos completados',
+    noPending: 'Sin pedidos pendientes',
+    syncToCloud: 'Sincronizar a la nube',
+    syncing: 'Sincronizando…',
+    pendingToLoad: 'Pedidos pendientes por cargar',
+    shippedToday: 'Enviados hoy',
+    noneShippedToday: 'Ninguno enviado hoy',
+    ordersCount: '{{count}} pedidos',
+    shippedCount: '{{count}} enviados'
+  },
+  nav: {
+    orders: 'Pedidos',
+    trucks: 'Camiones',
+    inventory: 'Inventario',
+    customers: 'Clientes',
+    purchasing: 'Compras',
+    reports: 'Reportes',
+    tasks: 'Tareas',
+    inventoryHint: 'Use el panel principal para administrar el inventario de plantas.',
+    customersHint: 'Administre su directorio de clientes en el panel principal.',
+    purchasingHint: 'Proveedores, órdenes de compra, recepción y facturas AP en el panel principal.',
+    reportsHint: 'Pida reportes de carga, inventario, ventas y clientes en el panel principal.',
+    tasksHint: 'Asigne tareas semanales por persona. Los trabajadores las marcan al terminar.'
+  },
+  app: {
+    loadingWorkspace: 'Cargando espacio de trabajo…',
+    workspaceNotActivated: 'Espacio de trabajo aún no activado',
+    workspaceNotActivatedBody:
+      '{{name}} está registrado, pero aún no se han activado módulos. NurseryOS activará Pedidos, Camiones, Clientes y otros desde la consola del vendedor.',
+    workspaceNotActivatedHint:
+      'Equipo sigue disponible en el encabezado. Las pestañas aparecen después de la activación.',
+    selectTruckOrOrder: 'Seleccione un camión o pedido a la izquierda para empezar a cargar.',
+    selectItemLeft: 'Seleccione un elemento a la izquierda.',
+    leaveTruckBuilder: '¿Salir del armador de camiones? Se perderán los cambios.',
+    uploadOrder: 'Subir pedido'
+  },
+  orders: {
+    title: 'Pedidos de plantas',
+    searchPlaceholder: 'Buscar cliente o OC…',
+    filterAll: 'Todos',
+    filterPending: 'Por cargar',
+    filterLoading: 'En progreso',
+    filterCompleted: 'Cargados',
+    statusPending: 'Por cargar',
+    statusLoading: 'En progreso',
+    statusCompleted: 'Cargado / Listo',
+    deleteConfirm: '¿Eliminar este pedido?',
+    noOrders: 'Aún no hay pedidos',
+    noOrdersHint: 'Suba un pedido de cliente para comenzar.',
+    needsInvoice: 'Falta guardar factura'
+  },
+  trucks: {
+    title: 'Camiones',
+    buildTruck: 'Armar camión',
+    noTrucks: 'Aún no hay camiones',
+    noTrucksHint: 'Arme un camión para empezar a cargar pedidos.',
+    deleteConfirm: '¿Eliminar este camión?'
+  },
+  loader: {
+    createEstimate: 'Crear presupuesto',
+    createInvoice: 'Crear factura',
+    resetCounts: '¿Restablecer conteos?',
+    loadAllPlants: '¿Cargar todas las plantas?',
+    resetTruck: 'Restablecer camión',
+    loadAll: 'Cargar todo',
+    invoiceNotSaved:
+      'Factura no guardada al cliente. Los precios están en este pedido — abra la factura y toque Guardar en Cliente.',
+    selectSalesRep: 'Seleccionar representante…',
+    stagingLocation: 'Ubicación de preparación',
+    stagingHint: 'Dónde se prepara este pedido en el patio',
+    saving: 'GUARDANDO…',
+    assignedCustomer: 'Cliente asignado',
+    unassigned: 'Sin asignar',
+    totalWeight: 'Peso total del pedido',
+    weightHint: 'Suma de plantas cargadas/pendientes',
+    deliveredPulled: 'Entregado/Extraído',
+    onTruckProgress: 'Progreso en camión',
+    interactiveList: 'Lista interactiva de carga',
+    plainText: 'Texto plano extraído',
+    addPlant: 'Agregar planta / artículo a este pedido',
+    selectSize: 'Seleccionar tamaño…',
+    savePlant: 'Guardar planta al pedido',
+    cost: 'Costo',
+    copyText: 'Copiar texto',
+    checkoff: 'Verificación',
+    loaded: 'Cargado',
+    pulled: 'Extraído',
+    qty: 'Cant.',
+    plant: 'Planta',
+    size: 'Tamaño',
+    notes: 'Notas',
+    vendor: 'Proveedor',
+    edit: 'Editar',
+    markLoaded: 'Marcar cargado',
+    markPulled: 'Marcar extraído'
+  },
+  team: {
+    languageTitle: 'Su idioma',
+    languageSaved: 'Idioma actualizado.',
+    languageFailed: 'No se pudo actualizar el idioma.'
+  }
+};
+
+export default es;

@@ -25,6 +25,7 @@ import {
   normalizeModulesList
 } from './modules';
 import { memberHasRole, normalizeMemberRoles, primaryRole } from './permissions';
+import { AppLocale, normalizeLocale } from './i18n';
 
 function slugifyNurseryName(name: string): string {
   const base = name
@@ -72,11 +73,16 @@ export async function listUserTenants(uid: string): Promise<Tenant[]> {
   return tenant ? [tenant] : [];
 }
 
+export async function updateUserLocale(uid: string, locale: AppLocale): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), { locale: normalizeLocale(locale) });
+}
+
 export async function signUpWithNursery(params: {
   email: string;
   password: string;
   displayName: string;
   nurseryName: string;
+  locale?: AppLocale;
 }): Promise<{ user: User; tenant: Tenant }> {
   const { email, password, displayName, nurseryName } = params;
   const trimmedNursery = nurseryName.trim();
@@ -114,7 +120,8 @@ export async function signUpWithNursery(params: {
     email: cred.user.email || email.trim(),
     displayName: displayName.trim() || undefined,
     activeTenantId: tenantId,
-    createdAt: now
+    createdAt: now,
+    locale: normalizeLocale(params.locale)
   };
 
   // Create identity docs first, then seed weights (avoids rule timing issues in one batch).
@@ -362,6 +369,7 @@ async function resumeExistingInviteMembership(params: {
   tenantId: string;
   tenantName?: string;
   displayName?: string;
+  locale?: AppLocale;
 }): Promise<{ tenant: Tenant; member: TenantMember } | null> {
   let existing: TenantMember | null = null;
   try {
@@ -382,7 +390,8 @@ async function resumeExistingInviteMembership(params: {
         email: params.user.email || '',
         displayName: params.displayName?.trim() || profile?.displayName || undefined,
         activeTenantId: params.tenantId,
-        createdAt: profile?.createdAt || now
+        createdAt: profile?.createdAt || now,
+        ...(params.locale ? { locale: normalizeLocale(params.locale) } : {})
       } satisfies UserProfile,
       { merge: true }
     );
@@ -396,6 +405,7 @@ export async function joinNurseryWithInvite(params: {
   user: User;
   inviteCode: string;
   displayName?: string;
+  locale?: AppLocale;
 }): Promise<{ tenant: Tenant; member: TenantMember }> {
   // Ensure Firestore requests use a fresh auth token (important right after sign-up).
   await params.user.getIdToken(true);
@@ -427,7 +437,8 @@ export async function joinNurseryWithInvite(params: {
       user: params.user,
       tenantId,
       tenantName,
-      displayName: params.displayName
+      displayName: params.displayName,
+      locale: params.locale
     });
     if (resumed) return resumed;
     throw new Error('Invalid or expired invite code.');
@@ -453,7 +464,8 @@ export async function joinNurseryWithInvite(params: {
     email: params.user.email || '',
     displayName: params.displayName?.trim() || undefined,
     activeTenantId: tenantId,
-    createdAt: now
+    createdAt: now,
+    locale: normalizeLocale(params.locale)
   };
 
   const memberRef = doc(db, 'tenants', tenantId, 'members', params.user.uid);
@@ -469,7 +481,8 @@ export async function joinNurseryWithInvite(params: {
       user: params.user,
       tenantId,
       tenantName,
-      displayName: params.displayName
+      displayName: params.displayName,
+      locale: params.locale
     });
     if (resumed) return resumed;
   }
@@ -496,6 +509,7 @@ export async function signUpAndJoinNursery(params: {
   password: string;
   displayName: string;
   inviteCode: string;
+  locale?: AppLocale;
 }): Promise<{ user: User; tenant: Tenant; member: TenantMember }> {
   const cred = await createUserWithEmailAndPassword(auth, params.email.trim(), params.password);
   if (params.displayName.trim()) {
@@ -504,7 +518,8 @@ export async function signUpAndJoinNursery(params: {
   const joined = await joinNurseryWithInvite({
     user: cred.user,
     inviteCode: params.inviteCode,
-    displayName: params.displayName
+    displayName: params.displayName,
+    locale: params.locale
   });
   return { user: cred.user, tenant: joined.tenant, member: joined.member };
 }

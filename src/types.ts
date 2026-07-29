@@ -50,6 +50,8 @@ export interface UserProfile {
   displayName?: string;
   activeTenantId: string | null;
   createdAt: string;
+  /** UI language preference (`en` default). */
+  locale?: 'en' | 'es';
   /** Platform operator — can manage modules for any nursery. Set in Firestore. */
   isPlatformAdmin?: boolean;
 }

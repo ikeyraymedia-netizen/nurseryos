@@ -47,6 +47,7 @@ import { confirmInvoicePayment } from './lib/stripe';
 import { PlatformDashboard } from './components/PlatformDashboard';
 import { resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
+import { AppLocale, useT } from './lib/i18n';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -309,20 +310,25 @@ function NurseryApp({
   member,
   userEmail,
   userId,
+  locale: _locale,
   isPlatformAdmin = false,
   onSignOut,
   onRefreshTenant,
+  onUpdateLocale,
   onBackToSeller
 }: {
   tenant: Tenant;
   member: TenantMember;
   userEmail: string;
   userId: string;
+  locale: AppLocale;
   isPlatformAdmin?: boolean;
   onSignOut: () => Promise<void>;
   onRefreshTenant?: () => Promise<void>;
+  onUpdateLocale: (locale: AppLocale) => Promise<void>;
   onBackToSeller?: () => void;
 }) {
+  const t = useT();
   const [tenant, setTenant] = useState(tenantProp);
   const [memberState, setMemberState] = useState(member);
   const nurseryAddress = resolveNurseryShippingAddress(tenant);
@@ -743,7 +749,7 @@ function NurseryApp({
 
   function leaveTruckBuilderIfNeeded(): boolean {
     if (!isBuildingTruck) return true;
-    return window.confirm('Leave truck builder? Your changes will be lost.');
+    return window.confirm(t('app.leaveTruckBuilder'));
   }
 
   function startBuildTruck() {
@@ -763,7 +769,7 @@ function NurseryApp({
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
         <BrandLogo variant="icon" size="lg" showText={false} nurseryName={tenant.name} />
-        <p className="text-sm font-bold text-gray-800 uppercase tracking-wider mt-6">Loading workspace...</p>
+        <p className="text-sm font-bold text-gray-800 uppercase tracking-wider mt-6">{t('app.loadingWorkspace')}</p>
       </div>
     );
   }
@@ -788,21 +794,19 @@ function NurseryApp({
             <div className="flex justify-center">
               <BrandLogo variant="icon" size="lg" showText={false} nurseryName={tenant.name} />
             </div>
-            <h2 className="mt-4 text-lg font-black text-gray-900">Workspace not activated yet</h2>
+            <h2 className="mt-4 text-lg font-black text-gray-900">{t('app.workspaceNotActivated')}</h2>
             <p className="mt-2 text-sm text-gray-600 leading-relaxed">
-              <span className="font-bold text-gray-900">{tenant.name}</span> is registered, but no
-              workspaces have been turned on. NurseryOS will enable Orders, Trucks, Customers, and
-              other modules from the seller console.
+              {t('app.workspaceNotActivatedBody', { name: tenant.name })}
             </p>
-            <p className="mt-3 text-xs text-gray-500">
-              Team stays available from the header. Workspace tabs appear after activation.
-            </p>
+            <p className="mt-3 text-xs text-gray-500">{t('app.workspaceNotActivatedHint')}</p>
           </div>
         </div>
         {showTeamManager && (
           <TeamManager
             tenant={tenant}
             currentUserId={userId}
+            locale={_locale}
+            onUpdateLocale={onUpdateLocale}
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
           />
@@ -841,7 +845,7 @@ function NurseryApp({
                 }`}
               >
                 <Sprout className="h-4 w-4" />
-                <span>Inventory</span>
+                <span>{t('nav.inventory')}</span>
               </button>
               {permissions.canViewTasks && (
                 <button
@@ -852,7 +856,7 @@ function NurseryApp({
                   }`}
                 >
                   <ClipboardList className="h-4 w-4" />
-                  <span>Tasks</span>
+                  <span>{t('nav.tasks')}</span>
                 </button>
               )}
             </div>
@@ -893,6 +897,8 @@ function NurseryApp({
           <TeamManager
             tenant={tenant}
             currentUserId={userId}
+            locale={_locale}
+            onUpdateLocale={onUpdateLocale}
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
           />
@@ -942,7 +948,7 @@ function NurseryApp({
                 }`}
               >
                 <FileText className="h-4 w-4" />
-                <span>Orders ({dynamicOrders.length})</span>
+                <span>{t('nav.orders')} ({dynamicOrders.length})</span>
               </button>
             )}
             {permissions.canViewTrucks && (
@@ -956,7 +962,7 @@ function NurseryApp({
                 }`}
               >
                 <TruckIcon className="h-4 w-4" />
-                <span>Trucks ({trucks.length})</span>
+                <span>{t('nav.trucks')} ({trucks.length})</span>
               </button>
             )}
             {permissions.canViewInventory && (
@@ -967,7 +973,7 @@ function NurseryApp({
                 }`}
               >
                 <Sprout className="h-4 w-4" />
-                <span>Inventory</span>
+                <span>{t('nav.inventory')}</span>
               </button>
             )}
             {permissions.canViewCustomers && (
@@ -978,7 +984,7 @@ function NurseryApp({
                 }`}
               >
                 <Users className="h-4 w-4" />
-                <span>Customers</span>
+                <span>{t('nav.customers')}</span>
               </button>
             )}
             {permissions.canViewPurchasing && (
@@ -995,7 +1001,7 @@ function NurseryApp({
                 }`}
               >
                 <PackagePlus className="h-4 w-4" />
-                <span>Purchasing</span>
+                <span>{t('nav.purchasing')}</span>
               </button>
             )}
             {permissions.canViewReports && (
@@ -1012,7 +1018,7 @@ function NurseryApp({
                 }`}
               >
                 <BarChart3 className="h-4 w-4" />
-                <span>Reports</span>
+                <span>{t('nav.reports')}</span>
               </button>
             )}
             {permissions.canViewTasks && (
@@ -1029,30 +1035,30 @@ function NurseryApp({
                 }`}
               >
                 <ClipboardList className="h-4 w-4" />
-                <span>Tasks</span>
+                <span>{t('nav.tasks')}</span>
               </button>
             )}
           </div>
 
           {activeTab === 'inventory' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
-              Use the main panel to manage live plant inventory.
+              {t('nav.inventoryHint')}
             </div>
           ) : activeTab === 'customers' && permissions.canViewCustomers ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
-              Manage your customer directory in the main panel.
+              {t('nav.customersHint')}
             </div>
           ) : activeTab === 'purchasing' && permissions.canViewPurchasing ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
-              Vendors, purchase orders, receiving, and AP bills in the main panel.
+              {t('nav.purchasingHint')}
             </div>
           ) : activeTab === 'reports' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
-              Ask AI for loading, inventory, sales, and customer reports in the main panel.
+              {t('nav.reportsHint')}
             </div>
           ) : activeTab === 'tasks' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
-              Assign weekly tasks by person. Workers check them off when finished.
+              {t('nav.tasksHint')}
             </div>
           ) : activeTab === 'orders' ? (
             <OrdersList
@@ -1102,7 +1108,7 @@ function NurseryApp({
               className="mb-3 inline-flex items-center gap-1.5 text-xs font-bold text-ink-800 bg-white border border-ink-200 rounded-xl px-3 py-2 shadow-sm"
             >
               <ArrowLeft className="h-4 w-4" />
-              {isBuildingTruck ? 'Back to trucks' : 'Back to list'}
+              {isBuildingTruck ? t('common.backToTrucks') : t('common.backToList')}
             </button>
           )}
           {activeTab === 'inventory' ? (
@@ -1219,8 +1225,8 @@ function NurseryApp({
               <h3 className="text-lg font-bold">No Selection</h3>
               <p className="text-sm text-gray-500 max-w-sm mt-1">
                 {permissions.canCheckOffLoading
-                  ? 'Select a truck or order on the left to start loading.'
-                  : 'Select an item on the left.'}
+                  ? t('app.selectTruckOrOrder')
+                  : t('app.selectItemLeft')}
               </p>
             </div>
           )}
@@ -1286,6 +1292,8 @@ function NurseryApp({
         <TeamManager
           tenant={tenant}
           currentUserId={userId}
+          locale={_locale}
+          onUpdateLocale={onUpdateLocale}
           onClose={() => setShowTeamManager(false)}
           onMemberUpdated={setMemberState}
         />
@@ -1440,9 +1448,11 @@ function RootApp({
       member={session.member}
       userEmail={session.user.email || 'unknown'}
       userId={session.user.uid}
+      locale={session.locale}
       isPlatformAdmin={isPlatformAdmin}
       onSignOut={session.onSignOut}
       onRefreshTenant={session.onRefreshTenant}
+      onUpdateLocale={session.onUpdateLocale}
       onBackToSeller={isPlatformAdmin ? goPlatform : undefined}
     />
   );

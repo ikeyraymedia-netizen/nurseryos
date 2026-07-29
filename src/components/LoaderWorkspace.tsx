@@ -37,6 +37,7 @@ import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { InvoiceModal } from './InvoiceModal';
+import { useT } from '../lib/i18n';
 
 interface LoaderWorkspaceProps {
   order: CustomerOrder;
@@ -61,6 +62,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   nurseryLogoSrc = null,
   tenantId
 }) => {
+  const t = useT();
   const salesRepOptions = useSalesRepOptions(tenantId);
   const [activeTab, setActiveTab] = useState<'checklist' | 'plaintext'>('checklist');
   const [copied, setCopied] = useState(false);
@@ -470,7 +472,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 className="px-3 py-1.5 bg-white hover:bg-sky-50 text-sky-900 border border-sky-200 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
               >
                 <FileText className="h-3.5 w-3.5" />
-                <span>Create Estimate</span>
+                <span>{t('loader.createEstimate')}</span>
               </button>
               <button
                 onClick={() => {
@@ -480,14 +482,14 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
               >
                 <DollarSign className="h-3.5 w-3.5" />
-                <span>Create Invoice</span>
+                <span>{t('loader.createInvoice')}</span>
               </button>
             </>
           )}
 
           {permissions.canEditOrders && showResetConfirm ? (
             <div className="flex items-center bg-amber-50 border border-amber-200 rounded-lg p-1 space-x-1">
-              <span className="text-[10px] font-bold text-amber-800 px-1">Reset counts?</span>
+              <span className="text-[10px] font-bold text-amber-800 px-1">{t('loader.resetCounts')}</span>
               <button
                 onClick={handleReset}
                 className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded"
@@ -503,7 +505,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             </div>
           ) : permissions.canCheckOffLoading && showLoadAllConfirm ? (
             <div className="flex items-center bg-ink-50 border border-ink-200 rounded-lg p-1 space-x-1">
-              <span className="text-[10px] font-bold text-ink-800 px-1">Load all plants?</span>
+              <span className="text-[10px] font-bold text-ink-800 px-1">{t('loader.loadAllPlants')}</span>
               <button
                 onClick={handleLoadAll}
                 className="px-2 py-0.5 bg-ink-700 hover:bg-ink-800 text-white font-bold text-[10px] rounded"
@@ -526,7 +528,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                   className="px-3 py-1.5 border border-gray-200 hover:border-amber-300 hover:bg-amber-50 text-gray-600 hover:text-amber-800 text-xs font-bold rounded-lg transition-all flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Undo2 className="h-3.5 w-3.5" />
-                  <span>Reset Truck</span>
+                  <span>{t('loader.resetTruck')}</span>
                 </button>
               )}
               {permissions.canCheckOffLoading && (
@@ -536,7 +538,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                   className="px-3 py-1.5 bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Load All</span>
+                  <span>{t('loader.loadAll')}</span>
                 </button>
               )}
             </>
@@ -575,7 +577,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             onChange={(e) => handleAssignOwner(e.target.value)}
             className="w-full px-3 py-2 border border-ink-200 rounded-lg text-sm bg-white"
           >
-            <option value="">Select sales rep...</option>
+            <option value="">{t('loader.selectSalesRep')}</option>
             {salesRepOptions.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -599,8 +601,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             <MapPin className="h-5 w-5" />
           </div>
           <div>
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">Order Staging Location</h4>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">Where this plant order is staged out in the yard</p>
+            <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">{t('loader.stagingLocation')}</h4>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">{t('loader.stagingHint')}</p>
           </div>
         </div>
         
@@ -616,7 +618,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           {savingStagedLocation && (
             <div className="absolute right-3 top-2.5 flex items-center space-x-1.5 bg-ink-50 border border-ink-150 px-2 py-0.5 rounded-lg">
               <span className="w-1.5 h-1.5 bg-ink-600 rounded-full animate-ping" />
-              <span className="text-[10px] font-bold text-ink-700 font-mono">SAVING...</span>
+              <span className="text-[10px] font-bold text-ink-700 font-mono">{t('loader.saving')}</span>
             </div>
           )}
         </div>
@@ -624,13 +626,13 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
 
       {permissions.canEditOrders && (
         <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5">
-          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Assigned Customer</label>
+          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{t('loader.assignedCustomer')}</label>
           <select
             value={order.customerId || ''}
             onChange={(e) => handleAssignCustomer(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
           >
-            <option value="">Unassigned</option>
+            <option value="">{t('loader.unassigned')}</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -649,18 +651,18 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             <Weight className="h-5.5 w-5.5" />
           </div>
           <div>
-            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono">Total Order Weight</p>
+            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono">{t('loader.totalWeight')}</p>
             <p className="text-2xl font-black text-gray-900 font-mono tracking-tight">
-              {totalWeight.toLocaleString()} <span className="text-xs font-semibold text-gray-500">lbs</span>
+              {totalWeight.toLocaleString()} <span className="text-xs font-semibold text-gray-500">{t('common.lbs')}</span>
             </p>
-            <p className="text-[10px] text-gray-400 mt-0.5 leading-none">Sum of all loaded/pending plants</p>
+            <p className="text-[10px] text-gray-400 mt-0.5 leading-none">{t('loader.weightHint')}</p>
           </div>
         </div>
 
         {/* Delivered / Pulled Progress Stat */}
         <div>
           <div className="flex justify-between items-baseline mb-1">
-            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono font-bold">Delivered/Pulled</p>
+            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono font-bold">{t('loader.deliveredPulled')}</p>
             <p className="text-xs font-bold font-mono text-ink-800">
               {pulledWeight.toLocaleString()} / {totalWeight.toLocaleString()} lbs
             </p>
@@ -680,7 +682,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         {/* Loading Progress Stat */}
         <div>
           <div className="flex justify-between items-baseline mb-1">
-            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono">On-Truck Progress</p>
+            <p className="text-xs font-bold text-ink-800/80 uppercase tracking-wide font-mono">{t('loader.onTruckProgress')}</p>
             <p className="text-xs font-bold font-mono text-ink-800">
               {loadedWeight.toLocaleString()} / {totalWeight.toLocaleString()} lbs
             </p>
@@ -710,7 +712,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           }`}
         >
           <ListTodo className="h-4.5 w-4.5" />
-          <span>Interactive Loader List</span>
+          <span>{t('loader.interactiveList')}</span>
         </button>
         <button
           onClick={() => setActiveTab('plaintext')}
@@ -721,7 +723,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           }`}
         >
           <FileText className="h-4.5 w-4.5" />
-          <span>Extracted Plain Text</span>
+          <span>{t('loader.plainText')}</span>
         </button>
       </div>
 
@@ -738,7 +740,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 className="w-full py-3 px-4 border border-dashed border-ink-300 hover:border-ink-500 bg-ink-50/20 hover:bg-ink-50/50 text-ink-800 hover:text-ink-900 font-bold text-sm rounded-xl transition-all flex items-center justify-center space-x-2 shadow-sm mb-4"
               >
                 <Plus className="h-4.5 w-4.5 stroke-[2.5px]" />
-                <span>Add Plant / Item to this Order</span>
+                <span>{t('loader.addPlant')}</span>
               </button>
             ) : (
               <form
@@ -793,7 +795,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
                       required
                     >
-                      <option value="">Select Size...</option>
+                      <option value="">{t('loader.selectSize')}</option>
                       {containerWeights.map((w) => (
                         <option key={w.id} value={w.id}>
                           {w.name} ({w.weightLbs} lbs)
@@ -868,7 +870,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                     className="px-4 py-2 bg-ink-700 hover:bg-ink-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
                   >
                     <Check className="h-3.5 w-3.5" />
-                    <span>Save Plant to Order</span>
+                    <span>{t('loader.savePlant')}</span>
                   </button>
                 </div>
               </form>
@@ -1064,7 +1066,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                   onClick={(e) => e.stopPropagation()}
                                   title="Your cost per plant (internal only)"
                                 >
-                                  <span className="text-[10px] uppercase tracking-wide">Cost</span>
+                                  <span className="text-[10px] uppercase tracking-wide">{t('loader.cost')}</span>
                                   <span className="text-[10px] font-mono">$</span>
                                   <input
                                     key={`cost-${item.id}-${item.unitCost ?? ''}`}
@@ -1237,12 +1239,12 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 {copied ? (
                   <>
                     <ClipboardCheck className="h-3.5 w-3.5 text-ink-600" />
-                    <span className="text-ink-700">Copied!</span>
+                    <span className="text-ink-700">{t('common.copied')}</span>
                   </>
                 ) : (
                   <>
                     <Clipboard className="h-3.5 w-3.5" />
-                    <span>Copy Text</span>
+                    <span>{t('loader.copyText')}</span>
                   </>
                 )}
               </button>
@@ -1315,7 +1317,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-ink-200 bg-white/95 backdrop-blur px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-wide text-ink-800">Checkoff</p>
+              <p className="text-[10px] font-black uppercase tracking-wide text-ink-800">{t('loader.checkoff')}</p>
               <p className="text-xs font-bold text-gray-900 truncate">
                 Pull {remainingToPull} · Load {remainingToLoad} left
               </p>

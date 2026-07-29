@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Calendar, Weight, Trash2, CheckCircle2, CircleDot, PlayCircle, MapPin, DollarSign } from 'lucide-react';
 import { CustomerOrder } from '../types';
 import { deleteCustomerOrder } from '../lib/db';
+import { useT } from '../lib/i18n';
 
 interface OrdersListProps {
   orders: CustomerOrder[];
@@ -18,6 +19,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   orderIdsNeedingInvoice,
   onSelectOrder
 }) => {
+  const t = useT();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'loading' | 'completed'>('all');
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
@@ -48,14 +50,14 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-ink-100 text-ink-800 border border-ink-200">
             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-            Loaded / Ready
+            {t('orders.statusCompleted')}
           </span>
         );
       case 'loading':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
             <PlayCircle className="h-3.5 w-3.5 mr-1" />
-            In Progress
+            {t('orders.statusLoading')}
           </span>
         );
       case 'pending':
@@ -63,7 +65,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
             <CircleDot className="h-3.5 w-3.5 mr-1" />
-            To Load
+            {t('orders.statusPending')}
           </span>
         );
     }
@@ -86,16 +88,17 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         minute: '2-digit'
       });
     } catch {
-      return 'Unknown date';
+      return t('common.unknownDate');
     }
   };
 
   return (
     <div id="orders-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-gray-900 font-sans">Plant Orders</h3>
+        <h3 className="text-lg font-bold text-gray-900 font-sans">{t('orders.title')}</h3>
         <span className="text-xs font-mono bg-ink-100 text-ink-950 border border-ink-300 px-2.5 py-1 rounded-lg font-bold">
-          {filteredOrders.length} {filteredOrders.length === 1 ? 'Order' : 'Orders'}
+          {filteredOrders.length}{' '}
+          {filteredOrders.length === 1 ? t('common.order') : t('common.orders')}
         </span>
       </div>
 
@@ -106,7 +109,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         </div>
         <input
           type="text"
-          placeholder="Search customer or order #..."
+          placeholder={t('orders.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ink-600 bg-slate-50/50 focus:bg-white transition-all font-medium text-gray-800 placeholder:text-slate-400 shadow-inner"
@@ -125,7 +128,13 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                 : 'text-slate-600 hover:text-ink-800 hover:bg-ink-50'
             }`}
           >
-            {tab === 'all' ? 'All Orders' : tab === 'loading' ? 'Loading' : tab === 'completed' ? 'Shipped' : 'Pending'}
+            {tab === 'all'
+              ? t('orders.filterAll')
+              : tab === 'loading'
+                ? t('orders.filterLoading')
+                : tab === 'completed'
+                  ? t('orders.filterCompleted')
+                  : t('orders.filterPending')}
           </button>
         ))}
       </div>
@@ -134,11 +143,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[500px] lg:max-h-[600px] min-h-[300px]">
         {filteredOrders.length === 0 ? (
           <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-300">
-            <p className="text-sm font-semibold text-gray-700">No orders found</p>
+            <p className="text-sm font-semibold text-gray-700">{t('orders.noOrders')}</p>
             <p className="text-xs text-slate-500 mt-1 max-w-[200px] mx-auto leading-normal">
-              {searchQuery || statusFilter !== 'all'
-                ? 'Try adjusting your filters or search terms.'
-                : 'Upload a PDF or image order in the sidebar to get started.'}
+              {t('orders.noOrdersHint')}
             </p>
           </div>
         ) : (

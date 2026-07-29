@@ -10,6 +10,7 @@ import {
   renameTenant,
   signIn,
   signUpAndJoinNursery,
+  updateUserLocale,
   watchAuth
 } from '../lib/tenants';
 import { setActiveTenant } from '../lib/db';
@@ -23,13 +24,22 @@ import { setPurchasingTenant } from '../lib/purchasing';
 import { BrandLogo } from './BrandLogo';
 import { bootstrapWorkspaceUrl } from '../lib/workspaceUrl';
 import { AuthPanel, REQUEST_ACCESS_EMAIL, WelcomePage } from './WelcomePage';
+import {
+  AppLocale,
+  LocaleProvider,
+  normalizeLocale,
+  readStoredLocale,
+  translate
+} from '../lib/i18n';
 
 interface AuthSession {
   user: User;
   profile: UserProfile;
   tenant: Tenant | null;
   member: TenantMember | null;
+  locale: AppLocale;
   onRefreshTenant: () => Promise<void>;
+  onUpdateLocale: (locale: AppLocale) => Promise<void>;
 }
 
 interface AuthGateProps {
@@ -78,6 +88,9 @@ export function AuthGate({ children }: AuthGateProps) {
   const [nurseryName, setNurseryName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [requestMessage, setRequestMessage] = useState('');
+  const [guestLocale, setGuestLocale] = useState<AppLocale>(() => readStoredLocale());
+
+  const effectiveLocale = normalizeLocale(profile?.locale ?? guestLocale);
 
   // Skip/ignore auth-listener loads while signup/join writes the profile (avoids a flash of
   // "no workspace" that leaves the form up after a successful join).
@@ -217,17 +230,24 @@ export function AuthGate({ children }: AuthGateProps) {
       profile,
       tenant,
       member,
+      locale: normalizeLocale(profile.locale ?? guestLocale),
       onRefreshTenant: async () => {
         if (!profile.activeTenantId) return;
         const next = await getTenant(profile.activeTenantId);
         if (next) setTenant(next);
+      },
+      onUpdateLocale: async (locale: AppLocale) => {
+        const next = normalizeLocale(locale);
+        setGuestLocale(next);
+        await updateUserLocale(user.uid, next);
+        setProfile((p) => (p ? { ...p, locale: next } : p));
       },
       onSignOut: async () => {
         clearTenantContexts();
         await logOut();
       }
     };
-  }, [user, profile, tenant, member]);
+  }, [user, profile, tenant, member, guestLocale]);
 
   // Before NurseryApp mounts after Firebase auth, mirror storage ↔ URL so
   // refresh restore cannot be lost during the auth loading gap.
@@ -257,6 +277,7 @@ export function AuthGate({ children }: AuthGateProps) {
     setFormError(null);
     setBusy(true);
     suppressAuthLoadRef.current = true;
+    const locale = effectiveLocale;
     try {
       let nextUser: User | null = null;
       if (authPanel === 'join') {
@@ -264,7 +285,8 @@ export function AuthGate({ children }: AuthGateProps) {
           email,
           password,
           displayName,
-          inviteCode
+          inviteCode,
+          locale
         });
         nextUser = joined.user;
       } else {
@@ -274,8 +296,11 @@ export function AuthGate({ children }: AuthGateProps) {
           await joinNurseryWithInvite({
             user: signedInUser,
             inviteCode,
-            displayName
+            displayName,
+            locale
           });
+        } else {
+          await updateUserLocale(signedInUser.uid, locale);
         }
       }
 
@@ -287,12 +312,12 @@ export function AuthGate({ children }: AuthGateProps) {
       console.error(err);
       const message =
         err?.code === 'auth/email-already-in-use'
-          ? 'That email already has an account. Sign in instead.'
+          ? translate(locale, 'auth.emailInUse')
           : err?.code === 'auth/invalid-credential' || err?.code === 'auth/wrong-password'
-            ? 'Email or password is incorrect.'
+            ? translate(locale, 'auth.wrongPassword')
             : err?.code === 'auth/operation-not-allowed'
               ? 'Email/password sign-in is not enabled on this Firebase project yet.'
-              : err?.message || 'Authentication failed.';
+              : err?.message || translate(locale, 'auth.authFailed');
       setFormError(message);
       // If auth already created the user but join failed, let the listener show boot state.
       suppressAuthLoadRef.current = false;
@@ -304,48 +329,58 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   }
 
-  if (!authReady) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <BrandLogo variant="icon" size="lg" showText={false} className="animate-pulse" />
-        <p className="text-sm font-bold text-gray-800 uppercase tracking-wider mt-6">Loading NurseryOS...</p>
-      </div>
-    );
-  }
-
-  if (session) {
-    return <>{children(session)}</>;
+  function handleLocaleChange(next: AppLocale) {
+    const locale = normalizeLocale(next);
+    setGuestLocale(locale);
+    if (user?.uid) {
+      void updateUserLocale(user.uid, locale).then(() => {
+        setProfile((p) => (p ? { ...p, locale } : p));
+      });
+    }
   }
 
   return (
-    <WelcomePage
-      authPanel={authPanel}
-      onAuthPanelChange={(panel) => {
-        setAuthPanel(panel);
-        setFormError(null);
-        setRequestSent(false);
-        if (panel !== 'signin') setSignInWithInvite(false);
-      }}
-      signInWithInvite={signInWithInvite}
-      onSignInWithInviteChange={setSignInWithInvite}
-      email={email}
-      onEmailChange={setEmail}
-      password={password}
-      onPasswordChange={setPassword}
-      displayName={displayName}
-      onDisplayNameChange={setDisplayName}
-      nurseryName={nurseryName}
-      onNurseryNameChange={setNurseryName}
-      inviteCode={inviteCode}
-      onInviteCodeChange={setInviteCode}
-      requestMessage={requestMessage}
-      onRequestMessageChange={setRequestMessage}
-      busy={busy}
-      formError={formError}
-      bootError={bootError}
-      requestSent={requestSent}
-      onSubmit={handleSubmit}
-      onRequestAccess={handleRequestAccess}
-    />
+    <LocaleProvider locale={effectiveLocale} onLocaleChange={handleLocaleChange}>
+      {!authReady ? (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <BrandLogo variant="icon" size="lg" showText={false} className="animate-pulse" />
+          <p className="text-sm font-bold text-gray-800 uppercase tracking-wider mt-6">
+            {translate(effectiveLocale, 'auth.loading')}
+          </p>
+        </div>
+      ) : session ? (
+        <>{children(session)}</>
+      ) : (
+        <WelcomePage
+          authPanel={authPanel}
+          onAuthPanelChange={(panel) => {
+            setAuthPanel(panel);
+            setFormError(null);
+            setRequestSent(false);
+            if (panel !== 'signin') setSignInWithInvite(false);
+          }}
+          signInWithInvite={signInWithInvite}
+          onSignInWithInviteChange={setSignInWithInvite}
+          email={email}
+          onEmailChange={setEmail}
+          password={password}
+          onPasswordChange={setPassword}
+          displayName={displayName}
+          onDisplayNameChange={setDisplayName}
+          nurseryName={nurseryName}
+          onNurseryNameChange={setNurseryName}
+          inviteCode={inviteCode}
+          onInviteCodeChange={setInviteCode}
+          requestMessage={requestMessage}
+          onRequestMessageChange={setRequestMessage}
+          busy={busy}
+          formError={formError}
+          bootError={bootError}
+          requestSent={requestSent}
+          onSubmit={handleSubmit}
+          onRequestAccess={handleRequestAccess}
+        />
+      )}
+    </LocaleProvider>
   );
 }

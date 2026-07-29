@@ -38,10 +38,13 @@ import {
   EmailStatus
 } from '../lib/email';
 import { tenantHasModule } from '../lib/modules';
+import { AppLocale, useT } from '../lib/i18n';
 
 interface TeamManagerProps {
   tenant: Tenant;
   currentUserId: string;
+  locale: AppLocale;
+  onUpdateLocale: (locale: AppLocale) => Promise<void>;
   onClose: () => void;
   onMemberUpdated?: (member: TenantMember) => void;
 }
@@ -51,9 +54,12 @@ const ASSIGNABLE = getAssignableRoles();
 export function TeamManager({
   tenant,
   currentUserId,
+  locale,
+  onUpdateLocale,
   onClose,
   onMemberUpdated
 }: TeamManagerProps) {
+  const t = useT();
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [invites, setInvites] = useState<TenantInvite[]>([]);
   const [inviteRoles, setInviteRoles] = useState<Exclude<MemberRole, 'owner'>[]>(['loader']);
@@ -568,6 +574,28 @@ export function TeamManager({
         </div>
 
         <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          <div className="rounded-xl border border-ink-100 bg-ink-50/50 px-3 py-3">
+            <p className="text-xs font-bold uppercase text-ink-800">{t('team.languageTitle')}</p>
+            <p className="text-[11px] text-gray-600 mb-2">{t('language.hint')}</p>
+            <select
+              value={locale}
+              disabled={busy}
+              onChange={(e) => {
+                const next = e.target.value as AppLocale;
+                setBusy(true);
+                setError(null);
+                void onUpdateLocale(next)
+                  .then(() => setMessage(t('team.languageSaved')))
+                  .catch(() => setError(t('team.languageFailed')))
+                  .finally(() => setBusy(false));
+              }}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white"
+            >
+              <option value="en">{t('language.english')}</option>
+              <option value="es">{t('language.spanish')}</option>
+            </select>
+          </div>
+
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-bold uppercase text-gray-500 mb-1">Workspace package</p>
             <p className="text-[11px] text-gray-600 mb-2">

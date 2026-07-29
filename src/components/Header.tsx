@@ -4,6 +4,7 @@ import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
 import { getMemberRoles, rolesLabel } from '../lib/permissions';
+import { AppLocale, useT } from '../lib/i18n';
 
 interface HeaderProps {
   orders: CustomerOrder[];
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onBackToSeller,
   onSelectOrder
 }) => {
+  const t = useT();
   // Calculate total pending vs total completed orders
   const activeOrders = orders.filter((o) => o.status !== 'completed');
   const completedOrders = orders.filter((o) => o.status === 'completed');
@@ -77,12 +79,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </h1>
                 {fallbackActive && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono animate-pulse">
-                    Local Active
+                    {t('header.localActive')}
                   </span>
                 )}
               </div>
               <p className="text-xs text-ink-300 font-mono uppercase tracking-widest font-bold">
-                NurseryOS Workspace
+                {t('header.workspace')}
                 {(member || role) && (
                   <span className="text-ink-500 font-normal">
                     {' '}
@@ -97,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onManageWeights}
                 className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
               >
-                Weights
+                {t('header.weights')}
               </button>
             )}
             {onManageTeam && (
@@ -106,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onManageTeam}
                 className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
               >
-                Team
+                {t('header.team')}
               </button>
             )}
             {onBackToSeller && (
@@ -115,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onBackToSeller}
                 className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
               >
-                Seller home
+                {t('header.sellerHome')}
               </button>
             )}
             {onManagePackages && (
@@ -124,7 +126,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={onManagePackages}
                 className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
               >
-                Packages
+                {t('header.packages')}
               </button>
             )}
             {onSignOut && (
@@ -132,10 +134,10 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => onSignOut()}
                 className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
-                title={userEmail || 'Sign out'}
+                title={userEmail || t('common.signOut')}
               >
                 <LogOut className="h-3.5 w-3.5" />
-                Sign out
+                {t('common.signOut')}
               </button>
             )}
           </div>
@@ -148,15 +150,15 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center justify-between mb-1.5 gap-2">
                 <div className="flex items-center space-x-1.5">
                   <Clock className="h-4 w-4 text-white/70 shrink-0" />
-                  <span className="text-[10px] uppercase tracking-wider font-mono text-white/80">Pending Orders to Load</span>
+                  <span className="text-[10px] uppercase tracking-wider font-mono text-white/80">{t('header.pendingToLoad')}</span>
                 </div>
                 <span className="bg-white/15 text-white px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border border-white/20">
-                  {activeOrders.length} orders
+                  {t('header.ordersCount', { count: activeOrders.length })}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
                 {activeOrders.length === 0 ? (
-                  <span className="text-xs text-white/50 font-mono italic">No pending orders</span>
+                  <span className="text-xs text-white/50 font-mono italic">{t('header.noPending')}</span>
                 ) : (
                   activeOrders.map((o) => {
                     const isCurrentlyLoading = o.status === 'loading';
@@ -186,15 +188,15 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center justify-between mb-1.5 gap-2">
                 <div className="flex items-center space-x-1.5">
                   <CheckCircle2 className="h-4 w-4 text-white/70 shrink-0" />
-                  <span className="text-[10px] uppercase tracking-wider font-mono text-white/80">Shipped Today</span>
+                  <span className="text-[10px] uppercase tracking-wider font-mono text-white/80">{t('header.shippedToday')}</span>
                 </div>
                 <span className="bg-white/15 text-white px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 border border-white/20">
-                  {completedOrders.length} shipped
+                  {t('header.shippedCount', { count: completedOrders.length })}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
                 {completedOrders.length === 0 ? (
-                  <span className="text-xs text-white/50 font-mono italic">None shipped today</span>
+                  <span className="text-xs text-white/50 font-mono italic">{t('header.noneShippedToday')}</span>
                 ) : (
                   completedOrders.map((o) => (
                     <button

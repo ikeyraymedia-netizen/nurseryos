@@ -11,7 +11,7 @@ import {
 } from '../lib/purchaseCategories';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
-import { dueDateFromPaymentTerms } from '../lib/dates';
+import { dueDateFromPaymentTerms, toDateKey } from '../lib/dates';
 
 type BillFormLine = {
   id?: string;
@@ -75,12 +75,22 @@ export function BillEditModal({
     setVendorId(bill.vendorId || '');
     setNewVendorName('');
     setBillDate(bill.billDate || '');
-    setDueDate(bill.dueDate || '');
     setVendorInvoice(bill.vendorInvoiceNumber || '');
     setNotes(bill.notes || '');
     setLines(billToFormLines(bill));
     setError(null);
-  }, [bill]);
+
+    if (bill.dueDate) {
+      setDueDate(bill.dueDate);
+      return;
+    }
+    const live = vendors.find((v) => v.id === bill.vendorId);
+    const due = dueDateFromPaymentTerms(
+      bill.billDate || toDateKey(new Date()),
+      live?.paymentTerms
+    );
+    setDueDate(due || '');
+  }, [bill, vendors]);
 
   const pickerVendors = useMemo(() => {
     if (!bill.vendorId) return vendors;

@@ -21,7 +21,8 @@ export function parseDateKey(dateKey: string): Date | null {
 
 /**
  * Compute a due date from invoice/bill date + payment terms text.
- * Supports Net/NET 10–90, Due on Receipt, COD. Returns null if terms are unknown.
+ * Supports Net/NET 10–90, Due on Receipt, COD, and loose variants like "30 days".
+ * Returns null if terms are unknown.
  */
 export function dueDateFromPaymentTerms(
   billDateKey: string,
@@ -33,7 +34,7 @@ export function dueDateFromPaymentTerms(
   const raw = String(paymentTerms || '').trim();
   if (!raw) return null;
 
-  const normalized = raw.toLowerCase().replace(/\s+/g, ' ');
+  const normalized = raw.toLowerCase().replace(/[_/]+/g, ' ').replace(/\s+/g, ' ').trim();
 
   if (
     normalized === 'due on receipt' ||
@@ -41,17 +42,30 @@ export function dueDateFromPaymentTerms(
     normalized === 'cod' ||
     normalized === 'cod (pickup)' ||
     normalized.includes('due on receipt') ||
-    normalized === 'cash'
+    normalized.includes('upon receipt') ||
+    normalized === 'cash' ||
+    normalized === 'cash on delivery'
   ) {
     return billDateKey;
   }
 
-  const netMatch = normalized.match(/\bnet\s*[-:]?\s*(\d{1,3})\b/);
+  const netMatch =
+    normalized.match(/\bnet\s*[-:]?\s*(\d{1,3})\b/) ||
+    normalized.match(/\b(\d{1,3})\s*(?:day|days|net)\b/);
   if (netMatch) {
     const days = Number(netMatch[1]);
-    if (!Number.isFinite(days) || days < 0) return null;
+    if (!Number.isFinite(days) || days < 0 || days > 365) return null;
     base.setDate(base.getDate() + days);
     return toDateKey(base);
+  }
+
+  // Bare number only (e.g. "30")
+  if (/^\d{1,3}$/.test(normalized)) {
+    const days = Number(normalized);
+    if (days > 0 && days <= 365) {
+      base.setDate(base.getDate() + days);
+      return toDateKey(base);
+    }
   }
 
   return null;

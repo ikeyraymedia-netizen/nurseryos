@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   Building2,
   ClipboardList,
   FileText,
@@ -22,7 +23,7 @@ import {
 } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
-import { dueDateFromPaymentTerms } from '../lib/dates';
+import { dueDateFromPaymentTerms, toDateKey } from '../lib/dates';
 import {
   addVendor,
   deleteVendor,
@@ -76,7 +77,7 @@ function money(n: number) {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return toDateKey(new Date());
 }
 
 function emptyLine(): Omit<PurchaseOrderLine, 'id' | 'quantityReceived'> {
@@ -172,6 +173,7 @@ export function PurchasingWorkspace({
   const [vendorContact, setVendorContact] = useState('');
   const [vendorTerms, setVendorTerms] = useState('');
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
 
   // PO form
   const [showPoForm, setShowPoForm] = useState(false);
@@ -229,6 +231,39 @@ export function PurchasingWorkspace({
       [b.billNumber, b.vendorName, b.status, b.poNumber].join(' ').toLowerCase().includes(q)
     );
   }, [bills, q]);
+
+  const selectedVendor = useMemo(
+    () =>
+      selectedVendorId
+        ? vendors.find((v) => v.id === selectedVendorId) || null
+        : null,
+    [vendors, selectedVendorId]
+  );
+
+  const selectedVendorBills = useMemo(() => {
+    if (!selectedVendorId) return [];
+    let list = bills.filter((b) => b.vendorId === selectedVendorId);
+    if (q) {
+      list = list.filter((b) =>
+        [b.billNumber, b.vendorName, b.status, b.poNumber, b.vendorInvoiceNumber]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      );
+    }
+    return list.sort((a, b) => (b.billDate || '').localeCompare(a.billDate || ''));
+  }, [bills, selectedVendorId, q]);
+
+  const billsByVendorId = useMemo(() => {
+    const map = new Map<string, { count: number; outstanding: number }>();
+    for (const bill of bills) {
+      const cur = map.get(bill.vendorId) || { count: 0, outstanding: 0 };
+      cur.count += 1;
+      if (bill.status !== 'paid') cur.outstanding += bill.grandTotal || 0;
+      map.set(bill.vendorId, cur);
+    }
+    return map;
+  }, [bills]);
 
   const billTotals = useMemo(() => {
     let outstanding = 0;
@@ -455,16 +490,29 @@ export function PurchasingWorkspace({
     });
   }
 
+  const selectedBillVendorTerms = vendors.find((v) => v.id === billVendorId)?.paymentTerms;
+
   function applyVendorTermsToDueDate(vendorId: string, dateKey: string) {
+    if (!vendorId || vendorId === CREATE_NEW_VENDOR) return;
     const vendor = vendors.find((v) => v.id === vendorId);
-    if (!vendor?.paymentTerms) return;
-    const due = dueDateFromPaymentTerms(dateKey, vendor.paymentTerms);
+    const terms = vendor?.paymentTerms;
+    if (!terms) return;
+    const due = dueDateFromPaymentTerms(dateKey || todayKey(), terms);
     if (due) setBillDue(due);
   }
 
-  function openNewBill() {
+  // Keep due date in sync when vendor terms load/update or bill date changes
+  useEffect(() => {
+    if (!showBillForm || editingBill) return;
+    if (!billVendorId || billVendorId === CREATE_NEW_VENDOR) return;
+    if (!selectedBillVendorTerms) return;
+    const due = dueDateFromPaymentTerms(billDate || todayKey(), selectedBillVendorTerms);
+    if (due) setBillDue(due);
+  }, [showBillForm, editingBill, billVendorId, billDate, selectedBillVendorTerms]);
+
+  function openNewBill(prefillVendorId?: string) {
     setEditingBill(null);
-    setBillVendorId('');
+    setBillVendorId(prefillVendorId || '');
     setBillNewVendorName('');
     setBillDate(todayKey());
     setBillDue('');
@@ -473,6 +521,9 @@ export function PurchasingWorkspace({
     setBillLines([emptyBillLine()]);
     setShowInvoiceScanner(false);
     setShowBillForm(true);
+    if (prefillVendorId) {
+      applyVendorTermsToDueDate(prefillVendorId, todayKey());
+    }
   }
 
   function openEditBill(bill: VendorBill) {
@@ -543,11 +594,16 @@ export function PurchasingWorkspace({
       }
       if (!vendor) return;
 
+      const resolvedDue =
+        billDue.trim() ||
+        dueDateFromPaymentTerms(billDate || todayKey(), vendor.paymentTerms) ||
+        undefined;
+
       await createVendorBill({
         vendorId: vendor.id,
         vendorName: vendor.name,
         billDate: billDate || undefined,
-        dueDate: billDue.trim() ? billDue : undefined,
+        dueDate: resolvedDue,
         vendorInvoiceNumber: billVendorInvoice.trim() || undefined,
         notes: billNotes.trim() || undefined,
         items
@@ -587,6 +643,133 @@ export function PurchasingWorkspace({
     }
   }
 
+  function renderBillCard(bill: VendorBill) {
+    return (
+      <div
+        key={bill.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          if (permissions.canManageVendorBills) openEditBill(bill);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (permissions.canManageVendorBills) openEditBill(bill);
+          }
+        }}
+        className={`border rounded-xl p-3 transition text-left w-full ${
+          editingBill?.id === bill.id
+            ? 'border-ink-400 bg-ink-50/30'
+            : 'border-gray-100 hover:border-ink-200 cursor-pointer'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-gray-900">
+              {bill.billNumber}
+              {!selectedVendorId && (
+                <span className="font-semibold text-gray-500"> · {bill.vendorName}</span>
+              )}
+            </p>
+            <p className="text-xs text-gray-500">
+              {bill.billDate}
+              {bill.dueDate ? ` · ${t('purchasing.due')} ${bill.dueDate}` : ''}
+              {bill.vendorInvoiceNumber
+                ? ` · ${t('purchasing.invPrefix')} ${bill.vendorInvoiceNumber}`
+                : ''}
+              {bill.poNumber ? ` · ${bill.poNumber}` : ''} · {money(bill.grandTotal)}
+            </p>
+            {bill.status === 'paid' && (bill.paymentMethod || bill.paymentReference) && (
+              <p className="text-[11px] font-bold text-emerald-800 mt-1">
+                {formatPaymentRecord(t, bill.paymentMethod, bill.paymentReference)}
+                {bill.paidAt ? ` · ${new Date(bill.paidAt).toLocaleDateString()}` : ''}
+              </p>
+            )}
+            {bill.items?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {[
+                  ...new Set(
+                    bill.items.map((line) =>
+                      translateCategory(
+                        t,
+                        purchaseCategoryLabel(
+                          line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
+                        )
+                      )
+                    )
+                  )
+                ].map((label) => (
+                  <span
+                    key={label}
+                    className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <span
+            className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusBadge(bill.status)}`}
+          >
+            {translateStatus(t, bill.status)}
+          </span>
+        </div>
+        {bill.invoicePhotoUrl && (
+          <a
+            href={bill.invoicePhotoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block mt-1.5 text-[11px] font-bold text-ink-700 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {t('purchasing.viewScannedInvoice')}
+          </a>
+        )}
+        {permissions.canManageVendorBills && (
+          <div className="flex flex-wrap gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => openEditBill(bill)}
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-800"
+            >
+              <Pencil className="h-3 w-3" />
+              {t('purchasing.edit')}
+            </button>
+            {bill.status !== 'paid' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setMarkingPaidBill(bill)}
+                className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white"
+              >
+                {t('purchasing.markPaid')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                void run(async () => {
+                  if (
+                    !confirm(t('purchasing.deleteBillConfirm', { billNumber: bill.billNumber }))
+                  )
+                    return;
+                  if (editingBill?.id === bill.id) setEditingBill(null);
+                  await deleteVendorBill(bill.id);
+                })
+              }
+              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-rose-700"
+            >
+              {t('common.delete')}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-ink-100 p-5 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -610,7 +793,10 @@ export function PurchasingWorkspace({
             <button
               key={id}
               type="button"
-              onClick={() => setView(id)}
+              onClick={() => {
+                setView(id);
+                if (id !== 'vendors') setSelectedVendorId(null);
+              }}
               className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold ${
                 view === id
                   ? 'bg-ink-700 text-white'
@@ -630,11 +816,13 @@ export function PurchasingWorkspace({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={
-            view === 'vendors'
-              ? t('purchasing.searchVendors')
-              : view === 'orders'
-                ? t('purchasing.searchPos')
-                : t('purchasing.searchBills')
+            view === 'vendors' && selectedVendor
+              ? t('purchasing.searchVendorBills')
+              : view === 'vendors'
+                ? t('purchasing.searchVendors')
+                : view === 'orders'
+                  ? t('purchasing.searchPos')
+                  : t('purchasing.searchBills')
           }
           className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
         />
@@ -702,151 +890,305 @@ export function PurchasingWorkspace({
         </div>
       )}
 
-      {view === 'vendors' && permissions.canManageVendorBills && (
-        <div className="space-y-2">
-          <div className="flex justify-end">
+      {view === 'vendors' && selectedVendor ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-ink-100 bg-ink-50/40 p-4">
             <button
               type="button"
-              onClick={() => setShowInvoiceScanner((o) => !o)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
-            >
-              <ScanLine className="h-3.5 w-3.5" />
-              {showInvoiceScanner ? t('purchasing.hideInvoiceScan') : t('purchasing.scanInvoice')}
-            </button>
-          </div>
-          {showInvoiceScanner && (
-            <VendorInvoiceScanner
-              tenantId={tenantId}
-              vendors={vendors}
-              permissions={permissions}
-              onSaved={() => {
-                setShowInvoiceScanner(false);
-                setView('bills');
+              onClick={() => {
+                setSelectedVendorId(null);
+                setSearch('');
               }}
-            />
-          )}
-        </div>
-      )}
-
-      {view === 'vendors' && (
-        <div className="grid lg:grid-cols-5 gap-4">
-          {permissions.canEditVendors && (
-            <form
-              onSubmit={handleSaveVendor}
-              className="lg:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-2"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-ink-800 hover:text-ink-950 mb-3"
             >
-              <p className="text-xs font-bold uppercase tracking-wide text-ink-900">
-                {editingVendorId ? t('purchasing.editVendor') : t('purchasing.addVendor')}
-              </p>
-              <input
-                required
-                value={vendorName}
-                onChange={(e) => setVendorName(e.target.value)}
-                placeholder={t('purchasing.vendorName')}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
-              <input
-                value={vendorContact}
-                onChange={(e) => setVendorContact(e.target.value)}
-                placeholder={t('purchasing.contactName')}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
-              <input
-                value={vendorEmail}
-                onChange={(e) => setVendorEmail(e.target.value)}
-                placeholder={t('common.email')}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
-              <input
-                value={vendorPhone}
-                onChange={(e) => setVendorPhone(e.target.value)}
-                placeholder={t('customers.phone')}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
-              <input
-                value={vendorTerms}
-                onChange={(e) => setVendorTerms(e.target.value)}
-                placeholder={t('purchasing.paymentTerms')}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
-                >
-                  {editingVendorId ? t('common.save') : t('purchasing.addVendorBtn')}
-                </button>
-                {editingVendorId && (
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {t('purchasing.backToVendors')}
+            </button>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-gray-900 truncate">{selectedVendor.name}</h3>
+                <p className="text-xs text-gray-500">
+                  {[selectedVendor.contactName, selectedVendor.contactEmail, selectedVendor.phone]
+                    .filter(Boolean)
+                    .join(' · ') || t('purchasing.noContact')}
+                </p>
+                {selectedVendor.paymentTerms && (
+                  <p className="text-[11px] text-ink-700 mt-1">
+                    {t('purchasing.terms', { terms: selectedVendor.paymentTerms })}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                {permissions.canEditVendors && (
                   <button
                     type="button"
-                    onClick={resetVendorForm}
-                    className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600"
+                    onClick={() => {
+                      setEditingVendorId(selectedVendor.id);
+                      setVendorName(selectedVendor.name);
+                      setVendorEmail(selectedVendor.contactEmail || '');
+                      setVendorPhone(selectedVendor.phone || '');
+                      setVendorContact(selectedVendor.contactName || '');
+                      setVendorTerms(selectedVendor.paymentTerms || '');
+                      setSelectedVendorId(null);
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-800"
                   >
-                    {t('common.cancel')}
+                    <Pencil className="h-3 w-3" />
+                    {t('common.edit')}
+                  </button>
+                )}
+                {permissions.canManageVendorBills && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('bills');
+                      openNewBill(selectedVendor.id);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ink-700 text-white text-[10px] font-bold"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {t('purchasing.newBill')}
                   </button>
                 )}
               </div>
-            </form>
-          )}
-          <div className={`${permissions.canEditVendors ? 'lg:col-span-3' : 'lg:col-span-5'} space-y-2 max-h-[520px] overflow-y-auto`}>
-            {filteredVendors.length === 0 ? (
-              <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noVendors')}</p>
-            ) : (
-              filteredVendors.map((v) => (
-                <div
-                  key={v.id}
-                  className="border border-gray-100 rounded-xl p-3 hover:border-ink-200 transition"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">{v.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {[v.contactName, v.contactEmail, v.phone].filter(Boolean).join(' · ') ||
-                          t('purchasing.noContact')}
-                      </p>
-                      {v.paymentTerms && (
-                        <p className="text-[11px] text-ink-700 mt-1">
-                          {t('purchasing.terms', { terms: v.paymentTerms })}
-                        </p>
-                      )}
-                    </div>
-                    {permissions.canEditVendors && (
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingVendorId(v.id);
-                            setVendorName(v.name);
-                            setVendorEmail(v.contactEmail || '');
-                            setVendorPhone(v.phone || '');
-                            setVendorContact(v.contactName || '');
-                            setVendorTerms(v.paymentTerms || '');
-                          }}
-                          className="text-[10px] font-bold text-ink-700 px-2 py-1 rounded-lg hover:bg-ink-50"
-                        >
-                          {t('common.edit')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void run(async () => {
-                              if (!confirm(t('purchasing.deleteVendor', { name: v.name }))) return;
-                              await deleteVendor(v.id);
-                            })
-                          }
-                          className="text-[10px] font-bold text-rose-700 px-2 py-1 rounded-lg hover:bg-rose-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="rounded-lg border border-slate-100 bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase text-slate-500">
+                  {t('purchasing.bills')}
+                </p>
+                <p className="text-sm font-black text-slate-900">
+                  {billsByVendorId.get(selectedVendor.id)?.count || 0}
+                </p>
+              </div>
+              <div className="rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase text-amber-700">
+                  {t('purchasing.outstanding')}
+                </p>
+                <p className="text-sm font-black text-amber-900">
+                  {money(billsByVendorId.get(selectedVendor.id)?.outstanding || 0)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-ink-900 mb-2">
+              {t('purchasing.billsForVendor', { name: selectedVendor.name })}
+            </p>
+            <div className="space-y-2 max-h-[480px] overflow-y-auto">
+              {selectedVendorBills.length === 0 ? (
+                <p className="text-xs text-gray-500 py-8 text-center">
+                  {t('purchasing.noBillsForVendor')}
+                </p>
+              ) : (
+                selectedVendorBills.map((bill) => renderBillCard(bill))
+              )}
+            </div>
           </div>
         </div>
+      ) : (
+        view === 'vendors' && (
+          <>
+            {permissions.canManageVendorBills && (
+              <div className="space-y-2">
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowInvoiceScanner((o) => !o)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
+                  >
+                    <ScanLine className="h-3.5 w-3.5" />
+                    {showInvoiceScanner
+                      ? t('purchasing.hideInvoiceScan')
+                      : t('purchasing.scanInvoice')}
+                  </button>
+                </div>
+                {showInvoiceScanner && (
+                  <VendorInvoiceScanner
+                    tenantId={tenantId}
+                    vendors={vendors}
+                    permissions={permissions}
+                    onSaved={() => {
+                      setShowInvoiceScanner(false);
+                      setView('bills');
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+            <div className="grid lg:grid-cols-5 gap-4">
+              {permissions.canEditVendors && (
+                <form
+                  onSubmit={handleSaveVendor}
+                  className="lg:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-2"
+                >
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-900">
+                    {editingVendorId ? t('purchasing.editVendor') : t('purchasing.addVendor')}
+                  </p>
+                  <input
+                    required
+                    value={vendorName}
+                    onChange={(e) => setVendorName(e.target.value)}
+                    placeholder={t('purchasing.vendorName')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                  <input
+                    value={vendorContact}
+                    onChange={(e) => setVendorContact(e.target.value)}
+                    placeholder={t('purchasing.contactName')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                  <input
+                    value={vendorEmail}
+                    onChange={(e) => setVendorEmail(e.target.value)}
+                    placeholder={t('common.email')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                  <input
+                    value={vendorPhone}
+                    onChange={(e) => setVendorPhone(e.target.value)}
+                    placeholder={t('customers.phone')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                  <label className="block text-xs space-y-1">
+                    <span className="font-bold text-slate-600">{t('purchasing.paymentTerms')}</span>
+                    <select
+                      value={
+                        ['Net 15', 'Net 30', 'Net 45', 'Net 60', 'Due on Receipt', 'COD'].includes(
+                          vendorTerms
+                        )
+                          ? vendorTerms
+                          : ''
+                      }
+                      onChange={(e) => {
+                        if (e.target.value) setVendorTerms(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                    >
+                      <option value="">{t('purchasing.selectTerms')}</option>
+                      <option value="Net 15">Net 15</option>
+                      <option value="Net 30">Net 30</option>
+                      <option value="Net 45">Net 45</option>
+                      <option value="Net 60">Net 60</option>
+                      <option value="Due on Receipt">Due on Receipt</option>
+                      <option value="COD">COD</option>
+                    </select>
+                    <input
+                      value={vendorTerms}
+                      onChange={(e) => setVendorTerms(e.target.value)}
+                      placeholder={t('purchasing.paymentTermsPlaceholder')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
+                    >
+                      {editingVendorId ? t('common.save') : t('purchasing.addVendorBtn')}
+                    </button>
+                    {editingVendorId && (
+                      <button
+                        type="button"
+                        onClick={resetVendorForm}
+                        className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+              <div
+                className={`${permissions.canEditVendors ? 'lg:col-span-3' : 'lg:col-span-5'} space-y-2 max-h-[520px] overflow-y-auto`}
+              >
+                {filteredVendors.length === 0 ? (
+                  <p className="text-xs text-gray-500 py-8 text-center">
+                    {t('purchasing.noVendors')}
+                  </p>
+                ) : (
+                  filteredVendors.map((v) => {
+                    const stats = billsByVendorId.get(v.id);
+                    return (
+                      <div
+                        key={v.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedVendorId(v.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedVendorId(v.id);
+                          }
+                        }}
+                        className="border border-gray-100 rounded-xl p-3 hover:border-ink-200 transition cursor-pointer text-left"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-gray-900">{v.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {[v.contactName, v.contactEmail, v.phone]
+                                .filter(Boolean)
+                                .join(' · ') || t('purchasing.noContact')}
+                            </p>
+                            {v.paymentTerms && (
+                              <p className="text-[11px] text-ink-700 mt-1">
+                                {t('purchasing.terms', { terms: v.paymentTerms })}
+                              </p>
+                            )}
+                            <p className="text-[11px] text-slate-600 mt-1.5">
+                              {t('purchasing.vendorBillSummary', {
+                                count: stats?.count || 0,
+                                outstanding: money(stats?.outstanding || 0)
+                              })}
+                            </p>
+                          </div>
+                          {permissions.canEditVendors && (
+                            <div
+                              className="flex gap-1 shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingVendorId(v.id);
+                                  setVendorName(v.name);
+                                  setVendorEmail(v.contactEmail || '');
+                                  setVendorPhone(v.phone || '');
+                                  setVendorContact(v.contactName || '');
+                                  setVendorTerms(v.paymentTerms || '');
+                                }}
+                                className="text-[10px] font-bold text-ink-700 px-2 py-1 rounded-lg hover:bg-ink-50"
+                              >
+                                {t('common.edit')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void run(async () => {
+                                    if (!confirm(t('purchasing.deleteVendor', { name: v.name })))
+                                      return;
+                                    await deleteVendor(v.id);
+                                  })
+                                }
+                                className="text-[10px] font-bold text-rose-700 px-2 py-1 rounded-lg hover:bg-rose-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </>
+        )
       )}
 
       {view === 'orders' && (
@@ -1333,137 +1675,7 @@ export function PurchasingWorkspace({
             {filteredBills.length === 0 ? (
               <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noBills')}</p>
             ) : (
-              filteredBills.map((bill) => (
-                <div
-                  key={bill.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    if (permissions.canManageVendorBills) openEditBill(bill);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      if (permissions.canManageVendorBills) openEditBill(bill);
-                    }
-                  }}
-                  className={`border rounded-xl p-3 transition text-left w-full ${
-                    editingBill?.id === bill.id
-                      ? 'border-ink-400 bg-ink-50/30'
-                      : 'border-gray-100 hover:border-ink-200 cursor-pointer'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">
-                        {bill.billNumber}
-                        <span className="font-semibold text-gray-500"> · {bill.vendorName}</span>
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {bill.billDate}
-                        {bill.dueDate ? ` · ${t('purchasing.due')} ${bill.dueDate}` : ''}
-                        {bill.vendorInvoiceNumber
-                          ? ` · ${t('purchasing.invPrefix')} ${bill.vendorInvoiceNumber}`
-                          : ''}
-                        {bill.poNumber ? ` · ${bill.poNumber}` : ''} · {money(bill.grandTotal)}
-                      </p>
-                      {bill.status === 'paid' &&
-                        (bill.paymentMethod || bill.paymentReference) && (
-                          <p className="text-[11px] font-bold text-emerald-800 mt-1">
-                            {formatPaymentRecord(t, bill.paymentMethod, bill.paymentReference)}
-                            {bill.paidAt
-                              ? ` · ${new Date(bill.paidAt).toLocaleDateString()}`
-                              : ''}
-                          </p>
-                        )}
-                      {bill.items?.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {[
-                            ...new Set(
-                              bill.items.map((line) =>
-                                translateCategory(
-                                  t,
-                                  purchaseCategoryLabel(
-                                    line.category ||
-                                      (line.lineType === 'plant' ? 'Plants' : 'Other')
-                                  )
-                                )
-                              )
-                            )
-                          ].map((label) => (
-                            <span
-                              key={label}
-                              className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600"
-                            >
-                              {label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusBadge(bill.status)}`}
-                    >
-                      {translateStatus(t, bill.status)}
-                    </span>
-                  </div>
-                  {bill.invoicePhotoUrl && (
-                    <a
-                      href={bill.invoicePhotoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-block mt-1.5 text-[11px] font-bold text-ink-700 hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {t('purchasing.viewScannedInvoice')}
-                    </a>
-                  )}
-                  {permissions.canManageVendorBills && (
-                    <div
-                      className="flex flex-wrap gap-2 mt-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => openEditBill(bill)}
-                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-800"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        {t('purchasing.edit')}
-                      </button>
-                      {bill.status !== 'paid' && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setMarkingPaidBill(bill)}
-                          className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white"
-                        >
-                          {t('purchasing.markPaid')}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void run(async () => {
-                            if (
-                              !confirm(
-                                t('purchasing.deleteBillConfirm', { billNumber: bill.billNumber })
-                              )
-                            )
-                              return;
-                            if (editingBill?.id === bill.id) setEditingBill(null);
-                            await deleteVendorBill(bill.id);
-                          })
-                        }
-                        className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-rose-700"
-                      >
-                        {t('common.delete')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))
+              filteredBills.map((bill) => renderBillCard(bill))
             )}
           </div>
         </div>

@@ -5,7 +5,6 @@ import {
   orderBy,
   query,
   setDoc,
-  updateDoc,
   deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -84,9 +83,16 @@ export async function addVendor(
 export async function updateVendor(vendor: Vendor): Promise<void> {
   const tenantId = requireTenantId();
   const { id, ...rest } = vendor;
-  await updateDoc(
+  await setDoc(
     vendorDoc(tenantId, id),
-    sanitizeForFirestore({ ...rest, updatedAt: new Date().toISOString() })
+    sanitizeForFirestore({
+      ...rest,
+      id,
+      // Persist empty terms as omitted so "cleared" doesn't leave old value stuck
+      paymentTerms: rest.paymentTerms?.trim() || null,
+      updatedAt: new Date().toISOString()
+    }),
+    { merge: true }
   );
 }
 

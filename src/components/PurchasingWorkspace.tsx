@@ -22,6 +22,7 @@ import {
 } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
+import { dueDateFromPaymentTerms } from '../lib/dates';
 import {
   addVendor,
   deleteVendor,
@@ -452,6 +453,13 @@ export function PurchasingWorkspace({
       setReceivingOrder(null);
       setReceiptQty({});
     });
+  }
+
+  function applyVendorTermsToDueDate(vendorId: string, dateKey: string) {
+    const vendor = vendors.find((v) => v.id === vendorId);
+    if (!vendor?.paymentTerms) return;
+    const due = dueDateFromPaymentTerms(dateKey, vendor.paymentTerms);
+    if (due) setBillDue(due);
   }
 
   function openNewBill() {
@@ -1150,7 +1158,12 @@ export function PurchasingWorkspace({
                   vendors={vendors}
                   vendorId={billVendorId}
                   newVendorName={billNewVendorName}
-                  onVendorIdChange={setBillVendorId}
+                  onVendorIdChange={(id) => {
+                    setBillVendorId(id);
+                    if (id && id !== CREATE_NEW_VENDOR) {
+                      applyVendorTermsToDueDate(id, billDate || todayKey());
+                    }
+                  }}
                   onNewVendorNameChange={setBillNewVendorName}
                   allowCreate={permissions.canEditVendors}
                 />
@@ -1159,7 +1172,13 @@ export function PurchasingWorkspace({
                   <input
                     type="date"
                     value={billDate}
-                    onChange={(e) => setBillDate(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setBillDate(next);
+                      if (billVendorId && billVendorId !== CREATE_NEW_VENDOR) {
+                        applyVendorTermsToDueDate(billVendorId, next || todayKey());
+                      }
+                    }}
                     className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   />
                 </label>
@@ -1171,6 +1190,15 @@ export function PurchasingWorkspace({
                     onChange={(e) => setBillDue(e.target.value)}
                     className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   />
+                  {billVendorId &&
+                    billVendorId !== CREATE_NEW_VENDOR &&
+                    vendors.find((v) => v.id === billVendorId)?.paymentTerms && (
+                      <span className="mt-1 block text-[10px] text-slate-500">
+                        {t('purchasing.terms', {
+                          terms: vendors.find((v) => v.id === billVendorId)?.paymentTerms || ''
+                        })}
+                      </span>
+                    )}
                 </label>
                 <label className="block text-xs">
                   <span className="font-bold text-slate-600">{t('purchasing.vendorInvoiceNumber')}</span>

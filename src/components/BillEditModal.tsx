@@ -11,6 +11,7 @@ import {
 } from '../lib/purchaseCategories';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
+import { dueDateFromPaymentTerms } from '../lib/dates';
 
 type BillFormLine = {
   id?: string;
@@ -212,7 +213,17 @@ export function BillEditModal({
               vendors={pickerVendors}
               vendorId={vendorId}
               newVendorName={newVendorName}
-              onVendorIdChange={setVendorId}
+              onVendorIdChange={(id) => {
+                setVendorId(id);
+                if (id && id !== CREATE_NEW_VENDOR) {
+                  const vendor = pickerVendors.find((v) => v.id === id);
+                  const due = dueDateFromPaymentTerms(
+                    billDate || bill.billDate,
+                    vendor?.paymentTerms
+                  );
+                  if (due) setDueDate(due);
+                }
+              }}
               onNewVendorNameChange={setNewVendorName}
               allowCreate={canCreateVendor}
             />
@@ -221,7 +232,15 @@ export function BillEditModal({
               <input
                 type="date"
                 value={billDate}
-                onChange={(e) => setBillDate(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setBillDate(next);
+                  if (vendorId && vendorId !== CREATE_NEW_VENDOR) {
+                    const vendor = pickerVendors.find((v) => v.id === vendorId);
+                    const due = dueDateFromPaymentTerms(next || bill.billDate, vendor?.paymentTerms);
+                    if (due) setDueDate(due);
+                  }
+                }}
                 className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
             </label>
@@ -233,6 +252,15 @@ export function BillEditModal({
                 onChange={(e) => setDueDate(e.target.value)}
                 className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
+              {vendorId &&
+                vendorId !== CREATE_NEW_VENDOR &&
+                pickerVendors.find((v) => v.id === vendorId)?.paymentTerms && (
+                  <span className="mt-1 block text-[10px] text-slate-500">
+                    {t('purchasing.terms', {
+                      terms: pickerVendors.find((v) => v.id === vendorId)?.paymentTerms || ''
+                    })}
+                  </span>
+                )}
             </label>
             <label className="block text-xs">
               <span className="font-bold text-slate-600">{t('purchasing.vendorInvoiceNumber')}</span>

@@ -7,6 +7,56 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Parse YYYY-MM-DD as a local calendar date (avoids UTC off-by-one). */
+export function parseDateKey(dateKey: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || '').trim());
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+  return dt;
+}
+
+/**
+ * Compute a due date from invoice/bill date + payment terms text.
+ * Supports Net/NET 10–90, Due on Receipt, COD. Returns null if terms are unknown.
+ */
+export function dueDateFromPaymentTerms(
+  billDateKey: string,
+  paymentTerms?: string | null
+): string | null {
+  const base = parseDateKey(billDateKey);
+  if (!base) return null;
+
+  const raw = String(paymentTerms || '').trim();
+  if (!raw) return null;
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, ' ');
+
+  if (
+    normalized === 'due on receipt' ||
+    normalized === 'upon receipt' ||
+    normalized === 'cod' ||
+    normalized === 'cod (pickup)' ||
+    normalized.includes('due on receipt') ||
+    normalized === 'cash'
+  ) {
+    return billDateKey;
+  }
+
+  const netMatch = normalized.match(/\bnet\s*[-:]?\s*(\d{1,3})\b/);
+  if (netMatch) {
+    const days = Number(netMatch[1]);
+    if (!Number.isFinite(days) || days < 0) return null;
+    base.setDate(base.getDate() + days);
+    return toDateKey(base);
+  }
+
+  return null;
+}
+
 /** Sunday (local) as YYYY-MM-DD for the week containing `date`. */
 export function startOfWeekSunday(date = new Date()): string {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());

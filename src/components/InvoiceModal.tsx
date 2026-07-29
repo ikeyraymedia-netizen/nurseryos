@@ -61,6 +61,7 @@ import { PdfShareSheet } from './PdfShareSheet';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import jsPDF from 'jspdf';
 import { useT } from '../lib/i18n';
+import { dueDateFromPaymentTerms } from '../lib/dates';
 
 interface InvoiceModalProps {
   isOpen: boolean;
@@ -371,22 +372,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Handle default due date auto-calculation when date or terms change
   useEffect(() => {
     if (!invoiceDate) return;
-    
-    const baseDate = new Date(invoiceDate);
-    if (isNaN(baseDate.getTime())) return;
-
-    if (paymentTerms === 'Due on Receipt' || paymentTerms === 'COD') {
-      setDueDate(invoiceDate);
-    } else if (paymentTerms === 'Net 15' || paymentTerms === 'NET 15') {
-      baseDate.setDate(baseDate.getDate() + 15);
-      setDueDate(baseDate.toISOString().split('T')[0]);
-    } else if (paymentTerms === 'Net 30' || paymentTerms === 'NET 30') {
-      baseDate.setDate(baseDate.getDate() + 30);
-      setDueDate(baseDate.toISOString().split('T')[0]);
-    } else if (paymentTerms === 'Net 45' || paymentTerms === 'NET 45') {
-      baseDate.setDate(baseDate.getDate() + 45);
-      setDueDate(baseDate.toISOString().split('T')[0]);
-    }
+    const next = dueDateFromPaymentTerms(invoiceDate, paymentTerms);
+    if (next) setDueDate(next);
   }, [invoiceDate, paymentTerms]);
 
   // Synchronize email subject when document number / type changes

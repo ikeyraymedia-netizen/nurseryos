@@ -26,6 +26,7 @@ import {
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { useT } from '../lib/i18n';
+import { dueDateFromPaymentTerms, toDateKey } from '../lib/dates';
 
 type InputMode = 'file' | 'text';
 
@@ -480,7 +481,19 @@ export function VendorInvoiceScanner({
               vendors={vendors}
               vendorId={selectedVendorId}
               newVendorName={createVendorName}
-              onVendorIdChange={setSelectedVendorId}
+              onVendorIdChange={(id) => {
+                setSelectedVendorId(id);
+                if (!id || id === CREATE_NEW_VENDOR) return;
+                const vendor = vendors.find((v) => v.id === id);
+                if (!vendor?.paymentTerms) return;
+                // Fill due date from vendor terms when scan didn't provide one
+                setDraft((prev) => {
+                  if (!prev || prev.dueDate) return prev;
+                  const base = prev.billDate || toDateKey(new Date());
+                  const due = dueDateFromPaymentTerms(base, vendor.paymentTerms);
+                  return due ? { ...prev, dueDate: due } : prev;
+                });
+              }}
               onNewVendorNameChange={setCreateVendorName}
               allowCreate={permissions.canEditVendors}
               aiHint={draft.vendorName}

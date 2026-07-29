@@ -111,3 +111,14 @@ export async function deleteNursery(input: {
   const data = (await res.json()) as { tenantId: string; name?: string };
   return { tenantId: data.tenantId, name: data.name || input.confirmName };
 }
+
+export async function resendOwnerPasswordEmail(tenantId: string): Promise<{ ownerEmail: string }> {
+  const res = await fetch('/api/platform/resend-owner-password', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ tenantId })
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { ownerEmail?: string };
+  return { ownerEmail: data.ownerEmail || '' };
+}

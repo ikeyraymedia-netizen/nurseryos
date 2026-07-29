@@ -139,6 +139,89 @@ async function generateOwnerPasswordResetLink(email: string, continueUrl: string
   }
 }
 
+async function sendOwnerWelcomeEmail(params: {
+  email: string;
+  displayName?: string;
+  nurseryName: string;
+  continueUrl: string;
+}): Promise<{ resetLink: string; messageId: string }> {
+  const resetLink = await generateOwnerPasswordResetLink(params.email, params.continueUrl);
+  const displayName = (params.displayName || '').trim();
+  const nurseryName = params.nurseryName.trim();
+
+  const text = [
+    `Hi${displayName ? ` ${displayName}` : ''},`,
+    '',
+    `Your NurseryOS workspace for ${nurseryName} is ready.`,
+    '',
+    'Set your password and sign in here:',
+    resetLink,
+    '',
+    'If you did not request access, you can ignore this email.',
+    '',
+    '— NurseryOS'
+  ].join('\n');
+
+  const html = `
+    <p>Hi${displayName ? ` ${escapeHtml(displayName)}` : ''},</p>
+    <p>Your NurseryOS workspace for <strong>${escapeHtml(nurseryName)}</strong> is ready.</p>
+    <p><a href="${escapeHtml(resetLink)}">Set your password and sign in</a></p>
+    <p style="color:#64748b;font-size:12px;">If the button does not work, copy this link:<br/>${escapeHtml(resetLink)}</p>
+    <p>— NurseryOS</p>
+  `;
+
+  const messageId = await sendViaResend({
+    fromName: 'NurseryOS',
+    to: params.email,
+    subject: `Your NurseryOS workspace is ready — ${nurseryName}`,
+    text,
+    html
+  });
+
+  return { resetLink, messageId };
+}
+
+async function resolveNurseryOwner(tenantId: string): Promise<{
+  uid: string;
+  email: string;
+  displayName: string;
+  nurseryName: string;
+}> {
+  const db = getAdminDb();
+  const tenantSnap = await db.doc(`tenants/${tenantId}`).get();
+  if (!tenantSnap.exists) {
+    throw Object.assign(new Error('Nursery not found.'), { status: 404 });
+  }
+  const tenant = tenantSnap.data() || {};
+  const nurseryName = String(tenant.name || tenantId).trim();
+  const ownerId = String(tenant.ownerId || '').trim();
+  if (!ownerId) {
+    throw Object.assign(new Error('This nursery has no owner on file.'), { status: 400 });
+  }
+
+  const memberSnap = await db.doc(`tenants/${tenantId}/members/${ownerId}`).get();
+  const member = memberSnap.exists ? memberSnap.data() || {} : {};
+  let email = String(member.email || '').trim().toLowerCase();
+  let displayName = String(member.displayName || '').trim();
+
+  try {
+    const authUser = await admin.auth().getUser(ownerId);
+    if (!email && authUser.email) email = authUser.email.toLowerCase();
+    if (!displayName && authUser.displayName) displayName = authUser.displayName;
+  } catch {
+    // Auth user missing — fall through
+  }
+
+  if (!email || !looksLikeEmail(email)) {
+    throw Object.assign(
+      new Error('Could not find a valid owner email for this nursery.'),
+      { status: 400 }
+    );
+  }
+
+  return { uid: ownerId, email, displayName, nurseryName };
+}
+
 function platformFromAddress(): string {
   const raw = process.env.RESEND_FROM_EMAIL?.trim();
   if (raw) return raw;
@@ -455,36 +538,14 @@ export function registerPlatformRoutes(app: Express) {
       let welcomeWarning: string | null = null;
       if (sendWelcome) {
         try {
-          resetLink = await generateOwnerPasswordResetLink(email, appBaseUrl(req));
-
-          const text = [
-            `Hi${displayName ? ` ${displayName}` : ''},`,
-            '',
-            `Your NurseryOS workspace for ${nurseryName} is ready.`,
-            '',
-            'Set your password and sign in here:',
-            resetLink,
-            '',
-            'If you did not request access, you can ignore this email.',
-            '',
-            '— NurseryOS'
-          ].join('\n');
-
-          const html = `
-          <p>Hi${displayName ? ` ${escapeHtml(displayName)}` : ''},</p>
-          <p>Your NurseryOS workspace for <strong>${escapeHtml(nurseryName)}</strong> is ready.</p>
-          <p><a href="${escapeHtml(resetLink)}">Set your password and sign in</a></p>
-          <p style="color:#64748b;font-size:12px;">If the button does not work, copy this link:<br/>${escapeHtml(resetLink)}</p>
-          <p>— NurseryOS</p>
-        `;
-
-          welcomeEmailId = await sendViaResend({
-            fromName: 'NurseryOS',
-            to: email,
-            subject: `Your NurseryOS workspace is ready — ${nurseryName}`,
-            text,
-            html
+          const welcome = await sendOwnerWelcomeEmail({
+            email,
+            displayName,
+            nurseryName,
+            continueUrl: appBaseUrl(req)
           });
+          resetLink = welcome.resetLink;
+          welcomeEmailId = welcome.messageId;
         } catch (welcomeErr: any) {
           console.error('[platform] nursery created but welcome email failed', welcomeErr);
           welcomeWarning =
@@ -497,11 +558,38 @@ export function registerPlatformRoutes(app: Express) {
         success: true,
         tenantId,
         ownerUid,
+        ownerEmail: email,
         userCreated,
         modules,
         welcomeEmailId,
         resetLinkSent: Boolean(resetLink && welcomeEmailId),
         warning: welcomeWarning
+      });
+    });
+  });
+
+  app.post('/api/platform/resend-owner-password', (req, res) => {
+    withPlatformAdmin(req, res, async () => {
+      const tenantId = String(req.body?.tenantId || '').trim();
+      if (!tenantId) {
+        res.status(400).json({ error: 'Missing nursery id.' });
+        return;
+      }
+
+      getAdminDb();
+      const owner = await resolveNurseryOwner(tenantId);
+      const welcome = await sendOwnerWelcomeEmail({
+        email: owner.email,
+        displayName: owner.displayName,
+        nurseryName: owner.nurseryName,
+        continueUrl: appBaseUrl(req)
+      });
+
+      res.json({
+        success: true,
+        tenantId,
+        ownerEmail: owner.email,
+        messageId: welcome.messageId
       });
     });
   });

@@ -30,7 +30,8 @@ import {
   declineAccessRequest,
   deleteNursery,
   listAccessRequests,
-  provisionNursery
+  provisionNursery,
+  resendOwnerPasswordEmail
 } from '../lib/platformAdmin';
 import { BrandLogo } from './BrandLogo';
 
@@ -79,6 +80,7 @@ export function PlatformDashboard({
   const [createRequestId, setCreateRequestId] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resendingPassword, setResendingPassword] = useState(false);
 
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
@@ -228,6 +230,25 @@ export function PlatformDashboard({
       setError(err?.message || 'Could not create nursery.');
     } finally {
       setCreateBusy(false);
+    }
+  }
+
+  async function handleResendPassword() {
+    if (!selected) return;
+    setResendingPassword(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await resendOwnerPasswordEmail(selected.id);
+      setMessage(
+        result.ownerEmail
+          ? `Set-password email resent to ${result.ownerEmail}. Ask them to check inbox and spam.`
+          : 'Set-password email resent. Ask them to check inbox and spam.'
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Could not resend password email.');
+    } finally {
+      setResendingPassword(false);
     }
   }
 
@@ -834,13 +855,31 @@ export function PlatformDashboard({
                   </button>
                 </div>
 
+                <div className="rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-3 space-y-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    Owner login
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    If they never got the welcome email, resend a set-password link to the nursery
+                    owner.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={resendingPassword || deleting || saving}
+                    onClick={() => void handleResendPassword()}
+                    className="px-4 py-2 rounded-lg text-xs font-black bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-50"
+                  >
+                    {resendingPassword ? 'Sending…' : 'Resend set-password email'}
+                  </button>
+                </div>
+
                 {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
                 {message && <p className="text-xs text-ink-300 font-semibold">{message}</p>}
 
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
-                    disabled={deleting || saving}
+                    disabled={deleting || saving || resendingPassword}
                     onClick={() => void handleDeleteNursery()}
                     className="px-4 py-2.5 rounded-xl text-xs font-black border border-rose-800/60 bg-rose-950/40 text-rose-300 hover:bg-rose-900/50 disabled:opacity-50"
                   >
@@ -848,7 +887,7 @@ export function PlatformDashboard({
                   </button>
                   <button
                     type="button"
-                    disabled={saving || deleting}
+                    disabled={saving || deleting || resendingPassword}
                     onClick={handleSave}
                     className="px-5 py-2.5 rounded-xl text-xs font-black bg-ink-600 text-white hover:bg-ink-500 disabled:opacity-50"
                   >

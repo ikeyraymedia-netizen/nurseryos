@@ -105,6 +105,7 @@ export function InventoryMatchModal({
         quantityAvailable: Math.max(0, createQty),
         weeksUntilReady: null,
         chemicals: [],
+        fertilizers: [],
         cutBackAt: null,
         notes: ''
       });
@@ -115,6 +116,7 @@ export function InventoryMatchModal({
         quantityAvailable: Math.max(0, createQty),
         weeksUntilReady: null,
         chemicals: [],
+        fertilizers: [],
         cutBackAt: null,
         notes: '',
         dateCreated: new Date().toISOString(),

@@ -237,6 +237,12 @@ export interface ChemicalApplication {
   notes?: string;
 }
 
+export interface FertilizerApplication {
+  fertilizerName: string;
+  appliedAt: string; // ISO date
+  notes?: string;
+}
+
 export interface InventoryPlant {
   id: string;
   plantName: string;
@@ -244,6 +250,7 @@ export interface InventoryPlant {
   quantityAvailable: number;
   weeksUntilReady?: number | null;
   chemicals: ChemicalApplication[];
+  fertilizers?: FertilizerApplication[];
   cutBackAt?: string | null;
   cutBackNotes?: string;
   location?: string;

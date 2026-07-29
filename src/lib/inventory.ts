@@ -11,7 +11,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { ChemicalApplication, InventoryPlant } from '../types';
+import { ChemicalApplication, FertilizerApplication, InventoryPlant } from '../types';
 import {
   findMatchingInventoryPlants,
   normalizeContainerSize,
@@ -316,6 +316,7 @@ export async function addInventoryPlant(
     ...plant,
     id,
     chemicals: plant.chemicals || [],
+    fertilizers: plant.fertilizers || [],
     dateCreated: now,
     dateUpdated: now
   };
@@ -376,6 +377,18 @@ export async function addChemicalApplication(
   await updateInventoryPlant(updated);
 }
 
+export async function addFertilizerApplication(
+  _plantId: string,
+  fertilizer: FertilizerApplication,
+  currentPlant: InventoryPlant
+): Promise<void> {
+  const updated: InventoryPlant = {
+    ...currentPlant,
+    fertilizers: [...(currentPlant.fertilizers || []), fertilizer]
+  };
+  await updateInventoryPlant(updated);
+}
+
 export function parseCsvInventory(text: string): Array<Omit<InventoryPlant, 'id' | 'dateCreated' | 'dateUpdated'>> {
   return parseInventoryCsvText(text);
 }
@@ -404,6 +417,7 @@ export async function bulkImportInventoryPlants(
       ...plant,
       id,
       chemicals: plant.chemicals || [],
+      fertilizers: plant.fertilizers || [],
       dateCreated: now,
       dateUpdated: now
     };

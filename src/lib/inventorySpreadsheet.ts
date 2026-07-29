@@ -14,6 +14,7 @@ export type SpreadsheetInventoryItem = {
   listPrice?: number | null;
   notes: string;
   chemicals: [];
+  fertilizers: [];
   cutBackAt: null;
 };
 
@@ -191,6 +192,7 @@ function mapTableToInventory(table: string[][]): SpreadsheetInventoryItem[] {
           ? Number(String(row[weeksIdx]).replace(/[^\d.-]/g, '')) || null
           : null,
       chemicals: [],
+      fertilizers: [],
       cutBackAt: null,
       notes: notesIdx >= 0 ? String(row[notesIdx] || '').trim() : ''
     };
@@ -357,6 +359,7 @@ export function parseCatalogMatrix(table: string[][]): SpreadsheetInventoryItem[
           quantityAvailable: 0,
           weeksUntilReady: null,
           chemicals: [],
+          fertilizers: [],
           cutBackAt: null,
           listPrice,
           notes: listPrice != null ? `List price $${listPrice.toFixed(2)}` : ''
@@ -475,6 +478,7 @@ export function parseQuickbooksProductList(table: string[][]): SpreadsheetInvent
       quantityAvailable: 0,
       weeksUntilReady: null,
       chemicals: [],
+      fertilizers: [],
       cutBackAt: null,
       listPrice,
       notes: notesParts.join(' · ')

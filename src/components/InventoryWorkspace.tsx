@@ -4,6 +4,7 @@ import {
   Upload,
   Plus,
   Droplets,
+  Leaf,
   Scissors,
   Search,
   RefreshCw,
@@ -18,6 +19,7 @@ import { CustomerOrder, InventoryPlant, Truck as TruckType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
+  addFertilizerApplication,
   addInventoryPlant,
   bulkImportInventoryPlants,
   deleteAllInventoryPlants,
@@ -153,6 +155,10 @@ export function InventoryWorkspace({
   const [chemDate, setChemDate] = useState(new Date().toISOString().split('T')[0]);
   const [chemNotes, setChemNotes] = useState('');
 
+  const [fertName, setFertName] = useState('');
+  const [fertDate, setFertDate] = useState(new Date().toISOString().split('T')[0]);
+  const [fertNotes, setFertNotes] = useState('');
+
   useEffect(() => {
     return subscribeToInventory(setPlants);
   }, []);
@@ -209,6 +215,7 @@ export function InventoryWorkspace({
         quantityAvailable: newQty,
         weeksUntilReady: newWeeks === '' ? null : Number(newWeeks),
         chemicals: [],
+        fertilizers: [],
         cutBackAt: null,
         location: newLocation.trim() || undefined,
         notes: ''
@@ -518,6 +525,32 @@ export function InventoryWorkspace({
       setMessageIsError(false);
     } catch (err: any) {
       setMessage(err?.message || t('inventory.chemicalFailed'));
+      setMessageIsError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAddFertilizer(e: FormEvent) {
+    e.preventDefault();
+    if (!selected || !permissions.canEditInventory || !fertName.trim()) return;
+    setBusy(true);
+    try {
+      await addFertilizerApplication(
+        selected.id,
+        {
+          fertilizerName: fertName.trim(),
+          appliedAt: fertDate,
+          notes: fertNotes.trim() || undefined
+        },
+        selected
+      );
+      setFertName('');
+      setFertNotes('');
+      setMessage(t('inventory.fertilizerRecorded'));
+      setMessageIsError(false);
+    } catch (err: any) {
+      setMessage(err?.message || t('inventory.fertilizerFailed'));
       setMessageIsError(true);
     } finally {
       setBusy(false);
@@ -1064,6 +1097,52 @@ export function InventoryWorkspace({
                       className="rounded-lg bg-ink-700 text-white text-xs font-bold"
                     >
                       {t('inventory.logSpray')}
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase text-gray-500 mb-2 flex items-center gap-1">
+                  <Leaf className="h-3.5 w-3.5" /> {t('inventory.fertilizerHistory')}
+                </p>
+                <div className="space-y-2 mb-3">
+                  {(selected.fertilizers || []).length === 0 ? (
+                    <p className="text-xs text-gray-400">{t('inventory.noFertilizers')}</p>
+                  ) : (
+                    (selected.fertilizers || []).map((f, i) => (
+                      <div
+                        key={i}
+                        className="text-xs bg-emerald-50/60 border border-emerald-100 rounded-lg px-3 py-2"
+                      >
+                        <span className="font-bold text-gray-800">{f.fertilizerName}</span>
+                        <span className="text-gray-500"> • {f.appliedAt.split('T')[0]}</span>
+                        {f.notes && <p className="text-gray-500 mt-0.5">{f.notes}</p>}
+                      </div>
+                    ))
+                  )}
+                </div>
+                {permissions.canEditInventory && (
+                  <form onSubmit={handleAddFertilizer} className="grid sm:grid-cols-3 gap-2">
+                    <input
+                      required
+                      value={fertName}
+                      onChange={(e) => setFertName(e.target.value)}
+                      placeholder={t('inventory.fertilizerKind')}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="date"
+                      value={fertDate}
+                      onChange={(e) => setFertDate(e.target.value)}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="rounded-lg bg-emerald-700 text-white text-xs font-bold"
+                    >
+                      {t('inventory.logFertilizer')}
                     </button>
                   </form>
                 )}

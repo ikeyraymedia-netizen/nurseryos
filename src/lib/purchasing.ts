@@ -314,6 +314,7 @@ async function applyReceivedQtyToInventory(
     containerSize: input.containerSize.trim(),
     quantityAvailable: input.quantity,
     chemicals: [],
+    fertilizers: [],
     notes: input.unitCost != null ? `Received @ $${input.unitCost.toFixed(2)}` : undefined
   });
   inventory.push({
@@ -322,6 +323,7 @@ async function applyReceivedQtyToInventory(
     containerSize: input.containerSize.trim(),
     quantityAvailable: input.quantity,
     chemicals: [],
+    fertilizers: [],
     dateCreated: new Date().toISOString(),
     dateUpdated: new Date().toISOString()
   });

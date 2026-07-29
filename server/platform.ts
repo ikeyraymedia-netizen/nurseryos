@@ -505,4 +505,73 @@ export function registerPlatformRoutes(app: Express) {
       });
     });
   });
+
+  app.post('/api/platform/delete-nursery', (req, res) => {
+    withPlatformAdmin(req, res, async () => {
+      const tenantId = String(req.body?.tenantId || '').trim();
+      const confirmName = String(req.body?.confirmName || '').trim();
+      if (!tenantId) {
+        res.status(400).json({ error: 'Missing nursery id.' });
+        return;
+      }
+
+      const db = getAdminDb();
+      const tenantRef = db.doc(`tenants/${tenantId}`);
+      const tenantSnap = await tenantRef.get();
+      if (!tenantSnap.exists) {
+        res.status(404).json({ error: 'Nursery not found.' });
+        return;
+      }
+
+      const tenantName = String(tenantSnap.data()?.name || '').trim();
+      if (confirmName && confirmName !== tenantName) {
+        res.status(400).json({
+          error: `Name does not match. Type "${tenantName}" exactly to delete.`
+        });
+        return;
+      }
+
+      // Clear activeTenantId for any users pointing at this nursery
+      const usersSnap = await db.collection('users').where('activeTenantId', '==', tenantId).get();
+      if (!usersSnap.empty) {
+        let batch = db.batch();
+        let ops = 0;
+        for (const userDoc of usersSnap.docs) {
+          batch.update(userDoc.ref, { activeTenantId: null });
+          ops += 1;
+          if (ops >= 400) {
+            await batch.commit();
+            batch = db.batch();
+            ops = 0;
+          }
+        }
+        if (ops > 0) await batch.commit();
+      }
+
+      // Remove invite code index docs for this nursery
+      const inviteCodesSnap = await db
+        .collection('inviteCodes')
+        .where('tenantId', '==', tenantId)
+        .get();
+      if (!inviteCodesSnap.empty) {
+        let batch = db.batch();
+        let ops = 0;
+        for (const codeDoc of inviteCodesSnap.docs) {
+          batch.delete(codeDoc.ref);
+          ops += 1;
+          if (ops >= 400) {
+            await batch.commit();
+            batch = db.batch();
+            ops = 0;
+          }
+        }
+        if (ops > 0) await batch.commit();
+      }
+
+      // Recursive delete of tenant doc + all subcollections
+      await db.recursiveDelete(tenantRef);
+
+      res.json({ success: true, tenantId, name: tenantName });
+    });
+  });
 }

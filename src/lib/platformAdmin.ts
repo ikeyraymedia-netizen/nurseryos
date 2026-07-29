@@ -94,3 +94,20 @@ export async function provisionNursery(input: {
     warning: data.warning || null
   };
 }
+
+export async function deleteNursery(input: {
+  tenantId: string;
+  confirmName: string;
+}): Promise<{ tenantId: string; name: string }> {
+  const res = await fetch('/api/platform/delete-nursery', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      tenantId: input.tenantId,
+      confirmName: input.confirmName.trim()
+    })
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { tenantId: string; name?: string };
+  return { tenantId: data.tenantId, name: data.name || input.confirmName };
+}

@@ -28,6 +28,7 @@ import {
 import {
   AccessRequest,
   declineAccessRequest,
+  deleteNursery,
   listAccessRequests,
   provisionNursery
 } from '../lib/platformAdmin';
@@ -77,6 +78,7 @@ export function PlatformDashboard({
   const [createModules, setCreateModules] = useState<TenantModuleId[]>([...DEFAULT_CREATE_MODULES]);
   const [createRequestId, setCreateRequestId] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
@@ -226,6 +228,38 @@ export function PlatformDashboard({
       setError(err?.message || 'Could not create nursery.');
     } finally {
       setCreateBusy(false);
+    }
+  }
+
+  async function handleDeleteNursery() {
+    if (!selected) return;
+    const typed = window.prompt(
+      `This permanently deletes "${selected.name}" and all of its data (orders, trucks, inventory, bills, team, etc.).\n\nType the nursery name exactly to confirm:`
+    );
+    if (typed == null) return;
+    if (typed.trim() !== selected.name.trim()) {
+      setError('Delete cancelled — the name did not match.');
+      setMessage(null);
+      return;
+    }
+    if (!window.confirm(`Really delete ${selected.name}? This cannot be undone.`)) return;
+
+    setDeleting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await deleteNursery({
+        tenantId: selected.id,
+        confirmName: selected.name
+      });
+      setMessage(`Deleted nursery "${result.name}".`);
+      setSelectedId(null);
+      setDraft([]);
+      await refresh();
+    } catch (err: any) {
+      setError(err?.message || 'Could not delete nursery.');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -803,14 +837,24 @@ export function PlatformDashboard({
                 {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
                 {message && <p className="text-xs text-ink-300 font-semibold">{message}</p>}
 
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleSave}
-                  className="w-full sm:w-auto self-end px-5 py-2.5 rounded-xl text-xs font-black bg-ink-600 text-white hover:bg-ink-500 disabled:opacity-50"
-                >
-                  {saving ? 'Saving…' : 'Save package'}
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    disabled={deleting || saving}
+                    onClick={() => void handleDeleteNursery()}
+                    className="px-4 py-2.5 rounded-xl text-xs font-black border border-rose-800/60 bg-rose-950/40 text-rose-300 hover:bg-rose-900/50 disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting…' : 'Delete nursery'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || deleting}
+                    onClick={handleSave}
+                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-ink-600 text-white hover:bg-ink-500 disabled:opacity-50"
+                  >
+                    {saving ? 'Saving…' : 'Save package'}
+                  </button>
+                </div>
               </div>
             )}
           </section>

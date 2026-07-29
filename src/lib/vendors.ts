@@ -88,8 +88,9 @@ export async function updateVendor(vendor: Vendor): Promise<void> {
     sanitizeForFirestore({
       ...rest,
       id,
-      // Persist empty terms as omitted so "cleared" doesn't leave old value stuck
+      // Persist empty terms/address as null so cleared fields don't leave old values
       paymentTerms: rest.paymentTerms?.trim() || null,
+      billingAddress: rest.billingAddress?.trim() || null,
       updatedAt: new Date().toISOString()
     }),
     { merge: true }

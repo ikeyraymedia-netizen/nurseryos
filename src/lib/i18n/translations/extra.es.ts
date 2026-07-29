@@ -792,6 +792,8 @@ const extra = {
     addVendor: 'Agregar proveedor',
     vendorName: 'Nombre del proveedor',
     contactName: 'Nombre de contacto',
+    vendorAddress: 'Dirección',
+    vendorAddressPlaceholder: 'Calle, ciudad, estado, código postal',
     paymentTerms: 'Términos de pago',
     selectTerms: 'Seleccionar términos…',
     paymentTermsPlaceholder: 'Ingrese términos personalizados',

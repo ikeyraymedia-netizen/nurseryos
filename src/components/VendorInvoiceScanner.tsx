@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Camera,
@@ -70,7 +70,18 @@ function normalizeDate(value: unknown): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const parsed = Date.parse(raw);
   if (Number.isNaN(parsed)) return '';
-  return new Date(parsed).toISOString().slice(0, 10);
+  return toDateKey(new Date(parsed));
+}
+
+/** Prefer invoice due date; otherwise compute from the vendor's saved payment terms. */
+function resolveDueDate(
+  billDate: string,
+  invoiceDueDate: string,
+  paymentTerms?: string | null
+): string {
+  if (invoiceDueDate) return invoiceDueDate;
+  if (!paymentTerms) return '';
+  return dueDateFromPaymentTerms(billDate || toDateKey(new Date()), paymentTerms) || '';
 }
 
 export function VendorInvoiceScanner({
@@ -100,6 +111,18 @@ export function VendorInvoiceScanner({
         : null,
     [vendors, selectedVendorId]
   );
+
+  // Auto-matched vendors skip VendorPicker onChange — fill due from saved terms when blank.
+  useEffect(() => {
+    if (!draft || !selectedVendor?.paymentTerms) return;
+    if (draft.dueDate) return;
+    const due = dueDateFromPaymentTerms(
+      draft.billDate || toDateKey(new Date()),
+      selectedVendor.paymentTerms
+    );
+    if (!due) return;
+    setDraft((prev) => (prev && !prev.dueDate ? { ...prev, dueDate: due } : prev));
+  }, [draft?.dueDate, draft?.billDate, selectedVendor?.id, selectedVendor?.paymentTerms]);
 
   const lineSubtotal = useMemo(() => {
     if (!draft) return 0;
@@ -228,6 +251,9 @@ export function VendorInvoiceScanner({
 
       const vendorName = String(result.vendorName || '').trim() || t('scanner.unknownVendor');
       const match = findMatchingVendors(vendorName, vendors);
+      const billDate = normalizeDate(result.billDate) || toDateKey(new Date());
+      const invoiceDue = normalizeDate(result.dueDate);
+      const dueDate = resolveDueDate(billDate, invoiceDue, match.best?.paymentTerms);
 
       setDraft({
         vendorName,
@@ -235,8 +261,8 @@ export function VendorInvoiceScanner({
           String(result.vendorInvoiceNumber || '').trim() === 'N/A'
             ? ''
             : String(result.vendorInvoiceNumber || '').trim(),
-        billDate: normalizeDate(result.billDate),
-        dueDate: normalizeDate(result.dueDate),
+        billDate,
+        dueDate,
         notes: String(result.notes || '').trim(),
         items,
         matchConfidence: match.confidence,
@@ -323,12 +349,15 @@ export function VendorInvoiceScanner({
       }
 
       setStatusMessage(t('scanner.saving'));
+      const billDate = draft.billDate || toDateKey(new Date());
+      const dueDate =
+        resolveDueDate(billDate, draft.dueDate, vendor.paymentTerms) || undefined;
       const savedId = await createVendorBill({
         id: billId,
         vendorId: vendor.id,
         vendorName: vendor.name,
         billDate: draft.billDate || undefined,
-        dueDate: draft.dueDate || undefined,
+        dueDate,
         notes: draft.notes || undefined,
         vendorInvoiceNumber: draft.vendorInvoiceNumber || undefined,
         invoicePhotoUrl,
@@ -486,9 +515,10 @@ export function VendorInvoiceScanner({
                 if (!id || id === CREATE_NEW_VENDOR) return;
                 const vendor = vendors.find((v) => v.id === id);
                 if (!vendor?.paymentTerms) return;
-                // Fill due date from vendor terms when scan didn't provide one
                 setDraft((prev) => {
-                  if (!prev || prev.dueDate) return prev;
+                  if (!prev) return prev;
+                  // Always apply this vendor's terms when invoice didn't include a due date
+                  // (or user switched vendors — use the newly selected vendor's terms).
                   const base = prev.billDate || toDateKey(new Date());
                   const due = dueDateFromPaymentTerms(base, vendor.paymentTerms);
                   return due ? { ...prev, dueDate: due } : prev;
@@ -524,7 +554,16 @@ export function VendorInvoiceScanner({
               <input
                 type="date"
                 value={draft.billDate}
-                onChange={(e) => setDraft({ ...draft, billDate: e.target.value })}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  const due = selectedVendor?.paymentTerms
+                    ? dueDateFromPaymentTerms(
+                        next || toDateKey(new Date()),
+                        selectedVendor.paymentTerms
+                      ) || draft.dueDate
+                    : draft.dueDate;
+                  setDraft({ ...draft, billDate: next, dueDate: due });
+                }}
                 className="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
               />
             </label>
@@ -536,6 +575,11 @@ export function VendorInvoiceScanner({
                 onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })}
                 className="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
               />
+              {selectedVendor?.paymentTerms && (
+                <span className="mt-1 block text-[10px] text-slate-500">
+                  {t('purchasing.terms', { terms: selectedVendor.paymentTerms })}
+                </span>
+              )}
             </label>
           </div>
 

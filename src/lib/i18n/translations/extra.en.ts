@@ -785,6 +785,8 @@ const extra = {
     addVendor: 'Add vendor',
     vendorName: 'Vendor name',
     contactName: 'Contact name',
+    vendorAddress: 'Address',
+    vendorAddressPlaceholder: 'Street, city, state, ZIP',
     paymentTerms: 'Payment terms',
     selectTerms: 'Select terms…',
     paymentTermsPlaceholder: 'Enter custom terms',

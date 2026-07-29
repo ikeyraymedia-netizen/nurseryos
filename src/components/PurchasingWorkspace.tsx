@@ -186,6 +186,7 @@ export function PurchasingWorkspace({
   const [vendorEmail, setVendorEmail] = useState('');
   const [vendorPhone, setVendorPhone] = useState('');
   const [vendorContact, setVendorContact] = useState('');
+  const [vendorAddress, setVendorAddress] = useState('');
   const [vendorTerms, setVendorTerms] = useState('');
   const [vendorTermsIsCustom, setVendorTermsIsCustom] = useState(false);
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
@@ -230,7 +231,10 @@ export function PurchasingWorkspace({
   const filteredVendors = useMemo(() => {
     if (!q) return vendors;
     return vendors.filter((v) =>
-      [v.name, v.contactEmail, v.phone, v.contactName].join(' ').toLowerCase().includes(q)
+      [v.name, v.contactEmail, v.phone, v.contactName, v.billingAddress]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
     );
   }, [vendors, q]);
 
@@ -367,6 +371,7 @@ export function PurchasingWorkspace({
     setVendorEmail('');
     setVendorPhone('');
     setVendorContact('');
+    setVendorAddress('');
     setVendorTerms('');
     setVendorTermsIsCustom(false);
     setEditingVendorId(null);
@@ -387,6 +392,7 @@ export function PurchasingWorkspace({
           contactEmail: vendorEmail.trim() || undefined,
           phone: vendorPhone.trim() || undefined,
           contactName: vendorContact.trim() || undefined,
+          billingAddress: vendorAddress.trim() || undefined,
           paymentTerms: vendorTerms.trim() || undefined
         });
       } else {
@@ -395,6 +401,7 @@ export function PurchasingWorkspace({
           contactEmail: vendorEmail.trim() || undefined,
           phone: vendorPhone.trim() || undefined,
           contactName: vendorContact.trim() || undefined,
+          billingAddress: vendorAddress.trim() || undefined,
           paymentTerms: vendorTerms.trim() || undefined
         });
       }
@@ -945,6 +952,11 @@ export function PurchasingWorkspace({
                     .filter(Boolean)
                     .join(' · ') || t('purchasing.noContact')}
                 </p>
+                {selectedVendor.billingAddress?.trim() && (
+                  <p className="text-xs text-gray-600 mt-1.5 whitespace-pre-line">
+                    {selectedVendor.billingAddress.trim()}
+                  </p>
+                )}
                 {selectedVendor.paymentTerms && (
                   <p className="text-[11px] text-ink-700 mt-1">
                     {t('purchasing.terms', { terms: selectedVendor.paymentTerms })}
@@ -961,6 +973,7 @@ export function PurchasingWorkspace({
                       setVendorEmail(selectedVendor.contactEmail || '');
                       setVendorPhone(selectedVendor.phone || '');
                       setVendorContact(selectedVendor.contactName || '');
+                      setVendorAddress(selectedVendor.billingAddress || '');
                       loadVendorTerms(selectedVendor.paymentTerms);
                       setSelectedVendorId(null);
                     }}
@@ -1086,6 +1099,16 @@ export function PurchasingWorkspace({
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   />
                   <label className="block text-xs space-y-1">
+                    <span className="font-bold text-slate-600">{t('purchasing.vendorAddress')}</span>
+                    <textarea
+                      value={vendorAddress}
+                      onChange={(e) => setVendorAddress(e.target.value)}
+                      placeholder={t('purchasing.vendorAddressPlaceholder')}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    />
+                  </label>
+                  <label className="block text-xs space-y-1">
                     <span className="font-bold text-slate-600">{t('purchasing.paymentTerms')}</span>
                     <select
                       value={
@@ -1176,6 +1199,11 @@ export function PurchasingWorkspace({
                                 .filter(Boolean)
                                 .join(' · ') || t('purchasing.noContact')}
                             </p>
+                            {v.billingAddress?.trim() && (
+                              <p className="text-[11px] text-gray-600 mt-1 whitespace-pre-line line-clamp-2">
+                                {v.billingAddress.trim()}
+                              </p>
+                            )}
                             {v.paymentTerms && (
                               <p className="text-[11px] text-ink-700 mt-1">
                                 {t('purchasing.terms', { terms: v.paymentTerms })}
@@ -1201,6 +1229,7 @@ export function PurchasingWorkspace({
                                   setVendorEmail(v.contactEmail || '');
                                   setVendorPhone(v.phone || '');
                                   setVendorContact(v.contactName || '');
+                                  setVendorAddress(v.billingAddress || '');
                                   loadVendorTerms(v.paymentTerms);
                                 }}
                                 className="text-[10px] font-bold text-ink-700 px-2 py-1 rounded-lg hover:bg-ink-50"

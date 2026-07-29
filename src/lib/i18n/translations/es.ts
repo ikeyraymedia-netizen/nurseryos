@@ -1,4 +1,5 @@
 import type { TranslationDict } from './en';
+import extra from './extra.es';
 
 const es: TranslationDict = {
   common: {
@@ -207,7 +208,15 @@ const es: TranslationDict = {
     moveDown: 'Bajar (cargar después)',
     updateTruck: 'Actualizar camión',
     saveTruck: 'Guardar camión',
-    selectOneOrder: 'Seleccione al menos un pedido arriba, luego guarde el camión.'
+    selectOneOrder: 'Seleccione al menos un pedido arriba, luego guarde el camión.',
+    noTrucksThisDay: 'Sin camiones este día',
+    adjustFilters: 'Intente ajustar los filtros o términos de búsqueda.',
+    boardHint:
+      'El tablero abre en hoy — si su camión tiene otra fecha de carga, toque ese día (o Todos los camiones).',
+    previousWeek: 'Semana anterior',
+    nextWeek: 'Semana siguiente',
+    searchPlaceholder: 'Buscar camión o transportista...',
+    deleteTruck: 'Eliminar camión'
   },
   loader: {
     createEstimate: 'Crear presupuesto',
@@ -263,13 +272,18 @@ const es: TranslationDict = {
     optionalNotes: 'Notas opcionales',
     editItem: 'Editar detalles',
     deleteItem: 'Eliminar artículo',
-    notePrefix: 'Nota: {{text}}'
+    notePrefix: 'Nota: {{text}}',
+    saveInvoice: 'Guardar factura',
+    stagingPlaceholder: 'Escriba área de preparación (ej. Muelle A, Invernadero #3, Bahía 5)...',
+    vendorPlaceholder: 'Escriba o seleccione proveedor...',
+    costHint: 'Su costo por planta (solo interno)'
   },
   team: {
     languageTitle: 'Su idioma',
     languageSaved: 'Idioma actualizado.',
     languageFailed: 'No se pudo actualizar el idioma.'
-  }
+  },
+  ...extra
 };
 
 export default es;

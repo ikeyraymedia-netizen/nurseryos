@@ -13,7 +13,6 @@ import {
   getAssignableRoles,
   getMemberRoles,
   memberHasRole,
-  roleLabel,
   rolesLabel
 } from '../lib/permissions';
 import { TENANT_MODULE_DEFS, resolveEnabledModules } from '../lib/modules';
@@ -38,7 +37,7 @@ import {
   EmailStatus
 } from '../lib/email';
 import { tenantHasModule } from '../lib/modules';
-import { AppLocale, useT } from '../lib/i18n';
+import { AppLocale, useRoleLabel, useT } from '../lib/i18n';
 
 interface TeamManagerProps {
   tenant: Tenant;
@@ -60,6 +59,7 @@ export function TeamManager({
   onMemberUpdated
 }: TeamManagerProps) {
   const t = useT();
+  const { roleLabel } = useRoleLabel();
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [invites, setInvites] = useState<TenantInvite[]>([]);
   const [inviteRoles, setInviteRoles] = useState<Exclude<MemberRole, 'owner'>[]>(['loader']);
@@ -104,7 +104,7 @@ export function TeamManager({
       setEmailError(null);
     } catch (err: any) {
       setEmailStatus(null);
-      setEmailError(err?.message || 'Failed to load email settings.');
+      setEmailError(err?.message || t('teamExtra.loadEmailFailed'));
     }
   }
 
@@ -135,7 +135,7 @@ export function TeamManager({
               configured: true
             }
       );
-      setQbError(err?.message || 'Failed to load QuickBooks status.');
+      setQbError(err?.message || t('teamExtra.loadQbFailed'));
     }
   }
 
@@ -158,12 +158,12 @@ export function TeamManager({
               configured: true
             }
       );
-      setStripeError(err?.message || 'Failed to load Stripe status.');
+      setStripeError(err?.message || t('teamExtra.loadStripeFailed'));
     }
   }
 
   useEffect(() => {
-    refresh().catch((err) => setError(err?.message || 'Failed to load team.'));
+    refresh().catch((err) => setError(err?.message || t('teamExtra.loadTeamFailed')));
     void (async () => {
       if (quickbooksEnabled) {
         try {
@@ -179,14 +179,14 @@ export function TeamManager({
           if (!ready) {
             if (cfg?.quickbooks && !cfg?.firebaseAdmin) {
               setQbError(
-                'Firebase Admin is missing on the server. In Railway set FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of the key file), redeploy, then try again.'
+                t('teamExtra.firebaseAdminMissing')
               );
             } else if (!cfg?.quickbooks) {
               setQbError(
-                'QuickBooks keys are missing. Add QUICKBOOKS_CLIENT_ID / SECRET (and REDIRECT_URI or APP_URL) in Railway.'
+                t('teamExtra.qbKeysMissing')
               );
             } else {
-              setQbError('QuickBooks is not fully configured on the server yet.');
+              setQbError(t('teamExtra.qbNotConfigured'));
             }
           } else {
             setQbError(null);
@@ -200,7 +200,7 @@ export function TeamManager({
             environment: 'sandbox',
             configured: false
           });
-          setQbError(err?.message || 'Could not reach QuickBooks config endpoint.');
+          setQbError(err?.message || t('teamExtra.qbReachFailed'));
         }
       } else {
         setQbStatus(null);
@@ -227,14 +227,14 @@ export function TeamManager({
         if (!ready) {
           if (cfg?.stripe && !cfg?.firebaseAdmin) {
             setStripeError(
-              'Firebase Admin is missing on the server. Set FIREBASE_SERVICE_ACCOUNT_BASE64 in Railway.'
+              t('teamExtra.firebaseAdminMissing')
             );
           } else if (!cfg?.stripe) {
             setStripeError(
-              'Stripe keys are missing. Add STRIPE_SECRET_KEY (and STRIPE_PUBLISHABLE_KEY / STRIPE_WEBHOOK_SECRET) in Railway.'
+              t('teamExtra.stripeKeysMissing')
             );
           } else {
-            setStripeError('Stripe is not fully configured on the server yet.');
+            setStripeError(t('teamExtra.stripeNotConfigured'));
           }
           return;
         }
@@ -250,7 +250,7 @@ export function TeamManager({
           connectedAt: null,
           configured: false
         });
-        setStripeError(err?.message || 'Could not reach Stripe config endpoint.');
+        setStripeError(err?.message || t('teamExtra.stripeReachFailed'));
       }
       await refreshEmail();
     })();
@@ -269,14 +269,14 @@ export function TeamManager({
       });
       window.location.href = onboardingUrl;
     } catch (err: any) {
-      setStripeError(err?.message || 'Failed to start Stripe Connect.');
+      setStripeError(err?.message || t('teamExtra.stripeConnectFailed'));
     } finally {
       setStripeBusy(false);
     }
   }
 
   async function handleDisconnectStripe() {
-    const ok = confirm('Disconnect Stripe from this nursery? Pay links will stop working.');
+    const ok = confirm(t('teamExtra.disconnectStripe'));
     if (!ok) return;
     setStripeBusy(true);
     setStripeError(null);
@@ -286,10 +286,10 @@ export function TeamManager({
         action: 'stripe.disconnected',
         summary: 'Disconnected Stripe Connect'
       });
-      setMessage('Stripe disconnected.');
+      setMessage(t('teamExtra.stripeDisconnected'));
       await refreshStripe();
     } catch (err: any) {
-      setStripeError(err?.message || 'Failed to disconnect Stripe.');
+      setStripeError(err?.message || t('teamExtra.stripeDisconnectFailed'));
     } finally {
       setStripeBusy(false);
     }
@@ -312,7 +312,7 @@ export function TeamManager({
       });
       setMessage(`Customer replies will go to ${status.fromEmail}.`);
     } catch (err: any) {
-      setEmailError(err?.message || 'Failed to save email settings.');
+      setEmailError(err?.message || t('teamExtra.emailSaveFailed'));
     } finally {
       setEmailBusy(false);
     }
@@ -330,9 +330,9 @@ export function TeamManager({
         action: 'email.disconnected',
         summary: 'Disconnected outbound email'
       });
-      setMessage('Outbound email disconnected.');
+      setMessage(t('teamExtra.emailDisconnected'));
     } catch (err: any) {
-      setEmailError(err?.message || 'Failed to disconnect email.');
+      setEmailError(err?.message || t('teamExtra.emailDisconnectFailed'));
     } finally {
       setEmailBusy(false);
     }
@@ -351,7 +351,7 @@ export function TeamManager({
       }).catch(() => undefined);
       window.location.assign(url);
     } catch (err: any) {
-      setQbError(err?.message || 'Failed to start QuickBooks connect.');
+      setQbError(err?.message || t('teamExtra.qbConnectFailed'));
       setQbBusy(false);
     }
   }
@@ -373,14 +373,14 @@ export function TeamManager({
         );
       }
     } catch (err: any) {
-      setQbError(err?.message || 'Failed to load recent QuickBooks invoices.');
+      setQbError(err?.message || t('teamExtra.qbRecentFailed'));
     } finally {
       setQbRecentBusy(false);
     }
   }
 
   async function handleDisconnectQuickbooks() {
-    const ok = confirm('Disconnect QuickBooks from this nursery?');
+    const ok = confirm(t('teamExtra.qbDisconnectConfirm'));
     if (!ok) return;
     setQbBusy(true);
     setQbError(null);
@@ -392,11 +392,11 @@ export function TeamManager({
         action: 'quickbooks.disconnected',
         summary: 'Disconnected QuickBooks Online'
       });
-      setMessage('QuickBooks disconnected.');
+      setMessage(t('teamExtra.qbDisconnected'));
       setQbRecent([]);
       await refreshQuickbooks();
     } catch (err: any) {
-      setQbError(err?.message || 'Failed to disconnect QuickBooks.');
+      setQbError(err?.message || t('teamExtra.qbDisconnectFailed'));
     } finally {
       setQbBusy(false);
     }
@@ -414,7 +414,7 @@ export function TeamManager({
 
   function startEditRoles(member: TenantMember) {
     if (memberHasRole(member, 'owner')) {
-      setError('Owner roles cannot be changed here.');
+      setError(t('teamExtra.ownerRolesLocked'));
       return;
     }
     setEditingUserId(member.userId);
@@ -435,7 +435,7 @@ export function TeamManager({
 
   async function handleSaveRoles(member: TenantMember) {
     if (draftRoles.length === 0) {
-      setError('Pick at least one role.');
+      setError(t('teamExtra.pickOneRole'));
       return;
     }
     setBusy(true);
@@ -462,7 +462,7 @@ export function TeamManager({
         onMemberUpdated?.(updated);
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to update roles.');
+      setError(err?.message || t('teamExtra.rolesUpdateFailed'));
     } finally {
       setBusy(false);
     }
@@ -470,7 +470,7 @@ export function TeamManager({
 
   async function handleCreateInvite() {
     if (inviteRoles.length === 0) {
-      setError('Pick at least one role for the invite.');
+      setError(t('teamExtra.pickInviteRole'));
       return;
     }
     setBusy(true);
@@ -489,7 +489,7 @@ export function TeamManager({
       setTimeout(() => setCopiedCode(null), 2000);
       setMessage(`Invite created for ${rolesLabel(inviteRoles)}.`);
     } catch (err: any) {
-      setError(err?.message || 'Failed to create invite.');
+      setError(err?.message || t('teamExtra.inviteFailed'));
     } finally {
       setBusy(false);
     }
@@ -497,11 +497,11 @@ export function TeamManager({
 
   async function handleRemoveMember(member: TenantMember) {
     if (member.userId === currentUserId) {
-      setError('You cannot remove your own account from this screen.');
+      setError(t('teamExtra.cannotRemoveSelf'));
       return;
     }
     if (memberHasRole(member, 'owner')) {
-      setError('Owner cannot be removed.');
+      setError(t('teamExtra.ownerCannotRemove'));
       return;
     }
     const ok = confirm(`Remove ${member.displayName || member.email} from this nursery?`);
@@ -519,7 +519,7 @@ export function TeamManager({
       });
       await refresh();
     } catch (err: any) {
-      setError(err?.message || 'Failed to remove member.');
+      setError(err?.message || t('teamExtra.removeMemberFailed'));
     } finally {
       setBusy(false);
     }
@@ -527,7 +527,7 @@ export function TeamManager({
 
   async function handleResetPassword(member: TenantMember) {
     if (!member.email) {
-      setError('This team member has no email on file.');
+      setError(t('teamExtra.noEmailOnFile'));
       return;
     }
     const label = member.displayName || member.email;
@@ -553,7 +553,7 @@ export function TeamManager({
       });
       setMessage(`Reset email sent to ${member.email}. Ask them to check inbox/spam.`);
     } catch (err: any) {
-      setError(err?.message || 'Failed to send password reset.');
+      setError(err?.message || t('teamExtra.passwordResetFailed'));
     } finally {
       setBusy(false);
       setResettingUserId(null);
@@ -566,7 +566,7 @@ export function TeamManager({
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-ink-700" />
-            <h3 className="font-bold text-gray-900">Team & Roles</h3>
+            <h3 className="font-bold text-gray-900">{t('teamExtra.title')}</h3>
           </div>
           <button type="button" onClick={onClose} className="text-xs font-bold text-gray-500">
             Close
@@ -597,7 +597,7 @@ export function TeamManager({
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-            <p className="text-xs font-bold uppercase text-gray-500 mb-1">Workspace package</p>
+            <p className="text-xs font-bold uppercase text-gray-500 mb-1">{t('teamExtra.workspacePackage')}</p>
             <p className="text-[11px] text-gray-600 mb-2">
               Workspaces are enabled by NurseryOS in the seller console.
               {tenant.modules == null
@@ -628,7 +628,7 @@ export function TeamManager({
 
           {quickbooksEnabled && (
           <div className="rounded-xl border border-sky-100 bg-sky-50/50 px-3 py-3 space-y-2">
-            <p className="text-xs font-bold uppercase text-sky-900">QuickBooks Online</p>
+            <p className="text-xs font-bold uppercase text-sky-900">{t('teamExtra.qbo')}</p>
             <p className="text-[11px] text-sky-950/80 leading-relaxed">
               Connect this nursery to push saved invoices and estimates into QuickBooks.
               Owner/admin only.
@@ -677,7 +677,7 @@ export function TeamManager({
                     onClick={() => void handleLoadRecentQbInvoices()}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 bg-white text-sky-800 text-xs font-bold disabled:opacity-50"
                   >
-                    {qbRecentBusy ? 'Loading…' : 'Show recent QBO invoices'}
+                    {qbRecentBusy ? t('common.loading') : t('teamExtra.showQbo')}
                   </button>
                 </div>
                 {qbRecent.length > 0 && (
@@ -715,7 +715,7 @@ export function TeamManager({
                 }
               >
                 <Link2 className="h-3.5 w-3.5" />
-                {qbBusy ? 'Opening QuickBooks…' : 'Connect QuickBooks'}
+                {qbBusy ? t('teamExtra.openingQbo') : t('teamExtra.connectQbo')}
               </button>
             )}
             {qbError && <p className="text-[11px] text-red-700 leading-relaxed">{qbError}</p>}
@@ -730,7 +730,7 @@ export function TeamManager({
 
           {paymentsEnabled && (
             <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 space-y-2">
-              <p className="text-xs font-bold uppercase text-violet-900">Stripe Connect</p>
+              <p className="text-xs font-bold uppercase text-violet-900">{t('teamExtra.stripe')}</p>
               <p className="text-[11px] text-violet-950/80 leading-relaxed">
                 Connect this nursery’s Stripe account so customers can pay invoices by card. Funds
                 go to the nursery (merchant of record). Owner/admin only.
@@ -739,8 +739,8 @@ export function TeamManager({
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-ink-800">
                     {stripeStatus.chargesEnabled
-                      ? 'Ready to collect payments'
-                      : 'Connected — finish onboarding to enable charges'}
+                      ? t('teamExtra.stripeReady')
+                      : t('teamExtra.stripeConnectedPartial')}
                     {stripeStatus.connectedAt
                       ? ` · ${new Date(stripeStatus.connectedAt).toLocaleDateString()}`
                       : ''}
@@ -786,7 +786,7 @@ export function TeamManager({
                   }
                 >
                   <Link2 className="h-3.5 w-3.5" />
-                  {stripeBusy ? 'Opening Stripe…' : 'Connect Stripe'}
+                  {stripeBusy ? t('teamExtra.openingStripe') : t('teamExtra.connectStripe')}
                 </button>
               )}
               {stripeError && (
@@ -813,7 +813,7 @@ export function TeamManager({
                   : ''}
               </p>
             ) : (
-              <p className="text-xs font-semibold text-amber-800">Not configured yet</p>
+              <p className="text-xs font-semibold text-amber-800">{t('teamExtra.notConfigured')}</p>
             )}
             {emailStatus && emailStatus.platformReady === false && (
               <p className="text-[11px] text-amber-800 leading-relaxed">
@@ -849,7 +849,7 @@ export function TeamManager({
                 onClick={() => void handleSaveEmail()}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-800 text-white text-xs font-bold disabled:opacity-50"
               >
-                {emailBusy ? 'Saving…' : emailStatus?.configured ? 'Update email settings' : 'Save email settings'}
+                {emailBusy ? t('teamExtra.savingEmail') : emailStatus?.configured ? t('teamExtra.updateEmail') : t('teamExtra.saveEmail')}
               </button>
               {emailStatus?.configured && (
                 <button
@@ -869,7 +869,7 @@ export function TeamManager({
           </div>
 
           <div>
-            <p className="text-xs font-bold uppercase text-gray-500 mb-2">Current members</p>
+            <p className="text-xs font-bold uppercase text-gray-500 mb-2">{t('teamExtra.currentMembers')}</p>
             <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">
               People can hold more than one role (for example Inventory + Loader). Use Edit roles to
               change access. Password resets are owner/admin only.
@@ -956,7 +956,7 @@ export function TeamManager({
                             disabled={busy}
                             onClick={() => startEditRoles(m)}
                             className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-ink-50 px-2 py-1 text-[10px] font-bold text-ink-800 hover:bg-ink-100 disabled:opacity-50"
-                            title="Edit roles"
+                            title={t('teamExtra.editRoles')}
                           >
                             <Shield className="h-3.5 w-3.5" />
                             Edit roles
@@ -967,10 +967,10 @@ export function TeamManager({
                           disabled={busy || !m.email}
                           onClick={() => void handleResetPassword(m)}
                           className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                          title="Send password reset email"
+                          title={t('teamExtra.resetPasswordTitle')}
                         >
                           <KeyRound className="h-3.5 w-3.5" />
-                          {resettingUserId === m.userId ? 'Sending…' : 'Reset'}
+                          {resettingUserId === m.userId ? t('teamExtra.sending') : t('teamExtra.resetPassword')}
                         </button>
                         {m.userId !== currentUserId && !isOwner && (
                           <button
@@ -978,7 +978,7 @@ export function TeamManager({
                             disabled={busy}
                             onClick={() => void handleRemoveMember(m)}
                             className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
-                            title="Remove member"
+                            title={t('teamExtra.removeMemberTitle')}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             Remove
@@ -993,7 +993,7 @@ export function TeamManager({
           </div>
 
           <div className="rounded-xl border border-ink-100 bg-ink-50/40 p-4">
-            <p className="text-xs font-bold uppercase text-ink-800 mb-2">Invite a team member</p>
+            <p className="text-xs font-bold uppercase text-ink-800 mb-2">{t('teamExtra.inviteMember')}</p>
             <p className="text-xs text-ink-900/80 mb-3">
               Select one or more roles for the invite. Office gets customers, invoices, and reports
               (no yard tabs). Sales gets customers, orders, trucks, and invoices, with inventory

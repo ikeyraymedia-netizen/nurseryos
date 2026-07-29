@@ -201,7 +201,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                         setDeletingOrderId(order.id);
                       }}
                       className="text-gray-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
-                      title="Delete order"
+                      title={t('orders.deleteConfirm')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

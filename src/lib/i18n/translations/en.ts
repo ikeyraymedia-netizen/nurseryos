@@ -1,3 +1,5 @@
+import extra from './extra.en';
+
 const en = {
   common: {
     save: 'Save',
@@ -201,7 +203,15 @@ const en = {
     moveDown: 'Move Down (Load Later)',
     updateTruck: 'Update Truck',
     saveTruck: 'Save Truck',
-    selectOneOrder: 'Select at least one order above, then tap Save Truck.'
+    selectOneOrder: 'Select at least one order above, then tap Save Truck.',
+    noTrucksThisDay: 'No trucks this day',
+    adjustFilters: 'Try adjusting your filters or search terms.',
+    boardHint:
+      'The board opens on today — if your truck has a different loading date, tap that day (or All trucks).',
+    previousWeek: 'Previous week',
+    nextWeek: 'Next week',
+    searchPlaceholder: 'Search truck or carrier...',
+    deleteTruck: 'Delete truck'
   },
   loader: {
     createEstimate: 'Create Estimate',
@@ -257,13 +267,17 @@ const en = {
     optionalNotes: 'Optional notes',
     editItem: 'Edit item details',
     deleteItem: 'Delete item',
-    notePrefix: 'Note: {{text}}'
+    saveInvoice: 'Save invoice',
+    stagingPlaceholder: 'Type staging area (e.g. Dock A, Greenhouse #3, Bay 5)...',
+    vendorPlaceholder: 'Type or select vendor...',
+    costHint: 'Your cost per plant (internal only)'
   },
   team: {
     languageTitle: 'Your language',
     languageSaved: 'Language updated.',
     languageFailed: 'Could not update language.'
-  }
+  },
+  ...extra
 } as const;
 
 export type TranslationDict = typeof en;

@@ -1,5 +1,6 @@
 import { CheckCircle2, DollarSign, X } from 'lucide-react';
 import { PaymentNotice } from '../lib/paymentNotifications';
+import { useT } from '../lib/i18n';
 
 interface PaymentToastProps {
   notices: PaymentNotice[];
@@ -8,6 +9,7 @@ interface PaymentToastProps {
 }
 
 export function PaymentToast({ notices, onDismiss, onDismissAll }: PaymentToastProps) {
+  const t = useT();
   if (notices.length === 0) return null;
 
   return (
@@ -25,14 +27,14 @@ export function PaymentToast({ notices, onDismiss, onDismissAll }: PaymentToastP
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                 <p className="text-xs font-black uppercase tracking-wide text-emerald-800">
-                  Invoice paid
+                  {t('payment.invoicePaid')}
                 </p>
               </div>
               <p className="text-sm font-bold text-gray-900 mt-0.5 truncate">
                 {notice.documentNumber} · {notice.customerName}
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
-                ${notice.amount.toFixed(2)} received
+                {t('payment.received', { amount: notice.amount.toFixed(2) })}
                 {notice.paidAt
                   ? ` · ${new Date(notice.paidAt).toLocaleString(undefined, {
                       dateStyle: 'short',
@@ -45,7 +47,7 @@ export function PaymentToast({ notices, onDismiss, onDismissAll }: PaymentToastP
               type="button"
               onClick={() => onDismiss(notice.id)}
               className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-              aria-label="Dismiss"
+              aria-label={t('payment.dismiss')}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -58,7 +60,7 @@ export function PaymentToast({ notices, onDismiss, onDismissAll }: PaymentToastP
           onClick={onDismissAll}
           className="pointer-events-auto w-full text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-xl py-1.5 hover:bg-emerald-100"
         >
-          Dismiss all ({notices.length})
+          {t('payment.dismissAll', { n: notices.length })}
         </button>
       )}
       <style>{`

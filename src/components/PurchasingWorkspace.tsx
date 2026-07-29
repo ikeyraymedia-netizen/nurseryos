@@ -5,6 +5,7 @@ import {
   FileText,
   Mail,
   PackagePlus,
+  Pencil,
   Plus,
   Receipt,
   ScanLine,
@@ -16,9 +17,11 @@ import {
   PurchaseOrder,
   PurchaseOrderLine,
   Vendor,
-  VendorBill
+  VendorBill,
+  VendorBillLine
 } from '../types';
 import { AppPermissions } from '../lib/permissions';
+import { useT } from '../lib/i18n';
 import {
   addVendor,
   deleteVendor,
@@ -35,7 +38,8 @@ import {
   markVendorBillPaid,
   receivePurchaseOrder,
   subscribeToPurchaseOrders,
-  subscribeToVendorBills
+  subscribeToVendorBills,
+  updateVendorBill
 } from '../lib/purchasing';
 import {
   emptyBillLine,
@@ -52,6 +56,8 @@ import {
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
+import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
+import { BillEditModal } from './BillEditModal';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
@@ -81,6 +87,15 @@ function emptyLine(): Omit<PurchaseOrderLine, 'id' | 'quantityReceived'> {
   };
 }
 
+type BillFormLine = {
+  id?: string;
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  unitCost: number;
+  category: string;
+};
+
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     draft: 'bg-slate-100 text-slate-700',
@@ -94,11 +109,44 @@ function statusBadge(status: string) {
   return map[status] || 'bg-slate-100 text-slate-700';
 }
 
+const CATEGORY_I18N: Record<string, string> = {
+  Plants: 'category.plants',
+  'Soil / media': 'category.soil',
+  'Containers / trays': 'category.containers',
+  Chemicals: 'category.chemicals',
+  Fertilizer: 'category.fertilizer',
+  Freight: 'category.freight',
+  Fuel: 'category.fuel',
+  'Tools / equipment': 'category.tools',
+  'General supplies': 'category.supplies',
+  Other: 'category.other'
+};
+
+function translateCategory(t: (key: string) => string, label: string): string {
+  const key = CATEGORY_I18N[label];
+  return key ? t(key) : label;
+}
+
+function translateStatus(t: (key: string) => string, status: string): string {
+  const map: Record<string, string> = {
+    draft: 'purchasing.statusDraft',
+    sent: 'purchasing.statusSent',
+    partial: 'purchasing.statusPartial',
+    received: 'purchasing.statusReceived',
+    cancelled: 'purchasing.statusCancelled',
+    unpaid: 'purchasing.statusUnpaid',
+    paid: 'purchasing.statusPaid'
+  };
+  const key = map[status];
+  return key ? t(key) : status;
+}
+
 export function PurchasingWorkspace({
   permissions,
   tenantId,
   nurseryName
 }: PurchasingWorkspaceProps) {
+  const t = useT();
   const [view, setView] = useState<PurchasingView>('orders');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -137,11 +185,15 @@ export function PurchasingWorkspace({
 
   // Bill form
   const [showBillForm, setShowBillForm] = useState(false);
+  const [editingBill, setEditingBill] = useState<VendorBill | null>(null);
   const [billVendorId, setBillVendorId] = useState('');
   const [billNewVendorName, setBillNewVendorName] = useState('');
+  const [billDate, setBillDate] = useState(() => todayKey());
   const [billDue, setBillDue] = useState('');
+  const [billVendorInvoice, setBillVendorInvoice] = useState('');
   const [billNotes, setBillNotes] = useState('');
-  const [billLines, setBillLines] = useState([emptyBillLine()]);
+  const [billLines, setBillLines] = useState<BillFormLine[]>([emptyBillLine()]);
+  const [markingPaidBill, setMarkingPaidBill] = useState<VendorBill | null>(null);
 
   useEffect(() => {
     const unsubV = subscribeToVendors(setVendors);
@@ -215,7 +267,7 @@ export function PurchasingWorkspace({
     }
 
     const categories = [...byCategory.entries()]
-      .map(([id, amount]) => ({ id, label: id, amount }))
+      .map(([id, amount]) => ({ id, label: translateCategory(t, id), amount }))
       .sort((a, b) => b.amount - a.amount);
     const vendorsTop = [...byVendor.entries()]
       .map(([name, amount]) => ({ name, amount }))
@@ -228,7 +280,7 @@ export function PurchasingWorkspace({
       categories,
       vendorsTop
     };
-  }, [bills, monthKey]);
+  }, [bills, monthKey, t]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -236,7 +288,7 @@ export function PurchasingWorkspace({
     try {
       await action();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setError(err instanceof Error ? err.message : t('purchasing.somethingWentWrong'));
     } finally {
       setBusy(false);
     }
@@ -286,7 +338,7 @@ export function PurchasingWorkspace({
     if (!permissions.canEditPurchaseOrders) return;
     const vendor = vendors.find((v) => v.id === poVendorId);
     if (!vendor) {
-      setError('Pick a vendor.');
+      setError(t('purchasing.pickVendor'));
       return;
     }
     const items = poLines
@@ -299,7 +351,7 @@ export function PurchasingWorkspace({
       }))
       .filter((l) => l.plantName && l.quantityOrdered > 0);
     if (items.length === 0) {
-      setError('Add at least one plant line.');
+      setError(t('purchasing.addLineItem'));
       return;
     }
     await run(async () => {
@@ -343,7 +395,7 @@ export function PurchasingWorkspace({
     if (!emailingOrder || !permissions.canEditPurchaseOrders) return;
     const to = emailTo.trim();
     if (!to || !to.includes('@')) {
-      setEmailStatus('Enter a valid vendor email.');
+      setEmailStatus(t('purchasing.validEmail'));
       return;
     }
     setEmailSending(true);
@@ -367,9 +419,7 @@ export function PurchasingWorkspace({
       });
       if (!result.success) {
         throw new Error(
-          result.message ||
-            result.error ||
-            'Email is not configured. Open Team → Outbound email, and set RESEND_API_KEY in Railway.'
+          result.message || result.error || t('purchasing.emailNotConfigured')
         );
       }
 
@@ -383,13 +433,13 @@ export function PurchasingWorkspace({
         await markPurchaseOrderSent(emailingOrder);
       }
 
-      setEmailStatus(`Sent to ${to}`);
+      setEmailStatus(t('purchasing.sentTo', { email: to }));
       window.setTimeout(() => {
         setEmailingOrder(null);
         setEmailStatus(null);
       }, 1200);
     } catch (err: unknown) {
-      setEmailStatus(err instanceof Error ? err.message : 'Could not send email.');
+      setEmailStatus(err instanceof Error ? err.message : t('purchasing.couldNotSendEmail'));
     } finally {
       setEmailSending(false);
     }
@@ -404,7 +454,39 @@ export function PurchasingWorkspace({
     });
   }
 
-  async function handleCreateBill(e: FormEvent) {
+  function openNewBill() {
+    setEditingBill(null);
+    setBillVendorId('');
+    setBillNewVendorName('');
+    setBillDate(todayKey());
+    setBillDue('');
+    setBillVendorInvoice('');
+    setBillNotes('');
+    setBillLines([emptyBillLine()]);
+    setShowInvoiceScanner(false);
+    setShowBillForm(true);
+  }
+
+  function openEditBill(bill: VendorBill) {
+    setShowBillForm(false);
+    setShowInvoiceScanner(false);
+    setError(null);
+    setEditingBill(bill);
+  }
+
+  function closeBillForm() {
+    setShowBillForm(false);
+    setEditingBill(null);
+    setBillVendorId('');
+    setBillNewVendorName('');
+    setBillDate(todayKey());
+    setBillDue('');
+    setBillVendorInvoice('');
+    setBillNotes('');
+    setBillLines([emptyBillLine()]);
+  }
+
+  async function handleSaveBill(e: FormEvent) {
     e.preventDefault();
     if (!permissions.canManageVendorBills) return;
 
@@ -412,20 +494,21 @@ export function PurchasingWorkspace({
     if (billVendorId === CREATE_NEW_VENDOR) {
       const name = billNewVendorName.trim();
       if (!name) {
-        setError('Enter a vendor name.');
+        setError(t('purchasing.enterVendorName'));
         return;
       }
       if (!permissions.canEditVendors) {
-        setError('You need permission to create vendors.');
+        setError(t('purchasing.needVendorPermission'));
         return;
       }
     } else if (!vendor) {
-      setError('Pick a saved vendor, or create a new one.');
+      setError(t('purchasing.pickSavedVendor'));
       return;
     }
 
     const items = billLines
-      .map((l) => ({
+      .map((l, idx) => ({
+        id: l.id || `vbl-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 5)}`,
         plantName: l.plantName.trim(),
         containerSize: isPlantPurchaseCategory(l.category)
           ? l.containerSize.trim() || 'Other'
@@ -434,9 +517,9 @@ export function PurchasingWorkspace({
         unitCost: Math.max(0, Number(l.unitCost) || 0),
         category: resolvePurchaseCategory(l.category)
       }))
-      .filter((l) => l.plantName && l.quantity > 0);
+      .filter((l) => l.plantName && l.quantity > 0) as VendorBillLine[];
     if (items.length === 0) {
-      setError('Add at least one line.');
+      setError(t('purchasing.addLineRequired'));
       return;
     }
     await run(async () => {
@@ -451,20 +534,49 @@ export function PurchasingWorkspace({
         };
       }
       if (!vendor) return;
+
       await createVendorBill({
         vendorId: vendor.id,
         vendorName: vendor.name,
-        dueDate: billDue || undefined,
+        billDate: billDate || undefined,
+        dueDate: billDue.trim() ? billDue : undefined,
+        vendorInvoiceNumber: billVendorInvoice.trim() || undefined,
         notes: billNotes.trim() || undefined,
         items
       });
-      setShowBillForm(false);
-      setBillVendorId('');
-      setBillNewVendorName('');
-      setBillDue('');
-      setBillNotes('');
-      setBillLines([emptyBillLine()]);
+      closeBillForm();
     });
+  }
+
+  async function handleSaveEditedBill(updated: VendorBill) {
+    setBusy(true);
+    setError(null);
+    try {
+      let vendorId = updated.vendorId;
+      let vendorName = updated.vendorName;
+      if (vendorId === CREATE_NEW_VENDOR) {
+        if (!permissions.canEditVendors) {
+          throw new Error(t('purchasing.needVendorPermission'));
+        }
+        const name = vendorName.trim();
+        if (!name) throw new Error(t('purchasing.enterVendorName'));
+        vendorId = await addVendor({ name });
+        vendorName = name;
+      }
+      await updateVendorBill({
+        ...updated,
+        vendorId,
+        vendorName
+      });
+      setEditingBill(null);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : t('purchasing.somethingWentWrong');
+      setError(message);
+      throw err instanceof Error ? err : new Error(message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -475,18 +587,16 @@ export function PurchasingWorkspace({
             <PackagePlus className="h-5 w-5 text-ink-700" />
           </div>
           <div>
-            <h2 className="text-base font-black text-slate-900 tracking-tight">Purchasing</h2>
-            <p className="text-xs text-slate-500">
-              Upload all nursery purchases here — plants, supplies, freight, and bills
-            </p>
+            <h2 className="text-base font-black text-slate-900 tracking-tight">{t('purchasing.title')}</h2>
+            <p className="text-xs text-slate-500">{t('purchasing.subtitle')}</p>
           </div>
         </div>
         <div className="inline-flex rounded-xl border border-ink-200 overflow-hidden">
           {(
             [
-              ['orders', 'POs', ClipboardList],
-              ['vendors', 'Vendors', Building2],
-              ['bills', 'Bills', Receipt]
+              ['orders', t('purchasing.pos'), ClipboardList],
+              ['vendors', t('purchasing.vendors'), Building2],
+              ['bills', t('purchasing.bills'), Receipt]
             ] as const
           ).map(([id, label, Icon]) => (
             <button
@@ -513,10 +623,10 @@ export function PurchasingWorkspace({
           onChange={(e) => setSearch(e.target.value)}
           placeholder={
             view === 'vendors'
-              ? 'Search vendors…'
+              ? t('purchasing.searchVendors')
               : view === 'orders'
-                ? 'Search purchase orders…'
-                : 'Search vendor bills…'
+                ? t('purchasing.searchPos')
+                : t('purchasing.searchBills')
           }
           className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
         />
@@ -532,15 +642,15 @@ export function PurchasingWorkspace({
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-[10px] font-bold uppercase text-slate-500">Bills</p>
+              <p className="text-[10px] font-bold uppercase text-slate-500">{t('purchasing.bills')}</p>
               <p className="text-sm font-black text-slate-900">{billTotals.count}</p>
             </div>
             <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
-              <p className="text-[10px] font-bold uppercase text-amber-700">Outstanding</p>
+              <p className="text-[10px] font-bold uppercase text-amber-700">{t('purchasing.outstanding')}</p>
               <p className="text-sm font-black text-amber-900">{money(billTotals.outstanding)}</p>
             </div>
             <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
-              <p className="text-[10px] font-bold uppercase text-rose-700">Overdue</p>
+              <p className="text-[10px] font-bold uppercase text-rose-700">{t('purchasing.overdue')}</p>
               <p className="text-sm font-black text-rose-900">{money(billTotals.overdue)}</p>
             </div>
           </div>
@@ -548,12 +658,12 @@ export function PurchasingWorkspace({
           <div className="rounded-xl border border-ink-100 bg-ink-50/30 p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-wide text-ink-900">
-                Purchases this month
+                {t('purchasing.purchasesMonth')}
               </p>
               <p className="text-sm font-black text-ink-900">{money(monthPurchases.total)}</p>
             </div>
             <p className="text-[11px] text-slate-500">
-              {monthPurchases.billCount} bill{monthPurchases.billCount === 1 ? '' : 's'}
+              {t('purchasing.billCount', { n: monthPurchases.billCount })}
             </p>
             {monthPurchases.categories.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -578,9 +688,7 @@ export function PurchasingWorkspace({
               </div>
             )}
             {monthPurchases.billCount === 0 && (
-              <p className="text-[11px] text-slate-500">
-                No purchases logged this month yet — scan an invoice to start.
-              </p>
+              <p className="text-[11px] text-slate-500">{t('purchasing.noPurchases')}</p>
             )}
           </div>
         </div>
@@ -595,7 +703,7 @@ export function PurchasingWorkspace({
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
             >
               <ScanLine className="h-3.5 w-3.5" />
-              {showInvoiceScanner ? 'Hide invoice scan' : 'Scan vendor invoice'}
+              {showInvoiceScanner ? t('purchasing.hideInvoiceScan') : t('purchasing.scanInvoice')}
             </button>
           </div>
           {showInvoiceScanner && (
@@ -620,37 +728,37 @@ export function PurchasingWorkspace({
               className="lg:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-2"
             >
               <p className="text-xs font-bold uppercase tracking-wide text-ink-900">
-                {editingVendorId ? 'Edit vendor' : 'Add vendor'}
+                {editingVendorId ? t('purchasing.editVendor') : t('purchasing.addVendor')}
               </p>
               <input
                 required
                 value={vendorName}
                 onChange={(e) => setVendorName(e.target.value)}
-                placeholder="Vendor name"
+                placeholder={t('purchasing.vendorName')}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <input
                 value={vendorContact}
                 onChange={(e) => setVendorContact(e.target.value)}
-                placeholder="Contact name"
+                placeholder={t('purchasing.contactName')}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <input
                 value={vendorEmail}
                 onChange={(e) => setVendorEmail(e.target.value)}
-                placeholder="Email"
+                placeholder={t('common.email')}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <input
                 value={vendorPhone}
                 onChange={(e) => setVendorPhone(e.target.value)}
-                placeholder="Phone"
+                placeholder={t('customers.phone')}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <input
                 value={vendorTerms}
                 onChange={(e) => setVendorTerms(e.target.value)}
-                placeholder="Payment terms"
+                placeholder={t('purchasing.paymentTerms')}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <div className="flex gap-2">
@@ -659,7 +767,7 @@ export function PurchasingWorkspace({
                   disabled={busy}
                   className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
                 >
-                  {editingVendorId ? 'Save' : 'Add vendor'}
+                  {editingVendorId ? t('common.save') : t('purchasing.addVendorBtn')}
                 </button>
                 {editingVendorId && (
                   <button
@@ -667,7 +775,7 @@ export function PurchasingWorkspace({
                     onClick={resetVendorForm}
                     className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 )}
               </div>
@@ -675,7 +783,7 @@ export function PurchasingWorkspace({
           )}
           <div className={`${permissions.canEditVendors ? 'lg:col-span-3' : 'lg:col-span-5'} space-y-2 max-h-[520px] overflow-y-auto`}>
             {filteredVendors.length === 0 ? (
-              <p className="text-xs text-gray-500 py-8 text-center">No vendors yet.</p>
+              <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noVendors')}</p>
             ) : (
               filteredVendors.map((v) => (
                 <div
@@ -687,10 +795,12 @@ export function PurchasingWorkspace({
                       <p className="text-sm font-bold text-gray-900">{v.name}</p>
                       <p className="text-xs text-gray-500">
                         {[v.contactName, v.contactEmail, v.phone].filter(Boolean).join(' · ') ||
-                          'No contact info'}
+                          t('purchasing.noContact')}
                       </p>
                       {v.paymentTerms && (
-                        <p className="text-[11px] text-ink-700 mt-1">Terms: {v.paymentTerms}</p>
+                        <p className="text-[11px] text-ink-700 mt-1">
+                          {t('purchasing.terms', { terms: v.paymentTerms })}
+                        </p>
                       )}
                     </div>
                     {permissions.canEditVendors && (
@@ -707,13 +817,13 @@ export function PurchasingWorkspace({
                           }}
                           className="text-[10px] font-bold text-ink-700 px-2 py-1 rounded-lg hover:bg-ink-50"
                         >
-                          Edit
+                          {t('common.edit')}
                         </button>
                         <button
                           type="button"
                           onClick={() =>
                             void run(async () => {
-                              if (!confirm(`Delete vendor “${v.name}”?`)) return;
+                              if (!confirm(t('purchasing.deleteVendor', { name: v.name }))) return;
                               await deleteVendor(v.id);
                             })
                           }
@@ -741,7 +851,7 @@ export function PurchasingWorkspace({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
               >
                 <Plus className="h-3.5 w-3.5" />
-                New purchase order
+                {t('purchasing.newPo')}
               </button>
             </div>
           )}
@@ -753,14 +863,14 @@ export function PurchasingWorkspace({
             >
               <div className="grid sm:grid-cols-2 gap-2">
                 <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Vendor</span>
+                  <span className="font-bold text-slate-600">{t('purchasing.vendorLabel')}</span>
                   <select
                     required
                     value={poVendorId}
                     onChange={(e) => setPoVendorId(e.target.value)}
                     className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   >
-                    <option value="">Select…</option>
+                    <option value="">{t('purchasing.selectVendor')}</option>
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.name}
@@ -769,7 +879,7 @@ export function PurchasingWorkspace({
                   </select>
                 </label>
                 <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Expected</span>
+                  <span className="font-bold text-slate-600">{t('purchasing.expected')}</span>
                   <input
                     type="date"
                     value={poExpected}
@@ -788,7 +898,7 @@ export function PurchasingWorkspace({
                         next[idx] = { ...line, plantName: e.target.value };
                         setPoLines(next);
                       }}
-                      placeholder="Plant"
+                      placeholder={t('purchasing.plant')}
                       className="col-span-4 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                     />
                     <input
@@ -798,7 +908,7 @@ export function PurchasingWorkspace({
                         next[idx] = { ...line, containerSize: e.target.value };
                         setPoLines(next);
                       }}
-                      placeholder="Size"
+                      placeholder={t('purchasing.size')}
                       className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                     />
                     <input
@@ -810,7 +920,7 @@ export function PurchasingWorkspace({
                         next[idx] = { ...line, quantityOrdered: Number(e.target.value) || 0 };
                         setPoLines(next);
                       }}
-                      placeholder="Qty"
+                      placeholder={t('common.qty')}
                       className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                     />
                     <input
@@ -823,7 +933,7 @@ export function PurchasingWorkspace({
                         next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
                         setPoLines(next);
                       }}
-                      placeholder="Cost"
+                      placeholder={t('purchasing.cost')}
                       className="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                     />
                     <button
@@ -841,13 +951,13 @@ export function PurchasingWorkspace({
                   onClick={() => setPoLines([...poLines, emptyLine()])}
                   className="text-[11px] font-bold text-ink-700"
                 >
-                  + Add line
+                  {t('purchasing.addLine')}
                 </button>
               </div>
               <textarea
                 value={poNotes}
                 onChange={(e) => setPoNotes(e.target.value)}
-                placeholder="Notes"
+                placeholder={t('purchasing.notes')}
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
@@ -856,17 +966,17 @@ export function PurchasingWorkspace({
                 disabled={busy || vendors.length === 0}
                 className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
               >
-                Create PO
+                {t('purchasing.createPo')}
               </button>
               {vendors.length === 0 && (
-                <p className="text-[11px] text-amber-700">Add a vendor first.</p>
+                <p className="text-[11px] text-amber-700">{t('purchasing.addVendorFirst')}</p>
               )}
             </form>
           )}
 
           <div className="space-y-2 max-h-[520px] overflow-y-auto">
             {filteredOrders.length === 0 ? (
-              <p className="text-xs text-gray-500 py-8 text-center">No purchase orders yet.</p>
+              <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noPos')}</p>
             ) : (
               filteredOrders.map((order) => (
                 <div
@@ -881,15 +991,15 @@ export function PurchasingWorkspace({
                       </p>
                       <p className="text-xs text-gray-500">
                         {order.orderDate}
-                        {order.expectedDate ? ` · Due ${order.expectedDate}` : ''} ·{' '}
-                        {money(order.grandTotal)} · {order.items.length} line
-                        {order.items.length === 1 ? '' : 's'}
+                        {order.expectedDate ? ` · ${t('purchasing.due')} ${order.expectedDate}` : ''} ·{' '}
+                        {money(order.grandTotal)} · {order.items.length}{' '}
+                        {t('purchasing.lines')}
                       </p>
                     </div>
                     <span
                       className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusBadge(order.status)}`}
                     >
-                      {order.status}
+                      {translateStatus(t, order.status)}
                     </span>
                   </div>
                   <ul className="text-[11px] text-slate-600 space-y-0.5">
@@ -900,7 +1010,7 @@ export function PurchasingWorkspace({
                       </li>
                     ))}
                     {order.items.length > 4 && (
-                      <li className="text-slate-400">+{order.items.length - 4} more</li>
+                      <li className="text-slate-400">{t('purchasing.moreLines', { n: order.items.length - 4 })}</li>
                     )}
                   </ul>
                   <div className="flex flex-wrap gap-2">
@@ -914,7 +1024,7 @@ export function PurchasingWorkspace({
                           className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white"
                         >
                           <Mail className="h-3 w-3" />
-                          Email vendor
+                          {t('purchasing.emailVendor')}
                         </button>
                       )}
                     {permissions.canEditPurchaseOrders && order.status === 'draft' && (
@@ -924,7 +1034,7 @@ export function PurchasingWorkspace({
                         onClick={() => void run(() => markPurchaseOrderSent(order))}
                         className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-sky-700 text-white"
                       >
-                        Mark sent
+                        {t('purchasing.markSent')}
                       </button>
                     )}
                     {permissions.canReceivePurchases &&
@@ -935,7 +1045,7 @@ export function PurchasingWorkspace({
                           onClick={() => openReceive(order)}
                           className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white"
                         >
-                          Receive
+                          {t('purchasing.receive')}
                         </button>
                       )}
                     {permissions.canManageVendorBills && (
@@ -950,7 +1060,7 @@ export function PurchasingWorkspace({
                         }
                         className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 text-ink-800"
                       >
-                        Create bill
+                        {t('purchasing.createBill')}
                       </button>
                     )}
                     {permissions.canEditPurchaseOrders && order.status === 'draft' && (
@@ -958,13 +1068,14 @@ export function PurchasingWorkspace({
                         type="button"
                         onClick={() =>
                           void run(async () => {
-                            if (!confirm(`Delete ${order.poNumber}?`)) return;
+                            if (!confirm(t('purchasing.deletePoConfirm', { poNumber: order.poNumber })))
+                              return;
                             await deletePurchaseOrder(order.id);
                           })
                         }
                         className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-rose-700"
                       >
-                        Delete
+                        {t('common.delete')}
                       </button>
                     )}
                   </div>
@@ -983,23 +1094,27 @@ export function PurchasingWorkspace({
                 type="button"
                 onClick={() => {
                   setShowInvoiceScanner((o) => !o);
-                  setShowBillForm(false);
+                  if (!showInvoiceScanner) closeBillForm();
+                  else setShowBillForm(false);
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-white text-ink-800 text-xs font-bold"
               >
                 <ScanLine className="h-3.5 w-3.5" />
-                {showInvoiceScanner ? 'Hide scan' : 'Scan invoice'}
+                {showInvoiceScanner ? t('purchasing.hideScan') : t('purchasing.scanInvoiceBtn')}
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setShowBillForm((o) => !o);
-                  setShowInvoiceScanner(false);
+                  if (showBillForm && !editingBill) {
+                    closeBillForm();
+                  } else {
+                    openNewBill();
+                  }
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
               >
                 <Plus className="h-3.5 w-3.5" />
-                New vendor bill
+                {t('purchasing.newBill')}
               </button>
             </div>
           )}
@@ -1013,11 +1128,23 @@ export function PurchasingWorkspace({
             />
           )}
 
-          {showBillForm && permissions.canManageVendorBills && (
+          {showBillForm && !editingBill && permissions.canManageVendorBills && (
             <form
-              onSubmit={handleCreateBill}
+              onSubmit={handleSaveBill}
               className="rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-3"
             >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black uppercase tracking-wide text-ink-900">
+                  {t('purchasing.newBill')}
+                </p>
+                <button
+                  type="button"
+                  onClick={closeBillForm}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800"
+                >
+                  {t('common.cancel')}
+                </button>
+              </div>
               <div className="grid sm:grid-cols-2 gap-2 items-start">
                 <VendorPicker
                   vendors={vendors}
@@ -1028,11 +1155,28 @@ export function PurchasingWorkspace({
                   allowCreate={permissions.canEditVendors}
                 />
                 <label className="block text-xs">
-                  <span className="font-bold text-slate-600">Due date</span>
+                  <span className="font-bold text-slate-600">{t('purchasing.billDate')}</span>
+                  <input
+                    type="date"
+                    value={billDate}
+                    onChange={(e) => setBillDate(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                </label>
+                <label className="block text-xs">
+                  <span className="font-bold text-slate-600">{t('purchasing.dueDate')}</span>
                   <input
                     type="date"
                     value={billDue}
                     onChange={(e) => setBillDue(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  />
+                </label>
+                <label className="block text-xs">
+                  <span className="font-bold text-slate-600">{t('purchasing.vendorInvoiceNumber')}</span>
+                  <input
+                    value={billVendorInvoice}
+                    onChange={(e) => setBillVendorInvoice(e.target.value)}
                     className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   />
                 </label>
@@ -1051,7 +1195,7 @@ export function PurchasingWorkspace({
                           next[idx] = { ...line, plantName: e.target.value };
                           setBillLines(next);
                         }}
-                        placeholder="Plant or supply description"
+                        placeholder={t('purchasing.description')}
                         className="col-span-11 sm:col-span-7 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                       />
                       <div className="col-span-11 sm:col-span-4">
@@ -1077,7 +1221,7 @@ export function PurchasingWorkspace({
                       {isPlantPurchaseCategory(line.category) && (
                         <label className="col-span-4 block">
                           <span className="text-[9px] font-bold uppercase text-slate-500">
-                            Size
+                            {t('purchasing.size')}
                           </span>
                           <input
                             value={line.containerSize}
@@ -1086,7 +1230,7 @@ export function PurchasingWorkspace({
                               next[idx] = { ...line, containerSize: e.target.value };
                               setBillLines(next);
                             }}
-                            placeholder="#3, Tray…"
+                            placeholder={t('purchasing.sizePlaceholder')}
                             className="mt-0.5 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                           />
                         </label>
@@ -1094,7 +1238,9 @@ export function PurchasingWorkspace({
                       <label
                         className={`block ${isPlantPurchaseCategory(line.category) ? 'col-span-4' : 'col-span-6'}`}
                       >
-                        <span className="text-[9px] font-bold uppercase text-slate-500">Qty</span>
+                        <span className="text-[9px] font-bold uppercase text-slate-500">
+                          {t('common.qty')}
+                        </span>
                         <input
                           type="number"
                           min={1}
@@ -1111,7 +1257,7 @@ export function PurchasingWorkspace({
                         className={`block ${isPlantPurchaseCategory(line.category) ? 'col-span-4' : 'col-span-6'}`}
                       >
                         <span className="text-[9px] font-bold uppercase text-slate-500">
-                          Cost each
+                          {t('purchasing.costEach')}
                         </span>
                         <input
                           type="number"
@@ -1135,13 +1281,13 @@ export function PurchasingWorkspace({
                   onClick={() => setBillLines([...billLines, emptyBillLine()])}
                   className="text-[11px] font-bold text-ink-700"
                 >
-                  + Add line
+                  {t('purchasing.addLine')}
                 </button>
               </div>
               <textarea
                 value={billNotes}
                 onChange={(e) => setBillNotes(e.target.value)}
-                placeholder="Notes"
+                placeholder={t('purchasing.notes')}
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
@@ -1150,19 +1296,34 @@ export function PurchasingWorkspace({
                 disabled={busy}
                 className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
               >
-                Save bill
+                {t('purchasing.saveBill')}
               </button>
             </form>
           )}
 
           <div className="space-y-2 max-h-[480px] overflow-y-auto">
             {filteredBills.length === 0 ? (
-              <p className="text-xs text-gray-500 py-8 text-center">No vendor bills yet.</p>
+              <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noBills')}</p>
             ) : (
               filteredBills.map((bill) => (
                 <div
                   key={bill.id}
-                  className="border border-gray-100 rounded-xl p-3 hover:border-ink-200 transition"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (permissions.canManageVendorBills) openEditBill(bill);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (permissions.canManageVendorBills) openEditBill(bill);
+                    }
+                  }}
+                  className={`border rounded-xl p-3 transition text-left w-full ${
+                    editingBill?.id === bill.id
+                      ? 'border-ink-400 bg-ink-50/30'
+                      : 'border-gray-100 hover:border-ink-200 cursor-pointer'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -1172,30 +1333,32 @@ export function PurchasingWorkspace({
                       </p>
                       <p className="text-xs text-gray-500">
                         {bill.billDate}
-                        {bill.dueDate ? ` · Due ${bill.dueDate}` : ''}
+                        {bill.dueDate ? ` · ${t('purchasing.due')} ${bill.dueDate}` : ''}
                         {bill.vendorInvoiceNumber
-                          ? ` · Inv ${bill.vendorInvoiceNumber}`
+                          ? ` · ${t('purchasing.invPrefix')} ${bill.vendorInvoiceNumber}`
                           : ''}
                         {bill.poNumber ? ` · ${bill.poNumber}` : ''} · {money(bill.grandTotal)}
                       </p>
-                      {bill.invoicePhotoUrl && (
-                        <a
-                          href={bill.invoicePhotoUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] font-bold text-ink-700 hover:underline"
-                        >
-                          View scanned invoice
-                        </a>
-                      )}
+                      {bill.status === 'paid' &&
+                        (bill.paymentMethod || bill.paymentReference) && (
+                          <p className="text-[11px] font-bold text-emerald-800 mt-1">
+                            {formatPaymentRecord(t, bill.paymentMethod, bill.paymentReference)}
+                            {bill.paidAt
+                              ? ` · ${new Date(bill.paidAt).toLocaleDateString()}`
+                              : ''}
+                          </p>
+                        )}
                       {bill.items?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {[
                             ...new Set(
                               bill.items.map((line) =>
-                                purchaseCategoryLabel(
-                                  line.category ||
-                                    (line.lineType === 'plant' ? 'Plants' : 'Other')
+                                translateCategory(
+                                  t,
+                                  purchaseCategoryLabel(
+                                    line.category ||
+                                      (line.lineType === 'plant' ? 'Plants' : 'Other')
+                                  )
                                 )
                               )
                             )
@@ -1213,32 +1376,61 @@ export function PurchasingWorkspace({
                     <span
                       className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusBadge(bill.status)}`}
                     >
-                      {bill.status}
+                      {translateStatus(t, bill.status)}
                     </span>
                   </div>
+                  {bill.invoicePhotoUrl && (
+                    <a
+                      href={bill.invoicePhotoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block mt-1.5 text-[11px] font-bold text-ink-700 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {t('purchasing.viewScannedInvoice')}
+                    </a>
+                  )}
                   {permissions.canManageVendorBills && (
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div
+                      className="flex flex-wrap gap-2 mt-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openEditBill(bill)}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-800"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {t('purchasing.edit')}
+                      </button>
                       {bill.status !== 'paid' && (
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => void run(() => markVendorBillPaid(bill))}
+                          onClick={() => setMarkingPaidBill(bill)}
                           className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white"
                         >
-                          Mark paid
+                          {t('purchasing.markPaid')}
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() =>
                           void run(async () => {
-                            if (!confirm(`Delete ${bill.billNumber}?`)) return;
+                            if (
+                              !confirm(
+                                t('purchasing.deleteBillConfirm', { billNumber: bill.billNumber })
+                              )
+                            )
+                              return;
+                            if (editingBill?.id === bill.id) setEditingBill(null);
                             await deleteVendorBill(bill.id);
                           })
                         }
                         className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-rose-700"
                       >
-                        Delete
+                        {t('common.delete')}
                       </button>
                     </div>
                   )}
@@ -1255,13 +1447,15 @@ export function PurchasingWorkspace({
             <div className="px-5 py-4 bg-ink-950 text-white flex items-center gap-2">
               <FileText className="h-4 w-4" />
               <div>
-                <h3 className="text-sm font-black">Receive {receivingOrder.poNumber}</h3>
+                <h3 className="text-sm font-black">
+                  {t('purchasing.receiveTitle', { poNumber: receivingOrder.poNumber })}
+                </h3>
                 <p className="text-[11px] text-white/70">{receivingOrder.vendorName}</p>
               </div>
             </div>
             <div className="p-4 space-y-2 max-h-[50vh] overflow-y-auto">
               <p className="text-[11px] text-slate-500">
-                Enter qty received now. Inventory is updated only for these amounts.
+                {t('purchasing.receiveHint')}
               </p>
               {receivingOrder.items.map((line) => {
                 const remaining = Math.max(
@@ -1279,8 +1473,11 @@ export function PurchasingWorkspace({
                         <span className="text-slate-500 font-medium">{line.containerSize}</span>
                       </p>
                       <p className="text-[10px] text-slate-500">
-                        Received {line.quantityReceived}/{line.quantityOrdered} · remaining{' '}
-                        {remaining}
+                        {t('purchasing.receivedProgress', {
+                          received: line.quantityReceived,
+                          ordered: line.quantityOrdered,
+                          remaining
+                        })}
                       </p>
                     </div>
                     <input
@@ -1306,7 +1503,7 @@ export function PurchasingWorkspace({
                 onClick={() => setReceivingOrder(null)}
                 className="px-3 py-2 text-xs font-bold text-slate-600"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1314,7 +1511,7 @@ export function PurchasingWorkspace({
                 onClick={() => void handleReceive()}
                 className="px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
               >
-                Receive into inventory
+                {t('purchasing.receiveIntoInventory')}
               </button>
             </div>
           </div>
@@ -1331,7 +1528,9 @@ export function PurchasingWorkspace({
               <div className="flex items-center gap-2 min-w-0">
                 <Mail className="h-4 w-4 shrink-0" />
                 <div className="min-w-0">
-                  <h3 className="text-sm font-black">Email {emailingOrder.poNumber}</h3>
+                  <h3 className="text-sm font-black">
+                    {t('purchasing.emailPoTitle', { poNumber: emailingOrder.poNumber })}
+                  </h3>
                   <p className="text-[11px] text-white/70 truncate">
                     {emailingOrder.vendorName} · {money(emailingOrder.grandTotal)}
                   </p>
@@ -1341,25 +1540,25 @@ export function PurchasingWorkspace({
                 type="button"
                 onClick={() => setEmailingOrder(null)}
                 className="text-white/70 hover:text-white"
-                aria-label="Close"
+                aria-label={t('common.close')}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="p-4 space-y-3">
               <label className="block text-xs">
-                <span className="font-bold text-slate-600">Vendor email</span>
+                <span className="font-bold text-slate-600">{t('purchasing.vendorEmailLabel')}</span>
                 <input
                   type="email"
                   required
                   value={emailTo}
                   onChange={(e) => setEmailTo(e.target.value)}
-                  placeholder="vendor@example.com"
+                  placeholder={t('purchasing.emailPlaceholder')}
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 />
               </label>
               <label className="block text-xs">
-                <span className="font-bold text-slate-600">Subject</span>
+                <span className="font-bold text-slate-600">{t('purchasing.subjectLabel')}</span>
                 <input
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
@@ -1367,23 +1566,22 @@ export function PurchasingWorkspace({
                 />
               </label>
               <label className="block text-xs">
-                <span className="font-bold text-slate-600">Message (optional)</span>
+                <span className="font-bold text-slate-600">{t('purchasing.messageOptional')}</span>
                 <textarea
                   value={emailMessage}
                   onChange={(e) => setEmailMessage(e.target.value)}
                   rows={3}
-                  placeholder="Please confirm availability and ship date…"
+                  placeholder={t('purchasing.messagePlaceholder')}
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 />
               </label>
-              <p className="text-[11px] text-slate-500">
-                Email includes the full PO line items and totals. Draft POs are marked{' '}
-                <span className="font-semibold">sent</span> after a successful send.
-              </p>
+              <p className="text-[11px] text-slate-500">{t('purchasing.emailPoHint')}</p>
               {emailStatus && (
                 <p
                   className={`text-xs font-semibold rounded-lg px-3 py-2 ${
-                    emailStatus.startsWith('Sent')
+                    emailStatus.startsWith(
+                      t('purchasing.sentTo', { email: '' }).replace('{{email}}', '').trim()
+                    )
                       ? 'text-emerald-800 bg-emerald-50 border border-emerald-100'
                       : 'text-rose-700 bg-rose-50 border border-rose-100'
                   }`}
@@ -1398,7 +1596,7 @@ export function PurchasingWorkspace({
                 onClick={() => setEmailingOrder(null)}
                 className="px-3 py-2 text-xs font-bold text-slate-600"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -1406,11 +1604,38 @@ export function PurchasingWorkspace({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
               >
                 <Mail className="h-3.5 w-3.5" />
-                {emailSending ? 'Sending…' : 'Send PO'}
+                {emailSending ? t('invoice.sending') : t('purchasing.sendPo')}
               </button>
             </div>
           </form>
         </div>
+      )}
+
+      {editingBill && (
+        <BillEditModal
+          bill={editingBill}
+          vendors={vendors}
+          busy={busy}
+          canCreateVendor={permissions.canEditVendors}
+          onClose={() => setEditingBill(null)}
+          onSave={handleSaveEditedBill}
+        />
+      )}
+
+      {markingPaidBill && (
+        <MarkPaidModal
+          title={t('purchasing.markPaid')}
+          subtitle={`${markingPaidBill.billNumber} · ${markingPaidBill.vendorName}`}
+          amountLabel={money(markingPaidBill.grandTotal)}
+          busy={busy}
+          onCancel={() => setMarkingPaidBill(null)}
+          onConfirm={async (payment) => {
+            await run(async () => {
+              await markVendorBillPaid(markingPaidBill, payment);
+              setMarkingPaidBill(null);
+            });
+          }}
+        />
       )}
     </div>
   );

@@ -290,7 +290,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
             setSelectedDay(null);
           }}
           className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-          title="Previous week"
+          title={t('trucks.previousWeek')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -313,7 +313,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
             setSelectedDay(null);
           }}
           className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-          title="Next week"
+          title={t('trucks.nextWeek')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -450,7 +450,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
             </div>
             <input
               type="text"
-              placeholder="Search truck or carrier..."
+              placeholder={t('trucks.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ink-600 bg-slate-50/50 focus:bg-white transition-all font-medium text-gray-800 placeholder:text-slate-400 shadow-inner"
@@ -482,11 +482,11 @@ export const TrucksList: React.FC<TrucksListProps> = ({
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[500px] lg:max-h-[600px] min-h-[220px]">
             {filteredTrucks.length === 0 ? (
               <div className="text-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-300 px-3">
-                <p className="text-sm font-semibold text-gray-700">No trucks this day</p>
+                <p className="text-sm font-semibold text-gray-700">{t('trucks.noTrucksThisDay')}</p>
                 <p className="text-xs text-slate-500 mt-1 max-w-[220px] mx-auto leading-normal">
                   {searchQuery || statusFilter !== 'all'
-                    ? 'Try adjusting your filters or search terms.'
-                    : 'The board opens on today — if your truck has a different loading date, tap that day (or All trucks).'}
+                    ? t('trucks.adjustFilters')
+                    : t('trucks.boardHint')}
                 </p>
                 {otherDaysThisWeek.length > 0 && !searchQuery && statusFilter === 'all' && (
                   <div className="mt-4 flex flex-wrap justify-center gap-1.5">
@@ -595,7 +595,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                               setDeletingTruckId(truck.id);
                             }}
                             className="text-gray-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
-                            title="Delete truck"
+                            title={t('trucks.deleteTruck')}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>

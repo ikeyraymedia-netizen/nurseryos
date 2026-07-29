@@ -395,19 +395,15 @@ function NurseryApp({
     if (!qb && !stripe && !stripePay) return;
 
     if (qb === 'connected') {
-      alert(
-        'QuickBooks connected. Open Team to confirm status, then push invoices from the invoice screen.'
-      );
+      alert(t('appExtra.qbConnectedAlert'));
       setShowTeamManager(true);
     } else if (qb === 'error') {
-      alert(`QuickBooks connect failed: ${params.get('message') || 'Unknown error'}`);
+      alert(`${t('appExtra.qbFailed')} ${params.get('message') || t('invoice.unknownError')}`);
     }
 
     if (stripe === 'return' || stripe === 'refresh') {
       alert(
-        stripe === 'return'
-          ? 'Stripe onboarding returned. Open Team to confirm charges are enabled, then create a pay link from an invoice.'
-          : 'Stripe onboarding was refreshed. Open Team and continue Connect if needed.'
+        stripe === 'return' ? t('appExtra.stripeReturnedAlert') : t('appExtra.stripeRefreshedAlert')
       );
       setShowTeamManager(true);
     }
@@ -426,25 +422,22 @@ function NurseryApp({
             });
             alert(
               result.paid
-                ? 'Payment received. Open the invoice from Customers — it should show Paid with $0.00 balance due.'
-                : `Payment submitted, but Stripe still shows status “${result.paymentStatus || 'unpaid'}”. Open the invoice and use Refresh payment status, or wait a few seconds.`
+                ? t('appExtra.paymentReceivedAlert')
+                : t('appExtra.paymentPendingAlert', {
+                    status: result.paymentStatus || 'unpaid'
+                  })
             );
             return;
           } catch (err: any) {
             console.warn('[stripe] confirm after redirect failed', err);
-            alert(
-              err?.message ||
-                'Payment submitted, but NurseryOS could not confirm it yet. Open the invoice and click Refresh payment status.'
-            );
+            alert(err?.message || t('appExtra.paymentSubmittedAlert'));
             return;
           }
         }
-        alert(
-          'Payment submitted. Open the invoice from Customers and click Refresh payment status if it is not marked Paid yet.'
-        );
+        alert(t('appExtra.paymentSubmittedOpen'));
       })();
     } else if (stripePay === 'cancel') {
-      alert('Payment canceled. You can create a new pay link from the invoice when ready.');
+      alert(t('appExtra.paymentCanceledAlert'));
     }
 
     // Strip OAuth/payment return params only — keep tab/order/truck.
@@ -456,7 +449,7 @@ function NurseryApp({
     url.searchParams.delete('documentId');
     url.searchParams.delete('session_id');
     window.history.replaceState({}, '', url.pathname + url.search);
-  }, [tenant.id]);
+  }, [tenant.id, t]);
 
   useEffect(() => {
     // While a restored tab is still pending authorization, never write a
@@ -1222,7 +1215,7 @@ function NurseryApp({
           ) : (
             <div className="bg-white rounded-2xl border border-ink-100 p-12 text-center min-h-[400px] flex flex-col items-center justify-center">
               <TruckIcon className="h-10 w-10 text-ink-800 mb-4" />
-              <h3 className="text-lg font-bold">No Selection</h3>
+              <h3 className="text-lg font-bold">{t('appExtra.noSelection')}</h3>
               <p className="text-sm text-gray-500 max-w-sm mt-1">
                 {permissions.canCheckOffLoading
                   ? t('app.selectTruckOrOrder')
@@ -1370,6 +1363,7 @@ function RootApp({
     onRefreshTenant: () => Promise<void>;
   };
 }) {
+  const t = useT();
   const isPlatformAdmin = !!session.profile.isPlatformAdmin;
   const [sellerView, setSellerView] = useState<'platform' | 'nursery'>(() => {
     if (!isPlatformAdmin) return 'nursery';
@@ -1417,10 +1411,9 @@ function RootApp({
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
         <BrandLogo variant="icon" size="lg" showText={false} />
-        <h1 className="mt-6 text-lg font-black">No nursery workspace linked</h1>
+        <h1 className="mt-6 text-lg font-black">{t('appExtra.noWorkspace')}</h1>
         <p className="mt-2 text-sm text-slate-400 max-w-md leading-relaxed">
-          Your seller account can manage packages from the platform console. To open a nursery
-          workspace (like Bayou), this account also needs to be a member of that nursery.
+          {t('appExtra.noWorkspaceSellerBody')}
         </p>
         {isPlatformAdmin && (
           <button
@@ -1428,7 +1421,7 @@ function RootApp({
             onClick={goPlatform}
             className="mt-6 px-4 py-2 rounded-xl bg-ink-600 text-xs font-black"
           >
-            Back to Seller console
+            {t('appExtra.backToSeller')}
           </button>
         )}
         <button
@@ -1436,7 +1429,7 @@ function RootApp({
           onClick={() => session.onSignOut()}
           className="mt-3 text-xs font-bold text-slate-400 underline"
         >
-          Sign out
+          {t('common.signOut')}
         </button>
       </div>
     );

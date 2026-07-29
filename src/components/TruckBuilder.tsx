@@ -5,6 +5,7 @@ import { X, Check, Save, Truck as TruckIcon, HelpCircle, ChevronUp, ChevronDown 
 import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
 import { toDateKey } from '../lib/dates';
 import { useSalesRepOptions } from '../lib/salesReps';
+import { useT } from '../lib/i18n';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
@@ -21,6 +22,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   onCancel,
   onSuccess
 }) => {
+  const t = useT();
   const ownerOptions = useSalesRepOptions(tenantId);
   const [name, setName] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -89,19 +91,19 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Please provide a name or label for this truck.');
+      setError(t('truckBuilder.nameRequired'));
       return;
     }
     if (!truckType) {
-      setError('Please select a truck type.');
+      setError(t('truckBuilder.typeRequired'));
       return;
     }
     if (selectedOrderIds.length === 0) {
-      setError('Please select at least one customer order to load on this truck.');
+      setError(t('truckBuilder.ordersRequired'));
       return;
     }
     if (!loadingDate) {
-      setError('Please set a loading date so this truck appears on the Trucks week board.');
+      setError(t('truckBuilder.dateRequired'));
       return;
     }
 
@@ -136,7 +138,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
       }
     } catch (err: any) {
       console.error('Failed to save truck:', err);
-      setError(err.message || 'An error occurred while saving the truck load.');
+      setError(err.message || t('truckBuilder.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -164,14 +166,16 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
         <div className="flex items-center space-x-2">
           <TruckIcon className="h-5 w-5 text-white/70" />
           <h3 className="text-base font-bold font-sans">
-            {truckToEdit ? `Edit Truck Load: ${truckToEdit.name}` : 'Build a Custom Truck Load'}
+            {truckToEdit
+              ? t('trucks.editTruckLoad', { name: truckToEdit.name })
+              : t('trucks.buildCustomTruck')}
           </h3>
         </div>
         <button
           type="button"
           onClick={onCancel}
           className="text-white/80 hover:text-white p-1 rounded-lg border border-transparent hover:border-white/30 hover:bg-white/10 transition-colors"
-          title="Cancel"
+          title={t('common.cancel')}
         >
           <X className="h-5 w-5" />
         </button>
@@ -181,7 +185,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
           {error && (
             <div className="bg-red-50 text-red-800 text-xs font-bold p-3.5 rounded-xl border border-red-200 flex items-center space-x-2">
-              <span className="shrink-0 font-mono">⚠️ Error:</span>
+              <span className="shrink-0 font-mono">{t('truckBuilder.errorPrefix')}</span>
               <span>{error}</span>
             </div>
           )}
@@ -190,7 +194,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Sales Rep *
+                {t('truckBuilder.salesRep')}
               </label>
               <select
                 value={owner}
@@ -198,7 +202,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
                 required
               >
-                <option value="">Select sales rep...</option>
+                <option value="">{t('loader.selectSalesRep')}</option>
                 {ownerOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -209,25 +213,25 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 )}
               </select>
               <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-                Team members with Owner, Admin, or Sales roles.
+                {t('truckBuilder.salesRepHint')}
               </p>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Truck Label / Name *
+                {t('truckBuilder.truckLabel')}
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Lafayette - Flatbed #1"
+                placeholder={t('truckBuilder.truckLabelPlaceholder')}
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium"
                 required
               />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Loading Date *
+                {t('trucks.loadingDateLabel')}
               </label>
               <input
                 type="date"
@@ -237,24 +241,24 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
               />
               <p className="text-[10px] text-gray-500 mt-1 leading-snug">
-                Places this truck on that day in the Trucks week board (Sun–Sat).
+                {t('truckBuilder.dateHint')}
               </p>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Logistics Carrier / Driver
+                {t('truckBuilder.carrier')}
               </label>
               <input
                 type="text"
                 value={carrier}
                 onChange={(e) => setCarrier(e.target.value)}
-                placeholder="e.g. Cajun Freight / driver Bobby"
+                placeholder={t('truckBuilder.carrierPlaceholder')}
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium"
               />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-                Truck Type *
+                {t('truckBuilder.truckType')}
               </label>
               <select
                 value={truckType}
@@ -262,7 +266,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans font-medium text-gray-800"
                 required
               >
-                <option value="">Select Type...</option>
+                <option value="">{t('truckBuilder.selectType')}</option>
                 <option value="28' Gooseneck">28' Gooseneck</option>
                 <option value="30' Gooseneck">30' Gooseneck</option>
                 <option value="32' Gooseneck">32' Gooseneck</option>
@@ -280,12 +284,12 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
 
           <div>
             <label className="block text-xs font-bold text-gray-700 font-mono mb-1.5 uppercase">
-              Loading Instructions / Driver Notes
+              {t('trucks.driverNotes')}
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Load heavy #45 first, tie down canvas securely, separate Lafayette orders near cab..."
+              placeholder={t('truckBuilder.driverNotesPlaceholder')}
               rows={2}
               className="block w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-sans"
             />
@@ -295,18 +299,18 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-bold text-gray-700 font-mono uppercase">
-                Select Orders to Load *
+                {t('trucks.selectOrders')}
               </label>
               <span className="text-[11px] font-mono font-bold text-ink-800 bg-ink-50 border border-ink-100 px-2 py-0.5 rounded-md">
-                {selectableOrders.length} Available
+                {t('truckBuilder.ordersAvailable', { n: selectableOrders.length })}
               </span>
             </div>
 
             {selectableOrders.length === 0 ? (
               <div className="text-center py-8 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-gray-500">
-                <p className="text-xs font-bold">No available orders found</p>
+                <p className="text-xs font-bold">{t('truckBuilder.noOrders')}</p>
                 <p className="text-[10px] text-gray-400 mt-1 max-w-[240px] mx-auto leading-normal">
-                  All active plant orders are already assigned to trucks. Upload new customer papers or delete a truck load to release its orders.
+                  {t('truckBuilder.noOrdersHintActive')}
                 </p>
               </div>
             ) : (
@@ -336,7 +340,10 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                             {order.customerName}
                           </p>
                           <p className="text-[10px] text-gray-400 font-mono">
-                            Order #: {order.orderNumber} • {totalItems} plants
+                            {t('truckBuilder.orderLineShort', {
+                              num: order.orderNumber,
+                              items: totalItems
+                            })}
                           </p>
                         </div>
                       </div>
@@ -345,7 +352,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                           {order.totalWeightLbs.toLocaleString()} lbs
                         </p>
                         <p className="text-[9px] text-gray-400 font-mono capitalize">
-                          Status: {order.status === 'completed' ? 'loaded' : order.status}
+                          {order.status === 'completed'
+                            ? t('truckBuilder.statusLoaded')
+                            : t('truckBuilder.status', { status: order.status })}
                         </p>
                       </div>
                     </div>
@@ -361,14 +370,14 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <label className="block text-xs font-bold text-gray-800 font-mono uppercase">
-                    Determine Loading Sequence *
+                    {t('trucks.loadingSequence')}
                   </label>
                   <p className="text-[10px] text-gray-500 font-sans mt-0.5 leading-normal">
-                    Specify the sequence in which these customer shipments will be physically loaded onto the truck (e.g. 1st, 2nd, 3rd). Use the arrows to reorder.
+                    {t('truckBuilder.sequenceDetail')}
                   </p>
                 </div>
                 <span className="text-[10px] font-mono font-bold text-ink-800 bg-ink-50 border border-ink-100 px-2 py-0.5 rounded-md shrink-0">
-                  {selectedOrderIds.length} Assigned
+                  {t('truckBuilder.ordersAssigned', { n: selectedOrderIds.length })}
                 </span>
               </div>
 
@@ -389,9 +398,17 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                       <div className="flex items-center space-x-3 min-w-0">
                         {/* Position Badge */}
                         <div className="w-14 shrink-0 flex flex-col items-center justify-center bg-ink-50 text-ink-800 border border-ink-100 rounded-lg py-1.5 font-mono">
-                          <span className="text-[9px] font-black leading-none uppercase tracking-wide opacity-80">LOAD</span>
+                          <span className="text-[9px] font-black leading-none uppercase tracking-wide opacity-80">
+                            {t('truckBuilder.loadOrdinal')}
+                          </span>
                           <span className="text-xs font-black mt-1 leading-none text-ink-950">
-                            {index === 0 ? '1st' : index === 1 ? '2nd' : index === 2 ? '3rd' : `${index + 1}th`}
+                            {index === 0
+                              ? t('truckBuilder.first')
+                              : index === 1
+                                ? t('truckBuilder.second')
+                                : index === 2
+                                  ? t('truckBuilder.third')
+                                  : t('truckBuilder.nth', { n: index + 1 })}
                           </span>
                         </div>
 
@@ -400,7 +417,11 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                             {order.customerName}
                           </p>
                           <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                            Order #{order.orderNumber} • {totalItems} plants • {order.totalWeightLbs.toLocaleString()} lbs
+                            {t('truckBuilder.orderLineFull', {
+                              num: order.orderNumber,
+                              items: totalItems,
+                              weight: order.totalWeightLbs.toLocaleString()
+                            })}
                           </p>
                         </div>
                       </div>
@@ -412,7 +433,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                           disabled={isFirst}
                           onClick={() => handleMoveOrder(index, 'up')}
                           className="w-8 h-8 rounded-lg border border-gray-200 hover:border-ink-500 hover:bg-ink-50 text-gray-500 hover:text-ink-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:hover:text-gray-500 flex items-center justify-center transition-all"
-                          title="Move Up (Load Earlier)"
+                          title={t('trucks.moveUp')}
                         >
                           <ChevronUp className="h-4 w-4" />
                         </button>
@@ -421,7 +442,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                           disabled={isLast}
                           onClick={() => handleMoveOrder(index, 'down')}
                           className="w-8 h-8 rounded-lg border border-gray-200 hover:border-ink-500 hover:bg-ink-50 text-gray-500 hover:text-ink-800 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:hover:text-gray-500 flex items-center justify-center transition-all"
-                          title="Move Down (Load Later)"
+                          title={t('trucks.moveDown')}
                         >
                           <ChevronDown className="h-4 w-4" />
                         </button>
@@ -439,15 +460,21 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           {/* Live Stats */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white p-3 rounded-xl border border-gray-150 shadow-inner">
-              <p className="text-[9px] font-bold text-gray-400 font-mono uppercase">Orders Selected</p>
+              <p className="text-[9px] font-bold text-gray-400 font-mono uppercase">
+                {t('truckBuilder.ordersSelected')}
+              </p>
               <p className="text-lg font-black text-ink-950 font-mono mt-0.5">
-                {selectedOrderIds.length} <span className="text-xs font-normal text-gray-500">loads</span>
+                {selectedOrderIds.length}{' '}
+                <span className="text-xs font-normal text-gray-500">{t('truckBuilder.loads')}</span>
               </p>
             </div>
             <div className="bg-white p-3 rounded-xl border border-gray-150 shadow-inner">
-              <p className="text-[9px] font-bold text-gray-400 font-mono uppercase">Cumulative Weight</p>
+              <p className="text-[9px] font-bold text-gray-400 font-mono uppercase">
+                {t('truckBuilder.cumulativeWeight')}
+              </p>
               <p className="text-lg font-black text-ink-950 font-mono mt-0.5">
-                {totalWeightSelected.toLocaleString()} <span className="text-xs font-normal text-gray-500">lbs</span>
+                {totalWeightSelected.toLocaleString()}{' '}
+                <span className="text-xs font-normal text-gray-500">{t('common.lbs')}</span>
               </p>
             </div>
           </div>
@@ -456,12 +483,21 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           <div className="bg-white p-3.5 rounded-xl border border-gray-150">
             <div className="flex justify-between text-[10px] mb-1 font-mono">
               <span className="font-bold text-gray-500 uppercase flex items-center">
-                {truckType ? `${truckType} Payload Gauge` : "Trailer Payload Gauge"}
+                {truckType
+                  ? t('truckBuilder.payloadGauge', { type: truckType })
+                  : t('truckBuilder.trailerGauge')}
               </span>
               <span className={`font-black ${capacityLimitLbs > 0 && totalWeightSelected > capacityLimitLbs ? 'text-red-600 animate-pulse' : 'text-ink-800'}`}>
                 {capacityLimitLbs > 0
-                  ? `${totalWeightSelected.toLocaleString()} / ${capacityLimitLbs.toLocaleString()} lbs (${limitPercentage}%)`
-                  : `${totalWeightSelected.toLocaleString()} lbs — select truck type for capacity`}
+                  ? t('truckBuilder.weightCapacity', {
+                      current: totalWeightSelected.toLocaleString(),
+                      limit: capacityLimitLbs.toLocaleString(),
+                      pct: limitPercentage
+                    })
+                  : t('truckBuilder.weightNoCapacity', {
+                      current: totalWeightSelected.toLocaleString(),
+                      hint: t('truckBuilder.selectTypeCapacity')
+                    })}
               </span>
             </div>
             <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
@@ -478,7 +514,10 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
             </div>
             {capacityLimitLbs > 0 && totalWeightSelected > capacityLimitLbs && (
               <p className="text-[9px] text-red-600 font-bold mt-1.5 font-mono">
-                ⚠️ OVERWEIGHT WARNING: Exceeds {truckType || 'selected trailer'} capacity limit of {capacityLimitLbs.toLocaleString()} lbs. Consider splitting.
+                {t('truckBuilder.overweightDetail', {
+                  type: truckType || t('truckBuilder.selectedTrailer'),
+                  limit: capacityLimitLbs.toLocaleString()
+                })}
               </p>
             )}
           </div>
@@ -491,7 +530,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               disabled={saving}
               className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -503,18 +542,18 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
               }`}
             >
               {saving ? (
-                <span>Saving Truck...</span>
+                <span>{t('truckBuilder.saving')}</span>
               ) : (
                 <>
                   <Save className="h-4 w-4" />
-                  <span>{truckToEdit ? 'Update Truck' : 'Save Truck'}</span>
+                  <span>{truckToEdit ? t('trucks.updateTruck') : t('trucks.saveTruck')}</span>
                 </>
               )}
             </button>
           </div>
           {selectedOrderIds.length === 0 && (
             <p className="text-[10px] text-gray-500 text-right font-mono">
-              Select at least one order above, then tap Save Truck.
+              {t('trucks.selectOneOrder')}
             </p>
           )}
         </div>

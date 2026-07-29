@@ -105,7 +105,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       });
     } catch (err) {
       console.error('Pull sheet PDF failed:', err);
-      alert('Could not generate pull sheet PDF. Try again.');
+      alert(t('trucksExtra.pullSheetFailed'));
     } finally {
       setPullSheetBusy(false);
     }
@@ -329,15 +329,15 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     setAddError(null);
 
     if (!newPlantName.trim()) {
-      setAddError('Plant name is required');
+      setAddError(t('trucksExtra.plantNameRequired'));
       return;
     }
     if (!newContainerSize) {
-      setAddError('Container size is required');
+      setAddError(t('trucksExtra.sizeRequired'));
       return;
     }
     if (newQuantity <= 0) {
-      setAddError('Quantity must be at least 1');
+      setAddError(t('trucksExtra.qtyMin'));
       return;
     }
 
@@ -388,7 +388,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       setAddingPlantToOrderId(null);
     } catch (err: any) {
       console.error('Error adding plant to order inside truck:', err);
-      setAddError(err.message || 'Failed to add plant to order');
+      setAddError(err.message || t('trucksExtra.failedAddPlant'));
     }
   };
 
@@ -398,7 +398,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     setStandaloneError(null);
 
     if (!standaloneCustomerName.trim()) {
-      setStandaloneError('Customer/Label is required');
+      setStandaloneError(t('trucksExtra.customerRequired'));
       return;
     }
     if (!standalonePlantName.trim()) {
@@ -457,13 +457,13 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       setIsCreatingStandalone(false);
     } catch (err: any) {
       console.error('Error creating standalone addition:', err);
-      setStandaloneError(err.message || 'Failed to create standalone addition');
+      setStandaloneError(err.message || t('trucksExtra.failedStandalone'));
     }
   };
 
   const handleDeleteItem = async (order: CustomerOrder, itemId: string) => {
     if (!permissions.canEditOrders) return;
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    if (!window.confirm(t('trucksExtra.deleteItemConfirm'))) return;
     try {
       const updatedItems = order.items.filter((item) => item.id !== itemId);
       let totalQty = 0;
@@ -612,7 +612,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               disabled={pullSheetBusy || truckOrders.length === 0}
               onClick={handleDownloadPullSheet}
               className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-ink-200 shadow-sm font-sans disabled:opacity-50"
-              title="Download printable pull sheet PDF"
+              title={t('trucksExtra.downloadPullSheetTitle')}
             >
               <Printer className="h-3.5 w-3.5 mr-1.5" />
               {pullSheetBusy ? t('trucks.preparing') : t('trucks.pullSheetPdf')}
@@ -709,7 +709,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         {truck.notes && (
           <div className="mt-4 bg-white/5 border border-white/20 rounded-xl p-3 text-xs text-white/90 flex items-start space-x-2">
             <Info className="h-4 w-4 text-white/70 shrink-0 mt-0.5" />
-            <p className="leading-normal"><span className="font-bold font-mono text-white/80 uppercase">Load Instructions:</span> {truck.notes}</p>
+            <p className="leading-normal"><span className="font-bold font-mono text-white/80 uppercase">{t('trucks.loadInstructions')}</span> {truck.notes}</p>
           </div>
         )}
 
@@ -717,7 +717,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           <div className="mt-4 bg-red-600 border border-red-700 rounded-xl p-3 text-sm text-white flex items-start space-x-2 shadow-md">
             <AlertCircle className="h-5 w-5 text-red-100 shrink-0 mt-0.5" />
             <div className="leading-snug">
-              <p className="font-black uppercase tracking-wide text-xs text-red-100">Overweight — do not load as-is</p>
+              <p className="font-black uppercase tracking-wide text-xs text-red-100">{t('trucksExtra.overweightTitle')}</p>
               <p className="mt-1 text-red-50 text-xs">
                 {totalWeight.toLocaleString()} lbs on a {capacity.toLocaleString()} lb{' '}
                 {truck.truckType || 'trailer'} ({overallWeightPercentage}% capacity). Remove or split
@@ -742,7 +742,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         <div className={`p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-ink-500/20 ${isOverweight ? 'bg-red-100/80' : ''}`}>
           <Weight className={`h-5 w-5 shrink-0 ${isOverweight ? 'text-red-700' : 'text-ink-800'}`} />
           <div>
-            <p className={`text-[10px] font-bold font-mono uppercase leading-tight ${isOverweight ? 'text-red-800' : 'text-ink-900/60'}`}>Total Truckload Weight</p>
+            <p className={`text-[10px] font-bold font-mono uppercase leading-tight ${isOverweight ? 'text-red-800' : 'text-ink-900/60'}`}>{t('trucksExtra.totalWeight')}</p>
             <p className={`text-base font-black font-mono mt-0.5 ${isOverweight ? 'text-red-900' : 'text-gray-900'}`}>
               {totalWeight.toLocaleString()}
               {capacity > 0 ? (
@@ -760,7 +760,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         <div className="p-4 flex items-center space-x-3 border-r border-b sm:border-b-0 border-ink-500/20">
           <Package className="h-5 w-5 text-ink-800 shrink-0" />
           <div>
-            <p className="text-[10px] font-bold text-gray-400 font-mono uppercase leading-tight">Total Plants Count</p>
+            <p className="text-[10px] font-bold text-gray-400 font-mono uppercase leading-tight">{t('trucksExtra.totalPlants')}</p>
             <p className="text-base font-black text-gray-900 font-mono mt-0.5">
               {loadedPlants} <span className="text-xs font-semibold text-gray-400">loaded</span> / {totalPlants} pots
             </p>
@@ -785,7 +785,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       <div className="flex-1 overflow-y-auto p-6 max-h-[550px]">
         {truckOrders.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            <p className="text-sm font-semibold">No orders assigned to this truck.</p>
+            <p className="text-sm font-semibold">{t('trucksExtra.noOrders')}</p>
             <p className="text-xs text-gray-400 mt-1">Please edit the truck load to select customer orders.</p>
           </div>
         ) : (
@@ -800,7 +800,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                 className="w-full py-3 px-4 border border-dashed border-amber-300 hover:border-amber-500 bg-amber-50/20 hover:bg-amber-50/50 text-amber-900 hover:text-amber-950 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-2 shadow-sm mb-2"
               >
                 <Plus className="h-4 w-4 stroke-[2.5px] text-amber-700 animate-pulse" />
-                <span>Create Standalone Load Addition (New Customer/Ticket)</span>
+                <span>{t('trucksExtra.createStandaloneTitle')}</span>
               </button>
             ) : (
               <form
@@ -810,7 +810,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                 <div className="flex items-center justify-between border-b border-gray-150 pb-2 flex-wrap gap-2">
                   <h4 className="text-xs font-black text-gray-950 flex items-center">
                     <Plus className="h-4 w-4 mr-1.5 text-amber-700" />
-                    Create Standalone Load Addition
+                    {t('trucksExtra.createStandaloneShort')}
                   </h4>
                   <button
                     type="button"
@@ -820,7 +820,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                     }}
                     className="text-xs text-gray-550 hover:text-gray-750 font-bold"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 </div>
 
@@ -927,7 +927,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                     className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-lg shadow-sm hover:shadow transition-all flex items-center space-x-1 cursor-pointer"
                   >
                     <CheckCircle2 className="h-4.5 w-4.5" />
-                    <span>Save Standalone Addition to Truck</span>
+                    <span>{t('trucksExtra.saveStandalone')}</span>
                   </button>
                 </div>
               </form>
@@ -1115,7 +1115,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                               <button
                                 onClick={() => setRemovingOrderId(order.id)}
                                 className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                                title="Remove this order from the truck (keeps the order)"
+                                title={t('trucksExtra.removeFromTruckTitle')}
                               >
                                 <Trash2 className="h-3.5 w-3.5 mr-1" />
                                 Remove from Truck
@@ -1141,7 +1141,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           className="w-full py-2.5 px-3 border border-dashed border-ink-300 hover:border-ink-500 bg-ink-50/20 hover:bg-ink-50/50 text-ink-850 hover:text-ink-950 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 shadow-sm"
                         >
                           <Plus className="h-3.5 w-3.5 stroke-[2.5px] text-ink-700" />
-                          <span>Add Plant Addition / Add-on to this Order</span>
+                          <span>{t('trucksExtra.addPlantAdditionFull')}</span>
                         </button>
                       ) : (
                         <form
@@ -1151,7 +1151,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           <div className="flex items-center justify-between border-b border-gray-250 pb-2">
                             <h4 className="text-xs font-black text-gray-900 flex items-center">
                               <Plus className="h-3.5 w-3.5 mr-1 text-ink-700" />
-                              Add Plant Addition to {order.customerName}
+                              {t('trucksExtra.addPlantTo', { name: order.customerName })}
                             </h4>
                             <button
                               type="button"
@@ -1252,7 +1252,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                               className="px-3.5 py-1.5 bg-ink-700 hover:bg-ink-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
                             >
                               <CheckCheck className="h-3 w-3" />
-                              <span>Save Addition</span>
+                              <span>{t('trucks.saveAddition')}</span>
                             </button>
                           </div>
                         </form>
@@ -1332,7 +1332,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         value={editNotes}
                                         onChange={(e) => setEditNotes(e.target.value)}
                                         className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
-                                        placeholder="Optional notes"
+                                        placeholder={t('loader.optionalNotes')}
                                       />
                                     </div>
                                   </div>
@@ -1394,14 +1394,14 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                             setEditIsAddition(!!item.isAddition);
                                           }}
                                           className="p-0.5 text-gray-400 hover:text-ink-700 hover:bg-ink-50 rounded"
-                                          title="Edit item details"
+                                          title={t('loader.editItem')}
                                         >
                                           <Edit className="h-3 w-3 text-gray-400 hover:text-ink-600" />
                                         </button>
                                         <button
                                           onClick={() => handleDeleteItem(order, item.id)}
                                           className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                          title="Delete item"
+                                          title={t('loader.deleteItem')}
                                         >
                                           <Trash2 className="h-3 w-3 text-gray-400 hover:text-red-600" />
                                         </button>

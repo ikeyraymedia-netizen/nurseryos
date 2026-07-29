@@ -109,7 +109,7 @@ export function AuthGate({ children }: AuthGateProps) {
     const isPlatformAdmin = !!nextProfile?.isPlatformAdmin;
 
     if (!nextProfile) {
-      setBootError('Your account profile was not found. Request access or join with an invite code.');
+      setBootError(translate(effectiveLocale, 'auth.profileNotFound'));
       setProfile(null);
       setTenant(null);
       setMember(null);
@@ -128,7 +128,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setAuthReady(true);
         return;
       }
-      setBootError('Your account has no nursery workspace yet. Request access or join with an invite code.');
+      setBootError(translate(effectiveLocale, 'auth.noWorkspace'));
       setProfile(null);
       setTenant(null);
       setMember(null);
@@ -150,7 +150,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setAuthReady(true);
         return;
       }
-      setBootError('Nursery workspace not found. Please contact support or create a new account.');
+      setBootError(translate(effectiveLocale, 'auth.workspaceNotFound'));
       setProfile(null);
       setTenant(null);
       setMember(null);
@@ -212,7 +212,7 @@ export function AuthGate({ children }: AuthGateProps) {
         await hydrateSession(nextUser);
       } catch (err: any) {
         console.error(err);
-        setBootError(err?.message || 'Failed to load nursery workspace.');
+        setBootError(err?.message || translate(effectiveLocale, 'auth.loadFailed'));
         clearTenantContexts();
         setAuthReady(true);
       }
@@ -263,7 +263,7 @@ export function AuthGate({ children }: AuthGateProps) {
         `Nursery: ${nurseryName.trim()}`,
         `Email: ${email.trim()}`,
         '',
-        requestMessage.trim() || 'I would like to set up NurseryOS for our nursery.'
+        requestMessage.trim() || translate(effectiveLocale, 'authExtra.requestBody')
       ].join('\n')
     );
     window.location.href = `mailto:${REQUEST_ACCESS_EMAIL}?subject=${subject}&body=${body}`;
@@ -316,7 +316,7 @@ export function AuthGate({ children }: AuthGateProps) {
           : err?.code === 'auth/invalid-credential' || err?.code === 'auth/wrong-password'
             ? translate(locale, 'auth.wrongPassword')
             : err?.code === 'auth/operation-not-allowed'
-              ? 'Email/password sign-in is not enabled on this Firebase project yet.'
+              ? translate(locale, 'authExtra.emailSignInDisabled')
               : err?.message || translate(locale, 'auth.authFailed');
       setFormError(message);
       // If auth already created the user but join failed, let the listener show boot state.

@@ -5,6 +5,7 @@ import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, 
 import jsPDF from 'jspdf';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
+import { useT, useLocale } from '../lib/i18n';
 import { imageSrcToDataUrl, resolveNurseryLogoSrc } from '../lib/nurseryBranding';
 
 interface BillOfLadingModalProps {
@@ -29,8 +30,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   nurseryAddress = '',
   nurseryLogoSrc = null,
 }) => {
+  const t = useT();
+  const { locale } = useLocale();
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
-  const truckName = String(truck?.name || 'Truck');
+  const truckName = String(truck?.name || t('bol.defaultTruckName'));
   const orderIds = Array.isArray(truck?.orderIds) ? truck.orderIds : [];
   const safeOrders = Array.isArray(orders) ? orders : [];
 
@@ -52,7 +55,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [shipperAddress, setShipperAddress] = useState(
     nurseryAddress
       ? `${nurseryName}\n${nurseryAddress}`
-      : `${nurseryName}\nNursery Loading Facility`
+      : `${nurseryName}\n${t('bol.defaultShipperSuffix')}`
   );
   const [shipDate, setShipDate] = useState(
     truck?.loadingDate || new Date().toISOString().split('T')[0]
@@ -60,7 +63,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [driverName, setDriverName] = useState('');
   const [truckNumber, setTruckNumber] = useState(() => {
     const match = truckName.match(/\d+/);
-    return match ? `Truck #${match[0]}` : 'Unit 401';
+    return match ? t('bol.truckUnit', { num: match[0] }) : t('bol.defaultTruck');
   });
   const [trailerNumber, setTrailerNumber] = useState('');
   const [sealNumber, setSealNumber] = useState('');
@@ -68,7 +71,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [receiverContact, setReceiverContact] = useState('');
   const [poNumber, setPoNumber] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState(
-    truck?.notes || 'Handle with care. Protect from extreme heat. Secure loads.'
+    truck?.notes || t('bol.defaultInstructions')
   );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfSheet, setPdfSheet] = useState<{
@@ -142,7 +145,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
         if (!bolConsolidatedMap.has(key)) {
           bolConsolidatedMap.set(key, {
-            plantName: item.plantName || 'Plant',
+            plantName: item.plantName || t('bol.defaultPlant'),
             containerSize: item.containerSize || '',
             totalQty: 0,
           });
@@ -245,14 +248,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.setTextColor(20, 20, 20);
       pdf.text((nurseryName || 'NurseryOS').toUpperCase(), textX, headerTop + 18);
       pdf.setFontSize(12);
-      pdf.text('BILL OF LADING', textX, headerTop + 34);
+      pdf.text(t('bol.billOfLading'), textX, headerTop + 34);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(10);
       pdf.setTextColor(60, 60, 60);
       pdf.text(
         selectedBOLType === 'consolidated'
-          ? 'Consolidated Truck Shipment'
-          : 'Individual Order Shipment',
+          ? t('bol.consolidatedShipment')
+          : t('bol.individualShipment'),
         textX,
         headerTop + 48
       );
@@ -261,22 +264,57 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       const infoTop = y + 4;
       box(margin, infoTop, pageWidth - margin * 2, 78);
       y = infoTop + 18;
-      writeLine(`BOL Number: ${bolNumber}`, margin + 10, 10, true, 14);
-      writeLine(`Ship Date: ${new Date(shipDate).toLocaleDateString()}`, margin + 10, 10, false, 14);
-      writeLine(`Customer P.O. #: ${poNumber.trim() || 'N/A'}`, margin + 10, 10, false, 14);
-      writeLine(`Carrier: ${truck.carrier || 'Private Fleet'}`, margin + 210, 10, false, 14);
-      writeLine(`Truck/Unit: ${truckNumber || 'N/A'}`, margin + 210, 10, false, 14);
-      writeLine(`Trailer: ${trailerNumber || 'N/A'}   Seal: ${sealNumber || 'N/A'}`, margin + 390, 10, false, 14);
+      writeLine(t('bol.pdfBolNumber', { num: bolNumber }), margin + 10, 10, true, 14);
+      writeLine(
+        t('bol.pdfShipDate', { date: new Date(shipDate).toLocaleDateString(locale) }),
+        margin + 10,
+        10,
+        false,
+        14
+      );
+      writeLine(
+        t('bol.pdfCustomerPo', { po: poNumber.trim() || t('bol.na') }),
+        margin + 10,
+        10,
+        false,
+        14
+      );
+      writeLine(
+        t('bol.pdfCarrier', { carrier: truck.carrier || t('bol.privateFleet') }),
+        margin + 210,
+        10,
+        false,
+        14
+      );
+      writeLine(t('bol.pdfTruckUnit', { unit: truckNumber || t('bol.na') }), margin + 210, 10, false, 14);
+      writeLine(
+        t('bol.pdfTrailerSeal', {
+          trailer: trailerNumber || t('bol.na'),
+          seal: sealNumber || t('bol.na')
+        }),
+        margin + 390,
+        10,
+        false,
+        14
+      );
       y = infoTop + 90;
 
-      drawSectionTitle('Shipper');
+      drawSectionTitle(t('bol.pdfShipper'));
       writeWrapped(`${nurseryName}\n${shipperAddress}`, margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
       y += 2;
 
-      drawSectionTitle(selectedBOLType === 'consolidated' ? 'Stops / Consignees' : 'Consignee');
+      drawSectionTitle(
+        selectedBOLType === 'consolidated' ? t('bol.pdfStopsConsignees') : t('bol.pdfConsignee')
+      );
       currentBOLOrders.forEach((order, idx) => {
         writeWrapped(
-          `${selectedBOLType === 'consolidated' ? `Stop ${idx + 1}: ` : ''}${order.customerName} (Order #${order.orderNumber})`,
+          selectedBOLType === 'consolidated'
+            ? t('bol.pdfStopOrder', {
+                n: idx + 1,
+                customer: order.customerName,
+                num: order.orderNumber
+              })
+            : `${order.customerName} (${t('common.order')} #${order.orderNumber})`,
           margin + 4,
           pageWidth - margin * 2 - 8,
           10,
@@ -286,7 +324,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       });
       if (receiverAddress.trim()) {
         writeWrapped(
-          `Receiver Address: ${receiverAddress}`,
+          t('bol.pdfReceiverAddress', { address: receiverAddress }),
           margin + 4,
           pageWidth - margin * 2 - 8,
           10,
@@ -296,7 +334,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       }
       if (receiverContact.trim()) {
         writeWrapped(
-          `Point of Contact: ${receiverContact}`,
+          t('bol.pdfPointOfContact', { contact: receiverContact }),
           margin + 4,
           pageWidth - margin * 2 - 8,
           10,
@@ -306,7 +344,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       }
       y += 4;
 
-      drawSectionTitle('Cargo Manifest');
+      drawSectionTitle(t('bol.pdfCargoManifest'));
       ensureSpace(26);
       const xPlant = margin + 6;
       const xSize = margin + 300;
@@ -315,10 +353,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Plant Name', xPlant, y);
-      pdf.text('Size', xSize, y);
-      pdf.text('Qty', xQty, y);
-      pdf.text('Recv\'d', xCheck, y);
+      pdf.text(t('bol.pdfPlantName'), xPlant, y);
+      pdf.text(t('bol.pdfSize'), xSize, y);
+      pdf.text(t('bol.pdfQty'), xQty, y);
+      pdf.text(t('bol.pdfReceived'), xCheck, y);
       y += 8;
       pdf.setDrawColor(185, 185, 185);
       pdf.line(margin, y, pageWidth - margin, y);
@@ -346,11 +384,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(10);
       pdf.setTextColor(18, 65, 46);
-      pdf.text(`Total: ${totalPlants.toLocaleString()} plants`, margin + 4, y);
+      pdf.text(t('bol.pdfTotalPlants', { n: totalPlants.toLocaleString(locale) }), margin + 4, y);
       y += 12;
 
-      drawSectionTitle('Special Instructions');
-      writeWrapped(specialInstructions || 'N/A', margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
+      drawSectionTitle(t('bol.pdfSpecialInstructions'));
+      writeWrapped(specialInstructions || t('bol.na'), margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
 
       ensureSpace(28);
       y += 6;
@@ -361,8 +399,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(90, 90, 90);
-      pdf.text('Shipper Signature', margin, y);
-      pdf.text('Carrier / Driver Signature', margin + 280, y);
+      pdf.text(t('bol.pdfShipperSignature'), margin, y);
+      pdf.text(t('bol.pdfCarrierSignature'), margin + 280, y);
 
       const fileName = `${bolNumber}.pdf`;
       const result = await deliverPdfBlob(pdf.output('blob'), fileName);
@@ -376,7 +414,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     } catch (err) {
       console.error('Failed to generate BOL PDF:', err);
       alert(
-        `Could not generate BOL PDF: ${err instanceof Error ? err.message : 'Unknown error'}`
+        `${t('bol.generateFailed')} ${err instanceof Error ? err.message : t('bol.na')}`
       );
     } finally {
       setIsGeneratingPdf(false);
@@ -388,14 +426,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-[200] print:p-0 print:bg-white print:backdrop-blur-none"
       role="dialog"
       aria-modal="true"
-      aria-label="Bill of Lading"
+      aria-label={t('bol.title')}
     >
       {pdfSheet && (
         <PdfShareSheet
           url={pdfSheet.url}
           fileName={pdfSheet.fileName}
           blob={pdfSheet.blob}
-          title="Bill of Lading ready"
+          title={t('bol.ready')}
           onClose={() => setPdfSheet(null)}
         />
       )}
@@ -408,7 +446,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
               <FileText className="h-4 w-4 mr-2 text-ink-800" />
-              Customize BOL
+              {t('bol.customize')}
             </h3>
             <button
               onClick={onClose}
@@ -422,18 +460,21 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             {/* BOL Type Selection */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
-                BOL Selection
+                {t('bol.selection')}
               </label>
               <select
                 value={selectedBOLType}
                 onChange={(e) => setSelectedBOLType(e.target.value)}
                 className="w-full px-3 py-2 border border-ink-200 rounded-xl focus:outline-none focus:border-ink-500 bg-ink-50/40 font-semibold text-gray-800 text-xs"
               >
-                <option value="consolidated">Consolidated Truck BOL (All Orders)</option>
+                <option value="consolidated">{t('bol.consolidated')}</option>
                 {sortedOrders.map((order, idx) => (
                   <option key={order.id} value={order.id}>
-                    Stop {idx + 1}: Order #{order.orderNumber || '—'} -{' '}
-                    {String(order.customerName || 'Customer').slice(0, 25)}
+                    {t('bol.stopOrder', {
+                      n: idx + 1,
+                      num: order.orderNumber || '—',
+                      customer: String(order.customerName || t('reports.customer')).slice(0, 25)
+                    })}
                   </option>
                 ))}
               </select>
@@ -441,7 +482,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Ship Date
+                {t('bol.shipDate')}
               </label>
               <input
                 type="date"
@@ -453,12 +494,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Customer P.O. #
+                {t('bol.customerPo')}
               </label>
               <input
                 type="text"
                 value={poNumber}
-                placeholder="Customer purchase order number"
+                placeholder={t('bol.customerPoHint')}
                 onChange={(e) => setPoNumber(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
@@ -466,7 +507,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Shipper Address Info
+                {t('bol.shipperAddress')}
               </label>
               <textarea
                 rows={3}
@@ -478,12 +519,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Driver Name
+                {t('bol.driverName')}
               </label>
               <input
                 type="text"
                 value={driverName}
-                placeholder="e.g. Bobby Smith"
+                placeholder={t('bol.driverPlaceholder')}
                 onChange={(e) => setDriverName(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
@@ -491,7 +532,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Truck/Unit Number
+                {t('bol.truckNumber')}
               </label>
               <input
                 type="text"
@@ -503,12 +544,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Trailer Number
+                {t('bol.trailerNumber')}
               </label>
               <input
                 type="text"
                 value={trailerNumber}
-                placeholder="e.g. T-502"
+                placeholder={t('bol.trailerPlaceholder')}
                 onChange={(e) => setTrailerNumber(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
@@ -516,12 +557,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Seal Number (If applicable)
+                {t('bol.sealNumber')}
               </label>
               <input
                 type="text"
                 value={sealNumber}
-                placeholder="e.g. SL-9092"
+                placeholder={t('bol.sealPlaceholder')}
                 onChange={(e) => setSealNumber(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
@@ -529,12 +570,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Receiver Address
+                {t('bol.receiverAddress')}
               </label>
               <textarea
                 rows={3}
                 value={receiverAddress}
-                placeholder="Type receiver destination address"
+                placeholder={t('bol.receiverPlaceholder')}
                 onChange={(e) => setReceiverAddress(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
@@ -542,12 +583,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Point of Contact
+                {t('bol.pointOfContact')}
               </label>
               <input
                 type="text"
                 value={receiverContact}
-                placeholder="Name and phone/email"
+                placeholder={t('bol.pocPlaceholder')}
                 onChange={(e) => setReceiverContact(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
@@ -555,7 +596,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Special Transport Instructions
+                {t('bol.specialInstructions')}
               </label>
               <textarea
                 rows={3}
@@ -577,19 +618,19 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <Printer className="h-4 w-4" />
               <span>
                 {isGeneratingPdf
-                  ? 'Generating PDF...'
-                  : `Download ${selectedBOLType === 'consolidated' ? 'Consolidated BOL' : 'Order BOL'} PDF`}
+                  ? t('bol.generating')
+                  : selectedBOLType === 'consolidated'
+                    ? t('bol.downloadConsolidated')
+                    : t('bol.downloadOrder')}
               </span>
             </button>
-            <p className="text-[10px] text-slate-500 text-center md:hidden">
-              On phone: Share sheet or in-app preview — the app stays open.
-            </p>
+            <p className="text-[10px] text-slate-500 text-center md:hidden">{t('bol.phoneHint')}</p>
             <button
               type="button"
               onClick={onClose}
               className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center"
             >
-              Close Preview
+              {t('bol.closePreview')}
             </button>
           </div>
         </div>
@@ -601,25 +642,25 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
           <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
             <div>
               <h2 className="text-base font-black text-gray-900">
-                {selectedBOLType === 'consolidated' ? 'Consolidated Truck Bill of Lading' : `Bill of Lading: Order #${singleOrder?.orderNumber}`}
+                {selectedBOLType === 'consolidated'
+                  ? t('bol.consolidatedTitle')
+                  : t('bol.orderTitle', { num: singleOrder?.orderNumber })}
               </h2>
-              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                Below is the standard formatted Bill of Lading document ready to print.
-              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">{t('bol.previewBody')}</p>
             </div>
             <div className="flex items-center space-x-2">
               <button
                 onClick={handleDownloadPdf}
                 disabled={isGeneratingPdf}
                 className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
-                title="Download PDF"
+                title={t('bol.downloadPdf')}
               >
                 <Printer className="h-4 w-4" />
               </button>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
-                title="Close Window"
+                title={t('bol.closeWindow')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -658,7 +699,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   {logoSrc ? (
                     <img
                       src={logoSrc}
-                      alt={`${nurseryName} logo`}
+                      alt={t('bol.logoAlt', { name: nurseryName })}
                       className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-ink-100 bg-white shadow-sm shrink-0"
                     />
                   ) : null}
@@ -667,7 +708,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                       {nurseryName}
                     </h1>
                     <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-wide">
-                      Wholesale Foliage & Landscape Liners
+                      {t('bol.wholesaleTagline')}
                     </p>
                     <p className="text-[11px] text-gray-600 mt-3 whitespace-pre-line font-mono font-bold leading-relaxed text-ink-900/90">
                       {shipperAddress}
@@ -677,27 +718,35 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 <div className="sm:text-right flex flex-col sm:justify-between items-start sm:items-end">
                   <div className="border border-gray-300 rounded-lg p-3 bg-slate-50 inline-block text-left">
                     <span className="block text-[10px] font-bold text-gray-400 font-mono uppercase tracking-wide">
-                      {selectedBOLType === 'consolidated' ? 'Consolidated BOL Number' : 'Individual Order BOL Number'}
+                      {selectedBOLType === 'consolidated'
+                        ? t('bol.consolidatedBolNumber')
+                        : t('bol.individualBolNumber')}
                     </span>
                     <span className="text-base font-mono font-black text-gray-900">
                       {bolNumber}
                     </span>
                   </div>
                   <div className="mt-4 text-left sm:text-right font-mono text-[11px]">
-                    <p className="text-gray-500 font-bold uppercase text-[9px] tracking-wider mb-0.5">Shipment Logistics</p>
+                    <p className="text-gray-500 font-bold uppercase text-[9px] tracking-wider mb-0.5">
+                      {t('bol.shipmentLogistics')}
+                    </p>
                     <p className="text-gray-800">
-                      <span className="font-bold text-gray-500">Date:</span> {new Date(shipDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                      <span className="font-bold text-gray-500">{t('bol.dateLabel')}</span>{' '}
+                      {new Date(shipDate).toLocaleDateString(locale, { dateStyle: 'long' })}
                     </p>
                     {poNumber.trim() && (
                       <p className="text-gray-800">
-                        <span className="font-bold text-gray-500">P.O. #:</span> <span className="font-black text-gray-900">{poNumber}</span>
+                        <span className="font-bold text-gray-500">{t('bol.poLabel')}</span>{' '}
+                        <span className="font-black text-gray-900">{poNumber}</span>
                       </p>
                     )}
                     <p className="text-gray-800">
-                      <span className="font-bold text-gray-500">Truck Type:</span> {truck.truckType || 'N/A'}
+                      <span className="font-bold text-gray-500">{t('bol.truckTypeLabel')}</span>{' '}
+                      {truck.truckType || t('bol.na')}
                     </p>
                     <p className="text-gray-800">
-                      <span className="font-bold text-gray-500">Carrier:</span> {truck.carrier || 'Private Fleet'}
+                      <span className="font-bold text-gray-500">{t('bol.carrierLabel')}</span>{' '}
+                      {truck.carrier || t('bol.privateFleet')}
                     </p>
                   </div>
                 </div>
@@ -707,28 +756,30 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6 border-b border-gray-300">
                 <div>
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-3">
-                    Shipper / Origin Point
+                    {t('bol.shipperOrigin')}
                   </h3>
                   <div className="text-[11px] text-gray-800 font-medium leading-relaxed">
                     <p className="font-black text-xs text-gray-950">BAYOU STATE PLANT CO</p>
-                    <p className="mt-1 font-semibold">Nursery loading facilities</p>
-                    <p className="mt-2 text-gray-400 font-mono text-[10px] uppercase font-bold tracking-wider">Mailing & Pickup Address:</p>
+                    <p className="mt-1 font-semibold">{t('bol.nurseryLoading')}</p>
+                    <p className="mt-2 text-gray-400 font-mono text-[10px] uppercase font-bold tracking-wider">
+                      {t('bol.mailingPickup')}
+                    </p>
                     <p className="font-mono whitespace-pre-wrap mt-0.5 text-gray-700 leading-normal">{shipperAddress}</p>
-                    <p className="mt-2">Phone: (318) 748-0190</p>
-                    <p>Contact your nursery office for logistics details</p>
+                    <p className="mt-2">{t('bol.phone')}</p>
+                    <p>{t('bol.logisticsContact')}</p>
                   </div>
                 </div>
                 <div>
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-3">
-                    Carrier & Equipment Details
+                    {t('bol.carrierEquipment')}
                   </h3>
                   <div className="text-[11px] text-gray-800 font-mono space-y-1">
-                    <p><span className="font-bold text-gray-500">Carrier Name:</span> <span className="font-bold text-gray-900">{truck.carrier || `${nurseryName} (Private Fleet)`}</span></p>
-                    <p><span className="font-bold text-gray-500">Driver Name:</span> <span className="font-bold text-gray-900">{driverName || '__________________________'}</span></p>
-                    <p><span className="font-bold text-gray-500">Truck / Tractor #:</span> <span className="font-bold text-gray-900">{truckNumber || 'N/A'}</span></p>
-                    <p><span className="font-bold text-gray-500">Trailer Number:</span> <span className="font-bold text-gray-900">{trailerNumber || '__________________________'}</span></p>
+                    <p><span className="font-bold text-gray-500">{t('bol.carrierName')}</span> <span className="font-bold text-gray-900">{truck.carrier || t('bol.privateFleetParenthetical', { name: nurseryName })}</span></p>
+                    <p><span className="font-bold text-gray-500">{t('bol.driverNameLabel')}</span> <span className="font-bold text-gray-900">{driverName || t('bol.blankLine')}</span></p>
+                    <p><span className="font-bold text-gray-500">{t('bol.truckTractor')}</span> <span className="font-bold text-gray-900">{truckNumber || t('bol.na')}</span></p>
+                    <p><span className="font-bold text-gray-500">{t('bol.trailerNumberLabel')}</span> <span className="font-bold text-gray-900">{trailerNumber || t('bol.blankLine')}</span></p>
                     {sealNumber && (
-                      <p><span className="font-bold text-gray-500">Seal Number:</span> <span className="font-bold text-gray-900">{sealNumber}</span></p>
+                      <p><span className="font-bold text-gray-500">{t('bol.sealNumberLabel')}</span> <span className="font-bold text-gray-900">{sealNumber}</span></p>
                     )}
                   </div>
                 </div>
@@ -739,7 +790,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 /* Consolidated Route view */
                 <div className="py-6 border-b border-gray-300">
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-3">
-                    Delivery Route & Sequence of Stops (All Shipments on Truck)
+                    {t('bol.deliveryRoute')}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {sortedOrders.map((order, index) => {
@@ -751,17 +802,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         >
                           <div className="flex items-center justify-between gap-1 mb-1.5">
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black font-mono bg-ink-100 text-ink-900 border border-ink-200 uppercase">
-                              Stop {index + 1}
+                              {t('bol.stop', { n: index + 1 })}
                             </span>
                             <span className="text-[10px] text-gray-400 font-mono font-medium">
-                              Order #{order.orderNumber}
+                              {t('bol.orderNum', { num: order.orderNumber })}
                             </span>
                           </div>
                           <p className="text-xs font-black text-gray-950 truncate">
                             {order.customerName}
                           </p>
                           <div className="text-[10px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-gray-200/50">
-                            <span>{totalItems} plants</span>
+                            <span>{t('bol.plants', { n: totalItems })}</span>
                           </div>
                         </div>
                       );
@@ -772,35 +823,39 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 /* Individual Consignee view */
                 <div className="py-6 border-b border-gray-300">
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-3">
-                    Consignee / Delivery Destination
+                    {t('bol.consigneeDestination')}
                   </h3>
                   <div className="border border-gray-300 p-4 rounded-xl bg-slate-50 font-sans max-w-xl">
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black font-mono bg-ink-100 text-ink-900 border border-ink-200 uppercase">
-                        Active Consignee (Stop {sortedOrders.indexOf(singleOrder!) + 1})
+                        {t('bol.activeConsignee', {
+                          n: sortedOrders.indexOf(singleOrder!) + 1
+                        })}
                       </span>
                       <span className="text-xs font-mono font-bold text-gray-500">
-                        Order #{singleOrder?.orderNumber}
+                        {t('bol.orderNum', { num: singleOrder?.orderNumber })}
                       </span>
                     </div>
                     <p className="text-sm font-black text-gray-950">
                       {singleOrder?.customerName}
                     </p>
                     <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                      Deliver this plant shipment directly to customer designated destination for Order #{singleOrder?.orderNumber}.
+                      {t('bol.deliverInstruction', { num: singleOrder?.orderNumber })}
                     </p>
                     {receiverAddress && (
                       <p className="text-xs text-gray-700 mt-2 leading-relaxed">
-                        <span className="font-bold text-gray-500">Receiver Address:</span> {receiverAddress}
+                        <span className="font-bold text-gray-500">{t('bol.receiverAddressLabel')}</span>{' '}
+                        {receiverAddress}
                       </p>
                     )}
                     {receiverContact && (
                       <p className="text-xs text-gray-700 mt-1 leading-relaxed">
-                        <span className="font-bold text-gray-500">Point of Contact:</span> {receiverContact}
+                        <span className="font-bold text-gray-500">{t('bol.pointOfContactLabel')}</span>{' '}
+                        {receiverContact}
                       </p>
                     )}
                     <div className="text-[10px] text-gray-500 font-mono mt-3 pt-2.5 border-t border-gray-200/50">
-                      <span>Shipment Cargo: {totalPlants} plants</span>
+                      <span>{t('bol.shipmentCargo', { n: totalPlants })}</span>
                     </div>
                   </div>
                 </div>
@@ -810,23 +865,24 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <div className="py-6 border-b border-gray-300">
                 <div className="flex justify-between items-baseline mb-3">
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider">
-                    {selectedBOLType === 'consolidated' 
-                      ? 'Consolidated Cargo Manifest (Itemized Bill of Lading)' 
-                      : `Customer Cargo Manifest: Order #${singleOrder?.orderNumber}`
-                    }
+                    {selectedBOLType === 'consolidated'
+                      ? t('bol.consolidatedManifest')
+                      : t('bol.orderManifest', { num: singleOrder?.orderNumber })}
                   </h3>
                   <span className="text-[10px] font-mono font-bold text-gray-400">
-                    {selectedBOLType === 'consolidated' ? 'Grouped Totals for Loading' : 'Order Shipment Totals'}
+                    {selectedBOLType === 'consolidated'
+                      ? t('bol.groupedTotals')
+                      : t('bol.orderTotals')}
                   </span>
                 </div>
                 
                 <table className="w-full text-left border-collapse font-sans">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-bold font-mono uppercase tracking-wider">
-                      <th className="pb-2">Plant Variety Name</th>
-                      <th className="pb-2 w-28">Container Size</th>
-                      <th className="pb-2 text-center w-20">Qty</th>
-                      <th className="pb-2 text-center w-16">Recv&apos;d</th>
+                      <th className="pb-2">{t('bol.plantVariety')}</th>
+                      <th className="pb-2 w-28">{t('bol.containerSize')}</th>
+                      <th className="pb-2 text-center w-20">{t('common.qty')}</th>
+                      <th className="pb-2 text-center w-16">{t('bol.received')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -850,7 +906,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     ))}
                     <tr className="bg-slate-50 border-b-2 border-gray-300 font-bold text-gray-950 text-xs font-mono">
                       <td className="py-3 px-2 font-sans font-black" colSpan={2}>
-                        {selectedBOLType === 'consolidated' ? 'GRAND TOTAL CARGO' : 'SHIPMENT TOTAL CARGO'}
+                        {selectedBOLType === 'consolidated'
+                          ? t('bol.grandTotalCargo')
+                          : t('bol.shipmentTotalCargo')}
                       </td>
                       <td className="py-3 text-center">{totalPlants}</td>
                       <td className="py-3" />
@@ -862,7 +920,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               {/* Special Instructions */}
               <div className="py-6 border-b border-gray-300 text-xs">
                 <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-2">
-                  Special Transport & Loading Instructions
+                  {t('bol.specialTransport')}
                 </h3>
                 <p className="bg-slate-50 border border-gray-200 rounded-lg p-3 text-gray-700 leading-relaxed font-sans italic whitespace-pre-wrap">
                   {specialInstructions}
@@ -871,12 +929,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
               {/* Regulatory certification statement */}
               <div className="py-5 text-[9px] text-gray-500 leading-normal border-b border-gray-300">
-                <p className="font-bold uppercase mb-1">Shipper Certification:</p>
-                <p>
-                  This is to certify that the above-named materials are properly classified, packaged, marked, and labeled, and are in proper condition for transportation according to the applicable regulations of the Department of Transportation.
-                </p>
+                <p className="font-bold uppercase mb-1">{t('bol.shipperCertTitle')}</p>
+                <p>{t('bol.shipperCertBody')}</p>
                 <p className="mt-2">
-                  <span className="font-bold">Carrier Acknowledgment:</span> Carrier hereby acknowledges receipt of the packages/plants listed hereon in good apparent condition, except as noted. Carrier certifies that emergency response information was provided with this shipment.
+                  <span className="font-bold">{t('bol.carrierAckTitle')}</span> {t('bol.carrierAckBody')}
                 </p>
               </div>
 
@@ -885,19 +941,19 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 <div className="space-y-6">
                   <div>
                     <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">
-                      Shipper Representative ({nurseryName})
+                      {t('bol.shipperRep', { name: nurseryName })}
                     </p>
                     <div className="flex items-end pt-4 border-b border-gray-300">
-                      <span className="text-[10px] text-gray-400 mr-2 shrink-0">Signature:</span>
+                      <span className="text-[10px] text-gray-400 mr-2 shrink-0">{t('bol.signature')}</span>
                       <span className="flex-1"></span>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-2">
                       <div className="flex items-end border-b border-gray-300">
-                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">Printed Name:</span>
+                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">{t('bol.printedName')}</span>
                         <span className="flex-1"></span>
                       </div>
                       <div className="flex items-end border-b border-gray-300">
-                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">Date:</span>
+                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">{t('bol.dateField')}</span>
                         <span className="flex-1"></span>
                       </div>
                     </div>
@@ -905,19 +961,19 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
                   <div>
                     <p className="text-gray-400 font-bold uppercase text-[9px] tracking-wider mb-1">
-                      Carrier / Transport Driver Certificate
+                      {t('bol.carrierDriverCert')}
                     </p>
                     <div className="flex items-end pt-4 border-b border-gray-300">
-                      <span className="text-[10px] text-gray-400 mr-2 shrink-0">Driver Sign:</span>
+                      <span className="text-[10px] text-gray-400 mr-2 shrink-0">{t('bol.driverSign')}</span>
                       <span className="flex-1"></span>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-2">
                       <div className="flex items-end border-b border-gray-300">
-                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">Printed Name:</span>
+                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">{t('bol.printedName')}</span>
                         <span className="flex-1 font-sans font-bold text-xs pl-1">{driverName}</span>
                       </div>
                       <div className="flex items-end border-b border-gray-300">
-                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">Date:</span>
+                        <span className="text-[10px] text-gray-400 mr-2 shrink-0">{t('bol.dateField')}</span>
                         <span className="flex-1"></span>
                       </div>
                     </div>
@@ -926,27 +982,32 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
                 <div className="space-y-6 bg-slate-50 border border-gray-250 p-4 rounded-lg">
                   <p className="text-gray-500 font-bold uppercase text-[9px] tracking-wider mb-1">
-                    Consignee / Customer Stop Deliveries Receipt
+                    {t('bol.consigneeReceipt')}
                   </p>
                   <p className="text-[10px] text-gray-500 font-sans leading-normal mb-3">
                     {selectedBOLType === 'consolidated'
-                      ? "Each stop consignee must sign below to certify that all items scheduled in the cargo breakdown have been fully delivered in satisfactory condition."
-                      : "The customer consignee representative must sign below to certify that all items scheduled in this individual cargo breakdown have been fully delivered in satisfactory condition."
-                    }
+                      ? t('bol.consigneeReceiptConsolidated')
+                      : t('bol.consigneeReceiptIndividual')}
                   </p>
                   
                   <div className="space-y-4">
                     {currentBOLOrders.map((order, index) => (
                       <div key={order.id} className="pt-2 border-t border-gray-200 first:border-none first:pt-0">
                         <p className="text-[10px] font-black text-gray-900 font-sans">
-                          {selectedBOLType === 'consolidated' ? `STOP ${index + 1}: ` : ''}{order.customerName} (Order #{order.orderNumber})
+                          {selectedBOLType === 'consolidated'
+                            ? t('bol.stopCustomer', {
+                                n: index + 1,
+                                customer: order.customerName,
+                                num: order.orderNumber
+                              })
+                            : `${order.customerName} (${t('common.order')} #${order.orderNumber})`}
                         </p>
                         <div className="flex items-end pt-3 border-b border-gray-300">
-                          <span className="text-[9px] text-gray-400 mr-2 shrink-0">Received By:</span>
+                          <span className="text-[9px] text-gray-400 mr-2 shrink-0">{t('bol.receivedBy')}</span>
                           <span className="flex-1"></span>
                         </div>
                         <div className="flex items-end pt-2 border-b border-gray-300">
-                          <span className="text-[9px] text-gray-400 mr-2 shrink-0">Date / Time:</span>
+                          <span className="text-[9px] text-gray-400 mr-2 shrink-0">{t('bol.dateTime')}</span>
                           <span className="flex-1"></span>
                         </div>
                       </div>
@@ -957,7 +1018,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
               {/* Page Number / Footer */}
               <div className="pt-10 text-center text-[9px] text-gray-400 font-mono">
-                {nurseryName} • {selectedBOLType === 'consolidated' ? 'Consolidated Carrier Document' : `Individual Shipment: Order #${singleOrder?.orderNumber}`} • Page 1 of 1
+                {selectedBOLType === 'consolidated'
+                  ? t('bol.footerConsolidated', { name: nurseryName })
+                  : t('bol.footerIndividual', { name: nurseryName, num: singleOrder?.orderNumber })}
               </div>
 
             </div>

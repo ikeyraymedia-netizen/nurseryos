@@ -1,5 +1,6 @@
 import { Bell, CheckSquare, ClipboardList, DollarSign, FileText, Sprout, Truck as TruckIcon, X } from 'lucide-react';
 import { WhatsNewItem, WhatsNewKind } from '../lib/whatsNew';
+import { useT } from '../lib/i18n';
 
 interface WhatsNewModalProps {
   items: WhatsNewItem[];
@@ -27,23 +28,6 @@ function kindIcon(kind: WhatsNewKind) {
   }
 }
 
-function kindLabel(kind: WhatsNewKind) {
-  switch (kind) {
-    case 'order':
-      return 'Order';
-    case 'truck':
-      return 'Truck';
-    case 'task':
-      return 'Task';
-    case 'plant':
-      return 'Plant';
-    case 'payment':
-      return 'Payment';
-    default:
-      return 'Update';
-  }
-}
-
 export function WhatsNewModal({
   items,
   onDismiss,
@@ -52,6 +36,25 @@ export function WhatsNewModal({
   onOpenTrucks,
   onOpenCustomers
 }: WhatsNewModalProps) {
+  const t = useT();
+
+  function kindLabel(kind: WhatsNewKind) {
+    switch (kind) {
+      case 'order':
+        return t('whatsNew.order');
+      case 'truck':
+        return t('whatsNew.truck');
+      case 'task':
+        return t('whatsNew.task');
+      case 'plant':
+        return t('whatsNew.plant');
+      case 'payment':
+        return t('whatsNew.payment');
+      default:
+        return t('whatsNew.update');
+    }
+  }
+
   if (items.length === 0) return null;
 
   const counts = {
@@ -62,6 +65,14 @@ export function WhatsNewModal({
     payment: items.filter((i) => i.kind === 'payment').length
   };
 
+  const summaryParts = [
+    counts.payment ? t('whatsNew.summaryPayments', { n: counts.payment }) : null,
+    counts.order ? t('whatsNew.summaryOrders', { n: counts.order }) : null,
+    counts.truck ? t('whatsNew.summaryTrucks', { n: counts.truck }) : null,
+    counts.task ? t('whatsNew.summaryTasks', { n: counts.task }) : null,
+    counts.plant ? t('whatsNew.summaryPlants', { n: counts.plant }) : null
+  ].filter(Boolean);
+
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
@@ -71,27 +82,15 @@ export function WhatsNewModal({
               <Bell className="h-5 w-5 text-ink-300" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-black text-base tracking-tight">Since you were last here</h3>
-              <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                {[
-                  counts.payment
-                    ? `${counts.payment} payment${counts.payment === 1 ? '' : 's'}`
-                    : null,
-                  counts.order ? `${counts.order} new order${counts.order === 1 ? '' : 's'}` : null,
-                  counts.truck ? `${counts.truck} truck${counts.truck === 1 ? '' : 's'}` : null,
-                  counts.task ? `${counts.task} task${counts.task === 1 ? '' : 's'}` : null,
-                  counts.plant ? `${counts.plant} plant add${counts.plant === 1 ? '' : 's'}` : null
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
+              <h3 className="font-black text-base tracking-tight">{t('whatsNew.title')}</h3>
+              <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">{summaryParts.join(' · ')}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onDismiss}
             className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -112,7 +111,7 @@ export function WhatsNewModal({
                     </span>
                     {item.mine && (
                       <span className="text-[10px] font-bold uppercase tracking-wide text-ink-800 bg-ink-50 border border-ink-100 rounded px-1.5 py-0.5">
-                        Assigned to you
+                        {t('whatsNew.assignedToYou')}
                       </span>
                     )}
                   </div>
@@ -138,7 +137,7 @@ export function WhatsNewModal({
                 }}
                 className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-ink-200 bg-ink-50 text-ink-900 hover:bg-ink-100"
               >
-                View customers
+                {t('whatsNew.viewCustomers')}
               </button>
             )}
             {counts.order > 0 && onOpenOrders && (
@@ -150,7 +149,7 @@ export function WhatsNewModal({
                 }}
                 className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               >
-                View orders
+                {t('whatsNew.viewOrders')}
               </button>
             )}
             {counts.truck > 0 && onOpenTrucks && (
@@ -162,7 +161,7 @@ export function WhatsNewModal({
                 }}
                 className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               >
-                View trucks
+                {t('whatsNew.viewTrucks')}
               </button>
             )}
             {counts.task > 0 && onOpenTasks && (
@@ -174,7 +173,7 @@ export function WhatsNewModal({
                 }}
                 className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               >
-                View tasks
+                {t('whatsNew.viewTasks')}
               </button>
             )}
           </div>
@@ -184,7 +183,7 @@ export function WhatsNewModal({
             className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-ink-700 text-white hover:bg-ink-800"
           >
             <CheckSquare className="h-3.5 w-3.5" />
-            Got it
+            {t('whatsNew.gotIt')}
           </button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import {
   InventoryMatchRequest,
   rememberInventoryAlias
 } from '../lib/inventory';
+import { useT } from '../lib/i18n';
 
 interface InventoryMatchModalProps {
   request: InventoryMatchRequest;
@@ -32,6 +33,7 @@ export function InventoryMatchModal({
   permissions,
   onResolve
 }: InventoryMatchModalProps) {
+  const t = useT();
   const [showCreateForm, setShowCreateForm] = useState(
     request.suggestions.length === 0 && permissions.canEditInventory
   );
@@ -86,11 +88,11 @@ export function InventoryMatchModal({
     const plantName = createPlantName.trim();
     const containerSize = createContainerSize.trim();
     if (!plantName) {
-      setError('Plant name is required.');
+      setError(t('match.nameRequired'));
       return;
     }
     if (!containerSize) {
-      setError('Container size is required.');
+      setError(t('match.sizeRequired'));
       return;
     }
 
@@ -127,7 +129,7 @@ export function InventoryMatchModal({
       );
       onResolve([created]);
     } catch (err: any) {
-      setError(err?.message || 'Failed to create inventory item.');
+      setError(err?.message || t('match.createFailed'));
     } finally {
       setBusy(false);
     }
@@ -148,18 +150,16 @@ export function InventoryMatchModal({
             </div>
             <div>
               <h2 id="inventory-match-title" className="text-base font-bold text-gray-900">
-                Match to inventory
+                {t('match.title')}
               </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                No exact match found — link this line to inventory.
-              </p>
+              <p className="text-xs text-gray-500 mt-0.5">{t('match.noExact')}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onResolve(null)}
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -167,18 +167,21 @@ export function InventoryMatchModal({
 
         <div className="p-5 space-y-4">
           <div className="text-xs text-gray-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-            <span className="font-semibold text-gray-800">Order line:</span>{' '}
+            <span className="font-semibold text-gray-800">{t('match.orderLine')}</span>{' '}
             {request.plantName}
             <span className="text-gray-400"> • {request.containerSize}</span>
             {request.quantityHint != null && request.quantityHint > 0 && (
-              <span className="text-gray-400"> • Qty {request.quantityHint}</span>
+              <span className="text-gray-400">
+                {' '}
+                • {t('match.qtyLabel', { n: request.quantityHint })}
+              </span>
             )}
           </div>
 
           {request.suggestions.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                Click a suggestion to link
+                {t('match.clickSuggestion')}
               </p>
               {request.suggestions.map(({ plant, score }) => (
                 <button
@@ -190,10 +193,13 @@ export function InventoryMatchModal({
                 >
                   <span className="font-bold text-gray-900">{plant.plantName}</span>
                   <span className="text-gray-500"> • {plant.containerSize}</span>
-                  <span className="text-gray-400"> • Qty {plant.quantityAvailable}</span>
+                  <span className="text-gray-400">
+                    {' '}
+                    • {t('match.qtyLabel', { n: plant.quantityAvailable })}
+                  </span>
                   {score < 1 && (
                     <span className="ml-1 text-[10px] text-amber-600 font-semibold">
-                      ({Math.round(score * 100)}% match)
+                      {t('match.matchPct', { n: Math.round(score * 100) })}
                     </span>
                   )}
                 </button>
@@ -214,20 +220,20 @@ export function InventoryMatchModal({
                 className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 border-ink-200 bg-white text-ink-900 text-sm font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
               >
                 <Search className="h-4 w-4" />
-                Search inventory to link
+                {t('match.searchLink')}
               </button>
             ) : (
               <div className="border border-ink-200 rounded-xl p-3 bg-ink-50/30 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-ink-800">
-                    Search all inventory
+                    {t('match.searchAll')}
                   </p>
                   <button
                     type="button"
                     onClick={() => setShowSearch(false)}
                     className="text-[11px] font-bold text-slate-500"
                   >
-                    Hide
+                    {t('match.hide')}
                   </button>
                 </div>
                 <div className="relative">
@@ -236,16 +242,16 @@ export function InventoryMatchModal({
                     autoFocus
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search plant name, size, category…"
+                    placeholder={t('match.searchPlaceholder')}
                     className="w-full pl-8 pr-2 py-2 rounded-lg border border-gray-200 text-sm bg-white"
                   />
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-1">
                   {inventoryPlants.length === 0 ? (
-                    <p className="text-xs text-amber-800 py-2">No inventory plants loaded.</p>
+                    <p className="text-xs text-amber-800 py-2">{t('match.noPlantsLoaded')}</p>
                   ) : searchResults.length === 0 ? (
                     <p className="text-xs text-slate-500 py-2">
-                      No plants match “{searchQuery.trim()}”.
+                      {t('match.noMatch', { query: searchQuery.trim() })}
                     </p>
                   ) : (
                     searchResults.map((plant) => (
@@ -258,7 +264,10 @@ export function InventoryMatchModal({
                       >
                         <span className="font-bold text-gray-900">{plant.plantName}</span>
                         <span className="text-gray-500"> • {plant.containerSize}</span>
-                        <span className="text-gray-400"> • Qty {plant.quantityAvailable}</span>
+                        <span className="text-gray-400">
+                          {' '}
+                          • {t('match.qtyLabel', { n: plant.quantityAvailable })}
+                        </span>
                       </button>
                     ))
                   )}
@@ -280,7 +289,7 @@ export function InventoryMatchModal({
                   className="w-full inline-flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 border-dashed border-ink-400 bg-ink-50/50 text-ink-900 text-sm font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
                 >
                   <Plus className="h-4 w-4" />
-                  Create new and link
+                  {t('match.createAndLink')}
                 </button>
               ) : (
                 <form
@@ -288,13 +297,13 @@ export function InventoryMatchModal({
                   className="border border-ink-200 rounded-xl p-3 bg-ink-50/30 space-y-2"
                 >
                   <p className="text-[11px] font-bold uppercase tracking-wide text-ink-800">
-                    Create new inventory item
+                    {t('match.createNew')}
                   </p>
                   <input
                     required
                     value={createPlantName}
                     onChange={(e) => setCreatePlantName(e.target.value)}
-                    placeholder="Plant name"
+                    placeholder={t('inventory.plantName')}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                   />
                   {containerWeights.length > 0 ? (
@@ -314,7 +323,7 @@ export function InventoryMatchModal({
                       required
                       value={createContainerSize}
                       onChange={(e) => setCreateContainerSize(e.target.value)}
-                      placeholder="Container size"
+                      placeholder={t('match.containerSize')}
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                     />
                   )}
@@ -323,7 +332,7 @@ export function InventoryMatchModal({
                     min={0}
                     value={createQty}
                     onChange={(e) => setCreateQty(Number(e.target.value))}
-                    placeholder="Qty on hand"
+                    placeholder={t('match.qtyOnHand')}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                   />
                   {error && (
@@ -342,14 +351,14 @@ export function InventoryMatchModal({
                       }}
                       className="px-3 py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                     >
-                      Back
+                      {t('common.back')}
                     </button>
                     <button
                       type="submit"
                       disabled={busy}
                       className="flex-1 px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold disabled:opacity-50"
                     >
-                      {busy ? 'Creating…' : 'Create new and link'}
+                      {busy ? t('match.creating') : t('match.createAndLink')}
                     </button>
                   </div>
                 </form>
@@ -359,8 +368,7 @@ export function InventoryMatchModal({
 
           {!permissions.canEditInventory && request.suggestions.length === 0 && (
             <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              No similar inventory items found. Ask someone with inventory access to add this
-              product.
+              {t('match.noSimilar')}
             </p>
           )}
         </div>
@@ -372,7 +380,7 @@ export function InventoryMatchModal({
             onClick={() => onResolve(null)}
             className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
           >
-            Skip for now
+            {t('match.skip')}
           </button>
         </div>
       </div>

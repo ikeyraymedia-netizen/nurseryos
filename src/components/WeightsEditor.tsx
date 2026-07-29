@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings, Weight, Check, RefreshCw } from 'lucide-react';
 import { ContainerWeight } from '../types';
 import { updateContainerWeight, resetToFactoryWeights } from '../lib/db';
+import { useT } from '../lib/i18n';
 
 interface WeightsEditorProps {
   containerWeights: ContainerWeight[];
@@ -9,6 +10,7 @@ interface WeightsEditorProps {
 }
 
 export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, onClose }) => {
+  const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempWeight, setTempWeight] = useState<string>('');
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -63,23 +65,20 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-ink-700" />
-            <h3 className="font-bold text-gray-900">Container Weights</h3>
+            <h3 className="font-bold text-gray-900">{t('weights.title')}</h3>
           </div>
           <button type="button" onClick={onClose} className="text-xs font-bold text-gray-500">
-            Close
+            {t('common.close')}
           </button>
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          <p className="text-xs text-gray-500 leading-relaxed">
-            One-time setup for pot/tray weights. Changes recalculate shipping weights on active orders
-            and trucks.
-          </p>
+          <p className="text-xs text-gray-500 leading-relaxed">{t('weights.intro')}</p>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-150">
             {showResetConfirm ? (
               <div className="flex flex-col items-end gap-1 shrink-0 bg-red-50 p-2 rounded-lg border border-red-200 w-full sm:w-auto">
-                <span className="text-[10px] font-bold text-red-800">Reset all to factory defaults?</span>
+                <span className="text-[10px] font-bold text-red-800">{t('weights.resetConfirm')}</span>
                 <div className="flex gap-1">
                   <button
                     onClick={async () => {
@@ -92,13 +91,13 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                     }}
                     className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] rounded"
                   >
-                    Reset
+                    {t('weights.reset')}
                   </button>
                   <button
                     onClick={() => setShowResetConfirm(false)}
                     className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-[10px] rounded"
                   >
-                    No
+                    {t('common.no')}
                   </button>
                 </div>
               </div>
@@ -107,7 +106,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                 onClick={() => setShowResetConfirm(true)}
                 className="shrink-0 text-xs text-ink-800 hover:text-ink-900 bg-ink-100 hover:bg-ink-200 font-bold px-2.5 py-1.5 rounded-lg transition-colors border border-ink-200 shadow-sm"
               >
-                Reset to Factory Defaults
+                {t('weights.resetFactory')}
               </button>
             )}
           </div>
@@ -126,7 +125,9 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-gray-800 font-sans truncate">{cw.name}</p>
-                    <p className="text-[10px] text-gray-400 font-mono">Alias: {cw.id}</p>
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {t('weights.alias')} {cw.id}
+                    </p>
                   </div>
 
                   <div className="flex items-center space-x-2 shrink-0">
@@ -144,7 +145,7 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                           min="0"
                           step="0.5"
                         />
-                        <span className="text-[10px] font-bold text-gray-400">lbs</span>
+                        <span className="text-[10px] font-bold text-gray-400">{t('common.lbs')}</span>
                         <button
                           onClick={() => handleSaveEdit(cw)}
                           disabled={isSaving}
@@ -163,7 +164,9 @@ export const WeightsEditor: React.FC<WeightsEditorProps> = ({ containerWeights, 
                         className="px-2 py-1 bg-white border border-gray-200 hover:border-ink-500 rounded-lg flex items-center space-x-1 text-xs font-bold text-gray-700 hover:text-ink-800 shadow-sm transition-all"
                       >
                         <Weight className="h-3 w-3 text-ink-600" />
-                        <span className="font-mono">{cw.weightLbs} lbs</span>
+                        <span className="font-mono">
+                          {cw.weightLbs} {t('common.lbs')}
+                        </span>
                       </button>
                     )}
                   </div>

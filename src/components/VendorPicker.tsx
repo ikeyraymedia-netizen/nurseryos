@@ -1,4 +1,5 @@
 import { Vendor } from '../types';
+import { useT } from '../lib/i18n';
 
 export const CREATE_NEW_VENDOR = '__create_new__';
 
@@ -34,6 +35,7 @@ export function VendorPicker({
   suggestions = [],
   className = ''
 }: VendorPickerProps) {
+  const t = useT();
   const creating = allowCreate && vendorId === CREATE_NEW_VENDOR;
   const sorted = [...vendors].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -41,7 +43,7 @@ export function VendorPicker({
     <div className={`space-y-2 ${className}`}>
       {aiHint && (
         <p className="text-sm font-semibold text-slate-800">
-          AI read: <span className="text-ink-800">{aiHint}</span>
+          {t('vendor.aiRead')} <span className="text-ink-800">{aiHint}</span>
           {matchLabel && (
             <span className="ml-2 text-[10px] font-bold uppercase text-emerald-700">
               {matchLabel}
@@ -61,7 +63,7 @@ export function VendorPicker({
               !creating ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
             }`}
           >
-            Saved vendors
+            {t('vendor.savedVendors')}
           </button>
           <button
             type="button"
@@ -73,33 +75,33 @@ export function VendorPicker({
               creating ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
             }`}
           >
-            Create new
+            {t('vendor.createNew')}
           </button>
         </div>
       )}
 
       {creating ? (
         <label className="block text-xs">
-          <span className="font-bold text-slate-600">New vendor name</span>
+          <span className="font-bold text-slate-600">{t('vendor.newVendorName')}</span>
           <input
             required
             value={newVendorName}
             onChange={(e) => onNewVendorNameChange(e.target.value)}
-            placeholder="e.g. Shell, Home Depot, Greenleaf Nursery"
+            placeholder={t('vendor.vendorPlaceholder')}
             className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
             autoFocus
           />
         </label>
       ) : (
         <label className="block text-xs">
-          <span className="font-bold text-slate-600">Vendor</span>
+          <span className="font-bold text-slate-600">{t('vendor.vendor')}</span>
           <select
             required={!allowCreate}
             value={vendorId}
             onChange={(e) => onVendorIdChange(e.target.value)}
             className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
           >
-            <option value="">Select saved vendor…</option>
+            <option value="">{t('vendor.selectSaved')}</option>
             {sorted.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}

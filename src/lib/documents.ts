@@ -121,6 +121,29 @@ export async function updateCustomerDocument(document: CustomerDocument): Promis
   );
 }
 
+export async function markCustomerInvoicePaid(
+  document: CustomerDocument,
+  payment: {
+    method: Exclude<CustomerDocument['paymentMethod'], 'stripe' | undefined>;
+    reference?: string;
+  }
+): Promise<void> {
+  if (document.type !== 'invoice') {
+    throw new Error('Only invoices can be marked paid.');
+  }
+  await updateCustomerDocument({
+    ...document,
+    paymentStatus: 'paid',
+    paidAt: new Date().toISOString(),
+    paymentMethod: payment.method,
+    paymentReference: payment.reference?.trim() || undefined,
+    stripePaidAmountCents:
+      typeof document.stripePaidAmountCents === 'number'
+        ? document.stripePaidAmountCents
+        : Math.round((document.grandTotal || 0) * 100)
+  });
+}
+
 export async function deleteCustomerDocument(documentId: string): Promise<void> {
   const tenantId = requireTenantId();
   await deleteDoc(documentDoc(tenantId, documentId));

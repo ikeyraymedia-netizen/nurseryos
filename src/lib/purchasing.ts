@@ -382,22 +382,27 @@ export async function updateVendorBill(bill: VendorBill): Promise<void> {
   const subtotal = billLineSubtotal(bill.items || []);
   const freight = bill.freightCharge || 0;
   const { id, ...rest } = bill;
-  await updateDoc(
-    vendorBillDoc(tenantId, id),
-    sanitizeForFirestore({
-      ...rest,
-      subtotal,
-      grandTotal: subtotal + freight,
-      updatedAt: new Date().toISOString()
-    })
-  );
+  const payload = sanitizeForFirestore({
+    ...rest,
+    id,
+    subtotal,
+    freightCharge: freight || undefined,
+    grandTotal: subtotal + freight,
+    updatedAt: new Date().toISOString()
+  });
+  await setDoc(vendorBillDoc(tenantId, id), payload, { merge: true });
 }
 
-export async function markVendorBillPaid(bill: VendorBill): Promise<void> {
+export async function markVendorBillPaid(
+  bill: VendorBill,
+  payment?: { method: Exclude<VendorBill['paymentMethod'], 'stripe' | undefined>; reference?: string }
+): Promise<void> {
   await updateVendorBill({
     ...bill,
     status: 'paid',
-    paidAt: new Date().toISOString()
+    paidAt: new Date().toISOString(),
+    paymentMethod: payment?.method,
+    paymentReference: payment?.reference?.trim() || undefined
   });
 }
 

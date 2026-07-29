@@ -15,6 +15,7 @@ import {
   FileText
 } from 'lucide-react';
 import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument } from '../types';
+import { useLocale, useT } from '../lib/i18n';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
 import { listAllDocuments, subscribeToDocuments } from '../lib/documents';
@@ -27,20 +28,6 @@ interface ReportsWorkspaceProps {
   permissions: AppPermissions;
   nurseryName: string;
 }
-
-const SUGGESTED_REPORTS = [
-  'Sales for this month from saved invoices.',
-  'Total sales from all saved invoices (grand totals).',
-  'Sales by customer from saved invoices, ranked highest to lowest.',
-  'List every saved invoice with date, customer, and amount.',
-  'Compare estimates vs invoices: counts and dollar totals.',
-  'Top-selling plants by dollars from saved invoices.',
-  'Which orders are pending or still loading?',
-  'Show inventory items that are low on stock (under 10 on hand).',
-  'Summarize truck loading progress and overweight risk.',
-  'List plants pulled but not yet loaded on trucks.',
-  'What needs attention this week for loading, inventory, and sales?'
-];
 
 function monthKeyFromDate(raw?: string | null): string | null {
   if (!raw) return null;
@@ -499,6 +486,8 @@ export function ReportsWorkspace({
   permissions,
   nurseryName
 }: ReportsWorkspaceProps) {
+  const t = useT();
+  const { locale } = useLocale();
   const [inventory, setInventory] = useState<InventoryPlant[]>([]);
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
   const [docsError, setDocsError] = useState<string | null>(null);
@@ -538,7 +527,7 @@ export function ReportsWorkspace({
       return docs;
     } catch (err: any) {
       setDocuments([]);
-      setDocsError(err?.message || 'Could not load saved invoices/estimates.');
+      setDocsError(err?.message || t('reports.docsLoadFailed'));
       return [] as CustomerDocument[];
     }
   }
@@ -550,7 +539,7 @@ export function ReportsWorkspace({
       setAuditError(null);
     } catch (err: any) {
       setAuditEvents([]);
-      setAuditError(err?.message || 'Could not load activity log.');
+      setAuditError(err?.message || t('reports.auditLoadFailed'));
     }
   }
 
@@ -584,10 +573,42 @@ export function ReportsWorkspace({
   const topPlants = salesSnapshot.topPlantsByRevenue.slice(0, 15);
   const byMonth = salesSnapshot.byMonth.slice(0, 12);
 
+  const suggestedReports = useMemo(
+    () => [
+      t('reports.suggest1'),
+      t('reports.suggest2'),
+      t('reports.suggest3'),
+      t('reports.suggest4'),
+      t('reports.suggest5'),
+      t('reports.suggest6'),
+      t('reports.suggest7'),
+      t('reports.suggest8'),
+      t('reports.suggest9'),
+      t('reports.suggest10'),
+      t('reports.suggest11')
+    ],
+    [t]
+  );
+
+  const now = new Date();
+  const quarterNum = Math.floor(now.getMonth() / 3) + 1;
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  function formatMonthLabel(monthKey: string): string {
+    if (monthKey === 'unknown') return t('common.unknownDate');
+    const [y, m] = monthKey.split('-').map(Number);
+    if (!y || !m) return monthKey;
+    return new Date(y, m - 1, 1).toLocaleString(locale, { month: 'long', year: 'numeric' });
+  }
+
+  function displayRep(rep: string): string {
+    return rep === NO_SALES_REP_LABEL ? t('reports.noSalesRep') : rep;
+  }
+
   if (!permissions.canViewReports) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-gray-500">
-        Reports are available to owners, admins, and office staff.
+        {t('reports.notAvailable')}
       </div>
     );
   }
@@ -628,12 +649,12 @@ export function ReportsWorkspace({
           typeof result.details === 'string' && result.details.trim()
             ? ` ${result.details}`
             : '';
-        throw new Error(`${result.error || 'Failed to run report.'}${details}`);
+        throw new Error(`${result.error || t('reports.runFailed')}${details}`);
       }
 
-      setReport(result.report || 'No report returned.');
+      setReport(result.report || t('reports.noReportReturned'));
     } catch (err: any) {
-      setError(err?.message || 'Failed to run report.');
+      setError(err?.message || t('reports.runFailed'));
     } finally {
       setLoading(false);
     }
@@ -663,11 +684,8 @@ export function ReportsWorkspace({
             <BarChart3 className="h-5 w-5 text-ink-300" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-black tracking-tight">Reports</h2>
-            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-              Solid numbers from invoices you saved under a customer. Ask AI below for narrative
-              insights.
-            </p>
+            <h2 className="text-lg font-black tracking-tight">{t('reports.title')}</h2>
+            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">{t('reports.subtitle')}</p>
           </div>
         </div>
         <button
@@ -679,70 +697,68 @@ export function ReportsWorkspace({
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-600 text-[11px] font-bold text-slate-200 hover:bg-slate-800 shrink-0"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
+          {t('reports.refresh')}
         </button>
       </div>
 
       <div className="p-5 space-y-5 flex-1 flex flex-col">
         {docsError && (
           <p className="text-xs text-red-700 font-semibold bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-            Could not load documents: {docsError}
+            {t('reports.loadFailed')} {docsError}
           </p>
         )}
         {!docsError && invoiceCount === 0 && (
           <p className="text-xs text-amber-800 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-            No saved invoices yet — totals stay $0 until you save at least one invoice under a
-            customer.
+            {t('reports.noInvoicesHint')}
           </p>
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-2xl border border-ink-200 bg-ink-50/50 px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-ink-700/80">
-              Sales for the year
+              {t('reports.salesYear')}
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
               {money(periodSales.year.salesTotal)}
             </p>
             <p className="text-[11px] text-ink-900/70 mt-0.5">
-              {periodSales.year.label} · {periodSales.year.invoiceCount} invoice
-              {periodSales.year.invoiceCount === 1 ? '' : 's'}
+              {t('reports.salesYearLabel', { year: now.getFullYear() })} ·{' '}
+              {t('reports.invoiceCount', { n: periodSales.year.invoiceCount })}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              Sales for the quarter
+              {t('reports.salesQuarter')}
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
               {money(periodSales.quarter.salesTotal)}
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {periodSales.quarter.label} · {periodSales.quarter.invoiceCount} invoice
-              {periodSales.quarter.invoiceCount === 1 ? '' : 's'}
+              {t('reports.quarterLabel', { q: quarterNum, year: now.getFullYear() })} ·{' '}
+              {t('reports.invoiceCount', { n: periodSales.quarter.invoiceCount })}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-              Sales for the month
+              {t('reports.salesMonth')}
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
               {money(periodSales.month.salesTotal)}
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {periodSales.month.label} · {periodSales.month.invoiceCount} invoice
-              {periodSales.month.invoiceCount === 1 ? '' : 's'}
+              {formatMonthLabel(thisMonthKey)} ·{' '}
+              {t('reports.invoiceCount', { n: periodSales.month.invoiceCount })}
             </p>
           </div>
           <div className="rounded-2xl border border-teal-200 bg-teal-50/50 px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800/80">
-              Sales for the week
+              {t('reports.salesWeek')}
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
               {money(periodSales.week.salesTotal)}
             </p>
             <p className="text-[11px] text-teal-900/70 mt-0.5">
-              Sun–today · {periodSales.week.invoiceCount} invoice
-              {periodSales.week.invoiceCount === 1 ? '' : 's'}
+              {t('reports.sunToday', { n: periodSales.week.invoiceCount })}
             </p>
           </div>
         </div>
@@ -752,25 +768,25 @@ export function ReportsWorkspace({
             <Users className="h-4 w-4 text-indigo-700 shrink-0" />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">
-                Sales rep · year to date
+                {t('reports.repYtd')}
               </p>
               <p className="text-xs font-semibold text-gray-800">
-                Invoice totals by Sales Rep for {new Date().getFullYear()}
+                {t('reports.repTotals', { year: now.getFullYear() })}
               </p>
             </div>
           </div>
           {periodSales.repYear.length === 0 ? (
             <p className="px-4 py-3 text-xs text-gray-500">
-              No invoices dated this year yet.
+              {t('reports.noInvoicesYear')}
             </p>
           ) : (
             <div className="overflow-x-auto max-h-56 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-white">
                   <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                    <th className="text-left font-bold px-4 py-2">Sales Rep</th>
-                    <th className="text-right font-bold px-3 py-2">Invoices</th>
-                    <th className="text-right font-bold px-4 py-2">Sales</th>
+                    <th className="text-left font-bold px-4 py-2">{t('reports.salesRep')}</th>
+                    <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
+                    <th className="text-right font-bold px-4 py-2">{t('reports.sales')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -786,7 +802,7 @@ export function ReportsWorkspace({
                             : 'text-gray-900'
                         }`}
                       >
-                        {row.rep}
+                        {displayRep(row.rep)}
                       </td>
                       <td className="text-right font-mono text-gray-700 px-3 py-2">
                         {row.invoiceCount}
@@ -805,12 +821,15 @@ export function ReportsWorkspace({
         <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3.5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800/80">
-              Outstanding
+              {t('reports.outstanding')}
             </p>
             <p className="text-[11px] text-amber-900/70 mt-0.5">
-              {paymentStatus.unpaidCount} unpaid · {paymentStatus.pendingCount} awaiting payment ·{' '}
-              {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} all-time · {estimateCount}{' '}
-              estimate{estimateCount === 1 ? '' : 's'}
+              {t('reports.outstandingSummary', {
+                unpaid: paymentStatus.unpaidCount,
+                pending: paymentStatus.pendingCount,
+                invoices: invoiceCount,
+                estimates: estimateCount
+              })}
             </p>
           </div>
           <p className="text-xl font-black text-gray-900 font-mono tabular-nums shrink-0">
@@ -824,21 +843,21 @@ export function ReportsWorkspace({
               <Users className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  Sales by customer
+                  {t('reports.salesByCustomer')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800">Top customers from saved invoices</p>
+                <p className="text-xs font-semibold text-gray-800">{t('reports.topCustomers')}</p>
               </div>
             </div>
             {topCustomers.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-gray-500">No invoice sales yet.</p>
+              <p className="px-4 py-3 text-xs text-gray-500">{t('reports.noSales')}</p>
             ) : (
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-white">
                     <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                      <th className="text-left font-bold px-4 py-2">Customer</th>
-                      <th className="text-right font-bold px-3 py-2">Invoices</th>
-                      <th className="text-right font-bold px-4 py-2">Sales</th>
+                      <th className="text-left font-bold px-4 py-2">{t('reports.customer')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
+                      <th className="text-right font-bold px-4 py-2">{t('reports.sales')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -866,21 +885,21 @@ export function ReportsWorkspace({
               <Sprout className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  Top plants by revenue
+                  {t('reports.topPlants')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800">From invoice line items</p>
+                <p className="text-xs font-semibold text-gray-800">{t('reports.fromLineItems')}</p>
               </div>
             </div>
             {topPlants.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-gray-500">No plant sales on invoices yet.</p>
+              <p className="px-4 py-3 text-xs text-gray-500">{t('reports.noPlantSales')}</p>
             ) : (
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-white">
                     <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                      <th className="text-left font-bold px-4 py-2">Plant</th>
-                      <th className="text-right font-bold px-3 py-2">Qty</th>
-                      <th className="text-right font-bold px-4 py-2">Revenue</th>
+                      <th className="text-left font-bold px-4 py-2">{t('reports.plant')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('common.qty')}</th>
+                      <th className="text-right font-bold px-4 py-2">{t('reports.revenue')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -911,27 +930,29 @@ export function ReportsWorkspace({
               <Calendar className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  Sales by month
+                  {t('reports.salesByMonth')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800">By invoice date</p>
+                <p className="text-xs font-semibold text-gray-800">{t('reports.byInvoiceDate')}</p>
               </div>
             </div>
             {byMonth.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-gray-500">No monthly sales yet.</p>
+              <p className="px-4 py-3 text-xs text-gray-500">{t('reports.noMonthly')}</p>
             ) : (
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-white">
                     <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                      <th className="text-left font-bold px-4 py-2">Month</th>
-                      <th className="text-right font-bold px-3 py-2">Invoices</th>
-                      <th className="text-right font-bold px-4 py-2">Sales</th>
+                      <th className="text-left font-bold px-4 py-2">{t('reports.month')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
+                      <th className="text-right font-bold px-4 py-2">{t('reports.sales')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {byMonth.map((row) => (
                       <tr key={row.month} className="bg-white">
-                        <td className="text-left font-bold text-gray-900 px-4 py-2">{row.label}</td>
+                        <td className="text-left font-bold text-gray-900 px-4 py-2">
+                          {formatMonthLabel(row.month)}
+                        </td>
                         <td className="text-right font-mono text-gray-700 px-3 py-2">
                           {row.invoiceCount}
                         </td>
@@ -951,33 +972,32 @@ export function ReportsWorkspace({
               <DollarSign className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  Invoice payments
+                  {t('reports.payments')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800">Paid vs still owed</p>
+                <p className="text-xs font-semibold text-gray-800">{t('reports.paidVsOwed')}</p>
               </div>
             </div>
             <div className="p-4 space-y-2.5 bg-slate-50/40">
               <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-emerald-100 px-3 py-2.5">
-                <span className="text-xs font-bold text-emerald-900">Paid</span>
+                <span className="text-xs font-bold text-emerald-900">{t('customers.paid')}</span>
                 <span className="text-xs font-mono font-black text-emerald-800">
                   {paymentStatus.paidCount} · {money(paymentStatus.paidTotal)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-amber-100 px-3 py-2.5">
-                <span className="text-xs font-bold text-amber-900">Pay link pending</span>
+                <span className="text-xs font-bold text-amber-900">{t('reports.payLinkPending')}</span>
                 <span className="text-xs font-mono font-black text-amber-800">
                   {paymentStatus.pendingCount}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2.5">
-                <span className="text-xs font-bold text-slate-700">Unpaid (no pay link)</span>
+                <span className="text-xs font-bold text-slate-700">{t('reports.unpaidNoLink')}</span>
                 <span className="text-xs font-mono font-black text-slate-800">
                   {paymentStatus.unpaidCount}
                 </span>
               </div>
               <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
-                Outstanding total above includes unpaid and pending invoices (
-                {money(paymentStatus.outstandingTotal)}).
+                {t('reports.outstandingFootnote', { amount: money(paymentStatus.outstandingTotal) })}
               </p>
             </div>
           </div>
@@ -990,33 +1010,32 @@ export function ReportsWorkspace({
                 <BarChart3 className="h-4 w-4 text-indigo-700 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">
-                    Profit by sales rep
+                    {t('reports.profitRep')}
                   </p>
                   <p className="text-xs font-semibold text-gray-800 truncate">
-                    From saved invoices (revenue − cost)
+                    {t('reports.profitSubtitle')}
                   </p>
                 </div>
               </div>
               <span className="text-[10px] font-bold uppercase text-indigo-400 tracking-wide shrink-0">
-                Internal only
+                {t('reports.internalOnly')}
               </span>
             </div>
             {profitByRep.length === 0 ? (
               <p className="px-4 py-3 text-xs text-gray-500">
-                No invoice data yet. Set a Sales Rep on orders/invoices and enter plant costs to see
-                profit per rep here.
+                {t('reports.profitNoData')}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200 bg-white">
-                      <th className="text-left font-bold px-4 py-2">Sales Rep</th>
-                      <th className="text-right font-bold px-3 py-2">Invoices</th>
-                      <th className="text-right font-bold px-3 py-2">Revenue</th>
-                      <th className="text-right font-bold px-3 py-2">Cost</th>
-                      <th className="text-right font-bold px-3 py-2">Profit</th>
-                      <th className="text-right font-bold px-4 py-2">Margin</th>
+                      <th className="text-left font-bold px-4 py-2">{t('reports.salesRep')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.revenue')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.cost')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.profit')}</th>
+                      <th className="text-right font-bold px-4 py-2">{t('reports.margin')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1032,7 +1051,7 @@ export function ReportsWorkspace({
                               : 'text-gray-900'
                           }`}
                         >
-                          {row.rep}
+                          {displayRep(row.rep)}
                         </td>
                         <td className="text-right font-mono text-gray-700 px-3 py-2">
                           {row.invoiceCount}
@@ -1067,21 +1086,18 @@ export function ReportsWorkspace({
             <Sparkles className="h-4 w-4 text-ink-700 shrink-0" />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                Ask AI (optional)
+                {t('reports.askAi')}
               </p>
-              <p className="text-xs font-semibold text-gray-800">
-                Narrative insights on top of the same saved data — not a replacement for the tables
-                above
-              </p>
+              <p className="text-xs font-semibold text-gray-800">{t('reports.askAiSubtitle')}</p>
             </div>
           </div>
           <div className="p-4 space-y-3">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2">
-                Suggested questions
+                {t('reports.suggested')}
               </p>
               <div className="flex flex-wrap gap-2">
-                {SUGGESTED_REPORTS.map((suggestion) => (
+                {suggestedReports.map((suggestion) => (
                   <button
                     key={suggestion}
                     type="button"
@@ -1100,14 +1116,14 @@ export function ReportsWorkspace({
 
             <form onSubmit={handleSubmit} className="space-y-2">
               <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                Or type your own
+                {t('reports.typeOwn')}
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <textarea
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   rows={2}
-                  placeholder='e.g. "What needs attention this week for loading and inventory?"'
+                  placeholder={t('reports.askPlaceholder')}
                   className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-white resize-y min-h-[72px]"
                   disabled={loading}
                 />
@@ -1119,12 +1135,12 @@ export function ReportsWorkspace({
                   {loading ? (
                     <>
                       <RefreshCw className="h-4 w-4 animate-spin" />
-                      Running…
+                      {t('reports.running')}
                     </>
                   ) : (
                     <>
                       <Send className="h-4 w-4" />
-                      Ask AI
+                      {t('reports.askBtn')}
                     </>
                   )}
                 </button>
@@ -1143,7 +1159,7 @@ export function ReportsWorkspace({
                 <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                      AI response
+                      {t('reports.aiResponse')}
                     </p>
                     {lastQuestion && (
                       <p className="text-xs font-semibold text-gray-800 truncate">{lastQuestion}</p>
@@ -1158,12 +1174,12 @@ export function ReportsWorkspace({
                       {copied ? (
                         <>
                           <Check className="h-3.5 w-3.5 text-ink-600" />
-                          Copied
+                          {t('common.copied')}
                         </>
                       ) : (
                         <>
                           <Copy className="h-3.5 w-3.5" />
-                          Copy
+                          {t('common.copy')}
                         </>
                       )}
                     </button>
@@ -1173,7 +1189,7 @@ export function ReportsWorkspace({
                   {loading ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <RefreshCw className="h-7 w-7 text-ink-700 animate-spin mb-3" />
-                      <p className="text-sm font-bold text-gray-800">Analyzing nursery data…</p>
+                      <p className="text-sm font-bold text-gray-800">{t('reports.analyzing')}</p>
                     </div>
                   ) : (
                     <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed">
@@ -1192,9 +1208,9 @@ export function ReportsWorkspace({
               <History className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  Recent activity
+                  {t('reports.recentActivity')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800 truncate">Key saves and conversions</p>
+                <p className="text-xs font-semibold text-gray-800 truncate">{t('reports.activityHint')}</p>
               </div>
             </div>
             <button
@@ -1203,18 +1219,16 @@ export function ReportsWorkspace({
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 shrink-0"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
+              {t('reports.refresh')}
             </button>
           </div>
           <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 bg-slate-50/40">
             {auditError ? (
               <p className="px-4 py-3 text-xs text-amber-800">
-                {auditError} Publish the latest firestore.rules (auditLog) if this persists.
+                {auditError} {t('reports.auditFirestoreHint')}
               </p>
             ) : auditEvents.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-gray-500">
-                No activity yet. Saving invoices, estimates, uploads, or backups will show up here.
-              </p>
+              <p className="px-4 py-3 text-xs text-gray-500">{t('reports.noActivityDetail')}</p>
             ) : (
               auditEvents.map((event) => (
                 <div key={event.id || `${event.action}-${event.createdAt}`} className="px-4 py-2.5">

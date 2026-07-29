@@ -3,7 +3,8 @@ import { Clock, CheckCircle2, LogOut, CloudUpload } from 'lucide-react';
 import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
-import { getMemberRoles, rolesLabel } from '../lib/permissions';
+import { getMemberRoles } from '../lib/permissions';
+import { useRoleLabel, useT } from '../lib/i18n';
 import { AppLocale, useT } from '../lib/i18n';
 
 interface HeaderProps {
@@ -34,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectOrder
 }) => {
   const t = useT();
+  const { rolesLabel } = useRoleLabel();
   // Calculate total pending vs total completed orders
   const activeOrders = orders.filter((o) => o.status !== 'completed');
   const completedOrders = orders.filter((o) => o.status === 'completed');

@@ -141,6 +141,9 @@ export interface Customer {
 
 export type CustomerDocumentType = 'estimate' | 'invoice';
 
+/** How a customer invoice or vendor bill was paid (offline / recorded). */
+export type PaymentMethod = 'check' | 'ach' | 'wire' | 'cc' | 'stripe';
+
 export interface CustomerDocumentLineItem {
   id: string;
   plantName: string;
@@ -186,6 +189,10 @@ export interface CustomerDocument {
   /** Stripe Connect payment collection status for this invoice. */
   paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed';
   paidAt?: string;
+  /** How the invoice was paid (manual entry or Stripe). */
+  paymentMethod?: PaymentMethod;
+  /** Check number or ACH/Wire/CC confirmation / reference. */
+  paymentReference?: string;
   stripeCheckoutSessionId?: string;
   stripeCheckoutUrl?: string;
   stripePaymentIntentId?: string;
@@ -366,6 +373,10 @@ export interface VendorBill {
   invoicePhotoUrl?: string | null;
   invoicePhotoPath?: string | null;
   paidAt?: string;
+  /** How this vendor bill was paid. */
+  paymentMethod?: PaymentMethod;
+  /** Check number or ACH/Wire/CC confirmation / reference. */
+  paymentReference?: string;
   createdAt: string;
   updatedAt: string;
 }

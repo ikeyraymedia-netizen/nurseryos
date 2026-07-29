@@ -143,6 +143,7 @@ async function markDocumentPaid(params: {
     {
       paymentStatus: 'paid',
       paidAt: now,
+      paymentMethod: 'stripe',
       stripeCheckoutSessionId: params.sessionId || null,
       stripePaymentIntentId: params.paymentIntentId || null,
       stripePaidAmountCents:

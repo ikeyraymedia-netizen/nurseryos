@@ -550,11 +550,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
 
       {permissions.canViewInvoices && needsInvoiceSave && (
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
-          <p className="text-xs text-amber-950 leading-relaxed">
-            <span className="font-black">Invoice not saved to customer.</span> Pricing is on this order,
-            but Reports won&apos;t count it as sales until you open Create Invoice and tap{' '}
-            <span className="font-bold">Save to Customer</span>.
-          </p>
+          <p className="text-xs text-amber-950 leading-relaxed">{t('loader.invoiceNotSaved')}</p>
           <button
             type="button"
             onClick={() => {
@@ -564,7 +560,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             className="inline-flex items-center justify-center gap-1.5 shrink-0 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold"
           >
             <DollarSign className="h-3.5 w-3.5" />
-            Save invoice
+            {t('loader.saveInvoice')}
           </button>
         </div>
       )}
@@ -611,7 +607,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         <div className="flex-1 max-w-md relative">
           <input
             type="text"
-            placeholder="Type staging area (e.g. Dock A, Greenhouse #3, Bay 5)..."
+            placeholder={t('loader.stagingPlaceholder')}
             value={stagedLocation}
             readOnly={!permissions.canEditOrders}
             onChange={(e) => permissions.canEditOrders && handleStagedLocationChange(e.target.value)}
@@ -841,7 +837,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                       <input
                         type="text"
                         list="vendors-list-loader"
-                        placeholder="Type or select vendor..."
+                        placeholder={t('loader.vendorPlaceholder')}
                         value={newVendorName}
                         onChange={(e) => setNewVendorName(e.target.value)}
                         className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
@@ -1074,7 +1070,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                 <span
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50/70 text-indigo-800 font-semibold"
                                   onClick={(e) => e.stopPropagation()}
-                                  title="Your cost per plant (internal only)"
+                                  title={t('loader.costHint')}
                                 >
                                   <span className="text-[10px] uppercase tracking-wide">{t('loader.cost')}</span>
                                   <span className="text-[10px] font-mono">$</span>
@@ -1116,7 +1112,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                       }
                                     }}
                                     autoFocus
-                                    placeholder="Type or select vendor..."
+                                    placeholder={t('loader.vendorPlaceholder')}
                                     className="px-2 py-0.5 border border-ink-400 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855 w-44"
                                   />
                                 </div>

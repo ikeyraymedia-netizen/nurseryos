@@ -3,6 +3,20 @@ import {
   PURCHASE_CATEGORY_PRESETS,
   isPresetPurchaseCategory
 } from '../lib/purchaseCategories';
+import { useT } from '../lib/i18n';
+
+const CATEGORY_I18N_KEYS: Record<(typeof PURCHASE_CATEGORY_PRESETS)[number], string> = {
+  Plants: 'category.plants',
+  'Soil / media': 'category.soil',
+  'Containers / trays': 'category.containers',
+  Chemicals: 'category.chemicals',
+  Fertilizer: 'category.fertilizer',
+  Freight: 'category.freight',
+  Fuel: 'category.fuel',
+  'Tools / equipment': 'category.tools',
+  'General supplies': 'category.supplies',
+  Other: 'category.other'
+};
 
 interface PurchaseCategoryFieldProps {
   value: string;
@@ -19,11 +33,11 @@ export function PurchaseCategoryField({
   onChange,
   className = ''
 }: PurchaseCategoryFieldProps) {
+  const t = useT();
   const [mode, setMode] = useState<'list' | 'custom'>(() =>
     value.trim() && !isPresetPurchaseCategory(value) ? 'custom' : 'list'
   );
 
-  // If parent/AI sets a known preset, show list mode.
   useEffect(() => {
     if (value.trim() && isPresetPurchaseCategory(value)) {
       setMode('list');
@@ -35,7 +49,7 @@ export function PurchaseCategoryField({
   return (
     <div className={`space-y-1.5 ${className}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[9px] font-bold uppercase text-slate-500">Category</span>
+        <span className="text-[9px] font-bold uppercase text-slate-500">{t('category.label')}</span>
         <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
           <button
             type="button"
@@ -47,7 +61,7 @@ export function PurchaseCategoryField({
               mode === 'list' ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
             }`}
           >
-            List
+            {t('category.list')}
           </button>
           <button
             type="button"
@@ -59,7 +73,7 @@ export function PurchaseCategoryField({
               mode === 'custom' ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
             }`}
           >
-            Custom
+            {t('category.custom')}
           </button>
         </div>
       </div>
@@ -72,7 +86,7 @@ export function PurchaseCategoryField({
         >
           {PURCHASE_CATEGORY_PRESETS.map((label) => (
             <option key={label} value={label}>
-              {label}
+              {t(CATEGORY_I18N_KEYS[label])}
             </option>
           ))}
         </select>
@@ -80,7 +94,7 @@ export function PurchaseCategoryField({
         <input
           value={isPresetPurchaseCategory(value) ? '' : value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Type your category…"
+          placeholder={t('category.typeCustom')}
           className="w-full px-2 py-1.5 border border-ink-300 rounded-lg text-xs bg-white ring-1 ring-ink-100"
           autoFocus
         />

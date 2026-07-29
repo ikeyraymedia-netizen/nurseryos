@@ -25,6 +25,7 @@ import {
 } from '../lib/purchaseCategories';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
+import { useT } from '../lib/i18n';
 
 type InputMode = 'file' | 'text';
 
@@ -77,6 +78,7 @@ export function VendorInvoiceScanner({
   permissions,
   onSaved
 }: VendorInvoiceScannerProps) {
+  const t = useT();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [inputMode, setInputMode] = useState<InputMode>('file');
@@ -122,18 +124,18 @@ export function VendorInvoiceScanner({
     setSaving(false);
     setErrorMessage(null);
     resetDraft();
-    setStatusMessage(invoiceText ? 'Reading pasted invoice…' : 'Reading file…');
+    setStatusMessage(invoiceText ? t('scanner.readingPasted') : t('scanner.readingFile'));
 
     try {
       const mimeType = inferUploadMimeType(file.name, file.type, invoiceText);
       if (!isAllowedOrderUploadMime(mimeType)) {
-        throw new Error('Unsupported file. Upload a photo, PDF, or paste plain text.');
+        throw new Error(t('scanner.unsupportedFile'));
       }
 
       let base64Data: string | undefined;
       if (!invoiceText) {
         if (file.size > 20 * 1024 * 1024) {
-          throw new Error('File is too large. Please keep photos/PDFs under 20MB.');
+          throw new Error(t('scanner.fileTooLarge'));
         }
         base64Data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -145,9 +147,7 @@ export function VendorInvoiceScanner({
       }
 
       setStatusMessage(
-        invoiceText
-          ? 'Parsing pasted invoice with AI…'
-          : 'Analyzing vendor invoice with AI (this may take up to a minute)…'
+        invoiceText ? t('scanner.parsingPaste') : t('scanner.parsingLong')
       );
 
       const controller = new AbortController();
@@ -168,9 +168,7 @@ export function VendorInvoiceScanner({
         });
       } catch (fetchErr: unknown) {
         if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
-          throw new Error(
-            'Invoice analysis timed out. Try a clearer photo/PDF, or paste the line items as text.'
-          );
+          throw new Error(t('scanner.timeout'));
         }
         throw fetchErr;
       } finally {
@@ -181,8 +179,8 @@ export function VendorInvoiceScanner({
         const errorData = await response.json().catch(() => ({}));
         const friendly =
           response.status === 503
-            ? 'AI service is temporarily busy. Wait a few seconds and try again.'
-            : errorData.error || 'Failed to parse vendor invoice.';
+            ? t('scanner.aiBusy')
+            : errorData.error || t('scanner.parseFailed');
         const details =
           typeof errorData.details === 'string' && errorData.details.trim()
             ? ` ${errorData.details}`
@@ -224,12 +222,10 @@ export function VendorInvoiceScanner({
       }
 
       if (items.length === 0) {
-        throw new Error(
-          'No purchase lines found. Try a clearer photo, or paste the invoice lines as text.'
-        );
+        throw new Error(t('scanner.noLinesDetail'));
       }
 
-      const vendorName = String(result.vendorName || '').trim() || 'Unknown vendor';
+      const vendorName = String(result.vendorName || '').trim() || t('scanner.unknownVendor');
       const match = findMatchingVendors(vendorName, vendors);
 
       setDraft({
@@ -251,7 +247,7 @@ export function VendorInvoiceScanner({
       setStatusMessage('');
     } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err instanceof Error ? err.message : 'Could not read that invoice.');
+      setErrorMessage(err instanceof Error ? err.message : t('scanner.readFailed'));
       setPendingFile(null);
     } finally {
       setLoading(false);
@@ -274,14 +270,14 @@ export function VendorInvoiceScanner({
     try {
       if (!vendor) {
         if (selectedVendorId !== CREATE_NEW_VENDOR) {
-          throw new Error('Pick a saved vendor, or tap Create new.');
+          throw new Error(t('scanner.pickVendor'));
         }
         const name = createVendorName.trim() || draft.vendorName.trim();
         if (!name) {
-          throw new Error('Enter a vendor name.');
+          throw new Error(t('scanner.enterVendor'));
         }
         if (!permissions.canEditVendors) {
-          throw new Error('Pick an existing vendor from the list.');
+          throw new Error(t('scanner.pickExistingVendor'));
         }
         const id = await addVendor({ name });
         vendor = {
@@ -307,7 +303,7 @@ export function VendorInvoiceScanner({
         .filter((line) => line.plantName && line.quantity > 0);
 
       if (items.length === 0) {
-        throw new Error('Add at least one line with a quantity.');
+        throw new Error(t('scanner.addLineQty'));
       }
 
       const billId = `vbill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -315,7 +311,7 @@ export function VendorInvoiceScanner({
       let invoicePhotoPath: string | null = null;
 
       if (pendingFile) {
-        setStatusMessage('Uploading invoice scan…');
+        setStatusMessage(t('scanner.uploading'));
         const uploaded = await uploadVendorInvoiceAttachment({
           tenantId,
           billId,
@@ -325,7 +321,7 @@ export function VendorInvoiceScanner({
         invoicePhotoPath = uploaded.invoicePhotoPath;
       }
 
-      setStatusMessage('Saving vendor bill…');
+      setStatusMessage(t('scanner.saving'));
       const savedId = await createVendorBill({
         id: billId,
         vendorId: vendor.id,
@@ -344,7 +340,7 @@ export function VendorInvoiceScanner({
       onSaved?.(savedId);
     } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err instanceof Error ? err.message : 'Could not save vendor bill.');
+      setErrorMessage(err instanceof Error ? err.message : t('scanner.saveFailed'));
     } finally {
       setSaving(false);
       setStatusMessage('');
@@ -358,12 +354,9 @@ export function VendorInvoiceScanner({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-900">
-            Scan vendor invoice
+            {t('scanner.title')}
           </p>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            Upload any nursery purchase — plants, soil, pots, chemicals, freight. AI fills the
-            bill; you confirm the vendor and categories.
-          </p>
+          <p className="text-[11px] text-slate-500 mt-0.5">{t('scanner.subtitleDetail')}</p>
         </div>
         {draft && (
           <button
@@ -371,7 +364,7 @@ export function VendorInvoiceScanner({
             onClick={resetDraft}
             className="text-[11px] font-bold text-slate-500 hover:text-slate-800"
           >
-            Clear
+            {t('scanner.clear')}
           </button>
         )}
       </div>
@@ -386,7 +379,7 @@ export function VendorInvoiceScanner({
                 inputMode === 'file' ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
               }`}
             >
-              Photo / file
+              {t('scanner.photoFile')}
             </button>
             <button
               type="button"
@@ -395,7 +388,7 @@ export function VendorInvoiceScanner({
                 inputMode === 'text' ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
               }`}
             >
-              Paste text
+              {t('scanner.pasteText')}
             </button>
           </div>
 
@@ -431,7 +424,7 @@ export function VendorInvoiceScanner({
                 className="inline-flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-dashed border-ink-300 bg-white text-xs font-bold text-ink-800 hover:bg-ink-50 disabled:opacity-50"
               >
                 <Camera className="h-4 w-4" />
-                Take photo
+                {t('scanner.takePhoto')}
               </button>
               <button
                 type="button"
@@ -440,7 +433,7 @@ export function VendorInvoiceScanner({
                 className="inline-flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-dashed border-ink-300 bg-white text-xs font-bold text-ink-800 hover:bg-ink-50 disabled:opacity-50"
               >
                 <Upload className="h-4 w-4" />
-                Upload file
+                {t('scanner.uploadFile')}
               </button>
             </div>
           ) : (
@@ -449,7 +442,7 @@ export function VendorInvoiceScanner({
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
                 rows={6}
-                placeholder="Paste vendor invoice text here…"
+                placeholder={t('scanner.pastePlaceholder')}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
               />
               <button
@@ -458,7 +451,7 @@ export function VendorInvoiceScanner({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
               >
                 <FileText className="h-3.5 w-3.5" />
-                Parse text
+                {t('scanner.parseText')}
               </button>
             </form>
           )}
@@ -468,7 +461,7 @@ export function VendorInvoiceScanner({
       {(loading || statusMessage) && (
         <p className="text-xs font-semibold text-ink-800 flex items-center gap-2">
           {(loading || saving) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {statusMessage || 'Working…'}
+          {statusMessage || t('scanner.working')}
         </p>
       )}
 
@@ -482,7 +475,7 @@ export function VendorInvoiceScanner({
       {draft && (
         <div className="space-y-3">
           <div className="rounded-lg border border-ink-100 bg-white p-3 space-y-2">
-            <p className="text-[11px] font-bold uppercase text-slate-500">Vendor</p>
+            <p className="text-[11px] font-bold uppercase text-slate-500">{t('vendor.vendor')}</p>
             <VendorPicker
               vendors={vendors}
               vendorId={selectedVendorId}
@@ -495,7 +488,7 @@ export function VendorInvoiceScanner({
                 draft.matchConfidence !== 'none' &&
                 selectedVendorId &&
                 selectedVendorId !== CREATE_NEW_VENDOR
-                  ? `${draft.matchConfidence} match`
+                  ? t('scanner.matchLabel', { confidence: draft.matchConfidence })
                   : undefined
               }
               suggestions={draft.matchSuggestions}
@@ -504,7 +497,7 @@ export function VendorInvoiceScanner({
 
           <div className="grid sm:grid-cols-3 gap-2">
             <label className="block text-xs">
-              <span className="font-bold text-slate-600">Vendor inv #</span>
+              <span className="font-bold text-slate-600">{t('scanner.vendorInv')}</span>
               <input
                 value={draft.vendorInvoiceNumber}
                 onChange={(e) =>
@@ -514,7 +507,7 @@ export function VendorInvoiceScanner({
               />
             </label>
             <label className="block text-xs">
-              <span className="font-bold text-slate-600">Bill date</span>
+              <span className="font-bold text-slate-600">{t('scanner.billDate')}</span>
               <input
                 type="date"
                 value={draft.billDate}
@@ -523,7 +516,7 @@ export function VendorInvoiceScanner({
               />
             </label>
             <label className="block text-xs">
-              <span className="font-bold text-slate-600">Due date</span>
+              <span className="font-bold text-slate-600">{t('scanner.dueDate')}</span>
               <input
                 type="date"
                 value={draft.dueDate}
@@ -534,7 +527,7 @@ export function VendorInvoiceScanner({
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-[11px] font-bold uppercase text-slate-500">Line items</p>
+            <p className="text-[11px] font-bold uppercase text-slate-500">{t('scanner.lineItems')}</p>
             {draft.items.map((line, idx) => (
               <div
                 key={idx}
@@ -548,7 +541,7 @@ export function VendorInvoiceScanner({
                       items[idx] = { ...line, plantName: e.target.value };
                       setDraft({ ...draft, items });
                     }}
-                    placeholder="Plant or supply description"
+                    placeholder={t('purchasing.description')}
                     className="col-span-11 sm:col-span-7 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                   />
                   <div className="col-span-11 sm:col-span-4">
@@ -578,7 +571,9 @@ export function VendorInvoiceScanner({
                 <div className="grid grid-cols-12 gap-1.5">
                   {isPlantPurchaseCategory(line.category) && (
                     <label className="col-span-4 block">
-                      <span className="text-[9px] font-bold uppercase text-slate-500">Size</span>
+                      <span className="text-[9px] font-bold uppercase text-slate-500">
+                        {t('purchasing.size')}
+                      </span>
                       <input
                         value={line.containerSize}
                         onChange={(e) => {
@@ -586,7 +581,7 @@ export function VendorInvoiceScanner({
                           items[idx] = { ...line, containerSize: e.target.value };
                           setDraft({ ...draft, items });
                         }}
-                        placeholder="#3, Tray…"
+                        placeholder={t('purchasing.sizePlaceholder')}
                         className="mt-0.5 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                       />
                     </label>
@@ -594,7 +589,9 @@ export function VendorInvoiceScanner({
                   <label
                     className={`block ${isPlantPurchaseCategory(line.category) ? 'col-span-4' : 'col-span-6'}`}
                   >
-                    <span className="text-[9px] font-bold uppercase text-slate-500">Qty</span>
+                    <span className="text-[9px] font-bold uppercase text-slate-500">
+                      {t('common.qty')}
+                    </span>
                     <input
                       type="number"
                       min={0}
@@ -611,7 +608,7 @@ export function VendorInvoiceScanner({
                     className={`block ${isPlantPurchaseCategory(line.category) ? 'col-span-4' : 'col-span-6'}`}
                   >
                     <span className="text-[9px] font-bold uppercase text-slate-500">
-                      Cost each
+                      {t('purchasing.costEach')}
                     </span>
                     <input
                       type="number"
@@ -640,7 +637,7 @@ export function VendorInvoiceScanner({
               }
               className="text-[11px] font-bold text-ink-700"
             >
-              + Add line
+              {t('purchasing.addLine')}
             </button>
           </div>
 
@@ -648,15 +645,16 @@ export function VendorInvoiceScanner({
             value={draft.notes}
             onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
             rows={2}
-            placeholder="Notes / payment terms"
+            placeholder={t('scanner.notesPlaceholder')}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
           />
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-bold text-slate-700">
-              Total <span className="text-ink-800">{money(grandTotal)}</span>
+              {t('scanner.total')}{' '}
+              <span className="text-ink-800">{money(grandTotal)}</span>
               {pendingFile && (
-                <span className="ml-2 font-semibold text-slate-500">· scan attached</span>
+                <span className="ml-2 font-semibold text-slate-500">{t('scanner.scanAttached')}</span>
               )}
             </p>
             <div className="flex gap-2">
@@ -667,7 +665,7 @@ export function VendorInvoiceScanner({
                 className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-600"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                Start over
+                {t('scanner.startOver')}
               </button>
               <button
                 type="button"
@@ -685,7 +683,7 @@ export function VendorInvoiceScanner({
                 ) : (
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                Save vendor bill
+                {t('scanner.saveBill')}
               </button>
             </div>
           </div>

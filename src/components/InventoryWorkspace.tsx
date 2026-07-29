@@ -35,6 +35,8 @@ import {
   uploadInventoryPlantPhoto
 } from '../lib/inventoryPhotos';
 import { PdfShareSheet } from './PdfShareSheet';
+import { useT } from '../lib/i18n';
+import { usePlantDisplay } from '../lib/usePlantDisplay';
 
 interface InventoryWorkspaceProps {
   permissions: AppPermissions;
@@ -113,6 +115,8 @@ export function InventoryWorkspace({
   tenantId,
   nurseryName = 'Nursery'
 }: InventoryWorkspaceProps) {
+  const t = useT();
+  const dp = usePlantDisplay();
   const [plants, setPlants] = useState<InventoryPlant[]>([]);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -214,10 +218,10 @@ export function InventoryWorkspace({
       setNewQty(0);
       setNewWeeks('');
       setNewLocation('');
-      setMessage('Plant added to live inventory.');
+      setMessage(t('inventory.added'));
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to add plant.');
+      setMessage(err?.message || t('inventory.addFailed'));
       setMessageIsError(true);
     } finally {
       setBusy(false);
@@ -235,29 +239,31 @@ export function InventoryWorkspace({
     const isExcel = lower.endsWith('.xlsx') || lower.endsWith('.xls');
 
     try {
-      setUploadStatus(isExcel ? 'Reading Excel file...' : 'Reading CSV file...');
+      setUploadStatus(isExcel ? t('inventory.readingExcel') : t('inventory.readingCsv'));
       const parsed = isExcel
         ? await parseExcelInventory(file)
         : parseCsvInventory(await file.text());
 
       if (parsed.length === 0) {
-        throw new Error(
-          'No plant rows found. Need either columns like Plant / Size / Qty, or a price catalog with size headers (#1, #3, 4") and priced plant rows.'
-        );
+        throw new Error(t('inventory.noPlantRows'));
       }
 
-      setUploadStatus(`Saving ${parsed.length} plants to inventory...`);
+      setUploadStatus(t('inventory.savingPlants', { n: parsed.length }));
       const count = await bulkImportInventoryPlants(parsed);
       const zeroQty = parsed.filter((p) => !p.quantityAvailable).length;
       const withPrice = parsed.filter((p) => p.listPrice != null).length;
       setMessage(
         zeroQty > count * 0.8
-          ? `Imported ${count} plants (${withPrice} with list price) from ${file.name}. Qty starts at 0 — clear old inventory first if re-importing, then edit on-hand counts.`
-          : `Imported ${count} plants from ${file.name}.`
+          ? t('inventory.importedWithPrice', {
+              count,
+              withPrice,
+              file: file.name
+            })
+          : t('inventory.importedFrom', { count, file: file.name })
       );
       setMessageIsError(false);
     } catch (err: any) {
-      const msg = err?.message || 'Spreadsheet import failed.';
+      const msg = err?.message || t('inventory.spreadsheetImportFailed');
       setUploadError(msg);
       setMessage(msg);
       setMessageIsError(true);
@@ -277,8 +283,7 @@ export function InventoryWorkspace({
     }
 
     if (!INVENTORY_AI_MIME_TYPES.has(mimeType)) {
-      const msg =
-        'Unsupported file format. Upload CSV, Excel (.xlsx/.xls), PDF, or a photo (PNG/JPEG/WebP).';
+      const msg = t('inventory.unsupportedFormat');
       setUploadError(msg);
       setMessage(msg);
       setMessageIsError(true);
@@ -286,7 +291,7 @@ export function InventoryWorkspace({
     }
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      const msg = 'File is too large. Please upload a file under 20 MB.';
+      const msg = t('inventory.fileTooLarge');
       setUploadError(msg);
       setMessage(msg);
       setMessageIsError(true);
@@ -295,7 +300,7 @@ export function InventoryWorkspace({
 
     setUploadLoading(true);
     setUploadError(null);
-    setUploadStatus('Reading file...');
+    setUploadStatus(t('inventory.readingFile'));
     setMessage(null);
     setMessageIsError(false);
 
@@ -303,16 +308,16 @@ export function InventoryWorkspace({
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Could not read the selected file.'));
+        reader.onerror = () => reject(new Error(t('inventory.couldNotReadFile')));
         reader.readAsDataURL(file);
       });
 
-      setUploadStatus('Analyzing inventory with AI (large PDFs may take 2–4 minutes)...');
+      setUploadStatus(t('inventory.analyzingAi'));
 
       const waitStarted = Date.now();
       const waitTicker = window.setInterval(() => {
         const elapsedSec = Math.round((Date.now() - waitStarted) / 1000);
-        setUploadStatus(`Still analyzing with AI… (${elapsedSec}s elapsed)`);
+        setUploadStatus(t('inventory.stillAnalyzing', { elapsed: elapsedSec }));
       }, 15_000);
 
       let response: Response;
@@ -338,17 +343,17 @@ export function InventoryWorkspace({
         const errorData = await response.json().catch(() => ({}));
         const friendly =
           response.status === 503
-            ? 'AI service is temporarily busy. Wait a few seconds and try again.'
+            ? t('inventory.aiBusy')
             : errorData.error ||
               (typeof errorData.details === 'string' ? errorData.details : null) ||
-              'AI inventory import failed.';
+              t('inventory.aiImportFailed');
         throw new Error(friendly);
       }
 
       const result = await response.json();
       const rawItems = Array.isArray(result?.items) ? result.items : [];
       if (rawItems.length === 0) {
-        throw new Error('No inventory plants were detected in this file.');
+        throw new Error(t('inventory.noPlantsDetected'));
       }
 
       const normalized = rawItems.map((item: any) => {
@@ -381,16 +386,16 @@ export function InventoryWorkspace({
         return entry;
       });
 
-      setUploadStatus(`Saving ${normalized.length} plants to inventory...`);
+      setUploadStatus(t('inventory.savingPlants', { n: normalized.length }));
       const count = await bulkImportInventoryPlants(normalized);
-      setMessage(`Imported ${count} plants from ${file.name}.`);
+      setMessage(t('inventory.importedFrom', { count, file: file.name }));
       setMessageIsError(false);
     } catch (err: any) {
       console.error('Inventory upload failed:', err);
       const msg =
         err?.name === 'AbortError'
-          ? 'Analysis timed out after several minutes. Try again and let it run, or export fewer pages from the PDF.'
-          : err?.message || 'AI inventory import failed.';
+          ? t('inventory.analysisTimeout')
+          : err?.message || t('inventory.aiImportFailed');
       setUploadError(msg);
       setMessage(msg);
       setMessageIsError(true);
@@ -405,10 +410,10 @@ export function InventoryWorkspace({
     setBusy(true);
     try {
       await updateInventoryPlant({ ...selected, ...updates });
-      setMessage('Inventory updated.');
+      setMessage(t('inventory.updated'));
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Update failed.');
+      setMessage(err?.message || t('inventory.updateFailed'));
       setMessageIsError(true);
     } finally {
       setBusy(false);
@@ -417,17 +422,17 @@ export function InventoryWorkspace({
 
   async function handlePhotoUpload(file: File) {
     if (!selected || !permissions.canEditInventory || !tenantId) {
-      setMessage('Sign in to a nursery before uploading plant photos.');
+      setMessage(t('inventory.signInForPhotos'));
       setMessageIsError(true);
       return;
     }
     setPhotoBusy(true);
     try {
       await uploadInventoryPlantPhoto({ tenantId, plant: selected, file });
-      setMessage('Plant photo saved.');
+      setMessage(t('inventory.photoSaved'));
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Photo upload failed.');
+      setMessage(err?.message || t('inventory.photoUploadFailed'));
       setMessageIsError(true);
     } finally {
       setPhotoBusy(false);
@@ -436,14 +441,14 @@ export function InventoryWorkspace({
 
   async function handlePhotoRemove() {
     if (!selected || !permissions.canEditInventory) return;
-    if (!confirm('Remove this plant photo?')) return;
+    if (!confirm(t('inventory.removePhotoConfirm'))) return;
     setPhotoBusy(true);
     try {
       await removeInventoryPlantPhoto(selected);
-      setMessage('Plant photo removed.');
+      setMessage(t('inventory.photoRemoved'));
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Could not remove photo.');
+      setMessage(err?.message || t('inventory.couldNotRemovePhoto'));
       setMessageIsError(true);
     } finally {
       setPhotoBusy(false);
@@ -465,10 +470,10 @@ export function InventoryWorkspace({
         plants: exportPlants,
         inStockOnly: false
       });
-      setMessage(`Exported ${exportPlants.length} plant${exportPlants.length === 1 ? '' : 's'} to Excel.`);
+      setMessage(t('inventory.exportedExcel', { n: exportPlants.length }));
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Excel export failed.');
+      setMessage(err?.message || t('inventory.excelExportFailed'));
       setMessageIsError(true);
     } finally {
       setExportBusy(false);
@@ -486,11 +491,11 @@ export function InventoryWorkspace({
       if (result.method === 'preview') {
         setPdfSheet({ url: result.url, fileName: result.fileName, blob: result.blob });
       } else {
-        setMessage(`Exported ${exportPlants.length} plant${exportPlants.length === 1 ? '' : 's'} to PDF.`);
+        setMessage(t('inventory.exportedPdf', { n: exportPlants.length }));
         setMessageIsError(false);
       }
     } catch (err: any) {
-      setMessage(err?.message || 'PDF export failed.');
+      setMessage(err?.message || t('inventory.pdfExportFailed'));
       setMessageIsError(true);
     } finally {
       setExportBusy(false);
@@ -509,10 +514,10 @@ export function InventoryWorkspace({
       );
       setChemName('');
       setChemNotes('');
-      setMessage('Chemical application recorded.');
+      setMessage(t('inventory.chemicalRecorded'));
       setMessageIsError(false);
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to record chemical.');
+      setMessage(err?.message || t('inventory.chemicalFailed'));
       setMessageIsError(true);
     } finally {
       setBusy(false);
@@ -522,13 +527,11 @@ export function InventoryWorkspace({
   async function handleClearAllInventory() {
     if (!permissions.canEditInventory) return;
     if (plants.length === 0) {
-      setMessage('Inventory is already empty.');
+      setMessage(t('inventory.inventoryEmpty'));
       setMessageIsError(false);
       return;
     }
-    const ok = window.confirm(
-      `Delete all ${plants.length} inventory items? This cannot be undone. Use this if you accidentally imported a customer list into inventory.`
-    );
+    const ok = window.confirm(t('inventory.clearAllConfirm', { n: plants.length }));
     if (!ok) return;
 
     setBusy(true);
@@ -537,9 +540,9 @@ export function InventoryWorkspace({
     try {
       const count = await deleteAllInventoryPlants();
       setSelectedId(null);
-      setMessage(`Removed ${count} item${count === 1 ? '' : 's'} from inventory.`);
+      setMessage(t('inventory.removedItems', { n: count }));
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to clear inventory.');
+      setMessage(err?.message || t('inventory.clearInventoryFailed'));
       setMessageIsError(true);
     } finally {
       setBusy(false);
@@ -555,10 +558,8 @@ export function InventoryWorkspace({
               <Sprout className="h-5 w-5 text-ink-700" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Live Plant Inventory</h2>
-              <p className="text-xs text-gray-500">
-                Track qty, photos, weeks until ready, sprays, and cut-backs.
-              </p>
+              <h2 className="text-lg font-bold text-gray-900">{t('inventory.title')}</h2>
+              <p className="text-xs text-gray-500">{t('inventory.subtitle')}</p>
             </div>
           </div>
           <div className="flex flex-col items-stretch sm:items-end gap-2">
@@ -570,7 +571,7 @@ export function InventoryWorkspace({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold hover:bg-ink-100 disabled:opacity-50"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" />
-                Export Excel
+                {t('inventory.exportExcel')}
               </button>
               <button
                 type="button"
@@ -579,7 +580,7 @@ export function InventoryWorkspace({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
               >
                 <FileText className="h-3.5 w-3.5" />
-                Export PDF
+                {t('inventory.exportPdf')}
               </button>
             </div>
             <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
@@ -588,7 +589,7 @@ export function InventoryWorkspace({
                 checked={exportInStockOnly}
                 onChange={(e) => setExportInStockOnly(e.target.checked)}
               />
-              In-stock only ({exportPlants.length})
+              {t('inventory.inStockOnly', { n: exportPlants.length })}
             </label>
           </div>
         </div>
@@ -601,7 +602,7 @@ export function InventoryWorkspace({
                   <>
                     <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold cursor-pointer hover:bg-ink-800">
                       <Upload className="h-4 w-4" />
-                      Upload CSV / Excel
+                      {t('inventory.uploadCsvExcel')}
                       <input
                         type="file"
                         accept=".csv,.tsv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -615,7 +616,7 @@ export function InventoryWorkspace({
                     </label>
                     <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer hover:bg-slate-200">
                       <Upload className="h-4 w-4" />
-                      PDF / Photo
+                      {t('inventory.uploadPdfPhoto')}
                       <input
                         type="file"
                         accept=".pdf,image/*"
@@ -640,7 +641,7 @@ export function InventoryWorkspace({
                     }`}
                   >
                     <Plus className="h-4 w-4" />
-                    Add plant manually
+                    {t('inventory.addManually')}
                   </button>
                 )}
                 {permissions.canEditInventory && plants.length > 0 && (
@@ -650,7 +651,7 @@ export function InventoryWorkspace({
                     onClick={handleClearAllInventory}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 disabled:opacity-50"
                   >
-                    Clear all inventory
+                    {t('inventory.clearAll')}
                   </button>
                 )}
               </div>
@@ -658,7 +659,7 @@ export function InventoryWorkspace({
               <div className="bg-ink-50/50 border border-ink-100 rounded-xl p-4 flex items-center gap-3">
                 <RefreshCw className="h-5 w-5 text-ink-700 animate-spin shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-gray-800">Processing inventory file</p>
+                  <p className="text-sm font-semibold text-gray-800">{t('inventory.processing')}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{uploadStatus}</p>
                 </div>
               </div>
@@ -669,27 +670,27 @@ export function InventoryWorkspace({
                 className="bg-ink-50/40 border border-ink-200 rounded-xl p-4 space-y-2"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase text-ink-900">Add plant manually</p>
+                  <p className="text-xs font-bold uppercase text-ink-900">{t('inventory.addManually')}</p>
                   <button
                     type="button"
                     onClick={() => setShowAddPlant(false)}
                     className="text-[11px] font-bold text-ink-800 hover:underline"
                   >
-                    Close
+                    {t('common.close')}
                   </button>
                 </div>
                 <input
                   required
                   value={newPlantName}
                   onChange={(e) => setNewPlantName(e.target.value)}
-                  placeholder="Plant name"
+                  placeholder={t('inventory.plantName')}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     value={newContainerSize}
                     onChange={(e) => setNewContainerSize(e.target.value)}
-                    placeholder="Size (#3)"
+                    placeholder={t('inventory.size')}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                   />
                   <input
@@ -697,7 +698,7 @@ export function InventoryWorkspace({
                     min={0}
                     value={newQty}
                     onChange={(e) => setNewQty(Number(e.target.value))}
-                    placeholder="Qty"
+                    placeholder={t('inventory.qty')}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                   />
                 </div>
@@ -706,13 +707,13 @@ export function InventoryWorkspace({
                   min={0}
                   value={newWeeks}
                   onChange={(e) => setNewWeeks(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="Weeks until ready (optional)"
+                  placeholder={t('inventory.weeksReady')}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 />
                 <input
                   value={newLocation}
                   onChange={(e) => setNewLocation(e.target.value)}
-                  placeholder="Location (optional)"
+                  placeholder={t('inventory.location')}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 />
                 <button
@@ -721,7 +722,7 @@ export function InventoryWorkspace({
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-ink-700 text-white text-xs font-bold px-4 py-2.5 disabled:opacity-50"
                 >
                   <Plus className="h-4 w-4" />
-                  Add to inventory
+                  {t('inventory.addToInventory')}
                 </button>
               </form>
             )}
@@ -750,14 +751,12 @@ export function InventoryWorkspace({
         <div className="min-w-0">
           <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
             <Truck className="h-4 w-4 text-ink-700" />
-            Low stock for upcoming trucks
+            {t('inventory.lowStock')}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-            Compare on-hand inventory to plants needed on trucks loading in the next 14 days.
-          </p>
+          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{t('inventory.lowStockHint')}</p>
         </div>
         <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer select-none">
-          <span className="text-xs font-bold text-slate-600">{showLowStockUpcoming ? 'On' : 'Off'}</span>
+          <span className="text-xs font-bold text-slate-600">{showLowStockUpcoming ? t('inventory.on') : t('inventory.off')}</span>
           <button
             type="button"
             role="switch"
@@ -779,12 +778,10 @@ export function InventoryWorkspace({
       {showLowStockUpcoming && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
           <p className="text-xs font-black uppercase tracking-wide text-amber-900 mb-2">
-            Shortages ({lowStockAlerts.length})
+            {t('inventory.shortages', { n: lowStockAlerts.length })}
           </p>
           {lowStockAlerts.length === 0 ? (
-            <p className="text-sm text-amber-900/80">
-              No shortages found for trucks with a loading date in the next 14 days.
-            </p>
+            <p className="text-sm text-amber-900/80">{t('inventory.noShortages')}</p>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {lowStockAlerts.map((alert) => (
@@ -793,12 +790,12 @@ export function InventoryWorkspace({
                   className="bg-white border border-amber-200 rounded-xl px-3 py-2.5"
                 >
                   <p className="text-sm font-bold text-gray-900">
-                    {alert.plantName}{' '}
-                    <span className="text-xs font-mono text-slate-500">({alert.containerSize})</span>
+                    {dp.plant(alert.plantName)}{' '}
+                    <span className="text-xs font-mono text-slate-500">({dp.size(alert.containerSize)})</span>
                   </p>
                   <p className="text-xs text-amber-950 mt-0.5">
-                    Need <span className="font-black">{alert.needed}</span> · On hand{' '}
-                    <span className="font-black">{alert.available}</span> · Short{' '}
+                    {t('inventory.need')} <span className="font-black">{alert.needed}</span> · {t('inventory.onHand')}{' '}
+                    <span className="font-black">{alert.available}</span> · {t('inventory.short')}{' '}
                     <span className="font-black text-red-700">{alert.shortfall}</span>
                   </p>
                   <p className="text-[10px] text-slate-500 mt-1 truncate">
@@ -818,14 +815,14 @@ export function InventoryWorkspace({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search plants..."
+              placeholder={t('inventory.searchPlaceholder')}
               className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm"
             />
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-150 max-h-[420px] overflow-y-auto">
             {sortedFiltered.length === 0 ? (
-              <p className="p-4 text-sm text-gray-500">No inventory yet.</p>
+              <p className="p-4 text-sm text-gray-500">{t('inventory.noInventory')}</p>
             ) : (
               sortedFiltered.map((plant) => (
                 <button
@@ -840,14 +837,14 @@ export function InventoryWorkspace({
                     {plant.photoUrl ? (
                       <ImageIcon className="h-3.5 w-3.5 text-ink-600 shrink-0" />
                     ) : null}
-                    {plant.plantName}
+                    {dp.plant(plant.plantName)}
                   </p>
                   <p className="text-xs text-gray-500">
                     {plant.category ? `${plant.category} · ` : ''}
-                    {plant.containerSize}
+                    {dp.size(plant.containerSize)}
                     {plant.listPrice != null ? ` · $${plant.listPrice.toFixed(2)}` : ''}
-                    {` · Qty ${plant.quantityAvailable}`}
-                    {plant.weeksUntilReady != null ? ` · ${plant.weeksUntilReady} wks` : ''}
+                    {` · ${t('common.qty')} ${plant.quantityAvailable}`}
+                    {plant.weeksUntilReady != null ? ` · ${plant.weeksUntilReady} ${t('inventory.weeks')}` : ''}
                   </p>
                 </button>
               ))
@@ -860,10 +857,10 @@ export function InventoryWorkspace({
             <div className="bg-white rounded-2xl border border-gray-150 p-5 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                <h3 className="text-xl font-black text-gray-900">{selected.plantName}</h3>
+                <h3 className="text-xl font-black text-gray-900">{dp.plant(selected.plantName)}</h3>
                 <p className="text-sm text-gray-500">
                   {selected.category ? `${selected.category} · ` : ''}
-                  {selected.containerSize}
+                  {dp.size(selected.containerSize)}
                   {selected.listPrice != null ? ` · $${selected.listPrice.toFixed(2)}` : ''}
                 </p>
               </div>
@@ -871,20 +868,20 @@ export function InventoryWorkspace({
                   <button
                     type="button"
                     onClick={async () => {
-                      if (!confirm('Delete this plant from inventory?')) return;
+                      if (!confirm(t('inventory.deleteConfirm'))) return;
                       await deleteInventoryPlant(selected.id);
                       setSelectedId(null);
                     }}
                     className="text-xs font-bold text-red-600 hover:text-red-700"
                   >
-                    Delete
+                    {t('common.delete')}
                   </button>
                 )}
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
                 <p className="text-xs font-bold uppercase text-gray-500 flex items-center gap-1">
-                  <Camera className="h-3.5 w-3.5" /> Plant photo
+                  <Camera className="h-3.5 w-3.5" /> {t('inventory.plantPhoto')}
                 </p>
                 {selected.photoUrl ? (
                   <a
@@ -895,19 +892,23 @@ export function InventoryWorkspace({
                   >
                     <img
                       src={selected.photoUrl}
-                      alt={selected.plantName}
+                      alt={dp.plant(selected.plantName)}
                       className="h-40 w-full object-cover rounded-lg border border-slate-200 bg-white"
                     />
                   </a>
                 ) : (
                   <div className="h-28 rounded-lg border border-dashed border-slate-300 bg-white flex items-center justify-center text-xs text-slate-400">
-                    No photo yet
+                    {t('inventory.noPhoto')}
                   </div>
                 )}
                 {permissions.canEditInventory && (
                   <div className="flex flex-wrap gap-2">
                     <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ink-700 text-white text-[11px] font-bold cursor-pointer hover:bg-ink-800 disabled:opacity-50">
-                      {photoBusy ? 'Uploading…' : selected.photoUrl ? 'Replace photo' : 'Upload photo'}
+                      {photoBusy
+                        ? t('inventory.uploading')
+                        : selected.photoUrl
+                          ? t('inventory.replacePhoto')
+                          : t('inventory.uploadPhotoBtn')}
                       <input
                         type="file"
                         accept="image/*"
@@ -927,7 +928,7 @@ export function InventoryWorkspace({
                         onClick={() => void handlePhotoRemove()}
                         className="px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-rose-700 hover:bg-rose-50"
                       >
-                        Remove
+                        {t('inventory.remove')}
                       </button>
                     )}
                   </div>
@@ -936,7 +937,7 @@ export function InventoryWorkspace({
 
               <div className="grid sm:grid-cols-2 gap-3">
                 <label className="block text-xs">
-                  <span className="font-bold text-gray-500 uppercase">Qty available</span>
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.qtyAvailable')}</span>
                   <input
                     type="number"
                     min={0}
@@ -949,7 +950,7 @@ export function InventoryWorkspace({
                   />
                 </label>
                 <label className="block text-xs">
-                  <span className="font-bold text-gray-500 uppercase">List price</span>
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.listPrice')}</span>
                   <input
                     type="number"
                     min={0}
@@ -965,17 +966,17 @@ export function InventoryWorkspace({
                   />
                 </label>
                 <label className="block text-xs">
-                  <span className="font-bold text-gray-500 uppercase">Section / category</span>
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.section')}</span>
                   <input
                     disabled={!permissions.canEditInventory}
                     value={selected.category || ''}
                     onChange={(e) => saveSelected({ category: e.target.value || undefined })}
-                    placeholder="e.g. Shrubs"
+                    placeholder={t('inventory.sectionPlaceholder')}
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   />
                 </label>
                 <label className="block text-xs">
-                  <span className="font-bold text-gray-500 uppercase">Weeks until ready</span>
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.weeksUntilReady')}</span>
                   <input
                     type="number"
                     min={0}
@@ -993,7 +994,7 @@ export function InventoryWorkspace({
 
               <div>
                 <p className="text-xs font-bold uppercase text-gray-500 mb-2 flex items-center gap-1">
-                  <Scissors className="h-3.5 w-3.5" /> Cut-back status
+                  <Scissors className="h-3.5 w-3.5" /> {t('inventory.cutBack')}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <input
@@ -1011,12 +1012,12 @@ export function InventoryWorkspace({
                       onClick={() =>
                         saveSelected({
                           cutBackAt: new Date().toISOString(),
-                          cutBackNotes: 'Cut back recorded by field crew'
+                          cutBackNotes: t('inventory.cutBackRecorded')
                         })
                       }
                       className="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200"
                     >
-                      Mark cut back today
+                      {t('inventory.markCutBack')}
                     </button>
                   )}
                 </div>
@@ -1027,11 +1028,11 @@ export function InventoryWorkspace({
 
               <div>
                 <p className="text-xs font-bold uppercase text-gray-500 mb-2 flex items-center gap-1">
-                  <Droplets className="h-3.5 w-3.5" /> Chemical spray history
+                  <Droplets className="h-3.5 w-3.5" /> {t('inventory.sprayHistory')}
                 </p>
                 <div className="space-y-2 mb-3">
                   {(selected.chemicals || []).length === 0 ? (
-                    <p className="text-xs text-gray-400">No sprays recorded yet.</p>
+                    <p className="text-xs text-gray-400">{t('inventory.noSprays')}</p>
                   ) : (
                     selected.chemicals.map((c, i) => (
                       <div key={i} className="text-xs bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
@@ -1048,7 +1049,7 @@ export function InventoryWorkspace({
                       required
                       value={chemName}
                       onChange={(e) => setChemName(e.target.value)}
-                      placeholder="Chemical name"
+                      placeholder={t('inventory.chemicalName')}
                       className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
                     />
                     <input
@@ -1062,7 +1063,7 @@ export function InventoryWorkspace({
                       disabled={busy}
                       className="rounded-lg bg-ink-700 text-white text-xs font-bold"
                     >
-                      Log spray
+                      {t('inventory.logSpray')}
                     </button>
                   </form>
                 )}
@@ -1070,7 +1071,7 @@ export function InventoryWorkspace({
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center text-sm text-gray-500">
-              Select a plant to view and update inventory details.
+              {t('inventory.selectPlantDetail')}
             </div>
           )}
         </div>
@@ -1081,7 +1082,7 @@ export function InventoryWorkspace({
           url={pdfSheet.url}
           fileName={pdfSheet.fileName}
           blob={pdfSheet.blob}
-          title="Availability PDF ready"
+          title={t('inventory.pdfReady')}
           onClose={() => setPdfSheet(null)}
         />
       )}

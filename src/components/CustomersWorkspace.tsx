@@ -20,6 +20,8 @@ import { addCustomerOrder } from '../lib/db';
 import { logAuditEvent } from '../lib/audit';
 import { exportNurseryBackup } from '../lib/backup';
 import { AppPermissions } from '../lib/permissions';
+import { useT } from '../lib/i18n';
+import { formatPaymentRecord } from './MarkPaidModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 type CustomersView = 'customers' | 'invoices';
@@ -106,6 +108,7 @@ export function CustomersWorkspace({
   onOpenDocument,
   initialSelectedCustomerId
 }: CustomersWorkspaceProps) {
+  const t = useT();
   const NET_TERM_OPTIONS = ['NET 10', 'NET 15', 'NET 30', 'NET 45', 'NET 60', 'NET 90'] as const;
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -143,6 +146,44 @@ export function CustomersWorkspace({
   const [editCustomPaymentTerms, setEditCustomPaymentTerms] = useState('');
   const [customerDocuments, setCustomerDocuments] = useState<CustomerDocument[]>([]);
   const [convertingDocId, setConvertingDocId] = useState<string | null>(null);
+
+  const invoicePeriodLabels = useMemo(
+    (): Array<[InvoicePeriod, string]> => [
+      ['day', t('customers.today')],
+      ['week', t('customers.thisWeek')],
+      ['month', t('customers.thisMonth')],
+      ['quarter', t('customers.thisQuarter')],
+      ['year', t('customers.thisYear')],
+      ['all', t('customers.allTime')]
+    ],
+    [t]
+  );
+
+  function permissionOrFallback(err: unknown, fallbackKey: string): string {
+    const msg = String((err as { message?: string })?.message || '');
+    if (
+      msg.toLowerCase().includes('insufficient permissions') ||
+      msg.toLowerCase().includes('permission-denied')
+    ) {
+      return t('customers.permissionDenied');
+    }
+    return msg || t(fallbackKey);
+  }
+
+  function orderStatusLabel(status: CustomerOrder['status']): string {
+    switch (status) {
+      case 'completed':
+        return t('orders.statusCompleted');
+      case 'loading':
+        return t('orders.statusLoading');
+      default:
+        return t('orders.statusPending');
+    }
+  }
+
+  function docTypeLabel(type: CustomerDocumentType): string {
+    return type === 'invoice' ? t('customers.invoice') : t('customers.estimate');
+  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -289,7 +330,7 @@ export function CustomersWorkspace({
     e.preventDefault();
     if (!permissions.canEditCustomers) return;
     if (!name.trim()) {
-      setMessage('Customer name is required.');
+      setMessage(t('customers.nameRequired'));
       return;
     }
 
@@ -325,14 +366,9 @@ export function CustomersWorkspace({
       setNotes('');
       setShowAddForm(false);
       setSelectedCustomerId(newId);
-      setMessage('Customer saved.');
+      setMessage(t('customers.saved'));
     } catch (err: any) {
-      const msg = String(err?.message || '');
-      setMessage(
-        msg.toLowerCase().includes('insufficient permissions') || msg.toLowerCase().includes('permission-denied')
-          ? 'Permission denied. Publish the latest firestore.rules in Firebase Console (Rules tab on your AI Studio database), then hard refresh and try again.'
-          : msg || 'Failed to add customer.'
-      );
+      setMessage(permissionOrFallback(err, 'customers.addFailed'));
     } finally {
       setBusy(false);
     }
@@ -341,7 +377,7 @@ export function CustomersWorkspace({
   async function handleSaveSelectedCustomer() {
     if (!permissions.canEditCustomers || !selectedCustomer) return;
     if (!editName.trim()) {
-      setMessage('Customer name is required.');
+      setMessage(t('customers.nameRequired'));
       return;
     }
 
@@ -366,9 +402,9 @@ export function CustomersWorkspace({
         notes: editNotes.trim() || undefined,
         updatedAt: new Date().toISOString()
       });
-      setMessage('Customer updated.');
+      setMessage(t('customers.updated'));
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to update customer.');
+      setMessage(err?.message || t('customers.updateFailed'));
     } finally {
       setBusy(false);
     }
@@ -382,21 +418,16 @@ export function CustomersWorkspace({
       const text = await file.text();
       const parsed = parseCsvCustomers(text);
       if (parsed.length === 0) {
-        throw new Error('CSV needs a name header (optional: email, phone, notes).');
+        throw new Error(t('customers.csvFormatError'));
       }
       const count = await bulkImportCustomers(parsed);
       setMessage(
         count === 0
-          ? 'No new customers imported (names already in your list were skipped).'
-          : `Imported ${count} new customer${count === 1 ? '' : 's'} (existing names were skipped).`
+          ? t('customers.noNewImported')
+          : t('customers.importedCustomers', { n: count })
       );
     } catch (err: any) {
-      const msg = String(err?.message || '');
-      setMessage(
-        msg.toLowerCase().includes('insufficient permissions') || msg.toLowerCase().includes('permission-denied')
-          ? 'Permission denied. Publish the latest firestore.rules in Firebase Console (Rules tab on your AI Studio database), then hard refresh and try again.'
-          : msg || 'Customer CSV import failed.'
-      );
+      setMessage(permissionOrFallback(err, 'customers.csvImportFailed'));
     } finally {
       setBusy(false);
     }
@@ -406,12 +437,10 @@ export function CustomersWorkspace({
     if (!permissions.canEditCustomers) return;
     const extras = countDuplicateCustomerNames(customers);
     if (extras === 0) {
-      setMessage('No duplicate customer names found.');
+      setMessage(t('customers.noDuplicates'));
       return;
     }
-    const ok = window.confirm(
-      `Found about ${extras} duplicate customer record${extras === 1 ? '' : 's'} (same name more than once).\n\nKeep the most complete copy of each name, remove the extras, and re-link any orders/estimates that pointed at a removed copy?`
-    );
+    const ok = window.confirm(t('customers.dedupeConfirm', { n: extras }));
     if (!ok) return;
 
     setBusy(true);
@@ -419,14 +448,19 @@ export function CustomersWorkspace({
     try {
       const result = await deduplicateCustomersByName();
       if (result.removed === 0) {
-        setMessage('No duplicates needed removing.');
+        setMessage(t('customers.noDuplicatesRemoved'));
       } else {
         setMessage(
-          `Removed ${result.removed} duplicate${result.removed === 1 ? '' : 's'} across ${result.duplicateGroups} name${result.duplicateGroups === 1 ? '' : 's'}. Relinked ${result.remappedOrders} order${result.remappedOrders === 1 ? '' : 's'} and ${result.remappedDocuments} document${result.remappedDocuments === 1 ? '' : 's'}.`
+          t('customers.dedupeResult', {
+            removed: result.removed,
+            groups: result.duplicateGroups,
+            orders: result.remappedOrders,
+            documents: result.remappedDocuments
+          })
         );
       }
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to remove duplicate customers.');
+      setMessage(err?.message || t('customers.dedupeFailed'));
     } finally {
       setBusy(false);
     }
@@ -455,9 +489,9 @@ export function CustomersWorkspace({
           documents: documents.length
         }
       });
-      setMessage('Backup downloaded (JSON + CSV files).');
+      setMessage(t('customers.backupDownloaded'));
     } catch (err: any) {
-      setMessage(err?.message || 'Backup export failed.');
+      setMessage(err?.message || t('customers.backupFailed'));
     } finally {
       setBusy(false);
     }
@@ -466,12 +500,10 @@ export function CustomersWorkspace({
   async function handleDeleteAllCustomers() {
     if (!permissions.canEditCustomers) return;
     if (customers.length === 0) {
-      setMessage('No customers to delete.');
+      setMessage(t('customers.noCustomersToDelete'));
       return;
     }
-    const ok = window.confirm(
-      `Delete all ${customers.length} customers? This cannot be undone. Orders will keep their customer names but lose the customer link.`
-    );
+    const ok = window.confirm(t('customers.deleteAllConfirm', { n: customers.length }));
     if (!ok) return;
 
     setBusy(true);
@@ -479,9 +511,9 @@ export function CustomersWorkspace({
     try {
       const count = await deleteAllCustomers();
       setSelectedCustomerId(null);
-      setMessage(`Removed ${count} customer${count === 1 ? '' : 's'}.`);
+      setMessage(t('customers.removedCustomers', { n: count }));
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to delete customers.');
+      setMessage(err?.message || t('customers.deleteCustomersFailed'));
     } finally {
       setBusy(false);
     }
@@ -508,7 +540,7 @@ export function CustomersWorkspace({
     }
 
     const ok = window.confirm(
-      `Convert ${doc.documentNumber} into a plant order for ${selectedCustomer.name}? This adds it to Orders for pulling/loading. The estimate stays on the customer record.`
+      t('customers.convertConfirm', { doc: doc.documentNumber, customer: selectedCustomer.name })
     );
     if (!ok) return;
 
@@ -526,7 +558,7 @@ export function CustomersWorkspace({
       }));
 
       if (items.length === 0) {
-        throw new Error('This estimate has no line items to convert.');
+        throw new Error(t('customers.noLineItems'));
       }
 
       const orderId = await addCustomerOrder({
@@ -562,10 +594,10 @@ export function CustomersWorkspace({
         meta: { estimateId: doc.id, orderId, customerId: selectedCustomer.id }
       });
 
-      setMessage(`Estimate converted to order. Opening it now…`);
+      setMessage(t('customers.convertSuccess'));
       onOpenOrder?.(orderId);
     } catch (err: any) {
-      setMessage(err?.message || 'Failed to convert estimate to order.');
+      setMessage(err?.message || t('customers.convertFailed'));
     } finally {
       setConvertingDocId(null);
     }
@@ -585,7 +617,7 @@ export function CustomersWorkspace({
               className="inline-flex items-center gap-1.5 text-xs font-bold text-ink-800 hover:text-ink-950 mb-3"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back to customers
+              {t('customers.back')}
             </button>
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center shrink-0">
@@ -595,7 +627,7 @@ export function CustomersWorkspace({
                 <h2 className="text-lg font-bold text-gray-900 truncate">{selectedCustomer.name}</h2>
                 <p className="text-xs text-gray-500">
                   {[selectedCustomer.contactEmail, selectedCustomer.phone].filter(Boolean).join(' • ') ||
-                    'No contact info'}
+                    t('customers.noContact')}
                 </p>
               </div>
             </div>
@@ -610,18 +642,18 @@ export function CustomersWorkspace({
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                 <p className="text-[10px] font-black uppercase tracking-wider text-ink-800 mb-1.5">
-                  Bill To
+                  {t('customers.billTo')}
                 </p>
                 <p className="text-sm font-bold text-gray-900">
                   {selectedCustomer.billingName?.trim() || selectedCustomer.name}
                 </p>
                 <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
-                  {selectedCustomer.billingAddress?.trim() || 'No bill-to address on file'}
+                  {selectedCustomer.billingAddress?.trim() || t('customers.noBillTo')}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                 <p className="text-[10px] font-black uppercase tracking-wider text-ink-800 mb-1.5">
-                  Ship To
+                  {t('customers.shipTo')}
                 </p>
                 <p className="text-sm font-bold text-gray-900">
                   {selectedCustomer.shippingName?.trim() || selectedCustomer.name}
@@ -631,7 +663,7 @@ export function CustomersWorkspace({
                     selectedCustomer.shippingAddress ||
                     selectedCustomer.receiverAddress ||
                     ''
-                  ).trim() || 'No ship-to address on file'}
+                  ).trim() || t('customers.noShipTo')}
                 </p>
               </div>
             </div>
@@ -639,12 +671,12 @@ export function CustomersWorkspace({
               <div>
                 {selectedCustomer.pointOfContact && (
                   <p className="text-xs text-gray-600">
-                    Point of Contact: {selectedCustomer.pointOfContact}
+                    {t('customers.pointOfContact')} {selectedCustomer.pointOfContact}
                   </p>
                 )}
                 {selectedCustomer.paymentTerms && (
                   <p className="text-xs text-gray-600 mt-1">
-                    Terms: {selectedCustomer.paymentTerms}
+                    {t('customers.terms')} {selectedCustomer.paymentTerms}
                   </p>
                 )}
               </div>
@@ -652,45 +684,45 @@ export function CustomersWorkspace({
 
             {permissions.canEditCustomers && (
               <div className="border-t border-gray-100 pt-4 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Edit customer</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{t('customers.editCustomer')}</p>
                 <div className="grid md:grid-cols-2 gap-3">
                   <input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    placeholder="Customer name"
+                    placeholder={t('customers.customerName')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                     disabled={busy}
                   />
                   <input
                     value={editEmail}
                     onChange={(e) => setEditEmail(e.target.value)}
-                    placeholder="Email"
+                    placeholder={t('customers.email')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                     disabled={busy}
                   />
                   <input
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}
-                    placeholder="Phone"
+                    placeholder={t('customers.phone')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                     disabled={busy}
                   />
                   <input
                     value={editPointOfContact}
                     onChange={(e) => setEditPointOfContact(e.target.value)}
-                    placeholder="Point of contact"
+                    placeholder={t('customers.pointOfContactPlaceholder')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                     disabled={busy}
                   />
 
                   <div className="md:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-3 space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-wider text-ink-800">
-                      Bill To
+                      {t('customers.billTo')}
                     </p>
                     <input
                       value={editBillingName}
                       onChange={(e) => setEditBillingName(e.target.value)}
-                      placeholder="Bill-to name (defaults to customer name)"
+                      placeholder={t('customers.billToName')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -698,7 +730,7 @@ export function CustomersWorkspace({
                       rows={3}
                       value={editBillingAddress}
                       onChange={(e) => setEditBillingAddress(e.target.value)}
-                      placeholder="Bill-to address"
+                      placeholder={t('customers.billToAddress')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -706,12 +738,12 @@ export function CustomersWorkspace({
 
                   <div className="md:col-span-2 rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-wider text-sky-800">
-                      Ship To
+                      {t('customers.shipTo')}
                     </p>
                     <input
                       value={editShippingName}
                       onChange={(e) => setEditShippingName(e.target.value)}
-                      placeholder="Ship-to name (defaults to customer name)"
+                      placeholder={t('customers.shipToName')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -719,7 +751,7 @@ export function CustomersWorkspace({
                       rows={3}
                       value={editShippingAddress}
                       onChange={(e) => setEditShippingAddress(e.target.value)}
-                      placeholder="Ship-to address"
+                      placeholder={t('customers.shipToAddress')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -736,14 +768,14 @@ export function CustomersWorkspace({
                         {opt}
                       </option>
                     ))}
-                    <option value="COD">COD</option>
-                    <option value="CUSTOM">Custom</option>
+                    <option value="COD">{t('customers.cod')}</option>
+                    <option value="CUSTOM">{t('customers.custom')}</option>
                   </select>
                   {editPaymentTermsType === 'CUSTOM' && (
                     <input
                       value={editCustomPaymentTerms}
                       onChange={(e) => setEditCustomPaymentTerms(e.target.value)}
-                      placeholder="Custom terms"
+                      placeholder={t('customers.customTerms')}
                       className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
                       disabled={busy}
                     />
@@ -751,7 +783,7 @@ export function CustomersWorkspace({
                   <input
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
-                    placeholder="Notes"
+                    placeholder={t('customers.notes')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm md:col-span-2"
                     disabled={busy}
                   />
@@ -762,18 +794,18 @@ export function CustomersWorkspace({
                   disabled={busy}
                   className="px-4 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
                 >
-                  Save Customer Changes
+                  {t('customers.saveChanges')}
                 </button>
               </div>
             )}
 
             <div className="border-t border-gray-100 pt-4">
               <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
-                Estimates & Invoices ({customerDocuments.length})
+                {t('customers.estimatesInvoices', { n: customerDocuments.length })}
               </p>
               {customerDocuments.length === 0 ? (
                 <p className="text-xs text-gray-500 mb-3">
-                  No estimates or invoices yet. Create one after uploading an order, or from an open order.
+                  {t('customers.noDocsHint')}
                 </p>
               ) : (
                 <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 mb-3">
@@ -784,9 +816,9 @@ export function CustomersWorkspace({
                           <p className="text-sm font-bold text-gray-900 truncate">{doc.documentNumber}</p>
                           <p className="text-xs text-gray-500">
                             {new Date(doc.documentDate).toLocaleDateString()} • ${doc.grandTotal.toFixed(2)}
-                            {doc.orderNumber ? ` • Order #${doc.orderNumber}` : ''}
+                            {doc.orderNumber ? ` • ${t('customers.orderNum')}${doc.orderNumber}` : ''}
                             {doc.type === 'invoice' && doc.paymentStatus === 'paid'
-                              ? ' • Balance $0.00'
+                              ? ` • ${t('customers.balance')}`
                               : ''}
                           </p>
                         </div>
@@ -798,20 +830,27 @@ export function CustomersWorkspace({
                                 : 'bg-sky-100 text-sky-800'
                             }`}
                           >
-                            {doc.type}
+                            {docTypeLabel(doc.type)}
                           </span>
                           {doc.type === 'invoice' && doc.paymentStatus === 'paid' && (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
-                              Paid
+                              {t('customers.paid')}
                             </span>
                           )}
                           {doc.type === 'invoice' && doc.paymentStatus === 'pending' && (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
-                              Pending
+                              {t('customers.pending')}
                             </span>
                           )}
                         </div>
                       </div>
+                      {doc.type === 'invoice' &&
+                        doc.paymentStatus === 'paid' &&
+                        (doc.paymentMethod || doc.paymentReference) && (
+                          <p className="text-[10px] font-semibold text-emerald-800 mt-1">
+                            {formatPaymentRecord(t, doc.paymentMethod, doc.paymentReference)}
+                          </p>
+                        )}
                       <div className="mt-2 flex flex-wrap gap-2">
                         {permissions.canViewInvoices && onOpenDocument && (
                           <button
@@ -820,7 +859,7 @@ export function CustomersWorkspace({
                             className="inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
-                            Open {doc.type}
+                            {t('customers.openDoc', { type: docTypeLabel(doc.type) })}
                           </button>
                         )}
                         {permissions.canUploadOrders && doc.type === 'estimate' && !doc.orderId && (
@@ -831,7 +870,7 @@ export function CustomersWorkspace({
                             className="inline-flex items-center gap-1 text-xs font-bold text-sky-800 hover:text-sky-950 disabled:opacity-50"
                           >
                             <ClipboardList className="h-3.5 w-3.5" />
-                            {convertingDocId === doc.id ? 'Converting…' : 'Convert to order'}
+                            {convertingDocId === doc.id ? t('customers.converting') : t('customers.convertToOrder')}
                           </button>
                         )}
                         {permissions.canViewOrders && doc.type === 'estimate' && doc.orderId && onOpenOrder && (
@@ -841,7 +880,7 @@ export function CustomersWorkspace({
                             className="inline-flex items-center gap-1 text-xs font-bold text-sky-800 hover:text-sky-950"
                           >
                             <ClipboardList className="h-3.5 w-3.5" />
-                            Open linked order
+                            {t('customers.openLinkedOrder')}
                           </button>
                         )}
                       </div>
@@ -853,10 +892,10 @@ export function CustomersWorkspace({
 
             <div className="border-t border-gray-100 pt-4">
               <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
-                Orders ({selectedCustomerOrders.length})
+                {t('customers.orders', { n: selectedCustomerOrders.length })}
               </p>
               {selectedCustomerOrders.length === 0 ? (
-                <p className="text-xs text-gray-500">No linked orders yet.</p>
+                <p className="text-xs text-gray-500">{t('customers.noOrders')}</p>
               ) : (
                 <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
                   {selectedCustomerOrders.map((order) => (
@@ -864,10 +903,10 @@ export function CustomersWorkspace({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-900 truncate">
-                            Order #{order.orderNumber}
+                            {t('customers.orderNum')}{order.orderNumber}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {new Date(order.dateCreated).toLocaleDateString()} • {order.items.length} items
+                            {new Date(order.dateCreated).toLocaleDateString()} • {order.items.length} {t('customers.items')}
                           </p>
                         </div>
                         <span
@@ -879,7 +918,7 @@ export function CustomersWorkspace({
                                 : 'bg-slate-100 text-slate-700'
                           }`}
                         >
-                          {order.status}
+                          {orderStatusLabel(order.status)}
                         </span>
                       </div>
                       {onOpenOrder && (
@@ -889,7 +928,7 @@ export function CustomersWorkspace({
                           className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                         >
                           <FileText className="h-3.5 w-3.5" />
-                          Open order
+                          {t('customers.openOrder')}
                         </button>
                       )}
                     </div>
@@ -913,12 +952,12 @@ export function CustomersWorkspace({
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">
-                    {workspaceView === 'invoices' ? 'Invoices' : 'Customers Workspace'}
+                    {workspaceView === 'invoices' ? t('customers.invoices') : t('customers.workspaceTitle')}
                   </h2>
                   <p className="text-xs text-gray-500">
                     {workspaceView === 'invoices'
-                      ? 'Filter saved invoices by period or customer, then open one.'
-                      : 'Search customers, then open one to view details.'}
+                      ? t('customers.invoicesSubtitle')
+                      : t('customers.customersSubtitle')}
                   </p>
                 </div>
               </div>
@@ -937,7 +976,7 @@ export function CustomersWorkspace({
                           : 'bg-white text-ink-800 hover:bg-ink-50'
                       }`}
                     >
-                      Customers
+                      {t('customers.customers')}
                     </button>
                     <button
                       type="button"
@@ -953,7 +992,7 @@ export function CustomersWorkspace({
                       }`}
                     >
                       <FileText className="h-3.5 w-3.5" />
-                      Invoices
+                      {t('customers.invoices')}
                     </button>
                   </div>
                 )}
@@ -967,7 +1006,7 @@ export function CustomersWorkspace({
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800"
                   >
                     {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    {showAddForm ? 'Close' : 'Add Customer'}
+                    {showAddForm ? t('common.close') : t('customers.addCustomer')}
                   </button>
                 )}
               </div>
@@ -976,16 +1015,7 @@ export function CustomersWorkspace({
             {workspaceView === 'invoices' ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      ['day', 'Today'],
-                      ['week', 'This week'],
-                      ['month', 'This month'],
-                      ['quarter', 'This quarter'],
-                      ['year', 'This year'],
-                      ['all', 'All time']
-                    ] as Array<[InvoicePeriod, string]>
-                  ).map(([id, label]) => (
+                  {invoicePeriodLabels.map(([id, label]) => (
                     <button
                       key={id}
                       type="button"
@@ -1004,14 +1034,14 @@ export function CustomersWorkspace({
                 <div className="grid sm:grid-cols-2 gap-2">
                   <label className="block">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Customer
+                      {t('customers.customer')}
                     </span>
                     <select
                       value={invoiceCustomerId}
                       onChange={(e) => setInvoiceCustomerId(e.target.value)}
                       className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     >
-                      <option value="all">All customers</option>
+                      <option value="all">{t('customers.allCustomers')}</option>
                       {[...customers]
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map((c) => (
@@ -1023,14 +1053,14 @@ export function CustomersWorkspace({
                   </label>
                   <label className="block">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Search
+                      {t('common.search')}
                     </span>
                     <div className="relative mt-1">
                       <Search className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
                       <input
                         value={invoiceSearch}
                         onChange={(e) => setInvoiceSearch(e.target.value)}
-                        placeholder="Number, customer, order…"
+                        placeholder={t('customers.searchPlaceholder')}
                         className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
                       />
                     </div>
@@ -1039,23 +1069,23 @@ export function CustomersWorkspace({
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-slate-500">Invoices</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-500">{t('customers.invoicesCount')}</p>
                     <p className="text-sm font-black text-slate-900">{invoiceTotals.count}</p>
                   </div>
                   <div className="rounded-xl border border-ink-100 bg-ink-50/60 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-ink-700">Total</p>
+                    <p className="text-[10px] font-bold uppercase text-ink-700">{t('customers.total')}</p>
                     <p className="text-sm font-black text-ink-900">
                       {formatMoney(invoiceTotals.total)}
                     </p>
                   </div>
                   <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-amber-700">Outstanding</p>
+                    <p className="text-[10px] font-bold uppercase text-amber-700">{t('customers.outstanding')}</p>
                     <p className="text-sm font-black text-amber-900">
                       {formatMoney(invoiceTotals.outstanding)}
                     </p>
                   </div>
                   <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-rose-700">Overdue</p>
+                    <p className="text-[10px] font-bold uppercase text-rose-700">{t('customers.overdue')}</p>
                     <p className="text-sm font-black text-rose-900">
                       {formatMoney(invoiceTotals.overdue)}
                     </p>
@@ -1065,7 +1095,7 @@ export function CustomersWorkspace({
                 <div className="space-y-2 max-h-[480px] overflow-y-auto">
                   {filteredInvoices.length === 0 ? (
                     <p className="text-xs text-gray-500 py-6 text-center">
-                      No invoices match these filters.
+                      {t('customers.noInvoices')}
                     </p>
                   ) : (
                     filteredInvoices.map((doc) => (
@@ -1082,25 +1112,31 @@ export function CustomersWorkspace({
                             <p className="text-xs text-gray-500">
                               {documentDateValue(doc).toLocaleDateString()} • $
                               {(doc.grandTotal || 0).toFixed(2)}
-                              {doc.orderNumber ? ` • Order #${doc.orderNumber}` : ''}
+                              {doc.orderNumber ? ` • ${t('customers.orderNum')}${doc.orderNumber}` : ''}
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             {doc.paymentStatus === 'paid' ? (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
-                                Paid
+                                {t('customers.paid')}
                               </span>
                             ) : doc.paymentStatus === 'pending' ? (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
-                                Pending
+                                {t('customers.pending')}
                               </span>
                             ) : (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-slate-100 text-slate-700">
-                                Unpaid
+                                {t('customers.unpaid')}
                               </span>
                             )}
                           </div>
                         </div>
+                        {doc.paymentStatus === 'paid' &&
+                          (doc.paymentMethod || doc.paymentReference) && (
+                            <p className="text-[10px] font-semibold text-emerald-800 mt-1">
+                              {formatPaymentRecord(t, doc.paymentMethod, doc.paymentReference)}
+                            </p>
+                          )}
                         {onOpenDocument && (
                           <button
                             type="button"
@@ -1108,7 +1144,7 @@ export function CustomersWorkspace({
                             className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
-                            Open invoice
+                            {t('customers.openInvoice')}
                           </button>
                         )}
                       </div>
@@ -1122,7 +1158,7 @@ export function CustomersWorkspace({
               <div className="flex flex-wrap gap-2 mb-4">
                 <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold cursor-pointer hover:bg-ink-100">
                   <Upload className="h-4 w-4" />
-                  Upload Customer CSV
+                  {t('customers.uploadCsv')}
                   <input
                     type="file"
                     accept=".csv,text/csv"
@@ -1141,7 +1177,7 @@ export function CustomersWorkspace({
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 disabled:opacity-50"
                 >
                   <Download className="h-4 w-4" />
-                  Export backup
+                  {t('customers.exportBackup')}
                 </button>
                 {countDuplicateCustomerNames(customers) > 0 && (
                   <button
@@ -1150,7 +1186,7 @@ export function CustomersWorkspace({
                     onClick={handleDeduplicateCustomers}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold hover:bg-amber-100 disabled:opacity-50"
                   >
-                    Remove duplicates ({countDuplicateCustomerNames(customers)})
+                    {t('customers.removeDuplicates', { n: countDuplicateCustomerNames(customers) })}
                   </button>
                 )}
                 {customers.length > 0 && (
@@ -1160,7 +1196,7 @@ export function CustomersWorkspace({
                     onClick={handleDeleteAllCustomers}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 disabled:opacity-50"
                   >
-                    Delete all customers
+                    {t('customers.deleteAll')}
                   </button>
                 )}
               </div>
@@ -1177,52 +1213,52 @@ export function CustomersWorkspace({
                 onSubmit={handleAddCustomer}
                 className="border border-gray-200 rounded-2xl p-4 space-y-3 bg-slate-50/60 mb-4"
               >
-                <h3 className="text-sm font-bold text-gray-900">New customer</h3>
+                <h3 className="text-sm font-bold text-gray-900">{t('customers.newCustomer')}</h3>
                 <div className="grid md:grid-cols-2 gap-3">
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Customer name *"
+                    placeholder={t('customers.customerNameRequired')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     disabled={busy}
                   />
                   <input
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Contact email"
+                    placeholder={t('customers.contactEmail')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     disabled={busy}
                   />
                   <input
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Phone"
+                    placeholder={t('customers.phone')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     disabled={busy}
                   />
                   <input
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Notes"
+                    placeholder={t('customers.notes')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     disabled={busy}
                   />
                   <input
                     value={pointOfContact}
                     onChange={(e) => setPointOfContact(e.target.value)}
-                    placeholder="Point of contact"
+                    placeholder={t('customers.pointOfContactPlaceholder')}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                     disabled={busy}
                   />
 
                   <div className="md:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-3 space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-wider text-ink-800">
-                      Bill To
+                      {t('customers.billTo')}
                     </p>
                     <input
                       value={billingName}
                       onChange={(e) => setBillingName(e.target.value)}
-                      placeholder="Bill-to name (defaults to customer name)"
+                      placeholder={t('customers.billToName')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -1230,7 +1266,7 @@ export function CustomersWorkspace({
                       rows={3}
                       value={billingAddress}
                       onChange={(e) => setBillingAddress(e.target.value)}
-                      placeholder="Bill-to address"
+                      placeholder={t('customers.billToAddress')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -1238,12 +1274,12 @@ export function CustomersWorkspace({
 
                   <div className="md:col-span-2 rounded-xl border border-sky-100 bg-sky-50/40 p-3 space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-wider text-sky-800">
-                      Ship To
+                      {t('customers.shipTo')}
                     </p>
                     <input
                       value={shippingName}
                       onChange={(e) => setShippingName(e.target.value)}
-                      placeholder="Ship-to name (defaults to customer name)"
+                      placeholder={t('customers.shipToName')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -1251,7 +1287,7 @@ export function CustomersWorkspace({
                       rows={3}
                       value={shippingAddress}
                       onChange={(e) => setShippingAddress(e.target.value)}
-                      placeholder="Ship-to address"
+                      placeholder={t('customers.shipToAddress')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -1268,14 +1304,14 @@ export function CustomersWorkspace({
                         {opt}
                       </option>
                     ))}
-                    <option value="COD">COD</option>
-                    <option value="CUSTOM">Custom</option>
+                    <option value="COD">{t('customers.cod')}</option>
+                    <option value="CUSTOM">{t('customers.custom')}</option>
                   </select>
                   {paymentTermsType === 'CUSTOM' && (
                     <input
                       value={customPaymentTerms}
                       onChange={(e) => setCustomPaymentTerms(e.target.value)}
-                      placeholder="Custom terms"
+                      placeholder={t('customers.customTerms')}
                       className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={busy}
                     />
@@ -1286,7 +1322,7 @@ export function CustomersWorkspace({
                   disabled={busy}
                   className="px-4 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
                 >
-                  Save Customer
+                  {t('customers.saveCustomer')}
                 </button>
               </form>
             )}
@@ -1296,14 +1332,14 @@ export function CustomersWorkspace({
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search for customer..."
+                placeholder={t('customers.searchCustomer')}
                 className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
               />
             </div>
 
             <div className="space-y-2 max-h-[420px] overflow-y-auto">
               {filtered.length === 0 ? (
-                <p className="text-xs text-gray-500">No customers yet.</p>
+                <p className="text-xs text-gray-500">{t('customers.noCustomers')}</p>
               ) : (
                 filtered.map((c) => {
                   const rowOrders = ordersByCustomerId.get(c.id) || [];
@@ -1320,10 +1356,10 @@ export function CustomersWorkspace({
                     >
                       <p className="text-sm font-bold text-gray-900">{c.name}</p>
                       <p className="text-xs text-gray-500">
-                        {[c.contactEmail, c.phone].filter(Boolean).join(' • ') || 'No contact info'}
+                        {[c.contactEmail, c.phone].filter(Boolean).join(' • ') || t('customers.noContact')}
                       </p>
                       <p className="text-[11px] text-ink-700 font-semibold mt-1">
-                        {rowOrders.length} order{rowOrders.length === 1 ? '' : 's'}
+                        {t('customers.ordersCount', { n: rowOrders.length })}
                       </p>
                     </button>
                   );

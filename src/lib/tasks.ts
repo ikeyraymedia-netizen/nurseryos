@@ -73,9 +73,9 @@ export function weekDateKeys(weekStartMonday: string): string[] {
   return Array.from({ length: 7 }, (_, i) => addDaysToDateKey(weekStartMonday, i));
 }
 
-export function formatWeekdayLabel(dateKey: string): string {
+export function formatWeekdayLabel(dateKey: string, locale?: string): string {
   const [y, m, d] = dateKey.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+  return new Date(y, m - 1, d).toLocaleDateString(locale || undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric'

@@ -38,6 +38,7 @@ import { updateCustomerOrder } from '../lib/db';
 import {
   addCustomerDocument,
   updateCustomerDocument,
+  markCustomerInvoicePaid,
   defaultDocumentNumber,
   nextDocumentNumber,
   listAllDocuments,
@@ -57,7 +58,9 @@ import { sendInvoiceEmail } from '../lib/email';
 import { createInvoiceCheckout, confirmInvoicePayment } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
+import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import jsPDF from 'jspdf';
+import { useT } from '../lib/i18n';
 
 interface InvoiceModalProps {
   isOpen: boolean;
@@ -104,6 +107,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const printRef = useRef<HTMLDivElement | null>(null);
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const salesRepOptions = useSalesRepOptions(tenantId);
+  const t = useT();
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
     existingDocument?.type || initialDocumentType
   );
@@ -131,7 +135,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [taxRate, setTaxRate] = useState<number>(0);
   const [freightCharge, setFreightCharge] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
-  const [invoiceNotes, setInvoiceNotes] = useState('Thank you for your business. Balance due is payable in full per the terms above.');
+  const [invoiceNotes, setInvoiceNotes] = useState(t('invoice.defaultNotesInvoice'));
 
   // Store editable item prices
   const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
@@ -152,6 +156,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
   /** Optimistic paid flag after Refresh payment status / confirm. */
   const [localMarkedPaid, setLocalMarkedPaid] = useState(false);
+  const [showMarkPaid, setShowMarkPaid] = useState(false);
+  const [markingPaidBusy, setMarkingPaidBusy] = useState(false);
   /** When opened without existingDocument (e.g. from trucks), load saved invoice for payment status. */
   const [fetchedDocument, setFetchedDocument] = useState<CustomerDocument | null>(null);
   /** Live Firestore copy — updates Paid status without manual refresh. */
@@ -254,8 +260,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       existingDocument?.notes ||
         details?.notes ||
         (type === 'estimate'
-          ? 'This estimate is valid for 30 days. Prices subject to availability.'
-          : 'Thank you for your business. Balance due is payable in full per the terms above.')
+          ? t('invoice.defaultNotesEstimate')
+          : t('invoice.defaultNotesInvoice'))
     );
 
     const pricesMap: Record<string, number> = {};
@@ -293,7 +299,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       existingDocument?.customerEmail || order.customerEmail || customer?.contactEmail || ''
     );
     setEmailSubject(
-      `${type === 'estimate' ? 'Estimate' : 'Invoice'} ${
+      `${type === 'estimate' ? t('invoice.estimate') : t('invoice.invoice')} ${
         existingNumber || defaultDocumentNumber(type)
       } from ${nurseryName}`
     );
@@ -320,6 +326,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     if (!isOpen) {
       setFetchedDocument(null);
       setLocalMarkedPaid(false);
+      setShowMarkPaid(false);
       return;
     }
     if (existingDocument) {
@@ -385,12 +392,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Synchronize email subject when document number / type changes
   useEffect(() => {
     setEmailSubject(
-      `${documentType === 'estimate' ? 'Estimate' : 'Invoice'} ${invoiceNumber} from ${nurseryName}`
+      t('invoice.emailSubjectFrom', { docLabel: documentType === 'estimate' ? t('invoice.estimate') : t('invoice.invoice'), number: invoiceNumber, nurseryName })
     );
   }, [invoiceNumber, documentType, nurseryName]);
 
-  const docLabel = documentType === 'estimate' ? 'Estimate' : 'Invoice';
-  const docLabelUpper = documentType === 'estimate' ? 'ESTIMATE' : 'INVOICE';
+  const docLabel = documentType === 'estimate' ? t('invoice.estimate') : t('invoice.invoice');
+  const docLabelUpper = docLabel.toUpperCase();
 
   // Compute Active Item Quantity based on Qty Basis
   const getItemQty = (item: PlantOrderItem): number => {
@@ -464,7 +471,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             : ''
         }
         <h1 style="color: #0e7490; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
-        <p style="font-size: 11px; color: #0e7490; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">Wholesale Nursery</p>
+        <p style="font-size: 11px; color: #0e7490; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">{t('invoice.wholesaleNursery')}</p>
         
         <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
           <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumber}</h2>
@@ -479,13 +486,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </tr>
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Due Date:</strong></td>
-              <td style="padding: 2px 0; text-align: right; color: #0f172a; font-weight: bold;">${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}</td>
+              <td style="padding: 2px 0; text-align: right; color: #0f172a; font-weight: bold;">${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}</td>
             </tr>
           </table>
         </div>
 
         <div style="margin-bottom: 25px; font-size: 13px; font-family: Arial, sans-serif;">
-          <h3 style="color: #0e7490; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Bill To Customer:</h3>
+          <h3 style="color: #0e7490; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">{t('invoice.billToCustomer')}</h3>
           <p style="margin: 0; font-weight: bold; font-size: 14px; color: #0f172a;">${billToName}</p>
           <p style="margin: 5px 0 0 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${billToAddress}</p>
         </div>
@@ -588,7 +595,7 @@ Wholesale Nursery
 ${docLabelUpper}: ${invoiceNumber}
 Date: ${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
 Terms: ${paymentTerms}
-Due Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}
+Due Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}
 
 BILL TO:
 ${billToName}
@@ -616,12 +623,12 @@ Thank you for choosing ${nurseryName}!
   const handleSendEmailServer = async () => {
     if (!tenantId) {
       setEmailSentStatus('error_general');
-      setEmailErrorMessage('Nursery context missing. Close and reopen this invoice.');
+      setEmailErrorMessage(t('invoice.nurseryContextMissing'));
       return;
     }
     if (!customerEmail || !customerEmail.includes('@')) {
       setEmailSentStatus('error_general');
-      setEmailErrorMessage('Please enter a valid customer email address.');
+      setEmailErrorMessage(t('invoice.validEmailRequired'));
       return;
     }
 
@@ -668,16 +675,16 @@ Thank you for choosing ${nurseryName}!
         setEmailSentStatus('error_smtp');
         setEmailErrorMessage(
           result.message ||
-            'Email is not configured. Open Team → Outbound email, and make sure RESEND_API_KEY is set in Railway.'
+            t('invoice.emailNotConfiguredResend')
         );
       } else {
         setEmailSentStatus('error_general');
-        setEmailErrorMessage(result.error || 'Failed to dispatch email.');
+        setEmailErrorMessage(result.error || t('invoice.dispatchEmailFailed'));
       }
     } catch (err: any) {
       console.error('Email sending error:', err);
       setEmailSentStatus('error_general');
-      setEmailErrorMessage(err.message || 'An unexpected error occurred while sending the email.');
+      setEmailErrorMessage(err.message || t('invoice.unexpectedEmailError'));
     } finally {
       setIsSendingEmail(false);
     }
@@ -687,7 +694,7 @@ Thank you for choosing ${nurseryName}!
   const handleOpenMailClient = () => {
     if (!customerEmail) {
       setEmailSentStatus('error_general');
-      setEmailErrorMessage('Please enter a customer email address first.');
+      setEmailErrorMessage(t('invoice.emailFirstRequired'));
       return;
     }
     const textBody = generateEmailText();
@@ -878,7 +885,7 @@ Thank you for choosing ${nurseryName}!
 
       const customerId = customer?.id || order.customerId;
       if (!customerId) {
-        throw new Error('No customer linked. Assign a customer on the order before saving.');
+        throw new Error(t('invoice.noCustomerLinked'));
       }
 
       const docPayload = {
@@ -988,16 +995,16 @@ Thank you for choosing ${nurseryName}!
         /RESOURCE_EXHAUSTED|Quota exceeded/i.test(message)
       ) {
         alert(
-          'Could not save invoice: Firebase Firestore quota exceeded.\n\nUpgrade the Firebase project to the Blaze plan (Usage and billing), wait a minute, then try Save again.\n\nUntil that works, Stripe and QuickBooks stay disabled because the invoice is not saved yet.'
+          t('invoice.quotaExceeded')
         );
       } else if (code === 'permission-denied' || /insufficient permissions/i.test(message)) {
         alert(
-          'Could not save invoice to customer: Firestore permission denied.\n\nAsk your admin to deploy firestore.rules (documents collection), then try again.'
+          t('invoice.permissionDenied')
         );
       } else if (!customer?.id && !order.customerId) {
-        alert('Could not save. Link a customer on the order, then try again.');
+        alert(t('invoice.saveLinkCustomer'));
       } else {
-        alert(`Could not save invoice to customer: ${message}`);
+        alert(t('invoice.saveFailedGeneric', { message }));
       }
     } finally {
       setIsSaving(false);
@@ -1006,11 +1013,11 @@ Thank you for choosing ${nurseryName}!
 
   const handlePushToQuickbooks = async () => {
     if (!tenantId) {
-      alert('Nursery context missing. Close and reopen this invoice.');
+      alert(t('invoice.nurseryContextMissing'));
       return;
     }
     if (!savedDocumentId) {
-      alert(`Save this ${docLabel.toLowerCase()} to the customer first, then push to QuickBooks.`);
+      alert(t('invoice.saveDocFirstQb', { docLabel: docLabel.toLowerCase() }));
       return;
     }
     setIsPushingQb(true);
@@ -1058,10 +1065,10 @@ Thank you for choosing ${nurseryName}!
           `${docBit}${customerBit}${totalBit}${linesBit}${previewBit}\n\n` +
           (result.openUrl
             ? `Opening the connected sandbox company now.\nIf the tab looks wrong, use Team → Show recent QBO invoices.`
-            : 'Use Team → Show recent QBO invoices to open it.')
+            : t('invoice.qbLiveHint'))
       );
     } catch (err: any) {
-      alert(err?.message || 'Failed to push to QuickBooks.');
+      alert(err?.message || t('invoice.pushQbFailed'));
     } finally {
       setIsPushingQb(false);
     }
@@ -1070,7 +1077,7 @@ Thank you for choosing ${nurseryName}!
   const ensurePayLink = async (): Promise<string> => {
     if (activePayLinkUrl) return activePayLinkUrl;
     if (!tenantId || !savedDocumentId) {
-      throw new Error('Save this invoice to the customer first, then create a pay link.');
+      throw new Error(t('invoice.saveInvoiceFirst'));
     }
     const result = await createInvoiceCheckout({
       tenantId,
@@ -1080,7 +1087,7 @@ Thank you for choosing ${nurseryName}!
       throw new Error('Stripe did not return a pay link URL.');
     }
     setPayLinkUrl(result.url);
-    setPayLinkMessage('Pay link ready');
+    setPayLinkMessage(t('invoice.payLinkReady'));
     await logAuditEvent({
       action: 'stripe.checkout_created',
       summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
@@ -1091,15 +1098,15 @@ Thank you for choosing ${nurseryName}!
 
   const handleCreatePayLink = async () => {
     if (!tenantId) {
-      alert('Nursery context missing. Close and reopen this invoice.');
+      alert(t('invoice.nurseryContextMissing'));
       return;
     }
     if (!savedDocumentId) {
-      alert(`Save this ${docLabel.toLowerCase()} to the customer first, then create a pay link.`);
+      alert(t('invoice.saveDocFirstPayLink', { docLabel: docLabel.toLowerCase() }));
       return;
     }
     if (documentType !== 'invoice') {
-      alert('Only invoices can be collected via Stripe. Convert or save as an invoice first.');
+      alert(t('invoice.stripeInvoiceOnly'));
       return;
     }
     setIsCreatingPayLink(true);
@@ -1109,13 +1116,13 @@ Thank you for choosing ${nurseryName}!
       try {
         await navigator.clipboard.writeText(url);
         alert(
-          'Pay link created and copied to your clipboard.\n\nPaste it into a text/email to your customer — do not open it yourself unless you intend to pay the invoice.'
+          t('invoice.payLinkCopied')
         );
       } catch {
-        alert(`Pay link ready for your customer:\n\n${url}`);
+        alert(t('invoice.payLinkReadyAlert', { url }));
       }
     } catch (err: any) {
-      alert(err?.message || 'Failed to create Stripe pay link.');
+      alert(err?.message || t('invoice.pushQbFailed'));
     } finally {
       setIsCreatingPayLink(false);
     }
@@ -1123,7 +1130,7 @@ Thank you for choosing ${nurseryName}!
 
   const handleRefreshPaymentStatus = async (opts?: { silent?: boolean }) => {
     if (!tenantId || !savedDocumentId) {
-      if (!opts?.silent) alert('Save this invoice to the customer first.');
+      if (!opts?.silent) alert(t('invoice.saveInvoiceFirst'));
       return;
     }
     setIsRefreshingPayment(true);
@@ -1136,7 +1143,7 @@ Thank you for choosing ${nurseryName}!
       if (result.paid) {
         setLocalMarkedPaid(true);
         if (!opts?.silent) {
-          alert('Payment confirmed. This invoice is now marked Paid with $0.00 balance due.');
+          alert(t('invoice.paymentConfirmed'));
         }
       } else if (!opts?.silent) {
         alert(
@@ -1145,7 +1152,7 @@ Thank you for choosing ${nurseryName}!
         );
       }
     } catch (err: any) {
-      if (!opts?.silent) alert(err?.message || 'Failed to refresh payment status.');
+      if (!opts?.silent) alert(err?.message || t('invoice.refreshPaymentFailed'));
     } finally {
       setIsRefreshingPayment(false);
     }
@@ -1217,7 +1224,7 @@ Thank you for choosing ${nurseryName}!
       if (poNumber.trim()) metaLines.push(`P.O. #: ${poNumber.trim()}`);
       metaLines.push(`Terms: ${paymentTerms || '—'}`);
       metaLines.push(
-        `Due: ${dueDate ? new Date(dueDate).toLocaleDateString() : 'Upon Receipt'}`
+        `Due: ${dueDate ? new Date(dueDate).toLocaleDateString() : t('invoice.uponReceipt')}`
       );
       metaLines.forEach((line) => {
         pdf.text(line, rightX, y, { align: 'right' });
@@ -1236,7 +1243,7 @@ Thank you for choosing ${nurseryName}!
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(14, 116, 144);
-      pdf.text('BILL TO', margin, partiesTop);
+      pdf.text(t('invoice.billTo'), margin, partiesTop);
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
       pdf.setTextColor(20, 20, 20);
@@ -1256,14 +1263,14 @@ Thank you for choosing ${nurseryName}!
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(14, 116, 144);
-      pdf.text('SHIP FROM', originX, partiesTop);
+      pdf.text(t('invoice.shipFrom'), originX, partiesTop);
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
       pdf.setTextColor(80, 80, 80);
       let rightY = partiesTop + 15;
       pdf.text(`Shipper: ${nurseryName}`, originX, rightY);
       rightY += 12;
-      const originText = nurseryAddress || 'Nursery loading facility';
+      const originText = nurseryAddress || t('invoice.defaultOrigin');
       pdf.splitTextToSize(`Origin: ${originText}`, contentWidth / 2 - 10).forEach((l: string) => {
         pdf.text(l, originX, rightY);
         rightY += 12;
@@ -1284,10 +1291,10 @@ Thank you for choosing ${nurseryName}!
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(8);
         pdf.setTextColor(110, 110, 110);
-        pdf.text('PLANT VARIETY', xPlant, y);
+        pdf.text(t('invoice.plantVariety'), xPlant, y);
         pdf.text('SIZE', xSize, y);
         pdf.text('QTY', xQty, y, { align: 'right' });
-        pdf.text('UNIT PRICE', xPrice, y, { align: 'right' });
+        pdf.text(t('invoice.unitPrice'), xPrice, y, { align: 'right' });
         pdf.text('TOTAL', xTotal, y, { align: 'right' });
         // jsPDF y is text baseline — rule must sit below glyphs, then leave room for next baseline
         y += 4;
@@ -1356,20 +1363,20 @@ Thank you for choosing ${nurseryName}!
         y += big ? 20 : 14;
       };
 
-      writeTotal('Subtotal', money(subtotal));
-      if (discountAmount > 0) writeTotal('Discount', `-${money(discountAmount)}`);
-      if (freightCharge > 0) writeTotal('Freight / Shipping', money(freightCharge));
+      writeTotal(t('invoice.subtotal'), money(subtotal));
+      if (discountAmount > 0) writeTotal(t('invoice.discountLabel'), `-${money(discountAmount)}`);
+      if (freightCharge > 0) writeTotal(t('invoice.freightLabel'), money(freightCharge));
       if (salesTax > 0) writeTotal(`Sales Tax (${taxRate}%)`, money(salesTax));
       pdf.setDrawColor(180, 180, 180);
       pdf.setLineWidth(1);
       pdf.line(labelX, y - 4, rightX, y - 4);
       y += 8;
       if (documentType === 'invoice' && isPaid) {
-        writeTotal('Invoice Total', money(grandTotal), true, false);
-        writeTotal('Amount Paid', money(amountPaid), true, false);
-        writeTotal('BALANCE DUE', money(0), true, true);
+        writeTotal(t('invoice.invoiceTotalLabel'), money(grandTotal), true, false);
+        writeTotal(t('invoice.amountPaid'), money(amountPaid), true, false);
+        writeTotal(t('invoice.balanceDue'), money(0), true, true);
       } else {
-        writeTotal(documentType === 'estimate' ? 'ESTIMATE TOTAL' : 'BALANCE DUE', money(balanceDue), true, true);
+        writeTotal(documentType === 'estimate' ? t('invoice.estimateTotal') : t('invoice.balanceDue'), money(balanceDue), true, true);
       }
 
       // Notes
@@ -1379,7 +1386,7 @@ Thank you for choosing ${nurseryName}!
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(8);
         pdf.setTextColor(110, 110, 110);
-        pdf.text('NOTES', margin, y);
+        pdf.text(t('invoice.notes'), margin, y);
         y += 12;
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
@@ -1403,7 +1410,7 @@ Thank you for choosing ${nurseryName}!
       }
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert(`PDF export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      alert(t('invoice.pdfExportFailed', { message: err instanceof Error ? err.message : t('invoice.unknownError') }));
     }
   };
 
@@ -1426,15 +1433,58 @@ Thank you for choosing ${nurseryName}!
           url={pdfSheet.url}
           fileName={pdfSheet.fileName}
           blob={pdfSheet.blob}
-          title={`${docLabel} ready`}
+          title={t('invoice.ready', { docLabel })}
           onClose={() => setPdfSheet(null)}
+        />
+      )}
+      {showMarkPaid && paymentDocument && (
+        <MarkPaidModal
+          title={t('invoice.markAsPaid')}
+          subtitle={`${paymentDocument.documentNumber} · ${paymentDocument.billToName || paymentDocument.customerName}`}
+          amountLabel={`$${grandTotal.toFixed(2)}`}
+          busy={markingPaidBusy}
+          onCancel={() => setShowMarkPaid(false)}
+          onConfirm={async (payment) => {
+            setMarkingPaidBusy(true);
+            try {
+              await markCustomerInvoicePaid(paymentDocument, payment);
+              setLocalMarkedPaid(true);
+              setLiveDocument({
+                ...paymentDocument,
+                paymentStatus: 'paid',
+                paidAt: new Date().toISOString(),
+                paymentMethod: payment.method,
+                paymentReference: payment.reference,
+                stripePaidAmountCents:
+                  typeof paymentDocument.stripePaidAmountCents === 'number'
+                    ? paymentDocument.stripePaidAmountCents
+                    : Math.round(grandTotal * 100)
+              });
+              setShowMarkPaid(false);
+              await logAuditEvent({
+                action: 'invoice.marked_paid',
+                summary: `Marked ${paymentDocument.documentNumber} paid via ${payment.method}${
+                  payment.reference ? ` (${payment.reference})` : ''
+                }`,
+                meta: {
+                  documentId: paymentDocument.id,
+                  method: payment.method,
+                  reference: payment.reference || null
+                }
+              });
+            } catch (err: any) {
+              alert(err?.message || t('invoice.markPaidFailed'));
+            } finally {
+              setMarkingPaidBusy(false);
+            }
+          }}
         />
       )}
       {showFreightAllocation && (
         <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
             <div className="px-5 py-4 bg-ink-950 text-white">
-              <h3 className="text-base font-black">Distribute truck freight?</h3>
+              <h3 className="text-base font-black">{t('invoice.distributeFreight')}</h3>
               <p className="text-xs text-ink-200 mt-1">
                 This truck has {uniqueTruckOrders.length} orders and ${freightCharge.toFixed(2)} in
                 total freight.
@@ -1446,7 +1496,7 @@ Thank you for choosing ${nurseryName}!
                 onClick={() => handleFreightChoice('equal')}
                 className="w-full text-left rounded-xl border-2 border-slate-200 hover:border-ink-500 hover:bg-ink-50 px-4 py-3 transition-colors"
               >
-                <span className="block text-sm font-black text-gray-900">Split evenly</span>
+                <span className="block text-sm font-black text-gray-900">{t('invoice.splitEven')}</span>
                 <span className="block text-xs text-slate-500 mt-0.5">
                   Divide the freight equally across all {uniqueTruckOrders.length} invoices.
                 </span>
@@ -1522,9 +1572,25 @@ Thank you for choosing ${nurseryName}!
                   : 'border-amber-200 bg-amber-50 text-amber-900'
               }`}
             >
-              {isPaid
-                ? `Paid${paymentDocument?.paidAt ? ` · ${new Date(paymentDocument.paidAt).toLocaleDateString()}` : ''}`
-                : 'Payment pending — waiting for Stripe confirmation'}
+              {isPaid ? (
+                <>
+                  {t('invoice.paidBadge')}
+                  {paymentDocument?.paidAt
+                    ? ` · ${new Date(paymentDocument.paidAt).toLocaleDateString()}`
+                    : ''}
+                  {(paymentDocument?.paymentMethod || paymentDocument?.paymentReference) && (
+                    <span className="block font-semibold mt-0.5">
+                      {formatPaymentRecord(
+                        t,
+                        paymentDocument.paymentMethod,
+                        paymentDocument.paymentReference
+                      )}
+                    </span>
+                  )}
+                </>
+              ) : (
+                t('invoice.paymentPending')
+              )}
             </div>
           )}
 
@@ -1546,7 +1612,7 @@ Thank you for choosing ${nurseryName}!
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
                     }`}
                   >
-                    {type === 'estimate' ? 'Estimate' : 'Invoice'}
+                    {type === 'estimate' ? t('invoice.estimate') : t('invoice.invoice')}
                   </button>
                 ))}
               </div>
@@ -1574,7 +1640,7 @@ Thank you for choosing ${nurseryName}!
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
                     }`}
                   >
-                    {basis === 'ordered' ? 'Ordered' : basis === 'pulled' ? 'Pulled' : 'Loaded'}
+                    {basis === 'ordered' ? t('invoice.ordered') : basis === 'pulled' ? t('invoice.pulled') : t('invoice.loaded')}
                   </button>
                 ))}
               </div>
@@ -1605,7 +1671,7 @@ Thank you for choosing ${nurseryName}!
                 type="text"
                 value={poNumber}
                 onChange={(e) => setPoNumber(e.target.value)}
-                placeholder="Customer purchase order number"
+                placeholder={t('invoice.customerPoPlaceholder')}
                 className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
               />
               <p className="text-[10px] text-gray-400 mt-1 leading-snug">
@@ -1623,7 +1689,7 @@ Thank you for choosing ${nurseryName}!
                 onChange={(e) => setSalesRep(e.target.value)}
                 className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
               >
-                <option value="">Unassigned</option>
+                <option value="">{t('invoice.unassigned')}</option>
                 {salesRepOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -1685,12 +1751,12 @@ Thank you for choosing ${nurseryName}!
 
             {/* Financial Adjustments */}
             <div className="bg-slate-100 p-2.5 rounded-xl space-y-2 border border-slate-200">
-              <span className="block font-mono font-bold text-[9px] text-gray-400 uppercase tracking-widest">Charges & Adjustments</span>
+              <span className="block font-mono font-bold text-[9px] text-gray-400 uppercase tracking-widest">{t('invoice.charges')}</span>
               
               {/* Freight Charge */}
               <div>
                 <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
-                  <span>Freight / Shipping ($)</span>
+                  <span>{t('invoice.freight')}</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
@@ -1711,12 +1777,12 @@ Thank you for choosing ${nurseryName}!
               {/* Tax Rate */}
               <div>
                 <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
-                  <span>Tax Rate (%)</span>
+                  <span>{t('invoice.taxRate')}</span>
                   <button 
                     onClick={() => setTaxRate(taxRate === 0 ? 4.45 : 0)}
                     className="text-[9px] text-ink-700 hover:underline"
                   >
-                    {taxRate === 0 ? 'Use 4.45%' : 'Exempt (0%)'}
+                    {taxRate === 0 ? t('invoice.useTax') : t('invoice.exempt')}
                   </button>
                 </label>
                 <div className="relative">
@@ -1737,7 +1803,7 @@ Thank you for choosing ${nurseryName}!
               {/* Discount */}
               <div>
                 <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
-                  <span>Flat Discount ($)</span>
+                  <span>{t('invoice.discount')}</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
@@ -1777,7 +1843,7 @@ Thank you for choosing ${nurseryName}!
                 className="text-ink-700 hover:text-ink-950 font-bold flex items-center gap-1 hover:underline text-[10px]"
               >
                 <RefreshCw className="h-3 w-3" />
-                <span>Reset to Standard Wholesale Prices</span>
+                <span>{t('invoice.resetPrices')}</span>
               </button>
             </div>
 
@@ -1813,7 +1879,7 @@ Thank you for choosing ${nurseryName}!
                             step="0.01"
                             min="0"
                             value={cost || ''}
-                            placeholder="cost"
+                            placeholder={t('invoice.costPlaceholder')}
                             onChange={(e) => handleCostChange(item.id, Number(e.target.value))}
                             className="w-14 font-mono font-bold text-right text-indigo-800 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded"
                           />
@@ -1869,17 +1935,17 @@ Thank you for choosing ${nurseryName}!
               {saveSuccess ? (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>Saved to Customer!</span>
+                  <span>{t('invoice.savedToCustomer')}</span>
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4" />
                   <span>
                     {isSaving
-                      ? 'Saving...'
+                      ? t('invoice.saving')
                       : customer?.id || order.customerId
                         ? `Save ${docLabel} to Customer`
-                        : 'Save Pricing to Order'}
+                        : t('invoice.savePricing')}
                   </span>
                 </>
               )}
@@ -1897,7 +1963,7 @@ Thank you for choosing ${nurseryName}!
                 }`}
               >
                 <Mail className="h-4 w-4" />
-                <span>{showEmailPanel ? 'Hide Email Options' : `Email ${docLabel} to Customer`}</span>
+                <span>{showEmailPanel ? t('invoice.hideEmail') : t('invoice.emailCustomer', { docLabel })}</span>
               </button>
 
               {showEmailPanel && (
@@ -1910,7 +1976,7 @@ Thank you for choosing ${nurseryName}!
                       type="email"
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="e.g. buyer@wholesale.com"
+                      placeholder={t('invoice.emailPlaceholder')}
                       className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
                     />
                   </div>
@@ -1953,7 +2019,7 @@ Thank you for choosing ${nurseryName}!
                         className="w-full py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-[9px] font-black transition-all flex items-center justify-center space-x-1"
                       >
                         <Mail className="h-3 w-3" />
-                        <span>Open in Default Mail Client (Mailto)</span>
+                        <span>{t('invoice.openMailto')}</span>
                       </button>
                     </div>
                   )}
@@ -1966,7 +2032,7 @@ Thank you for choosing ${nurseryName}!
                         onClick={handleOpenMailClient}
                         className="w-full py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-[9px] font-bold transition-all flex items-center justify-center space-x-1"
                       >
-                        <span>Fallback: Open in Mail Client</span>
+                        <span>{t('invoice.fallbackMail')}</span>
                       </button>
                     </div>
                   )}
@@ -1996,7 +2062,7 @@ Thank you for choosing ${nurseryName}!
                       className="py-2 px-2.5 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
                     >
                       <Send className="h-3 w-3" />
-                      <span>{isSendingEmail ? 'Sending...' : 'Send Direct'}</span>
+                      <span>{isSendingEmail ? t('invoice.sending') : t('invoice.sendDirect')}</span>
                     </button>
 
                     <button
@@ -2004,7 +2070,7 @@ Thank you for choosing ${nurseryName}!
                       className="py-2 px-2.5 bg-white border border-gray-200 hover:bg-slate-100 text-gray-700 rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
                     >
                       <Mail className="h-3 w-3" />
-                      <span>Use Mail App</span>
+                      <span>{t('invoice.useMailApp')}</span>
                     </button>
                   </div>
                 </div>
@@ -2016,7 +2082,7 @@ Thank you for choosing ${nurseryName}!
               className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Download className="h-4 w-4" />
-              <span>Export PDF</span>
+              <span>{t('invoice.exportPdf')}</span>
             </button>
 
             <button
@@ -2024,8 +2090,27 @@ Thank you for choosing ${nurseryName}!
               className="w-full py-2.5 px-4 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Printer className="h-4 w-4" />
-              <span>Download & Print {docLabel}</span>
+              <span>{t('invoice.downloadPrint', { docLabel })}</span>
             </button>
+
+            {documentType === 'invoice' && !isPaid && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!savedDocumentId || !paymentDocument) {
+                    alert(t('invoice.saveInvoiceFirst'));
+                    return;
+                  }
+                  setShowMarkPaid(true);
+                }}
+                disabled={!savedDocumentId}
+                className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                title={savedDocumentId ? t('invoice.markAsPaid') : t('invoice.saveInvoiceFirst')}
+              >
+                <Check className="h-4 w-4" />
+                <span>{t('invoice.markAsPaid')}</span>
+              </button>
+            )}
 
             {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
               <button
@@ -2035,7 +2120,7 @@ Thank you for choosing ${nurseryName}!
                 className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-800 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
-                <span>{isRefreshingPayment ? 'Checking Stripe…' : 'Refresh payment status'}</span>
+                <span>{isRefreshingPayment ? t('invoice.checkingStripe') : t('invoice.refreshPayment')}</span>
               </button>
             )}
 
@@ -2048,19 +2133,19 @@ Thank you for choosing ${nurseryName}!
                   className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                   title={
                     isPaid
-                      ? 'This invoice is already paid'
+                      ? t('invoice.alreadyPaidTitle')
                       : savedDocumentId
-                        ? 'Create a Stripe pay link and copy it (does not open payment for you)'
-                        : 'Save to customer first'
+                        ? t('invoice.createPayLink')
+                        : t('invoice.saveFirst')
                   }
                 >
                   <DollarSign className="h-4 w-4" />
                   <span>
                     {isPaid
-                      ? 'Invoice paid'
+                      ? t('invoice.invoicePaidBtn')
                       : isCreatingPayLink
-                        ? 'Creating pay link…'
-                        : payLinkMessage || 'Create & copy pay link'}
+                        ? t('invoice.creatingPayLink')
+                        : payLinkMessage || t('invoice.createPayLink')}
                   </span>
                 </button>
               )}
@@ -2079,14 +2164,14 @@ Thank you for choosing ${nurseryName}!
                   className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                   title={
                     savedDocumentId
-                      ? 'Push saved document to QuickBooks Online'
+                      ? t('invoice.saveFirstQb')
                       : 'Save to customer first'
                   }
                 >
                   <Link2 className="h-4 w-4" />
                   <span>
                     {isPushingQb
-                      ? 'Pushing to QuickBooks…'
+                      ? t('invoice.pushingQb')
                       : qbPushMessage ||
                         existingDocument?.qboInvoiceId ||
                         'Push to QuickBooks'}
@@ -2122,14 +2207,14 @@ Thank you for choosing ${nurseryName}!
               <button
                 onClick={handlePrint}
                 className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
-                title="Download PDF to print"
+                title={t('invoice.downloadPdfTitle')}
               >
                 <Printer className="h-4 w-4" />
               </button>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
-                title="Close Window"
+                title={t('invoice.closeWindowTitle')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -2229,7 +2314,7 @@ Thank you for choosing ${nurseryName}!
                       <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-ink-800">{paymentTerms}</span>
                     </p>
                     <p className="text-gray-800">
-                      <span className="font-bold text-gray-500">Due Date:</span> <span className="font-bold">{dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Upon Receipt'}</span>
+                      <span className="font-bold text-gray-500">Due Date:</span> <span className="font-bold">{dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}</span>
                     </p>
                   </div>
                 </div>
@@ -2248,14 +2333,14 @@ Thank you for choosing ${nurseryName}!
                       value={billToName}
                       onChange={(e) => setBillToName(e.target.value)}
                       className="font-bold text-sm text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:bg-white focus:outline-none w-full p-0.5 rounded transition-all print:border-none print:p-0 print:font-black"
-                      placeholder="Customer Name"
+                      placeholder={t('invoice.customerNamePlaceholder')}
                     />
                     <textarea
                       rows={2}
                       value={billToAddress}
                       onChange={(e) => setBillToAddress(e.target.value)}
                       className="w-full text-xs text-gray-600 bg-transparent hover:bg-slate-50 border border-transparent focus:border-ink-600 focus:bg-white focus:outline-none p-0.5 rounded leading-normal resize-none font-sans font-medium mt-1 print:border-none print:p-0"
-                      placeholder="Billing Address"
+                      placeholder={t('invoice.billingAddressPlaceholder')}
                     />
                   </div>
                 </div>
@@ -2268,12 +2353,12 @@ Thank you for choosing ${nurseryName}!
                     <p><span className="font-bold text-gray-400">Shipper:</span> {nurseryName}</p>
                     <p className="whitespace-pre-line">
                       <span className="font-bold text-gray-400">Origin:</span>{' '}
-                      {nurseryAddress || 'Nursery loading facility'}
+                      {nurseryAddress || t('invoice.defaultOrigin')}
                     </p>
                     <p>
                       <span className="font-bold text-gray-400">Cargo Basis:</span>{' '}
                       <span className="font-bold text-ink-900 uppercase">
-                        {qtyBasis === 'ordered' ? 'Ordered Quantities' : qtyBasis === 'pulled' ? 'Delivered/Pulled Counts' : 'Loaded Counts'}
+                        {qtyBasis === 'ordered' ? t('invoice.orderedQuantities') : qtyBasis === 'pulled' ? t('invoice.deliveredPulledCounts') : t('invoice.loadedCounts')}
                       </span>
                     </p>
                   </div>
@@ -2285,10 +2370,10 @@ Thank you for choosing ${nurseryName}!
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
-                      <th className="pb-2 text-left">Plant Variety Name</th>
-                      <th className="pb-2 text-center w-28">Pot Size</th>
+                      <th className="pb-2 text-left">{t('invoice.plantVarietyName')}</th>
+                      <th className="pb-2 text-center w-28">{t('invoice.potSize')}</th>
                       <th className="pb-2 text-center w-20">Quantity</th>
-                      <th className="pb-2 text-right w-28">Unit Price</th>
+                      <th className="pb-2 text-right w-28">{t('invoice.unitPrice')}</th>
                       <th className="pb-2 text-right w-24">Total</th>
                     </tr>
                   </thead>
@@ -2346,9 +2431,9 @@ Thank you for choosing ${nurseryName}!
                 {/* Payment terms notes */}
                 <div className="md:col-span-7 space-y-4">
                   <div className="text-[10px] leading-relaxed text-gray-500 font-sans">
-                    <p className="font-black uppercase text-gray-400 tracking-wider mb-1">Customer Terms & Guarantee:</p>
+                    <p className="font-black uppercase text-gray-400 tracking-wider mb-1">{t('invoice.customerTermsGuarantee')}</p>
                     <p className="italic">
-                      "All plant materials are guaranteed to be robust, healthy, and up to nursery grade standards upon delivery. Any claims or discrepancies on quantity or grade must be filed in writing with our office within 48 hours of shipment receipt. Returns are not accepted unless authorized in writing."
+                      {t('invoice.customerTermsText')}
                     </p>
                   </div>
                   
@@ -2421,7 +2506,7 @@ Thank you for choosing ${nurseryName}!
                   )}
                   <div className="flex justify-between py-2 border-b-4 border-double border-ink-800 bg-ink-50/35 p-1.5 rounded-lg">
                     <span className="font-sans font-black text-ink-800 text-sm uppercase tracking-wide">
-                      {documentType === 'estimate' ? 'Estimate Total (USD):' : 'Balance Due (USD):'}
+                      {documentType === 'estimate' ? t('invoice.estimateTotalUsd') : t('invoice.balanceDueUsd')}
                     </span>
                     <span className="text-base font-black text-ink-950">${balanceDue.toFixed(2)}</span>
                   </div>

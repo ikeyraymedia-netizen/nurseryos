@@ -125,20 +125,20 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     resetDraftState();
     setSavedOrderId(null);
     setSavedEstimateCustomerId(null);
-    setStatusMessage(orderText ? 'Reading pasted order...' : 'Reading file content...');
+    setStatusMessage(orderText ? t('upload.readingPasted') : t('upload.readingFile'));
 
     try {
       const mimeType = inferUploadMimeType(file.name, file.type, orderText);
       if (!isAllowedOrderUploadMime(mimeType)) {
         throw new Error(
-          'Unsupported file format. Please upload a PDF or image, or paste plain text.'
+          t('upload.unsupported')
         );
       }
 
       let base64Data: string | undefined;
       if (!orderText) {
         if (file.size > 20 * 1024 * 1024) {
-          throw new Error('File is too large. Please upload a PDF or image under 20MB.');
+          throw new Error(t('upload.tooLarge'));
         }
         base64Data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -150,8 +150,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
       setStatusMessage(
         orderText
-          ? 'Parsing pasted order...'
-          : 'Analyzing order document with Gemini AI (this may take up to a minute)...'
+          ? t('upload.parsingPasted')
+          : t('upload.analyzingGemini')
       );
 
       const controller = new AbortController();
@@ -173,7 +173,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       } catch (fetchErr: any) {
         if (fetchErr?.name === 'AbortError') {
           throw new Error(
-            'Order analysis timed out. Try a clearer photo/PDF, or paste the plant list as text.'
+            t('upload.timeout')
           );
         }
         throw fetchErr;
@@ -185,8 +185,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         const errorData = await response.json().catch(() => ({}));
         const friendly =
           response.status === 503
-            ? 'AI service is temporarily busy. Please wait 10 seconds and try again.'
-            : errorData.error || 'Failed to parse order with Gemini.';
+            ? t('upload.aiBusy')
+            : errorData.error || t('upload.saveFailed');
         const details =
           typeof errorData.details === 'string' && errorData.details.trim()
             ? ` ${errorData.details}`
@@ -198,7 +198,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       const rawItems = Array.isArray(result.items) ? result.items : [];
       if (rawItems.length === 0) {
         throw new Error(
-          'No plant lines found. Check quantity/size format (e.g. "10 - #3 Live Oak") and try again.'
+          t('upload.noPlants')
         );
       }
       const itemsWithIds: PlantOrderItem[] = rawItems.map((item: any, index: number) => ({
@@ -210,7 +210,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         notes: item.notes || ''
       }));
 
-      const parsedCustomerName = result.customerName || 'Unknown Customer';
+      const parsedCustomerName = result.customerName || t('upload.unknownCustomer');
       const match = findMatchingCustomers(parsedCustomerName, customers);
       const suggestedId = match.best?.id || '';
 
@@ -232,7 +232,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setStatusMessage('');
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err.message || 'An unexpected error occurred while uploading.');
+      setErrorMessage(err.message || t('upload.uploadError'));
       setLoading(false);
     }
   };
@@ -367,7 +367,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           taxRate,
           freightCharge,
           discount,
-          notes: 'Estimate from uploaded paperwork. Not yet converted to a plant order.',
+          notes: t('upload.estimateNotesDefault'),
           billToName: linked.billingName || linked.name,
           billToAddress: linked.billingAddress || linked.shippingAddress || undefined,
           customerEmail: linked.contactEmail || undefined,
@@ -450,7 +450,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const processPastedText = () => {
     const text = pastedText.trim();
     if (!text) {
-      setErrorMessage('Paste the order text before continuing.');
+      setErrorMessage(t('upload.pasteRequired'));
       return;
     }
     const file = new File([text], 'pasted-order.txt', { type: 'text/plain' });
@@ -461,7 +461,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     <div id="uploader-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6">
       <div className="flex items-center space-x-2.5 mb-4">
         <Upload className="h-5 w-5 text-ink-800 font-bold" />
-        <h3 className="text-lg font-bold text-gray-900 font-sans">Add Order</h3>
+        <h3 className="text-lg font-bold text-gray-900 font-sans">{t('upload.addOrder')}</h3>
       </div>
 
       <p className="text-sm text-slate-600 mb-4 leading-relaxed font-medium">
@@ -576,7 +576,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         <div className="border border-sky-200 rounded-xl p-4 bg-sky-50/50 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-sky-700" />
-            <p className="text-sm font-bold text-gray-900">Estimate saved under customer</p>
+            <p className="text-sm font-bold text-gray-900">{t('upload.estimateSaved')}</p>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
             It was not added as a plant order. Open the customer to review it, or convert it to an
@@ -607,7 +607,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         <div className="border border-ink-200 rounded-xl p-4 bg-ink-50/40 space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-ink-700" />
-            <p className="text-sm font-bold text-gray-900">Order saved</p>
+            <p className="text-sm font-bold text-gray-900">{t('upload.orderSaved')}</p>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed">
             Set line pricing and save as an estimate or invoice under the customer. You can email or
@@ -652,14 +652,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       {loading && (
         <div className="bg-ink-50/50 border border-ink-100 rounded-xl p-6 flex flex-col items-center text-center min-h-[180px] justify-center">
           <RefreshCw className="h-8 w-8 text-ink-700 animate-spin mb-3" />
-          <p className="text-sm font-semibold text-gray-800 mb-1">Processing Paperwork</p>
+          <p className="text-sm font-semibold text-gray-800 mb-1">{t('upload.processing')}</p>
           <p className="text-xs text-gray-500 max-w-[240px] leading-relaxed">{statusMessage}</p>
         </div>
       )}
 
       {pendingDraft && !loading && uploadKind === null && (
         <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/40 space-y-3">
-          <p className="text-sm font-bold text-gray-900">Is this an estimate?</p>
+          <p className="text-sm font-bold text-gray-900">{t('upload.isEstimate')}</p>
           <p className="text-xs text-gray-600 leading-relaxed">
             Parsed <span className="font-semibold">{pendingDraft.customerName}</span>
             {pendingDraft.orderNumber !== 'N/A' ? ` • #${pendingDraft.orderNumber}` : ''} •{' '}
@@ -803,8 +803,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               ))}
             </select>
             <p className="text-[10px] text-gray-500 mt-1 leading-snug">
-              Track who this {uploadKind === 'estimate' ? 'estimate' : 'order'} belongs to — no truck
-              required.
+              {t('upload.trackSalesRepHint', {
+                type: uploadKind === 'estimate' ? t('invoice.estimate') : t('upload.plantOrder')
+              })}
             </p>
           </div>
 
@@ -812,13 +813,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           <div className="border-t border-ink-200/80 pt-3 space-y-2">
             <div className="flex items-center gap-2">
               <Sprout className="h-4 w-4 text-ink-700" />
-              <p className="text-sm font-bold text-gray-900">Link plants to inventory</p>
+              <p className="text-sm font-bold text-gray-900">{t('upload.linkInventory')}</p>
             </div>
-            <p className="text-[11px] text-gray-500 leading-relaxed">
-              Tap a suggestion to link each line. If nothing matches,{' '}
-              <span className="font-semibold text-ink-800">Search inventory</span> to find it
-              manually, or <span className="font-semibold text-ink-800">Create new and link</span>.
-            </p>
+            <p className="text-[11px] text-gray-500 leading-relaxed">{t('upload.linkHint')}</p>
 
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {pendingDraft.items.map((item) => {
@@ -849,15 +846,18 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
                     {status.type !== 'unmatched' ? (
                       <p className="text-[11px] font-semibold text-ink-800 bg-ink-50 border border-ink-100 rounded-md px-2 py-1">
-                        ✓ Linked to {dp.plant(status.label)} ({dp.size(status.containerSize)})
-                        {status.type === 'auto' ? ' — auto-matched' : ''}
+                        {t('upload.linkedTo', {
+                          name: dp.plant(status.label),
+                          size: dp.size(status.containerSize)
+                        })}
+                        {status.type === 'auto' ? t('upload.autoMatchedSuffix') : ''}
                       </p>
                     ) : (
                       <>
                         {suggestions.length > 0 && !searching && (
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                              Suggested matches — tap to link
+                              {t('upload.suggestedMatchesTap')}
                             </p>
                             {suggestions.map(({ plant, score }) => (
                               <button
@@ -887,7 +887,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                           <div className="space-y-2 rounded-lg border border-ink-200 bg-ink-50/40 p-2.5">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-[10px] font-bold uppercase tracking-wide text-ink-800">
-                                Search inventory
+                                {t('upload.searchInventory')}
                               </p>
                               <button
                                 type="button"
@@ -897,7 +897,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                                 }}
                                 className="text-[10px] font-bold text-slate-500 hover:text-slate-800"
                               >
-                                Close
+                                {t('upload.closeSearch')}
                               </button>
                             </div>
                             <div className="relative">
@@ -906,18 +906,18 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                                 autoFocus
                                 value={inventorySearch}
                                 onChange={(e) => setInventorySearch(e.target.value)}
-                                placeholder="Search plant name, size, category…"
+                                placeholder={t('upload.searchPlaceholderInventory')}
                                 className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-xs bg-white"
                               />
                             </div>
                             <div className="max-h-44 overflow-y-auto space-y-1">
                               {inventoryPlants.length === 0 ? (
                                 <p className="text-[11px] text-amber-800 px-1 py-2">
-                                  No inventory plants loaded yet.
+                                  {t('upload.noInventoryLoaded')}
                                 </p>
                               ) : inventorySearchResults.length === 0 ? (
                                 <p className="text-[11px] text-slate-500 px-1 py-2">
-                                  No plants match “{inventorySearch.trim()}”.
+                                  {t('upload.noPlantsMatch', { query: inventorySearch.trim() })}
                                 </p>
                               ) : (
                                 inventorySearchResults.map((plant) => (
@@ -958,7 +958,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                             className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
                           >
                             <Search className="h-3.5 w-3.5" />
-                            Search inventory to link
+                            {t('upload.searchInventoryLink')}
                           </button>
                         )}
 
@@ -974,12 +974,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                             ) : (
                               <Plus className="h-3.5 w-3.5" />
                             )}
-                            Create new and link
+                            {t('upload.createAndLink')}
                           </button>
                         ) : suggestions.length === 0 && !searching ? (
                           <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
-                            No auto-match — use Search inventory, or ask someone with inventory
-                            access to add this product.
+                            {t('upload.noAutoMatchInventory')}
                           </p>
                         ) : null}
                       </>
@@ -1039,7 +1038,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         <div className="mt-4 bg-red-50 border border-red-100 rounded-xl p-4 flex items-start space-x-2.5">
           <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
           <div className="text-xs text-red-800 leading-relaxed">
-            <p className="font-bold">Upload Error</p>
+            <p className="font-bold">{t('upload.uploadError')}</p>
             <p className="mt-1">{errorMessage}</p>
             {errorMessage.includes('GEMINI_API_KEY') && (
               <p className="mt-2 font-semibold text-red-900 bg-red-100/50 p-1.5 rounded">

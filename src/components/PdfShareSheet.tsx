@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Share2, X, Download } from 'lucide-react';
+import { useT } from '../lib/i18n';
 
 interface PdfShareSheetProps {
   url: string;
@@ -17,9 +18,12 @@ export const PdfShareSheet: React.FC<PdfShareSheetProps> = ({
   url,
   fileName,
   blob,
-  title = 'PDF ready',
+  title,
   onClose
 }) => {
+  const t = useT();
+  const sheetTitle = title ?? t('pdfShare.title');
+
   useEffect(() => {
     return () => {
       try {
@@ -44,13 +48,9 @@ export const PdfShareSheet: React.FC<PdfShareSheetProps> = ({
       if (err?.name === 'AbortError') return;
     }
 
-    // User-initiated open — more likely to be allowed than a programmatic one
-    // after async PDF generation.
     const opened = window.open(url, '_blank');
     if (!opened) {
-      alert(
-        'Could not open the PDF automatically. Use the Download link below, or take a screenshot of the preview.'
-      );
+      alert(t('pdfShare.openFailed'));
     }
   };
 
@@ -59,14 +59,14 @@ export const PdfShareSheet: React.FC<PdfShareSheetProps> = ({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-auto flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-slate-50">
           <div className="min-w-0">
-            <h3 className="text-sm font-black text-slate-900 truncate">{title}</h3>
+            <h3 className="text-sm font-black text-slate-900 truncate">{sheetTitle}</h3>
             <p className="text-[10px] text-slate-500 truncate">{fileName}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-slate-200 text-slate-500"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -87,7 +87,7 @@ export const PdfShareSheet: React.FC<PdfShareSheetProps> = ({
             className="flex-1 py-3 px-4 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2"
           >
             <Share2 className="h-4 w-4" />
-            Share / Save PDF
+            {t('pdfShare.share')} / {t('pdfShare.savePdf')}
           </button>
           <a
             href={url}
@@ -95,14 +95,14 @@ export const PdfShareSheet: React.FC<PdfShareSheetProps> = ({
             className="flex-1 py-3 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 rounded-xl text-xs font-black flex items-center justify-center gap-2"
           >
             <Download className="h-4 w-4" />
-            Download
+            {t('pdfShare.download')}
           </a>
           <button
             type="button"
             onClick={onClose}
             className="sm:w-28 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
           >
-            Done
+            {t('pdfShare.done')}
           </button>
         </div>
       </div>

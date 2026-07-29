@@ -17,7 +17,7 @@ import {
 import { BrandLogo } from './BrandLogo';
 import { AppLocale, useLocale, useT } from '../lib/i18n';
 
-const REQUEST_ACCESS_EMAIL = 'hello@nurseryos.app';
+const REQUEST_ACCESS_EMAIL = 'owner@nursery.app';
 
 const FEATURE_KEYS = [
   { icon: Package, key: 'inventory' },
@@ -52,7 +52,7 @@ interface WelcomePageProps {
   bootError: string | null;
   requestSent: boolean;
   onSubmit: (e: FormEvent) => void;
-  onRequestAccess: () => void;
+  onRequestAccess: () => void | Promise<void>;
 }
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -238,7 +238,13 @@ export function WelcomePage({
                 )}
 
                 {authPanel === 'request' ? (
-                  <div className="space-y-3">
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      onRequestAccess();
+                    }}
+                  >
                     <LanguageSelect />
                     <label className="block">
                       <FieldLabel>{t('common.yourName')}</FieldLabel>
@@ -282,6 +288,12 @@ export function WelcomePage({
                       />
                     </label>
 
+                    {(formError || bootError) && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                        {formError || bootError}
+                      </div>
+                    )}
+
                     {requestSent && (
                       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
                         {t('welcome.requestSent')}
@@ -289,9 +301,8 @@ export function WelcomePage({
                     )}
 
                     <button
-                      type="button"
+                      type="submit"
                       disabled={busy || !displayName.trim() || !nurseryName.trim() || !email.trim()}
-                      onClick={onRequestAccess}
                       className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-coral-600 hover:bg-coral-500 disabled:opacity-60 text-white font-bold text-sm py-3 transition-colors"
                     >
                       <ClipboardList className="h-4 w-4" />
@@ -305,7 +316,7 @@ export function WelcomePage({
                     >
                       {t('welcome.alreadyHaveAccount')}
                     </button>
-                  </div>
+                  </form>
                 ) : (
                   <form onSubmit={onSubmit} className="space-y-3">
                     <LanguageSelect />

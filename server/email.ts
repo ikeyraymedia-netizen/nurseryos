@@ -314,4 +314,83 @@ export function registerEmailRoutes(app: Express) {
       }
     })
   );
+
+  /** Public: nursery access requests from the marketing / welcome page. */
+  app.post('/api/request-access', (req, res) => {
+    void (async () => {
+      try {
+        const displayName = String(req.body?.displayName || '').trim();
+        const nurseryName = String(req.body?.nurseryName || '').trim();
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const message = String(req.body?.message || '').trim();
+        const locale = String(req.body?.locale || '').trim();
+
+        if (!displayName || displayName.length > 120) {
+          res.status(400).json({ error: 'Please enter your name.' });
+          return;
+        }
+        if (!nurseryName || nurseryName.length > 160) {
+          res.status(400).json({ error: 'Please enter your nursery name.' });
+          return;
+        }
+        if (!looksLikeEmail(email) || email.length > 200) {
+          res.status(400).json({ error: 'Please enter a valid email address.' });
+          return;
+        }
+        if (message.length > 4000) {
+          res.status(400).json({ error: 'Message is too long.' });
+          return;
+        }
+
+        const to =
+          process.env.ACCESS_REQUEST_EMAIL?.trim() ||
+          process.env.OWNER_EMAIL?.trim() ||
+          'owner@nursery.app';
+
+        const text = [
+          'New NurseryOS access request',
+          '',
+          `Name: ${displayName}`,
+          `Nursery: ${nurseryName}`,
+          `Email: ${email}`,
+          locale ? `Language: ${locale}` : null,
+          '',
+          message || '(No additional message)'
+        ]
+          .filter((line) => line != null)
+          .join('\n');
+
+        const html = `
+          <h2>New NurseryOS access request</h2>
+          <p><strong>Name:</strong> ${escapeHtml(displayName)}</p>
+          <p><strong>Nursery:</strong> ${escapeHtml(nurseryName)}</p>
+          <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
+          ${locale ? `<p><strong>Language:</strong> ${escapeHtml(locale)}</p>` : ''}
+          <p><strong>Message:</strong></p>
+          <p>${escapeHtml(message || '(No additional message)').replace(/\n/g, '<br/>')}</p>
+        `;
+
+        const messageId = await sendViaResend({
+          fromName: 'NurseryOS',
+          replyTo: email,
+          to,
+          subject: `Access request: ${nurseryName}`,
+          text,
+          html
+        });
+
+        res.json({ success: true, messageId });
+      } catch (err: any) {
+        httpError(res, err);
+      }
+    })();
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

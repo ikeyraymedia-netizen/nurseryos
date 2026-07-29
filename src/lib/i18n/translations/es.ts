@@ -61,7 +61,10 @@ const es: TranslationDict = {
     nurseryName: 'Nombre del vivero',
     messageOptional: 'Mensaje (opcional)',
     sendAccessRequest: 'Enviar solicitud de acceso',
-    requestSent: 'Abriendo su correo — envíe el mensaje para completar la solicitud.',
+    requestSent:
+      'Solicitud enviada — le escribiremos cuando su espacio de trabajo esté listo.',
+    requestFailed: 'No se pudo enviar la solicitud de acceso. Inténtelo de nuevo.',
+    requestMissingFields: 'Ingrese su nombre, el nombre del vivero y el correo.',
     alreadyHaveAccount: '¿Ya tiene cuenta? Iniciar sesión',
     joinNurseryTeam: 'Unirse al equipo',
     signInAndJoin: 'Iniciar sesión y unirse',

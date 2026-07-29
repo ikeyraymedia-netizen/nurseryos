@@ -23,7 +23,8 @@ import { setVendorsTenant } from '../lib/vendors';
 import { setPurchasingTenant } from '../lib/purchasing';
 import { BrandLogo } from './BrandLogo';
 import { bootstrapWorkspaceUrl } from '../lib/workspaceUrl';
-import { AuthPanel, REQUEST_ACCESS_EMAIL, WelcomePage } from './WelcomePage';
+import { AuthPanel, WelcomePage } from './WelcomePage';
+import { submitAccessRequest } from '../lib/accessRequest';
 import {
   AppLocale,
   LocaleProvider,
@@ -255,19 +256,36 @@ export function AuthGate({ children }: AuthGateProps) {
     if (session) bootstrapWorkspaceUrl();
   }, [session]);
 
-  function handleRequestAccess() {
-    const subject = encodeURIComponent('NurseryOS access request');
-    const body = encodeURIComponent(
-      [
-        `Name: ${displayName.trim()}`,
-        `Nursery: ${nurseryName.trim()}`,
-        `Email: ${email.trim()}`,
-        '',
-        requestMessage.trim() || translate(effectiveLocale, 'authExtra.requestBody')
-      ].join('\n')
-    );
-    window.location.href = `mailto:${REQUEST_ACCESS_EMAIL}?subject=${subject}&body=${body}`;
-    setRequestSent(true);
+  async function handleRequestAccess() {
+    if (busy) return;
+    const name = displayName.trim();
+    const nursery = nurseryName.trim();
+    const mail = email.trim();
+    if (!name || !nursery || !mail) {
+      setFormError(translate(effectiveLocale, 'welcome.requestMissingFields'));
+      return;
+    }
+    setFormError(null);
+    setRequestSent(false);
+    setBusy(true);
+    try {
+      await submitAccessRequest({
+        displayName: name,
+        nurseryName: nursery,
+        email: mail,
+        message: requestMessage.trim(),
+        locale: effectiveLocale
+      });
+      setRequestSent(true);
+    } catch (err: unknown) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : translate(effectiveLocale, 'welcome.requestFailed')
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {

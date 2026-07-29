@@ -61,7 +61,12 @@ export async function provisionNursery(input: {
   modules: TenantModuleId[];
   accessRequestId?: string;
   sendWelcomeEmail?: boolean;
-}): Promise<{ tenantId: string; userCreated: boolean; resetLinkSent: boolean }> {
+}): Promise<{
+  tenantId: string;
+  userCreated: boolean;
+  resetLinkSent: boolean;
+  warning?: string | null;
+}> {
   const res = await fetch('/api/platform/provision-nursery', {
     method: 'POST',
     headers: await authHeaders(),
@@ -80,10 +85,12 @@ export async function provisionNursery(input: {
     tenantId: string;
     userCreated?: boolean;
     resetLinkSent?: boolean;
+    warning?: string | null;
   };
   return {
     tenantId: data.tenantId,
     userCreated: Boolean(data.userCreated),
-    resetLinkSent: Boolean(data.resetLinkSent)
+    resetLinkSent: Boolean(data.resetLinkSent),
+    warning: data.warning || null
   };
 }

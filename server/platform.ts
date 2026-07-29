@@ -96,10 +96,47 @@ function appBaseUrl(req: Request): string {
     process.env.PUBLIC_APP_URL?.trim() ||
     process.env.VITE_APP_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
-  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https');
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim();
-  if (host) return `${proto}://${host}`.replace(/\/$/, '');
+
+  // Prefer the public product domain — never use Railway's *.up.railway.app host
+  // for Firebase action links (that domain is usually not Auth-allowlisted).
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+    .trim()
+    .toLowerCase();
+  if (
+    host &&
+    !host.includes('railway.app') &&
+    !host.includes('localhost') &&
+    !host.startsWith('127.0.0.1')
+  ) {
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https');
+    return `${proto}://${host}`.replace(/\/$/, '');
+  }
+
   return 'https://nurseryos.app';
+}
+
+async function generateOwnerPasswordResetLink(email: string, continueUrl: string): Promise<string> {
+  try {
+    return await admin.auth().generatePasswordResetLink(email, {
+      url: `${continueUrl}/`
+    });
+  } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    // Domain not allowlisted / unauthorized continue URL — fall back to Firebase default handler.
+    if (
+      /allowlist|whitelist|unauthorized.domain|unauthorized_continue_uri|invalid.continue/i.test(
+        msg
+      )
+    ) {
+      console.warn(
+        '[platform] continue URL not allowlisted, generating reset link without custom URL:',
+        continueUrl,
+        msg
+      );
+      return await admin.auth().generatePasswordResetLink(email);
+    }
+    throw err;
+  }
 }
 
 function platformFromAddress(): string {
@@ -415,25 +452,25 @@ export function registerPlatformRoutes(app: Express) {
 
       let resetLink: string | null = null;
       let welcomeEmailId: string | null = null;
+      let welcomeWarning: string | null = null;
       if (sendWelcome) {
-        resetLink = await admin.auth().generatePasswordResetLink(email, {
-          url: `${appBaseUrl(req)}/`
-        });
+        try {
+          resetLink = await generateOwnerPasswordResetLink(email, appBaseUrl(req));
 
-        const text = [
-          `Hi${displayName ? ` ${displayName}` : ''},`,
-          '',
-          `Your NurseryOS workspace for ${nurseryName} is ready.`,
-          '',
-          'Set your password and sign in here:',
-          resetLink,
-          '',
-          'If you did not request access, you can ignore this email.',
-          '',
-          '— NurseryOS'
-        ].join('\n');
+          const text = [
+            `Hi${displayName ? ` ${displayName}` : ''},`,
+            '',
+            `Your NurseryOS workspace for ${nurseryName} is ready.`,
+            '',
+            'Set your password and sign in here:',
+            resetLink,
+            '',
+            'If you did not request access, you can ignore this email.',
+            '',
+            '— NurseryOS'
+          ].join('\n');
 
-        const html = `
+          const html = `
           <p>Hi${displayName ? ` ${escapeHtml(displayName)}` : ''},</p>
           <p>Your NurseryOS workspace for <strong>${escapeHtml(nurseryName)}</strong> is ready.</p>
           <p><a href="${escapeHtml(resetLink)}">Set your password and sign in</a></p>
@@ -441,13 +478,19 @@ export function registerPlatformRoutes(app: Express) {
           <p>— NurseryOS</p>
         `;
 
-        welcomeEmailId = await sendViaResend({
-          fromName: 'NurseryOS',
-          to: email,
-          subject: `Your NurseryOS workspace is ready — ${nurseryName}`,
-          text,
-          html
-        });
+          welcomeEmailId = await sendViaResend({
+            fromName: 'NurseryOS',
+            to: email,
+            subject: `Your NurseryOS workspace is ready — ${nurseryName}`,
+            text,
+            html
+          });
+        } catch (welcomeErr: any) {
+          console.error('[platform] nursery created but welcome email failed', welcomeErr);
+          welcomeWarning =
+            welcomeErr?.message ||
+            'Nursery was created, but the welcome / password email failed.';
+        }
       }
 
       res.json({
@@ -457,7 +500,8 @@ export function registerPlatformRoutes(app: Express) {
         userCreated,
         modules,
         welcomeEmailId,
-        resetLinkSent: Boolean(resetLink)
+        resetLinkSent: Boolean(resetLink && welcomeEmailId),
+        warning: welcomeWarning
       });
     });
   });

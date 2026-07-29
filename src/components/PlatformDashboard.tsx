@@ -210,7 +210,7 @@ export function PlatformDashboard({
           result.resetLinkSent
             ? ' Welcome email with password link sent.'
             : ' Nursery created — welcome email was not sent.'
-        }`
+        }${result.warning ? ` Note: ${result.warning}` : ''}`
       );
       resetCreateForm();
       await refresh();

@@ -221,6 +221,8 @@ function normalizeSizeToken(raw: string): string | null {
   if (/^#?\s*15\b/.test(lower) || /^15\s*g(al(lon)?)?$/.test(lower)) return '#15';
   if (/^#?\s*30\b/.test(lower) || /^30\s*g(al(lon)?)?$/.test(lower)) return '#30';
   if (/^#?\s*45\b/.test(lower) || /^45\s*g(al(lon)?)?$/.test(lower)) return '#45';
+  if (/^#?\s*65\b/.test(lower) || /^65\s*g(al(lon)?)?$/.test(lower)) return '#65';
+  if (/^#?\s*100\b/.test(lower) || /^100\s*g(al(lon)?)?$/.test(lower)) return '#100';
   if (/^(b\s*&\s*b|b and b|bb)$/i.test(lower)) return 'B&B';
   if (/^4\s*("|in|inch)?$/i.test(lower)) return '4 inch';
   if (/^6\s*("|in|inch)?$/i.test(lower)) return '6 inch';

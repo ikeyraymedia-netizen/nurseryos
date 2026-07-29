@@ -14,6 +14,8 @@ export interface ParsedOrderFromText {
 
 const SIZE_RULES: Array<{ size: string; re: RegExp }> = [
   { size: 'B&B', re: /\b(?:b\s*&\s*b|b\.?\s*&?\s*b\.?|balled(?:\s+and\s+burlapped)?|caliper)\b/i },
+  { size: '#100', re: /(?:#\s*100\b|\b100\s*g(?:al(?:lon)?)?\b)/i },
+  { size: '#65', re: /(?:#\s*65\b|\b65\s*g(?:al(?:lon)?)?\b)/i },
   { size: '#45', re: /(?:#\s*45\b|\b45\s*g(?:al(?:lon)?)?\b)/i },
   { size: '#30', re: /(?:#\s*30\b|\b30\s*g(?:al(?:lon)?)?\b)/i },
   { size: '#15', re: /(?:#\s*15\b|\b15\s*g(?:al(?:lon)?)?\b)/i },

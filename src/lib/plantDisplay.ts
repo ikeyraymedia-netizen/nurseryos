@@ -175,6 +175,8 @@ const PLANT_WORDS: Record<string, string> = {
 
 const SIZE_PHRASES: Array<[string, string]> = [
   ['B&B', 'B&B'],
+  ['#100', '#100'],
+  ['#65', '#65'],
   ['#45', '#45'],
   ['#25', '#25'],
   ['#15', '#15'],
@@ -192,6 +194,8 @@ const SIZE_PHRASES: Array<[string, string]> = [
   ['1 Gallon', '1 galón'],
   ['25 Gallon', '25 galones'],
   ['45 Gallon', '45 galones'],
+  ['65 Gallon', '65 galones'],
+  ['100 Gallon', '100 galones'],
   ['Flat', 'Bandeja'],
   ['Liner', 'Plántula'],
   ['Plug', 'Plug']

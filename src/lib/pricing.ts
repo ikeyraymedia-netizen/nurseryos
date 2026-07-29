@@ -16,5 +16,14 @@ export function getDefaultPriceForSize(size: string): number {
   if (cleanSize.includes('#30') || cleanSize.includes('30-gallon') || cleanSize.includes('30g')) {
     return 195;
   }
+  if (cleanSize.includes('#45') || cleanSize.includes('45-gallon') || cleanSize.includes('45g')) {
+    return 275;
+  }
+  if (cleanSize.includes('#65') || cleanSize.includes('65-gallon') || cleanSize.includes('65g')) {
+    return 375;
+  }
+  if (cleanSize.includes('#100') || cleanSize.includes('100-gallon') || cleanSize.includes('100g')) {
+    return 550;
+  }
   return 15;
 }

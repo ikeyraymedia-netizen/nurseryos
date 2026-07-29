@@ -447,6 +447,8 @@ It is a customer plant order list/invoice from a nursery. Extract:
    - '#15' (for 15 gallon, 15g, #15 pot)
    - '#30' (for 30 gallon, 30g, #30 pot)
    - '#45' (for 45 gallon)
+   - '#65' (for 65 gallon)
+   - '#100' (for 100 gallon)
    - 'B&B' (for balled and burlapped, B&B trees, Caliper trees)
    - '4 inch' (for 4" pots)
    - '6 inch' (for 6" pots)
@@ -546,7 +548,7 @@ app.post('/api/parse-inventory', async (req, res) => {
     const prompt = `Analyze this nursery inventory source file (${fileName || 'inventory file'}).
 Extract a clean plant inventory list where each item includes:
 1) plantName
-2) containerSize (standardized if possible: #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other)
+2) containerSize (standardized if possible: #1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other)
 3) quantityAvailable (integer, default 0 if unknown)
 4) weeksUntilReady (integer if shown, otherwise omit)
 5) location (if present)
@@ -635,7 +637,7 @@ function getVendorInvoiceParseSchema() {
               containerSize: {
                 type: Type.STRING,
                 description:
-                  'For plants: standardized size (#1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other). For non-plants use empty string or Other.'
+                  'For plants: standardized size (#1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other). For non-plants use empty string or Other.'
               },
               quantity: { type: Type.INTEGER, description: 'Quantity billed' },
               unitCost: {
@@ -789,7 +791,7 @@ Extract:
 5. notes — payment terms, our PO #, or short useful context.
 6. ALL purchase line items (plants AND supplies AND freight rows):
    - plantName: plant name OR supply/product description (use "Freight" for freight lines)
-   - containerSize: for plants use closest of #1, #3, #5, #7, #10, #15, #30, #45, B&B, 4 inch, 6 inch, Tray, Other; for non-plants use "" or Other
+   - containerSize: for plants use closest of #1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other; for non-plants use "" or Other
    - quantity (integer; use 1 if a lump sum with no qty)
    - unitCost (price EACH — if only a line total is shown, divide by quantity)
    - category: prefer Plants, Soil / media, Containers / trays, Chemicals, Fertilizer, Freight, Fuel, Tools / equipment, General supplies, or Other. If none fit, invent a short clear custom label (e.g. "Irrigation", "Packaging").

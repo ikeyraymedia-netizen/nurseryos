@@ -118,7 +118,15 @@ function getLocalWeights(): ContainerWeight[] {
   const data = localStorage.getItem(localKey('container_weights'));
   if (data) {
     try {
-      return JSON.parse(data) as ContainerWeight[];
+      const weights = JSON.parse(data) as ContainerWeight[];
+      const existingIds = new Set(weights.map((cw) => cw.id));
+      const missing = DEFAULT_CONTAINER_WEIGHTS.filter((cw) => !existingIds.has(cw.id));
+      if (missing.length > 0) {
+        const merged = [...weights, ...missing];
+        localStorage.setItem(localKey('container_weights'), JSON.stringify(merged));
+        return merged;
+      }
+      return weights;
     } catch {
       return DEFAULT_CONTAINER_WEIGHTS;
     }
@@ -256,6 +264,35 @@ export async function reconnectAndSyncToCloud(): Promise<void> {
   window.location.reload();
 }
 
+/** Write any factory sizes missing from an existing list (does not overwrite custom lbs). */
+async function ensureMissingDefaultWeights(existing: ContainerWeight[]): Promise<ContainerWeight[]> {
+  const existingIds = new Set(existing.map((cw) => cw.id));
+  const missing = DEFAULT_CONTAINER_WEIGHTS.filter((cw) => !existingIds.has(cw.id));
+  if (missing.length === 0) return existing;
+
+  const merged = [...existing, ...missing];
+
+  if (fallbackActive || !activeTenantId) {
+    saveLocalWeights(merged);
+    return merged;
+  }
+
+  try {
+    const batch = writeBatch(db);
+    for (const cw of missing) {
+      batch.set(weightDoc(activeTenantId, cw.id), cw);
+    }
+    await batch.commit();
+    localStorage.setItem(localKey('container_weights'), JSON.stringify(merged));
+    return merged;
+  } catch (error: any) {
+    console.error('Error adding missing container weights:', error);
+    activateLocalFallback(error.message || 'Firestore write failed');
+    saveLocalWeights(merged);
+    return merged;
+  }
+}
+
 export async function initializeDefaultWeightsIfNeeded(): Promise<ContainerWeight[]> {
   const tenantId = requireTenantId();
 
@@ -280,7 +317,8 @@ export async function initializeDefaultWeightsIfNeeded(): Promise<ContainerWeigh
     querySnapshot.forEach((docSnap) => {
       weights.push(docSnap.data() as ContainerWeight);
     });
-    return weights;
+
+    return ensureMissingDefaultWeights(weights);
   } catch (error: any) {
     console.error('Error initializing default container weights on Firestore:', error);
     activateLocalFallback(error.message || 'Firestore connection failed');
@@ -300,6 +338,7 @@ export function subscribeToWeights(callback: (weights: ContainerWeight[]) => voi
   }
 
   const tenantId = activeTenantId;
+  let ensuringMissing = false;
   const unsubscribe = onSnapshot(
     weightsCol(tenantId),
     (snapshot) => {
@@ -311,10 +350,25 @@ export function subscribeToWeights(callback: (weights: ContainerWeight[]) => voi
         initializeDefaultWeightsIfNeeded().then((initialized) => {
           callback(initialized);
         });
-      } else {
-        localStorage.setItem(localKey('container_weights'), JSON.stringify(weights));
-        callback(weights);
+        return;
       }
+
+      const existingIds = new Set(weights.map((cw) => cw.id));
+      const hasMissing = DEFAULT_CONTAINER_WEIGHTS.some((cw) => !existingIds.has(cw.id));
+      if (hasMissing && !ensuringMissing) {
+        ensuringMissing = true;
+        ensureMissingDefaultWeights(weights)
+          .then((merged) => {
+            callback(merged);
+          })
+          .finally(() => {
+            ensuringMissing = false;
+          });
+        return;
+      }
+
+      localStorage.setItem(localKey('container_weights'), JSON.stringify(weights));
+      callback(weights);
     },
     (error) => {
       console.error('Error subscribing to weights on Firestore:', error);

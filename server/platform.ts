@@ -18,6 +18,8 @@ const DEFAULT_CONTAINER_WEIGHTS = [
   { id: '#15', name: '#15 / 15-Gallon Pot', label: '#15', weightLbs: 60 },
   { id: '#30', name: '#30 / 30-Gallon Pot', label: '#30', weightLbs: 150 },
   { id: '#45', name: '#45 / 45-Gallon Pot', label: '#45', weightLbs: 225 },
+  { id: '#65', name: '#65 / 65-Gallon Pot', label: '#65', weightLbs: 325 },
+  { id: '#100', name: '#100 / 100-Gallon Pot', label: '#100', weightLbs: 500 },
   { id: 'B&B', name: 'Balled & Burlapped (B&B)', label: 'B&B', weightLbs: 250 },
   { id: '4 inch', name: '4-inch Pot', label: '4 inch', weightLbs: 0.44 },
   { id: '6 inch', name: '6-inch Pot', label: '6 inch', weightLbs: 2 },

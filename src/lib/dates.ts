@@ -41,6 +41,9 @@ export function dueDateFromPaymentTerms(
     normalized === 'upon receipt' ||
     normalized === 'cod' ||
     normalized === 'cod (pickup)' ||
+    normalized === 'pre-pay' ||
+    normalized === 'prepay' ||
+    normalized === 'pre pay' ||
     normalized.includes('due on receipt') ||
     normalized.includes('upon receipt') ||
     normalized === 'cash' ||

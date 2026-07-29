@@ -63,6 +63,21 @@ import { BillEditModal } from './BillEditModal';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
+const VENDOR_TERM_PRESETS = [
+  'COD',
+  'Pre-Pay',
+  'Net 10',
+  'Net 15',
+  'Net 30',
+  'Net 45',
+  'Net 60',
+  'Net 90'
+] as const;
+
+function isVendorTermPreset(value: string): boolean {
+  return (VENDOR_TERM_PRESETS as readonly string[]).includes(value);
+}
+
 interface PurchasingWorkspaceProps {
   permissions: AppPermissions;
   tenantId: string;
@@ -172,6 +187,7 @@ export function PurchasingWorkspace({
   const [vendorPhone, setVendorPhone] = useState('');
   const [vendorContact, setVendorContact] = useState('');
   const [vendorTerms, setVendorTerms] = useState('');
+  const [vendorTermsIsCustom, setVendorTermsIsCustom] = useState(false);
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
 
@@ -330,12 +346,29 @@ export function PurchasingWorkspace({
     }
   }
 
+  function loadVendorTerms(terms?: string | null) {
+    const next = (terms || '').trim();
+    if (!next) {
+      setVendorTerms('');
+      setVendorTermsIsCustom(false);
+      return;
+    }
+    if (isVendorTermPreset(next)) {
+      setVendorTerms(next);
+      setVendorTermsIsCustom(false);
+      return;
+    }
+    setVendorTerms(next);
+    setVendorTermsIsCustom(true);
+  }
+
   function resetVendorForm() {
     setVendorName('');
     setVendorEmail('');
     setVendorPhone('');
     setVendorContact('');
     setVendorTerms('');
+    setVendorTermsIsCustom(false);
     setEditingVendorId(null);
   }
 
@@ -928,7 +961,7 @@ export function PurchasingWorkspace({
                       setVendorEmail(selectedVendor.contactEmail || '');
                       setVendorPhone(selectedVendor.phone || '');
                       setVendorContact(selectedVendor.contactName || '');
-                      setVendorTerms(selectedVendor.paymentTerms || '');
+                      loadVendorTerms(selectedVendor.paymentTerms);
                       setSelectedVendorId(null);
                     }}
                     className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-800"
@@ -1056,31 +1089,40 @@ export function PurchasingWorkspace({
                     <span className="font-bold text-slate-600">{t('purchasing.paymentTerms')}</span>
                     <select
                       value={
-                        ['Net 15', 'Net 30', 'Net 45', 'Net 60', 'Due on Receipt', 'COD'].includes(
-                          vendorTerms
-                        )
-                          ? vendorTerms
-                          : ''
+                        vendorTermsIsCustom
+                          ? '__custom__'
+                          : isVendorTermPreset(vendorTerms)
+                            ? vendorTerms
+                            : ''
                       }
                       onChange={(e) => {
-                        if (e.target.value) setVendorTerms(e.target.value);
+                        const next = e.target.value;
+                        if (next === '__custom__') {
+                          setVendorTermsIsCustom(true);
+                          if (isVendorTermPreset(vendorTerms)) setVendorTerms('');
+                          return;
+                        }
+                        setVendorTermsIsCustom(false);
+                        setVendorTerms(next);
                       }}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                     >
                       <option value="">{t('purchasing.selectTerms')}</option>
-                      <option value="Net 15">Net 15</option>
-                      <option value="Net 30">Net 30</option>
-                      <option value="Net 45">Net 45</option>
-                      <option value="Net 60">Net 60</option>
-                      <option value="Due on Receipt">Due on Receipt</option>
-                      <option value="COD">COD</option>
+                      {VENDOR_TERM_PRESETS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      <option value="__custom__">{t('purchasing.customTerms')}</option>
                     </select>
-                    <input
-                      value={vendorTerms}
-                      onChange={(e) => setVendorTerms(e.target.value)}
-                      placeholder={t('purchasing.paymentTermsPlaceholder')}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                    />
+                    {vendorTermsIsCustom && (
+                      <input
+                        value={vendorTerms}
+                        onChange={(e) => setVendorTerms(e.target.value)}
+                        placeholder={t('purchasing.paymentTermsPlaceholder')}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                      />
+                    )}
                   </label>
                   <div className="flex gap-2">
                     <button
@@ -1159,7 +1201,7 @@ export function PurchasingWorkspace({
                                   setVendorEmail(v.contactEmail || '');
                                   setVendorPhone(v.phone || '');
                                   setVendorContact(v.contactName || '');
-                                  setVendorTerms(v.paymentTerms || '');
+                                  loadVendorTerms(v.paymentTerms);
                                 }}
                                 className="text-[10px] font-bold text-ink-700 px-2 py-1 rounded-lg hover:bg-ink-50"
                               >

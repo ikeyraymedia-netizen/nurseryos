@@ -23,6 +23,7 @@ import {
   toDateKey,
   weekDateKeysFromSunday
 } from '../lib/dates';
+import { useT } from '../lib/i18n';
 
 interface TrucksListProps {
   trucks: Truck[];
@@ -45,6 +46,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
   onStartBuild,
   onSelectTruck
 }) => {
+  const t = useT();
   const todayKey = toDateKey(new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeekSunday());
   const [selectedDay, setSelectedDay] = useState<DaySelection | null>(() => {
@@ -197,14 +199,14 @@ export const TrucksList: React.FC<TrucksListProps> = ({
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-ink-100 text-ink-800 border border-ink-200">
             <CheckCircle2 className="h-3 w-3 mr-1" />
-            Fully Loaded
+            {t('trucks.fullyLoaded')}
           </span>
         );
       case 'loading':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
             <PlayCircle className="h-3 w-3 mr-1" />
-            Loading
+            {t('trucks.loading')}
           </span>
         );
       case 'pending':
@@ -212,7 +214,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
             <CircleDot className="h-3 w-3 mr-1" />
-            Ready to Load
+            {t('trucks.readyToLoad')}
           </span>
         );
     }
@@ -379,7 +381,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                 : 'bg-amber-50/60 border-amber-200 text-amber-900 hover:bg-amber-50'
             }`}
           >
-            Unscheduled ({trucksByLoadingDate.unscheduled.length})
+            {t('trucks.unscheduled')} ({trucksByLoadingDate.unscheduled.length})
           </button>
         )}
       </div>
@@ -466,7 +468,13 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                     : 'text-slate-600 hover:text-ink-800 hover:bg-ink-50'
                 }`}
               >
-                {tab === 'all' ? 'All' : tab === 'loading' ? 'Loading' : tab === 'completed' ? 'Loaded' : 'Pending'}
+                {tab === 'all'
+                  ? t('trucks.filterAll')
+                  : tab === 'loading'
+                    ? t('trucks.filterLoading')
+                    : tab === 'completed'
+                      ? t('trucks.filterLoaded')
+                      : t('trucks.filterPending')}
               </button>
             ))}
           </div>
@@ -568,7 +576,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                               }}
                               className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all"
                             >
-                              Confirm
+                              {t('common.confirm')}
                             </button>
                             <button
                               onClick={(e) => {
@@ -642,7 +650,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                       )}
                       <div className="flex justify-between items-center text-[10px] mb-1">
                         <span className="font-semibold text-gray-600">
-                          Loaded: <span className="font-bold text-gray-900">{loadedQty}</span>/{totalQty} pots
+                          {t('trucks.loadedPots', { loaded: loadedQty, total: totalQty })}
                         </span>
                         <span className="font-bold text-ink-800 font-mono">{percentage}%</span>
                       </div>

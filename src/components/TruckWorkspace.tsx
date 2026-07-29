@@ -40,6 +40,8 @@ import {
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
 import { downloadTruckPullSheetPdf } from '../lib/pullSheet';
+import { useT } from '../lib/i18n';
+import { usePlantDisplay } from '../lib/usePlantDisplay';
 
 interface TruckWorkspaceProps {
   truck: Truck;
@@ -68,6 +70,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   onEditTruck,
   onSelectOrder
 }) => {
+  const t = useT();
+  const dp = usePlantDisplay();
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [isBOLOpen, setIsBOLOpen] = useState(false);
@@ -611,7 +615,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               title="Download printable pull sheet PDF"
             >
               <Printer className="h-3.5 w-3.5 mr-1.5" />
-              {pullSheetBusy ? 'Preparing…' : 'Pull Sheet PDF'}
+              {pullSheetBusy ? t('trucks.preparing') : t('trucks.pullSheetPdf')}
             </button>
 
             {permissions.canViewBOL && (
@@ -695,7 +699,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-white shadow-sm"
                 >
                   <CheckCheck className="h-3.5 w-3.5 mr-1.5" />
-                  Load All Truck
+                  {t('trucks.loadAllTruck')}
                 </button>
               </>
             )}
@@ -1086,7 +1090,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             }`}
                           >
                             <CheckCheck className="h-3.5 w-3.5 mr-1" />
-                            Mark All Loaded
+                            {t('trucks.markAllLoaded')}
                           </button>
                           {permissions.canEditTrucks &&
                             (removingOrderId === order.id ? (
@@ -1367,9 +1371,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                 <div className="flex flex-col gap-3 w-full">
                                   <div className="min-w-0">
                                     <div className="text-xs font-bold text-gray-900 flex items-center flex-wrap gap-1.5">
-                                      <span>{item.plantName}</span>
+                                      <span>{dp.plant(item.plantName)}</span>
                                       <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 font-mono border border-slate-150">
-                                        {item.containerSize}
+                                        {dp.size(item.containerSize)}
                                       </span>
                                       {item.isAddition && (
                                         <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-500 text-amber-950 border border-amber-400">
@@ -1415,7 +1419,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                   <div className="grid grid-cols-2 gap-3 w-full border-t border-gray-100 pt-3 sm:flex sm:items-start sm:justify-end sm:gap-4 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto">
                                     <div className="flex flex-col items-center gap-1.5 bg-teal-50/40 border border-teal-200/60 rounded-xl p-2.5">
                                       <label className="text-[10px] font-bold text-teal-700 uppercase tracking-wide cursor-pointer select-none">
-                                        Pulled
+                                        {t('loader.pulled')}
                                       </label>
                                       <input
                                         type="checkbox"
@@ -1423,8 +1427,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         onChange={() => handleMarkItemFullyPulled(order.id, order, item.id)}
                                         disabled={!permissions.canCheckOffLoading}
                                         className="h-8 w-8 sm:h-7 sm:w-7 rounded-md border-2 border-teal-300 text-teal-600 focus:ring-teal-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
-                                        title={isFullyPulled ? 'Undo pulled' : 'Mark all pulled'}
-                                        aria-label={isFullyPulled ? 'Undo pulled' : 'Mark all pulled'}
+                                        title={isFullyPulled ? t('loader.undoPulled') : t('loader.markAllPulled')}
+                                        aria-label={isFullyPulled ? t('loader.undoPulled') : t('loader.markAllPulled')}
                                       />
                                       <div className="flex items-center space-x-1.5">
                                         <button
@@ -1448,7 +1452,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                     </div>
                                     <div className="flex flex-col items-center gap-1.5 bg-ink-50/40 border border-ink-200/60 rounded-xl p-2.5">
                                       <label className="text-[10px] font-bold text-ink-700 uppercase tracking-wide cursor-pointer select-none">
-                                        Loaded
+                                        {t('loader.loaded')}
                                       </label>
                                       <input
                                         type="checkbox"
@@ -1456,8 +1460,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         onChange={() => handleMarkItemFullyLoaded(order.id, order, item.id)}
                                         disabled={!permissions.canCheckOffLoading}
                                         className="h-8 w-8 sm:h-7 sm:w-7 rounded-md border-2 border-ink-300 text-ink-600 focus:ring-ink-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
-                                        title={isFullyLoaded ? 'Undo loaded' : 'Mark all loaded'}
-                                        aria-label={isFullyLoaded ? 'Undo loaded' : 'Mark all loaded'}
+                                        title={isFullyLoaded ? t('loader.undoLoaded') : t('loader.markAllLoaded')}
+                                        aria-label={isFullyLoaded ? t('loader.undoLoaded') : t('loader.markAllLoaded')}
                                       />
                                       <div className="flex items-center space-x-1.5">
                                         <button

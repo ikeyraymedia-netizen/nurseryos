@@ -242,7 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center justify-center gap-1.5 shrink-0 rounded-lg bg-amber-400 hover:bg-amber-300 text-amber-950 px-3 py-2 text-[11px] font-black disabled:opacity-60"
             >
               <CloudUpload className="h-3.5 w-3.5" />
-              {syncing ? 'Syncing…' : 'Sync to cloud'}
+              {syncing ? t('header.syncing') : t('header.syncToCloud')}
             </button>
           </div>
         </div>

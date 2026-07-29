@@ -182,7 +182,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                         }}
                         className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all"
                       >
-                        Confirm
+                        {t('common.confirm')}
                       </button>
                       <button
                         onClick={(e) => {

@@ -28,6 +28,8 @@ import { AppPermissions } from '../lib/permissions';
 import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { ContainerWeight, Customer, InventoryPlant, PlantOrderItem, CustomerDocumentType } from '../types';
+import { usePlantDisplay } from '../lib/usePlantDisplay';
+import { useT } from '../lib/i18n';
 
 interface OrderUploaderProps {
   containerWeights: ContainerWeight[];
@@ -62,6 +64,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   onCreateDocument,
   onEstimateSaved
 }) => {
+  const t = useT();
+  const dp = usePlantDisplay();
   const salesRepOptions = useSalesRepOptions(tenantId);
   const [isDragging, setIsDragging] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>('file');
@@ -836,16 +840,16 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                     className="bg-white border border-gray-100 rounded-lg px-3 py-2.5 space-y-2"
                   >
                     <div className="text-xs font-bold text-gray-900">
-                      {item.plantName}
+                      {dp.plant(item.plantName)}
                       <span className="font-normal text-gray-500">
                         {' '}
-                        • {item.containerSize} • Qty {item.quantity}
+                        • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
                       </span>
                     </div>
 
                     {status.type !== 'unmatched' ? (
                       <p className="text-[11px] font-semibold text-ink-800 bg-ink-50 border border-ink-100 rounded-md px-2 py-1">
-                        ✓ Linked to {status.label} ({status.containerSize})
+                        ✓ Linked to {dp.plant(status.label)} ({dp.size(status.containerSize)})
                         {status.type === 'auto' ? ' — auto-matched' : ''}
                       </p>
                     ) : (
@@ -863,7 +867,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                                 onClick={() => linkItemToPlant(item, plant)}
                                 className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
                               >
-                                <span className="font-bold text-gray-900">{plant.plantName}</span>
+                                <span className="font-bold text-gray-900">{dp.plant(plant.plantName)}</span>
                                 <span className="text-gray-500"> • {plant.containerSize}</span>
                                 <span className="text-gray-400">
                                   {' '}
@@ -925,7 +929,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                                     className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
                                   >
                                     <span className="font-bold text-gray-900">
-                                      {plant.plantName}
+                                      {dp.plant(plant.plantName)}
                                     </span>
                                     <span className="text-gray-500">
                                       {' '}
@@ -992,7 +996,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Line items</p>
               {pendingDraft.items.map((item) => (
                 <p key={item.id} className="text-xs text-gray-700">
-                  {item.plantName} • {item.containerSize} • Qty {item.quantity}
+                  {dp.plant(item.plantName)} • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
                 </p>
               ))}
             </div>

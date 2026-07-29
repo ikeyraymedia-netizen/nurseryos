@@ -12,6 +12,7 @@ import {
   ScanLine,
   Search,
   Trash2,
+  Upload,
   X
 } from 'lucide-react';
 import {
@@ -26,7 +27,9 @@ import { useT } from '../lib/i18n';
 import { dueDateFromPaymentTerms, toDateKey } from '../lib/dates';
 import {
   addVendor,
+  bulkImportVendors,
   deleteVendor,
+  parseCsvVendors,
   subscribeToVendors,
   updateVendor
 } from '../lib/vendors';
@@ -170,6 +173,7 @@ export function PurchasingWorkspace({
   const [bills, setBills] = useState<VendorBill[]>([]);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showInvoiceScanner, setShowInvoiceScanner] = useState(false);
 
@@ -341,6 +345,7 @@ export function PurchasingWorkspace({
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setError(null);
+    setStatus(null);
     try {
       await action();
     } catch (err: unknown) {
@@ -407,6 +412,30 @@ export function PurchasingWorkspace({
       }
       resetVendorForm();
     });
+  }
+
+  async function handleVendorsCsvUpload(file: File) {
+    if (!permissions.canEditVendors) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const text = await file.text();
+      const parsed = parseCsvVendors(text);
+      if (parsed.length === 0) {
+        throw new Error(t('purchasing.csvFormatError'));
+      }
+      const count = await bulkImportVendors(parsed);
+      setStatus(
+        count === 0
+          ? t('purchasing.noNewVendorsImported')
+          : t('purchasing.importedVendors', { n: count })
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('purchasing.csvImportFailed'));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleCreatePo(e: FormEvent) {
@@ -873,6 +902,11 @@ export function PurchasingWorkspace({
           {error}
         </p>
       )}
+      {status && (
+        <p className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+          {status}
+        </p>
+      )}
 
       {view === 'bills' && (
         <div className="space-y-3">
@@ -1036,21 +1070,44 @@ export function PurchasingWorkspace({
       ) : (
         view === 'vendors' && (
           <>
-            {permissions.canManageVendorBills && (
+            {(permissions.canEditVendors || permissions.canManageVendorBills) && (
               <div className="space-y-2">
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setShowInvoiceScanner((o) => !o)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
-                  >
-                    <ScanLine className="h-3.5 w-3.5" />
-                    {showInvoiceScanner
-                      ? t('purchasing.hideInvoiceScan')
-                      : t('purchasing.scanInvoice')}
-                  </button>
+                <div className="flex justify-end gap-2 flex-wrap">
+                  {permissions.canEditVendors && (
+                    <label
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold cursor-pointer hover:bg-ink-100 ${
+                        busy ? 'opacity-50 pointer-events-none' : ''
+                      }`}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {t('purchasing.uploadVendorsCsv')}
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        disabled={busy}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleVendorsCsvUpload(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  )}
+                  {permissions.canManageVendorBills && (
+                    <button
+                      type="button"
+                      onClick={() => setShowInvoiceScanner((o) => !o)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold"
+                    >
+                      <ScanLine className="h-3.5 w-3.5" />
+                      {showInvoiceScanner
+                        ? t('purchasing.hideInvoiceScan')
+                        : t('purchasing.scanInvoice')}
+                    </button>
+                  )}
                 </div>
-                {showInvoiceScanner && (
+                {showInvoiceScanner && permissions.canManageVendorBills && (
                   <VendorInvoiceScanner
                     tenantId={tenantId}
                     vendors={vendors}
@@ -1066,13 +1123,33 @@ export function PurchasingWorkspace({
 
             <div className="grid lg:grid-cols-5 gap-4">
               {permissions.canEditVendors && (
-                <form
-                  onSubmit={handleSaveVendor}
-                  className="lg:col-span-2 rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-2"
-                >
-                  <p className="text-xs font-bold uppercase tracking-wide text-ink-900">
-                    {editingVendorId ? t('purchasing.editVendor') : t('purchasing.addVendor')}
-                  </p>
+                <div className="lg:col-span-2 space-y-2">
+                  <label
+                    className={`inline-flex w-full items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-ink-200 bg-white text-ink-800 text-xs font-bold cursor-pointer hover:bg-ink-50 ${
+                      busy ? 'opacity-50 pointer-events-none' : ''
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {t('purchasing.uploadVendorsCsv')}
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      disabled={busy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleVendorsCsvUpload(file);
+                        e.currentTarget.value = '';
+                      }}
+                    />
+                  </label>
+                  <form
+                    onSubmit={handleSaveVendor}
+                    className="rounded-xl border border-ink-100 bg-ink-50/40 p-4 space-y-2"
+                  >
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-900">
+                      {editingVendorId ? t('purchasing.editVendor') : t('purchasing.addVendor')}
+                    </p>
                   <input
                     required
                     value={vendorName}
@@ -1166,6 +1243,7 @@ export function PurchasingWorkspace({
                     )}
                   </div>
                 </form>
+                </div>
               )}
               <div
                 className={`${permissions.canEditVendors ? 'lg:col-span-3' : 'lg:col-span-5'} space-y-2 max-h-[520px] overflow-y-auto`}

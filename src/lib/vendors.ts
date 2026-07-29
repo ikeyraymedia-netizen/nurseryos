@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -9,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Vendor } from '../types';
+import { normalizeVendorName } from './vendorMatch';
 
 let activeTenantId: string | null = null;
 
@@ -100,4 +102,140 @@ export async function updateVendor(vendor: Vendor): Promise<void> {
 export async function deleteVendor(vendorId: string): Promise<void> {
   const tenantId = requireTenantId();
   await deleteDoc(vendorDoc(tenantId, vendorId));
+}
+
+function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === ',' && !inQuotes) {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+
+    if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && next === '\n') i += 1;
+      row.push(cell);
+      const hasContent = row.some((c) => c.trim().length > 0);
+      if (hasContent) rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+
+    cell += ch;
+  }
+
+  row.push(cell);
+  if (row.some((c) => c.trim().length > 0)) rows.push(row);
+  return rows;
+}
+
+export function parseCsvVendors(text: string): Array<Omit<Vendor, 'id' | 'createdAt' | 'updatedAt'>> {
+  const rows = parseCsvRows(text);
+  if (rows.length === 0) return [];
+
+  const normalize = (v: string) => v.trim().toLowerCase();
+  const findIdx = (headers: string[], aliases: string[]) =>
+    headers.findIndex((h) => aliases.some((alias) => h.includes(alias)));
+
+  const headerRowIdx = rows.findIndex((row) => {
+    const headers = row.map(normalize);
+    return findIdx(headers, ['name', 'vendor', 'company', 'supplier', 'grower', 'nursery']) >= 0;
+  });
+
+  const dataStartIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+  const headers = (headerRowIdx >= 0 ? rows[headerRowIdx] : rows[0]).map(normalize);
+
+  const nameIdx = findIdx(headers, ['name', 'vendor', 'company', 'supplier', 'grower', 'nursery']);
+  const contactIdx = headers.findIndex(
+    (h) =>
+      (h.includes('contact name') ||
+        h.includes('contact person') ||
+        h === 'contact' ||
+        h === 'rep') &&
+      !h.includes('email') &&
+      !h.includes('phone') &&
+      !h.includes('mail')
+  );
+  const emailIdx = findIdx(headers, ['email', 'e-mail', 'mail']);
+  const phoneIdx = findIdx(headers, ['phone', 'mobile', 'cell', 'telephone']);
+  const addressIdx = findIdx(headers, [
+    'billing address',
+    'bill to address',
+    'address',
+    'street',
+    'location'
+  ]);
+  const termsIdx = findIdx(headers, ['payment terms', 'terms', 'pay terms']);
+  const notesIdx = findIdx(headers, ['note', 'comment', 'memo']);
+
+  const resolvedNameIdx = nameIdx >= 0 ? nameIdx : 0;
+
+  return rows
+    .slice(dataStartIdx)
+    .map((cols) => {
+      const name = (cols[resolvedNameIdx] || '').trim();
+      const contactName = contactIdx >= 0 ? (cols[contactIdx] || '').trim() : '';
+      const contactEmail = emailIdx >= 0 ? (cols[emailIdx] || '').trim() : '';
+      const phone = phoneIdx >= 0 ? (cols[phoneIdx] || '').trim() : '';
+      const billingAddress = addressIdx >= 0 ? (cols[addressIdx] || '').trim() : '';
+      const paymentTerms = termsIdx >= 0 ? (cols[termsIdx] || '').trim() : '';
+      const notes = notesIdx >= 0 ? (cols[notesIdx] || '').trim() : '';
+
+      return {
+        name,
+        contactName: contactName || undefined,
+        contactEmail: contactEmail || undefined,
+        phone: phone || undefined,
+        billingAddress: billingAddress || undefined,
+        paymentTerms: paymentTerms || undefined,
+        notes: notes || undefined
+      };
+    })
+    .filter((row) => {
+      if (!row.name) return false;
+      const lower = row.name.toLowerCase();
+      if (lower === 'name' || lower === 'vendor' || lower === 'vendor name') return false;
+      return true;
+    });
+}
+
+export async function bulkImportVendors(
+  vendors: Array<Omit<Vendor, 'id' | 'createdAt' | 'updatedAt'>>
+): Promise<number> {
+  const tenantId = requireTenantId();
+  const existingSnap = await getDocs(vendorsCol(tenantId));
+  const existingNames = new Set(
+    existingSnap.docs.map((snap) =>
+      normalizeVendorName(String((snap.data() as { name?: string }).name || ''))
+    )
+  );
+
+  let count = 0;
+  for (const vendor of vendors) {
+    const key = normalizeVendorName(vendor.name || '');
+    if (!key || existingNames.has(key)) continue;
+    await addVendor(vendor);
+    existingNames.add(key);
+    count += 1;
+  }
+  return count;
 }

@@ -811,6 +811,13 @@ const extra = {
     customTerms: 'Personalizado',
     terms: 'Términos: {{terms}}',
     addVendorBtn: 'Agregar proveedor',
+    uploadVendorsCsv: 'Subir CSV de proveedores',
+    csvFormatError:
+      'El CSV necesita un encabezado de nombre/proveedor (opcional: contacto, correo, teléfono, dirección, términos, notas).',
+    noNewVendorsImported:
+      'No se importaron proveedores nuevos (se omitieron nombres ya en su lista).',
+    importedVendors: 'Importados {{n}} proveedor(es) nuevo(s) (se omitieron nombres existentes).',
+    csvImportFailed: 'Error al importar CSV de proveedores.',
     noVendors: 'Aún no hay proveedores.',
     noContact: 'Sin información de contacto',
     backToVendors: 'Volver a proveedores',

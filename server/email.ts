@@ -345,7 +345,7 @@ export function registerEmailRoutes(app: Express) {
         const to =
           process.env.ACCESS_REQUEST_EMAIL?.trim() ||
           process.env.OWNER_EMAIL?.trim() ||
-          'owner@nursery.app';
+          'owner@nurseryos.app';
 
         const text = [
           'New NurseryOS access request',

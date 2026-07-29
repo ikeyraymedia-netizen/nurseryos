@@ -17,7 +17,7 @@ import {
 import { BrandLogo } from './BrandLogo';
 import { AppLocale, useLocale, useT } from '../lib/i18n';
 
-const REQUEST_ACCESS_EMAIL = 'owner@nursery.app';
+const REQUEST_ACCESS_EMAIL = 'owner@nurseryos.app';
 
 const FEATURE_KEYS = [
   { icon: Package, key: 'inventory' },

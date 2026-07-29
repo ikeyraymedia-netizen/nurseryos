@@ -126,6 +126,12 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']);
     }
 
+    // Access requests are created/updated by Admin SDK (API). Platform admins may read.
+    match /accessRequests/{requestId} {
+      allow read: if isPlatformAdmin();
+      allow create, update, delete: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read: if isMember(tenantId) || isPlatformAdmin();
       allow create: if signedIn()

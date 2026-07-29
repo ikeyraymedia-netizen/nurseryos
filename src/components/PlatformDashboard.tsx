@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Building2, Check, LogOut, Package, ArrowRight, ImagePlus } from 'lucide-react';
+import {
+  Building2,
+  Check,
+  LogOut,
+  Package,
+  ArrowRight,
+  ImagePlus,
+  Inbox,
+  UserPlus
+} from 'lucide-react';
 import { Tenant, TenantModuleId } from '../types';
 import {
   listAllTenants,
@@ -16,7 +25,17 @@ import {
   fileToCompressedLogoDataUrl,
   resolveNurseryLogoSrc
 } from '../lib/nurseryBranding';
+import {
+  AccessRequest,
+  declineAccessRequest,
+  listAccessRequests,
+  provisionNursery
+} from '../lib/platformAdmin';
 import { BrandLogo } from './BrandLogo';
+
+type SellerView = 'nurseries' | 'requests' | 'create';
+
+const DEFAULT_CREATE_MODULES: TenantModuleId[] = ['orders', 'trucks', 'customers'];
 
 interface PlatformDashboardProps {
   userEmail: string;
@@ -33,6 +52,7 @@ export function PlatformDashboard({
   onOpenHomeNursery,
   onSignOut
 }: PlatformDashboardProps) {
+  const [view, setView] = useState<SellerView>('nurseries');
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TenantModuleId[]>([]);
@@ -46,6 +66,17 @@ export function PlatformDashboard({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const logoFileRef = useRef<HTMLInputElement | null>(null);
+
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [requestActionId, setRequestActionId] = useState<string | null>(null);
+
+  const [createName, setCreateName] = useState('');
+  const [createNursery, setCreateNursery] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createModules, setCreateModules] = useState<TenantModuleId[]>([...DEFAULT_CREATE_MODULES]);
+  const [createRequestId, setCreateRequestId] = useState<string | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
 
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
@@ -87,10 +118,116 @@ export function PlatformDashboard({
     }
   }
 
+  async function refreshRequests() {
+    setRequestsLoading(true);
+    setError(null);
+    try {
+      const list = await listAccessRequests('pending');
+      setRequests(list);
+    } catch (err: any) {
+      setError(err?.message || 'Could not load access requests.');
+    } finally {
+      setRequestsLoading(false);
+    }
+  }
+
   useEffect(() => {
     refresh().catch(() => undefined);
+    refreshRequests().catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (view === 'requests') {
+      refreshRequests().catch(() => undefined);
+    }
+  }, [view]);
+
+  function resetCreateForm() {
+    setCreateName('');
+    setCreateNursery('');
+    setCreateEmail('');
+    setCreateModules([...DEFAULT_CREATE_MODULES]);
+    setCreateRequestId(null);
+  }
+
+  function openCreateFromRequest(req: AccessRequest) {
+    setCreateName(req.displayName || '');
+    setCreateNursery(req.nurseryName || '');
+    setCreateEmail(req.email || '');
+    setCreateModules([...DEFAULT_CREATE_MODULES]);
+    setCreateRequestId(req.id);
+    setView('create');
+    setError(null);
+    setMessage(null);
+  }
+
+  function openBlankCreate() {
+    resetCreateForm();
+    setView('create');
+    setError(null);
+    setMessage(null);
+  }
+
+  function toggleCreateModule(id: TenantModuleId) {
+    setCreateModules((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
+  }
+
+  async function handleDeclineRequest(req: AccessRequest) {
+    if (!confirm(`Decline access request from ${req.nurseryName} (${req.email})?`)) return;
+    setRequestActionId(req.id);
+    setError(null);
+    setMessage(null);
+    try {
+      await declineAccessRequest(req.id);
+      setRequests((prev) => prev.filter((r) => r.id !== req.id));
+      setMessage(`Declined ${req.nurseryName}.`);
+    } catch (err: any) {
+      setError(err?.message || 'Could not decline request.');
+    } finally {
+      setRequestActionId(null);
+    }
+  }
+
+  async function handleProvisionNursery() {
+    setCreateBusy(true);
+    setError(null);
+    setMessage(null);
+    const approvingId = createRequestId;
+    try {
+      const result = await provisionNursery({
+        displayName: createName,
+        nurseryName: createNursery,
+        email: createEmail,
+        modules: createModules,
+        accessRequestId: approvingId || undefined,
+        sendWelcomeEmail: true
+      });
+      setMessage(
+        `Created ${createNursery} (${result.tenantId}).${
+          result.resetLinkSent
+            ? ' Welcome email with password link sent.'
+            : ' Nursery created — welcome email was not sent.'
+        }`
+      );
+      resetCreateForm();
+      await refresh();
+      if (approvingId) {
+        setRequests((prev) => prev.filter((r) => r.id !== approvingId));
+      }
+      setView('nurseries');
+      setSelectedId(result.tenantId);
+      const list = await listAllTenants();
+      const created = list.find((t) => t.id === result.tenantId);
+      if (created) loadDraft(created);
+    } catch (err: any) {
+      setError(err?.message || 'Could not create nursery.');
+    } finally {
+      setCreateBusy(false);
+    }
+  }
 
   function selectTenant(id: string) {
     const t = tenants.find((x) => x.id === id);
@@ -249,19 +386,219 @@ export function PlatformDashboard({
       </header>
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
-        <div className="mb-6">
+        <div className="mb-6 space-y-4">
           <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-            Signed in as <span className="font-bold text-white">{userEmail}</span>. This is your seller
-            console — separate from any nursery workspace. New nurseries start with no workspaces;
-            turn modules on below to activate them.
+            Signed in as <span className="font-bold text-white">{userEmail}</span>. Approve access
+            requests, create nurseries, and manage packages from here.
           </p>
+          <div className="inline-flex rounded-xl border border-slate-700 overflow-hidden">
+            {(
+              [
+                ['nurseries', 'Nurseries', Building2],
+                ['requests', 'Access requests', Inbox],
+                ['create', 'Create nursery', UserPlus]
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  if (id === 'create' && view !== 'create') {
+                    resetCreateForm();
+                  }
+                  setView(id);
+                  setError(null);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold ${
+                  view === id
+                    ? 'bg-ink-600 text-white'
+                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+                {id === 'requests' && requests.length > 0 ? ` (${requests.length})` : ''}
+              </button>
+            ))}
+          </div>
+          {(error || message) && view !== 'nurseries' && (
+            <div className="space-y-1">
+              {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
+              {message && <p className="text-xs text-emerald-300 font-semibold">{message}</p>}
+            </div>
+          )}
         </div>
 
+        {view === 'requests' && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Inbox className="h-4 w-4 text-amber-300" />
+                <h2 className="text-sm font-black text-white">Pending access requests</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => refreshRequests()}
+                className="text-[11px] font-bold text-slate-300 hover:text-white"
+              >
+                Refresh
+              </button>
+            </div>
+            {requestsLoading ? (
+              <p className="p-4 text-sm text-slate-400">Loading…</p>
+            ) : requests.length === 0 ? (
+              <p className="p-4 text-sm text-slate-400">
+                No pending requests. New requests from the welcome page show up here.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-800">
+                {requests.map((req) => (
+                  <li key={req.id} className="px-4 py-4 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white">{req.nurseryName}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {req.displayName} · {req.email}
+                          {req.locale ? ` · ${req.locale}` : ''}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          {new Date(req.createdAt).toLocaleString()}
+                        </p>
+                        {req.message ? (
+                          <p className="text-xs text-slate-300 mt-2 whitespace-pre-wrap">
+                            {req.message}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={requestActionId === req.id}
+                          onClick={() => openCreateFromRequest(req)}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-black bg-ink-600 text-white hover:bg-ink-500 disabled:opacity-50"
+                        >
+                          Approve / create
+                        </button>
+                        <button
+                          type="button"
+                          disabled={requestActionId === req.id}
+                          onClick={() => void handleDeclineRequest(req)}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-black bg-slate-800 text-rose-300 hover:bg-slate-700 disabled:opacity-50"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {view === 'create' && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden max-w-2xl">
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-emerald-300" />
+              <h2 className="text-sm font-black text-white">
+                {createRequestId ? 'Approve & create nursery' : 'Create nursery'}
+              </h2>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-[11px] text-slate-400">
+                Creates the workspace, owner login, and emails them a set-password link.
+              </p>
+              <label className="block text-xs space-y-1">
+                <span className="font-bold text-slate-400">Owner name</span>
+                <input
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                />
+              </label>
+              <label className="block text-xs space-y-1">
+                <span className="font-bold text-slate-400">Nursery name</span>
+                <input
+                  required
+                  value={createNursery}
+                  onChange={(e) => setCreateNursery(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                />
+              </label>
+              <label className="block text-xs space-y-1">
+                <span className="font-bold text-slate-400">Owner email</span>
+                <input
+                  required
+                  type="email"
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                />
+              </label>
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  Starting modules
+                </p>
+                <div className="grid sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                  {TENANT_MODULE_DEFS.map((mod) => {
+                    const on = createModules.includes(mod.id);
+                    return (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        onClick={() => toggleCreateModule(mod.id)}
+                        className={`text-left rounded-lg border px-2.5 py-2 ${
+                          on
+                            ? 'border-ink-600/50 bg-ink-950/40'
+                            : 'border-slate-700 bg-slate-950/40'
+                        }`}
+                      >
+                        <span className="text-xs font-bold text-white">{mod.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={createBusy || !createNursery.trim() || !createEmail.trim()}
+                  onClick={() => void handleProvisionNursery()}
+                  className="px-4 py-2 rounded-xl text-xs font-black bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {createBusy ? 'Creating…' : 'Create nursery & email owner'}
+                </button>
+                <button
+                  type="button"
+                  disabled={createBusy}
+                  onClick={() => {
+                    resetCreateForm();
+                    setView(createRequestId ? 'requests' : 'nurseries');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-700 text-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {view === 'nurseries' && (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6">
           <section className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-ink-400" />
-              <h2 className="text-sm font-black text-white">Nurseries ({tenants.length})</h2>
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-ink-400" />
+                <h2 className="text-sm font-black text-white">Nurseries ({tenants.length})</h2>
+              </div>
+              <button
+                type="button"
+                onClick={openBlankCreate}
+                className="text-[11px] font-bold text-ink-300 hover:text-white"
+              >
+                + New
+              </button>
             </div>
             {loading ? (
               <p className="p-4 text-sm text-slate-400">Loading…</p>
@@ -478,6 +815,7 @@ export function PlatformDashboard({
             )}
           </section>
         </div>
+        )}
       </main>
     </div>
   );

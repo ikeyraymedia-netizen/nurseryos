@@ -6,6 +6,7 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
+import { createAccessRequestDoc } from './platform';
 
 interface EmailIntegration {
   /** reply-to / customer-facing nursery contact email */
@@ -347,6 +348,21 @@ export function registerEmailRoutes(app: Express) {
           process.env.OWNER_EMAIL?.trim() ||
           'owner@nurseryos.app';
 
+        let requestId: string | null = null;
+        if (isFirebaseAdminConfigured()) {
+          try {
+            requestId = await createAccessRequestDoc({
+              displayName,
+              nurseryName,
+              email,
+              message,
+              locale
+            });
+          } catch (persistErr) {
+            console.error('[email] failed to persist access request', persistErr);
+          }
+        }
+
         const text = [
           'New NurseryOS access request',
           '',
@@ -354,8 +370,11 @@ export function registerEmailRoutes(app: Express) {
           `Nursery: ${nurseryName}`,
           `Email: ${email}`,
           locale ? `Language: ${locale}` : null,
+          requestId ? `Request ID: ${requestId}` : null,
           '',
-          message || '(No additional message)'
+          message || '(No additional message)',
+          '',
+          'Approve in NurseryOS Seller → Access requests.'
         ]
           .filter((line) => line != null)
           .join('\n');
@@ -366,8 +385,10 @@ export function registerEmailRoutes(app: Express) {
           <p><strong>Nursery:</strong> ${escapeHtml(nurseryName)}</p>
           <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
           ${locale ? `<p><strong>Language:</strong> ${escapeHtml(locale)}</p>` : ''}
+          ${requestId ? `<p><strong>Request ID:</strong> ${escapeHtml(requestId)}</p>` : ''}
           <p><strong>Message:</strong></p>
           <p>${escapeHtml(message || '(No additional message)').replace(/\n/g, '<br/>')}</p>
+          <p style="margin-top:16px;">Approve in <strong>NurseryOS Seller → Access requests</strong>.</p>
         `;
 
         const messageId = await sendViaResend({
@@ -379,7 +400,7 @@ export function registerEmailRoutes(app: Express) {
           html
         });
 
-        res.json({ success: true, messageId });
+        res.json({ success: true, messageId, requestId });
       } catch (err: any) {
         httpError(res, err);
       }

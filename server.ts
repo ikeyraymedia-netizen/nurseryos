@@ -10,6 +10,7 @@ import {
   isStripeConfigured
 } from './server/stripe';
 import { registerEmailRoutes } from './server/email';
+import { registerPlatformRoutes } from './server/platform';
 import {
   isSpreadsheetInventoryUpload,
   parseInventorySpreadsheetBuffer
@@ -36,6 +37,7 @@ const PORT = Number(process.env.PORT) || 3000;
 registerQuickbooksRoutes(app);
 registerStripeRoutes(app);
 registerEmailRoutes(app);
+registerPlatformRoutes(app);
 
 // Lazy initialize Google Gen AI
 let aiClient: GoogleGenAI | null = null;

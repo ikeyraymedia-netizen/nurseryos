@@ -25,7 +25,8 @@ interface CheckbookIntegration {
 }
 
 function checkbookBase(env: CheckbookEnvironment): string {
-  return env === 'production' ? 'https://api.checkbook.io' : 'https://demo.checkbook.io';
+  // Sandbox keys only work on api.sandbox.checkbook.io (not demo.checkbook.io).
+  return env === 'production' ? 'https://api.checkbook.io' : 'https://api.sandbox.checkbook.io';
 }
 
 function integrationRef(tenantId: string) {

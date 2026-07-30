@@ -924,7 +924,7 @@ export function TeamManager({
                       }
                       className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
                     >
-                      <option value="sandbox">Sandbox (demo.checkbook.io)</option>
+                      <option value="sandbox">Sandbox (api.sandbox.checkbook.io)</option>
                       <option value="production">Production (api.checkbook.io)</option>
                     </select>
                   </label>

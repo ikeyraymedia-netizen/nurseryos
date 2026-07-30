@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckSquare,
   ClipboardList,
+  Languages,
   Laptop,
   LogIn,
   Package,
@@ -138,9 +139,15 @@ export function WelcomePage({
               </div>
             </div>
 
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-200 mb-5">
-              <Smartphone className="h-3.5 w-3.5 text-coral-400" />
-              {t('welcome.anytimeBadge')}
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-200">
+                <Smartphone className="h-3.5 w-3.5 text-coral-400" />
+                {t('welcome.anytimeBadge')}
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-coral-400/30 bg-coral-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-coral-200">
+                <Languages className="h-3.5 w-3.5 text-coral-300" />
+                {t('welcome.bilingualBadge')}
+              </div>
             </div>
 
             <h1 className="text-3xl sm:text-4xl xl:text-[2.75rem] font-black leading-tight text-white tracking-tight">
@@ -148,6 +155,10 @@ export function WelcomePage({
             </h1>
 
             <p className="mt-4 text-base sm:text-lg text-slate-300 leading-relaxed">{t('welcome.subhead')}</p>
+
+            <p className="mt-3 text-sm text-coral-100/90 leading-relaxed font-medium">
+              {t('welcome.bilingualBody')}
+            </p>
 
             <div className="mt-5 flex items-center gap-4 text-slate-400">
               <div className="flex items-center gap-1.5 text-xs font-semibold">

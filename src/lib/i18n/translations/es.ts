@@ -44,6 +44,9 @@ const es: TranslationDict = {
     liveDataBody:
       'Los cargadores revisan camiones en el teléfono. Oficina envía facturas desde la laptop. Mismos pedidos, mismo inventario, mismos números — actualizados en tiempo real.',
     anytimeBadge: 'En cualquier momento, cualquier dispositivo',
+    bilingualBadge: 'English · Español',
+    bilingualBody:
+      'Hecho para viveros bilingües — cambie toda la app al español para que el patio y la oficina trabajen en el idioma que prefieran.',
     headline: 'Maneje su vivero desde el patio, la oficina o el camino.',
     subhead:
       'NurseryOS reúne inventario, camiones, facturas y compras en un solo lugar — en cualquier teléfono, tableta u computadora. Sin app store. Solo inicie sesión.',

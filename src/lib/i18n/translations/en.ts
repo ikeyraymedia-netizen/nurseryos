@@ -43,6 +43,9 @@ const en = {
     liveDataBody:
       'Loaders check trucks on their phone. Office sends invoices from a laptop. Same orders, same inventory, same numbers — updated in real time.',
     anytimeBadge: 'Anytime, any device',
+    bilingualBadge: 'English · Español',
+    bilingualBody:
+      'Built for bilingual nurseries — switch the whole app to Spanish so yard crews and office staff can work in the language they prefer.',
     headline: 'Run your nursery from the yard, the office, or the road.',
     subhead:
       'NurseryOS keeps inventory, trucks, invoices, and purchasing in one place — on any phone, tablet, or computer. No app store. Just sign in.',

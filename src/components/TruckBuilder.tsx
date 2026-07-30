@@ -271,12 +271,14 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 <option value="30' Gooseneck">30' Gooseneck</option>
                 <option value="32' Gooseneck">32' Gooseneck</option>
                 <option value="36' Gooseneck">36' Gooseneck</option>
+                <option value="40' Gooseneck">40' Gooseneck</option>
                 <option value="24' Bumper Pull">24' Bumper Pull</option>
                 <option value="Hotshot">Hotshot</option>
                 <option value="26' Box">26' Box</option>
                 <option value="26' Refer">26' Refer</option>
                 <option value="53' Semi">53' Semi</option>
                 <option value="53' Refer">53' Refer</option>
+                <option value="Semi Flatbed">Semi Flatbed</option>
                 <option value="Flatbed Gooseneck">Flatbed Gooseneck</option>
               </select>
             </div>

@@ -4,11 +4,13 @@ export const TRUCK_CAPACITIES_LBS: Record<string, number> = {
   "30' Gooseneck": 15000,
   "32' Gooseneck": 16000,
   "36' Gooseneck": 18000,
+  "40' Gooseneck": 20000,
   Hotshot: 20000,
   "26' Box": 10000,
   "26' Refer": 10000,
   "53' Semi": 45000,
   "53' Refer": 45000,
+  'Semi Flatbed': 45000,
   Gooseneck: 15000,
   'Flatbed Gooseneck': 15000
 };
@@ -43,6 +45,7 @@ export function getTruckWeightCapacity(truckType?: string): number {
   if (typeLower.includes("30'") || typeLower.includes('30')) return 15000;
   if (typeLower.includes("32'") || typeLower.includes('32')) return 16000;
   if (typeLower.includes("36'") || typeLower.includes('36')) return 18000;
+  if (typeLower.includes("40'") || typeLower.includes('40')) return 20000;
   if (typeLower.includes('hotshot')) return 20000;
   if (typeLower.includes('semi')) return 45000;
   if (typeLower.includes('box')) return 10000;

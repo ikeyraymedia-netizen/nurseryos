@@ -149,6 +149,7 @@ export function getAdminDb(): Firestore {
   }
 
   db = getFirestore(admin.app(), DATABASE_ID);
+  db.settings({ ignoreUndefinedProperties: true });
   return db;
 }
 

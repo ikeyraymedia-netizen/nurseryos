@@ -149,7 +149,11 @@ export function getAdminDb(): Firestore {
   }
 
   db = getFirestore(admin.app(), DATABASE_ID);
-  db.settings({ ignoreUndefinedProperties: true });
+  try {
+    db.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // Settings can only be applied once; ignore if already configured.
+  }
   return db;
 }
 

@@ -894,7 +894,7 @@ export function TeamManager({
               <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-relaxed">
                 Use keys from Checkbook <span className="font-bold">Settings → Developer</span> with
                 the environment toggle set to <span className="font-bold">Sandbox</span>. Production
-                keys will fail here.
+                keys will fail here. Webhook key is optional.
               </p>
               {checkbookStatus?.connected ? (
                 <div className="space-y-2">

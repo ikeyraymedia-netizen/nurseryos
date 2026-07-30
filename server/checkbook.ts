@@ -376,6 +376,17 @@ export function registerCheckbookWebhookRoute(app: Express) {
 }
 
 export function registerCheckbookRoutes(app: Express) {
+  app.get('/api/checkbook/health', (_req, res) => {
+    res.json({
+      ok: true,
+      connectVersion: 4,
+      hosts: {
+        sandbox: CHECKBOOK_HOSTS.sandbox,
+        production: CHECKBOOK_HOSTS.production
+      }
+    });
+  });
+
   app.get('/api/checkbook/status', (req, res) =>
     void handleAsync(res, async () => {
       const tenantId = String(req.query.tenantId || '').trim();
@@ -433,7 +444,8 @@ export function registerCheckbookRoutes(app: Express) {
       const now = new Date().toISOString();
       const existing = await loadIntegration(tenantId);
       const resolvedWebhook = (webhookKey || existing?.webhookKey || '').trim();
-      const payload: Record<string, string> = {
+
+      const clean: Record<string, string> = {
         provider: 'checkbook',
         publishableKey: keys.publishableKey,
         secretKey: keys.secretKey,
@@ -445,19 +457,20 @@ export function registerCheckbookRoutes(app: Express) {
         publishableKeyLast4: last4(keys.publishableKey)
       };
       if (resolvedWebhook) {
-        payload.webhookKey = resolvedWebhook;
+        clean.webhookKey = resolvedWebhook;
       }
-      await integrationRef(tenantId).set(payload, { merge: true });
+
+      await integrationRef(tenantId).set(clean, { merge: true });
 
       res.json({
         connected: true,
         environment,
         apiBase,
-        publishableKeyLast4: payload.publishableKeyLast4,
+        publishableKeyLast4: clean.publishableKeyLast4,
         hasWebhookKey: Boolean(resolvedWebhook),
-        connectedAt: payload.connectedAt,
+        connectedAt: clean.connectedAt,
         webhookUrl: `${(process.env.APP_URL || 'https://nurseryos.app').replace(/\/$/, '')}/api/checkbook/webhook?tenantId=${encodeURIComponent(tenantId)}`,
-        connectVersion: 3
+        connectVersion: 4
       });
     })
   );

@@ -130,9 +130,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   });
 
   // Consolidate Items for the Bill of Lading Cargo Table
+  // Same plant + size + notes merge; different notes stay separate (e.g. 24" vs 30" on B&B).
   interface BOLConsolidatedItem {
     plantName: string;
     containerSize: string;
+    notes: string;
     totalQty: number;
   }
 
@@ -141,12 +143,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   try {
     currentBOLOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
-        const key = `${(item.plantName || '').toLowerCase()}::${(item.containerSize || '').toLowerCase()}`;
+        const notes = String(item.notes || '').trim();
+        const key = `${(item.plantName || '').toLowerCase()}::${(item.containerSize || '').toLowerCase()}::${notes.toLowerCase()}`;
 
         if (!bolConsolidatedMap.has(key)) {
           bolConsolidatedMap.set(key, {
             plantName: item.plantName || t('bol.defaultPlant'),
             containerSize: item.containerSize || '',
+            notes,
             totalQty: 0,
           });
         }
@@ -159,8 +163,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     console.error('[BOL] Failed consolidating cargo:', err);
   }
 
-  const consolidatedItems = Array.from(bolConsolidatedMap.values()).sort((a, b) => 
-    a.plantName.localeCompare(b.plantName)
+  const consolidatedItems = Array.from(bolConsolidatedMap.values()).sort(
+    (a, b) =>
+      a.plantName.localeCompare(b.plantName) ||
+      a.containerSize.localeCompare(b.containerSize) ||
+      a.notes.localeCompare(b.notes)
   );
 
   // Dynamic BOL Number
@@ -363,7 +370,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       y += 12;
 
       consolidatedItems.forEach((item) => {
-        ensureSpace(16);
+        const noteLines = item.notes
+          ? pdf.splitTextToSize(item.notes, xSize - xPlant - 8)
+          : [];
+        ensureSpace(16 + noteLines.length * 10);
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
         pdf.setTextColor(25, 25, 25);
@@ -376,7 +386,18 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         pdf.setLineWidth(0.8);
         pdf.rect(xCheck + 4, y - 7, 10, 10);
         pdf.setLineWidth(0.2);
-        y += 14;
+        if (noteLines.length > 0) {
+          y += 11;
+          pdf.setFontSize(8);
+          pdf.setTextColor(90, 90, 90);
+          noteLines.forEach((line: string) => {
+            pdf.text(line, xPlant, y);
+            y += 10;
+          });
+          y += 2;
+        } else {
+          y += 14;
+        }
       });
       ensureSpace(16);
       pdf.line(margin, y, pageWidth - margin, y);
@@ -891,7 +912,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         key={index}
                         className="border-b border-gray-200 text-xs font-medium text-gray-800"
                       >
-                        <td className="py-2.5 font-bold text-gray-950">{item.plantName}</td>
+                        <td className="py-2.5 font-bold text-gray-950">
+                          <div>{item.plantName}</div>
+                          {item.notes ? (
+                            <div className="mt-0.5 text-[10px] font-medium text-gray-500 leading-snug whitespace-pre-wrap">
+                              {item.notes}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="py-2.5 font-mono text-gray-500">{item.containerSize}</td>
                         <td className="py-2.5 text-center font-mono font-black text-gray-950">
                           {item.totalQty}

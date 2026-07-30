@@ -885,7 +885,16 @@ const extra = {
     statusReceived: 'received',
     statusCancelled: 'cancelled',
     statusUnpaid: 'unpaid',
-    statusPaid: 'paid'
+    statusPaymentPending: 'ACH pending',
+    statusPaid: 'paid',
+    payViaAch: 'Pay via ACH',
+    refreshAchStatus: 'Refresh ACH status',
+    achRecipientPrompt: 'Vendor email for ACH deposit link:',
+    achPayConfirm:
+      'Send {{amount}} ACH payment to {{vendor}} at {{email}}? They will get a Checkbook email to deposit to their bank.',
+    achPaymentSent: 'ACH payment sent. Vendor email: {{email}}',
+    achStatusRefreshed: 'Payment status: {{status}}',
+    achPending: 'ACH sent — waiting for {{recipient}} to deposit'
   },
   vendor: {
     aiRead: 'AI read:',
@@ -1246,6 +1255,25 @@ const extra = {
     addStripeEnvFirst: 'Add Stripe and Firebase Admin env vars on the server first',
     disconnectStripe: 'Disconnect Stripe from this nursery?',
     stripeDisconnected: 'Stripe disconnected.',
+    checkbook: 'Vendor ACH Bill Pay (Checkbook)',
+    checkbookIntro:
+      'Connect your Checkbook account to pay vendor bills by ACH from Purchasing. Create a free Checkbook account, verify your bank, then paste API keys from Settings → Developer. Owner/admin only.',
+    checkbookConnectedStatus: 'Connected ({{env}}) · key …{{last4}}',
+    checkbookWebhookHint:
+      'In Checkbook Developer settings, set webhook URL to:',
+    checkbookEnvironment: 'Environment',
+    checkbookPublishable: 'Publishable key',
+    checkbookSecret: 'Secret key',
+    checkbookWebhookKey: 'Webhook signing key (optional, recommended)',
+    connectCheckbook: 'Connect Checkbook',
+    checkbookKeysRequired: 'Publishable and secret keys are required.',
+    checkbookConnected: 'Checkbook connected for vendor bill pay.',
+    checkbookConnectFailed: 'Could not connect Checkbook.',
+    disconnectCheckbook: 'Disconnect Checkbook from this nursery?',
+    checkbookDisconnected: 'Checkbook disconnected.',
+    checkbookDisconnectFailed: 'Could not disconnect Checkbook.',
+    loadCheckbookFailed: 'Could not load Checkbook status.',
+    disconnect: 'Disconnect',
     outboundEmail: 'Outbound email',
     emailIntro:
       "Invoices are sent through NurseryOS email (Resend). Set this nursery's display name and reply-to address so customers can answer the nursery, not the platform. Owner/admin only.",

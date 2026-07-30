@@ -40,7 +40,8 @@ const ALL_MODULE_IDS = new Set([
   'profit',
   'payments',
   'quickbooks',
-  'purchasing'
+  'purchasing',
+  'billPay'
 ]);
 
 type AccessRequestStatus = 'pending' | 'approved' | 'declined';

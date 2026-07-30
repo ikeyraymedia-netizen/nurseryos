@@ -42,6 +42,10 @@ export interface AppPermissions {
   canEditPurchaseOrders: boolean;
   canReceivePurchases: boolean;
   canManageVendorBills: boolean;
+  /** Connect Checkbook for ACH bill pay (owner/admin; gated by billPay module). */
+  canManageBillPay: boolean;
+  /** Initiate ACH bill payments via Checkbook (gated by billPay module). */
+  canPayVendorBills: boolean;
 }
 
 const ROLE_RANK: Record<MemberRole, number> = {
@@ -161,7 +165,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
-        canManageVendorBills: true
+        canManageVendorBills: true,
+        canManageBillPay: true,
+        canPayVendorBills: true
       };
     case 'supervisor':
       // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
@@ -200,7 +206,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: true,
-        canManageVendorBills: false
+        canManageVendorBills: false,
+        canManageBillPay: false,
+        canPayVendorBills: false
       };
     case 'office':
       // Front office: customers, invoices, pricing, reports. No yard/ops tabs.
@@ -238,7 +246,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
-        canManageVendorBills: true
+        canManageVendorBills: true,
+        canManageBillPay: false,
+        canPayVendorBills: true
       };
     case 'sales':
       // Sales: customers, orders, trucks, invoices/pricing, reports; inventory view-only; no tasks.
@@ -276,7 +286,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
-        canManageVendorBills: true
+        canManageVendorBills: true,
+        canManageBillPay: false,
+        canPayVendorBills: false
       };
     case 'loader':
       return {
@@ -313,7 +325,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: false,
-        canManageVendorBills: false
+        canManageVendorBills: false,
+        canManageBillPay: false,
+        canPayVendorBills: false
       };
     case 'inventory':
       return {
@@ -350,7 +364,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: true,
-        canManageVendorBills: false
+        canManageVendorBills: false,
+        canManageBillPay: false,
+        canPayVendorBills: false
       };
     default:
       return getPermissionsForRole('loader');

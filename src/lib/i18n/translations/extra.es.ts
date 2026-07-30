@@ -895,7 +895,16 @@ const extra = {
     statusReceived: 'recibido',
     statusCancelled: 'cancelado',
     statusUnpaid: 'sin pagar',
-    statusPaid: 'pagado'
+    statusPaymentPending: 'ACH pendiente',
+    statusPaid: 'pagado',
+    payViaAch: 'Pagar por ACH',
+    refreshAchStatus: 'Actualizar estado ACH',
+    achRecipientPrompt: 'Correo del proveedor para el enlace de depósito ACH:',
+    achPayConfirm:
+      '¿Enviar pago ACH de {{amount}} a {{vendor}} a {{email}}? Recibirán un correo de Checkbook para depositar en su banco.',
+    achPaymentSent: 'Pago ACH enviado. Correo del proveedor: {{email}}',
+    achStatusRefreshed: 'Estado del pago: {{status}}',
+    achPending: 'ACH enviado — esperando depósito de {{recipient}}'
   },
   vendor: {
     aiRead: 'IA leyó:',
@@ -1258,6 +1267,25 @@ const extra = {
     addStripeEnvFirst: 'Agregue variables de Stripe y Firebase Admin en el servidor primero',
     disconnectStripe: '¿Desconectar Stripe de este vivero?',
     stripeDisconnected: 'Stripe desconectado.',
+    checkbook: 'Pago ACH a proveedores (Checkbook)',
+    checkbookIntro:
+      'Conecte su cuenta Checkbook para pagar facturas de proveedores por ACH desde Compras. Cree una cuenta Checkbook, verifique su banco y pegue las claves API de Configuración → Desarrollador. Solo propietario/admin.',
+    checkbookConnectedStatus: 'Conectado ({{env}}) · clave …{{last4}}',
+    checkbookWebhookHint:
+      'En la configuración de desarrollador de Checkbook, establezca la URL del webhook a:',
+    checkbookEnvironment: 'Entorno',
+    checkbookPublishable: 'Clave pública',
+    checkbookSecret: 'Clave secreta',
+    checkbookWebhookKey: 'Clave de firma del webhook (opcional, recomendada)',
+    connectCheckbook: 'Conectar Checkbook',
+    checkbookKeysRequired: 'Se requieren las claves pública y secreta.',
+    checkbookConnected: 'Checkbook conectado para pago de facturas.',
+    checkbookConnectFailed: 'No se pudo conectar Checkbook.',
+    disconnectCheckbook: '¿Desconectar Checkbook de este vivero?',
+    checkbookDisconnected: 'Checkbook desconectado.',
+    checkbookDisconnectFailed: 'No se pudo desconectar Checkbook.',
+    loadCheckbookFailed: 'No se pudo cargar el estado de Checkbook.',
+    disconnect: 'Desconectar',
     outboundEmail: 'Correo saliente',
     emailIntro:
       'Las facturas se envían por correo de NurseryOS (Resend). Configure el nombre y correo de respuesta de este vivero. Solo dueño/admin.',

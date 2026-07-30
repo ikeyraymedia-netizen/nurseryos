@@ -90,6 +90,13 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     label: 'Purchasing',
     description: 'Vendor directory, purchase orders, receiving into inventory, and vendor bills.',
     group: 'workspace'
+  },
+  {
+    id: 'billPay',
+    label: 'Vendor ACH Bill Pay',
+    description:
+      'Pay vendor bills online via Checkbook (ACH deposit link emailed to the vendor). Requires Purchasing.',
+    group: 'addon'
   }
 ];
 
@@ -104,7 +111,8 @@ export const OPT_IN_MODULE_IDS: TenantModuleId[] = [
   'profit',
   'payments',
   'quickbooks',
-  'purchasing'
+  'purchasing',
+  'billPay'
 ];
 
 /**
@@ -181,6 +189,7 @@ export function applyModuleGates(
   const payments = mods.has('payments');
   const quickbooks = mods.has('quickbooks');
   const purchasing = mods.has('purchasing');
+  const billPay = mods.has('billPay') && purchasing;
   const ops = orders || trucks;
 
   return {
@@ -219,7 +228,9 @@ export function applyModuleGates(
     canEditVendors: permissions.canEditVendors && purchasing,
     canEditPurchaseOrders: permissions.canEditPurchaseOrders && purchasing,
     canReceivePurchases: permissions.canReceivePurchases && purchasing,
-    canManageVendorBills: permissions.canManageVendorBills && purchasing
+    canManageVendorBills: permissions.canManageVendorBills && purchasing,
+    canManageBillPay: permissions.canManageBillPay && billPay,
+    canPayVendorBills: permissions.canPayVendorBills && billPay
   };
 }
 

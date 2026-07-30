@@ -63,6 +63,7 @@ import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { BillEditModal } from './BillEditModal';
+import { payVendorBillAch, refreshVendorBillPayment } from '../lib/checkbook';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills';
 
@@ -124,6 +125,7 @@ function statusBadge(status: string) {
     received: 'bg-emerald-100 text-emerald-800',
     cancelled: 'bg-rose-100 text-rose-800',
     unpaid: 'bg-amber-100 text-amber-800',
+    payment_pending: 'bg-sky-100 text-sky-800',
     paid: 'bg-emerald-700 text-white'
   };
   return map[status] || 'bg-slate-100 text-slate-700';
@@ -155,6 +157,7 @@ function translateStatus(t: (key: string) => string, status: string): string {
     received: 'purchasing.statusReceived',
     cancelled: 'purchasing.statusCancelled',
     unpaid: 'purchasing.statusUnpaid',
+    payment_pending: 'purchasing.statusPaymentPending',
     paid: 'purchasing.statusPaid'
   };
   const key = map[status];
@@ -283,7 +286,9 @@ export function PurchasingWorkspace({
     for (const bill of bills) {
       const cur = map.get(bill.vendorId) || { count: 0, outstanding: 0 };
       cur.count += 1;
-      if (bill.status !== 'paid') cur.outstanding += bill.grandTotal || 0;
+      if (bill.status !== 'paid' && bill.status !== 'payment_pending') {
+        cur.outstanding += bill.grandTotal || 0;
+      }
       map.set(bill.vendorId, cur);
     }
     return map;
@@ -294,7 +299,7 @@ export function PurchasingWorkspace({
     let overdue = 0;
     const today = todayKey();
     for (const bill of bills) {
-      if (bill.status === 'paid') continue;
+      if (bill.status === 'paid' || bill.status === 'payment_pending') continue;
       outstanding += bill.grandTotal || 0;
       if (bill.dueDate && bill.dueDate < today) overdue += bill.grandTotal || 0;
     }
@@ -755,6 +760,14 @@ export function PurchasingWorkspace({
                 {bill.paidAt ? ` · ${new Date(bill.paidAt).toLocaleDateString()}` : ''}
               </p>
             )}
+            {bill.status === 'payment_pending' && (
+              <p className="text-[11px] font-bold text-sky-800 mt-1">
+                {t('purchasing.achPending', {
+                  recipient: bill.checkbookRecipient || bill.vendorName
+                })}
+                {bill.checkbookPaymentError ? ` · ${bill.checkbookPaymentError}` : ''}
+              </p>
+            )}
             {bill.items?.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {[
@@ -796,8 +809,9 @@ export function PurchasingWorkspace({
             {t('purchasing.viewScannedInvoice')}
           </a>
         )}
-        {permissions.canManageVendorBills && (
+        {permissions.canManageVendorBills || permissions.canPayVendorBills ? (
           <div className="flex flex-wrap gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+            {permissions.canManageVendorBills && (
             <button
               type="button"
               disabled={busy}
@@ -807,7 +821,65 @@ export function PurchasingWorkspace({
               <Pencil className="h-3 w-3" />
               {t('purchasing.edit')}
             </button>
-            {bill.status !== 'paid' && (
+            )}
+            {bill.status === 'unpaid' && permissions.canPayVendorBills && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    const vendor = vendors.find((v) => v.id === bill.vendorId);
+                    let recipientEmail = vendor?.contactEmail?.trim() || '';
+                    if (!recipientEmail) {
+                      const entered = window.prompt(t('purchasing.achRecipientPrompt'), '');
+                      if (!entered?.trim()) return;
+                      recipientEmail = entered.trim();
+                    } else {
+                      const ok = window.confirm(
+                        t('purchasing.achPayConfirm', {
+                          amount: money(bill.grandTotal),
+                          vendor: bill.vendorName,
+                          email: recipientEmail
+                        })
+                      );
+                      if (!ok) return;
+                    }
+                    await payVendorBillAch({
+                      tenantId,
+                      billId: bill.id,
+                      recipientEmail
+                    });
+                    setStatus(t('purchasing.achPaymentSent', { email: recipientEmail }));
+                  })
+                }
+                className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white"
+              >
+                {t('purchasing.payViaAch')}
+              </button>
+            )}
+            {bill.status === 'payment_pending' && permissions.canPayVendorBills && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    const result = await refreshVendorBillPayment({
+                      tenantId,
+                      billId: bill.id
+                    });
+                    setStatus(
+                      t('purchasing.achStatusRefreshed', {
+                        status: result.status || 'unknown'
+                      })
+                    );
+                  })
+                }
+                className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-900"
+              >
+                {t('purchasing.refreshAchStatus')}
+              </button>
+            )}
+            {bill.status !== 'paid' && bill.status !== 'payment_pending' && (
               <button
                 type="button"
                 disabled={busy}
@@ -817,6 +889,7 @@ export function PurchasingWorkspace({
                 {t('purchasing.markPaid')}
               </button>
             )}
+            {permissions.canManageVendorBills && (
             <button
               type="button"
               onClick={() =>
@@ -833,8 +906,9 @@ export function PurchasingWorkspace({
             >
               {t('common.delete')}
             </button>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
     );
   }

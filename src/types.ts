@@ -14,7 +14,8 @@ export type TenantModuleId =
   | 'profit'
   | 'payments'
   | 'quickbooks'
-  | 'purchasing';
+  | 'purchasing'
+  | 'billPay';
 
 export interface Tenant {
   id: string;
@@ -340,7 +341,7 @@ export interface PurchaseOrder {
   updatedAt: string;
 }
 
-export type VendorBillStatus = 'unpaid' | 'paid';
+export type VendorBillStatus = 'unpaid' | 'payment_pending' | 'paid';
 
 /**
  * Optional legacy field from an earlier dual type/category model.
@@ -389,6 +390,13 @@ export interface VendorBill {
   paymentMethod?: PaymentMethod;
   /** Check number or ACH/Wire/CC confirmation / reference. */
   paymentReference?: string;
+  /** Checkbook digital payment id when paid via ACH bill pay. */
+  checkbookPaymentId?: string | null;
+  checkbookPaymentStatus?: string | null;
+  checkbookPaymentNumber?: number | null;
+  checkbookRecipient?: string | null;
+  checkbookDepositOption?: string | null;
+  checkbookPaymentError?: string | null;
   createdAt: string;
   updatedAt: string;
 }

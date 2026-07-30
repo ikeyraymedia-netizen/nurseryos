@@ -31,6 +31,12 @@ import {
   StripeStatus
 } from '../lib/stripe';
 import {
+  CheckbookStatus,
+  connectCheckbook,
+  disconnectCheckbook,
+  fetchCheckbookStatus
+} from '../lib/checkbook';
+import {
   disconnectEmail,
   fetchEmailStatus,
   saveEmailConfig,
@@ -87,6 +93,13 @@ export function TeamManager({
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
+  const [checkbookStatus, setCheckbookStatus] = useState<CheckbookStatus | null>(null);
+  const [checkbookBusy, setCheckbookBusy] = useState(false);
+  const [checkbookError, setCheckbookError] = useState<string | null>(null);
+  const [checkbookPubKey, setCheckbookPubKey] = useState('');
+  const [checkbookSecret, setCheckbookSecret] = useState('');
+  const [checkbookWebhookKey, setCheckbookWebhookKey] = useState('');
+  const [checkbookEnv, setCheckbookEnv] = useState<'sandbox' | 'production'>('sandbox');
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -94,6 +107,7 @@ export function TeamManager({
   const [emailFromName, setEmailFromName] = useState('');
   const paymentsEnabled = tenantHasModule(tenant, 'payments');
   const quickbooksEnabled = tenantHasModule(tenant, 'quickbooks');
+  const billPayEnabled = tenantHasModule(tenant, 'billPay');
 
   async function refreshEmail() {
     try {
@@ -136,6 +150,18 @@ export function TeamManager({
             }
       );
       setQbError(err?.message || t('teamExtra.loadQbFailed'));
+    }
+  }
+
+  async function refreshCheckbook() {
+    try {
+      const status = await fetchCheckbookStatus(tenant.id);
+      setCheckbookStatus(status);
+      if (status.environment) setCheckbookEnv(status.environment);
+      setCheckbookError(null);
+    } catch (err: any) {
+      setCheckbookStatus(null);
+      setCheckbookError(err?.message || t('teamExtra.loadCheckbookFailed'));
     }
   }
 
@@ -210,8 +236,7 @@ export function TeamManager({
       if (!paymentsEnabled) {
         setStripeStatus(null);
         setStripeError(null);
-        return;
-      }
+      } else {
       try {
         const cfg = await fetch('/api/stripe/config-status').then((r) => r.json());
         const ready = Boolean(cfg?.configured);
@@ -236,10 +261,10 @@ export function TeamManager({
           } else {
             setStripeError(t('teamExtra.stripeNotConfigured'));
           }
-          return;
+        } else {
+          setStripeError(null);
+          await refreshStripe();
         }
-        setStripeError(null);
-        await refreshStripe();
       } catch (err: any) {
         setStripeStatus({
           connected: false,
@@ -252,9 +277,22 @@ export function TeamManager({
         });
         setStripeError(err?.message || t('teamExtra.stripeReachFailed'));
       }
+      }
+
+      if (billPayEnabled) {
+        try {
+          await refreshCheckbook();
+        } catch {
+          // refreshCheckbook sets error state
+        }
+      } else {
+        setCheckbookStatus(null);
+        setCheckbookError(null);
+      }
+
       await refreshEmail();
     })();
-  }, [tenant.id, paymentsEnabled, quickbooksEnabled]);
+  }, [tenant.id, paymentsEnabled, quickbooksEnabled, billPayEnabled]);
 
   async function handleConnectStripe() {
     setStripeBusy(true);
@@ -292,6 +330,58 @@ export function TeamManager({
       setStripeError(err?.message || t('teamExtra.stripeDisconnectFailed'));
     } finally {
       setStripeBusy(false);
+    }
+  }
+
+  async function handleConnectCheckbook() {
+    if (!checkbookPubKey.trim() || !checkbookSecret.trim()) {
+      setCheckbookError(t('teamExtra.checkbookKeysRequired'));
+      return;
+    }
+    setCheckbookBusy(true);
+    setCheckbookError(null);
+    setMessage(null);
+    try {
+      const status = await connectCheckbook({
+        tenantId: tenant.id,
+        publishableKey: checkbookPubKey.trim(),
+        secretKey: checkbookSecret.trim(),
+        webhookKey: checkbookWebhookKey.trim() || undefined,
+        environment: checkbookEnv
+      });
+      setCheckbookStatus(status);
+      setCheckbookPubKey('');
+      setCheckbookSecret('');
+      setCheckbookWebhookKey('');
+      void logAuditEvent({
+        action: 'checkbook.connected',
+        summary: `Connected Checkbook (${checkbookEnv})`
+      });
+      setMessage(t('teamExtra.checkbookConnected'));
+    } catch (err: any) {
+      setCheckbookError(err?.message || t('teamExtra.checkbookConnectFailed'));
+    } finally {
+      setCheckbookBusy(false);
+    }
+  }
+
+  async function handleDisconnectCheckbook() {
+    const ok = confirm(t('teamExtra.disconnectCheckbook'));
+    if (!ok) return;
+    setCheckbookBusy(true);
+    setCheckbookError(null);
+    try {
+      await disconnectCheckbook(tenant.id);
+      void logAuditEvent({
+        action: 'checkbook.disconnected',
+        summary: 'Disconnected Checkbook bill pay'
+      });
+      setCheckbookStatus(null);
+      setMessage(t('teamExtra.checkbookDisconnected'));
+    } catch (err: any) {
+      setCheckbookError(err?.message || t('teamExtra.checkbookDisconnectFailed'));
+    } finally {
+      setCheckbookBusy(false);
     }
   }
 
@@ -791,6 +881,88 @@ export function TeamManager({
               )}
               {stripeError && (
                 <p className="text-[11px] text-red-700 leading-relaxed">{stripeError}</p>
+              )}
+            </div>
+          )}
+
+          {billPayEnabled && (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-3 space-y-2">
+              <p className="text-xs font-bold uppercase text-emerald-900">{t('teamExtra.checkbook')}</p>
+              <p className="text-[11px] text-emerald-950/80 leading-relaxed">
+                {t('teamExtra.checkbookIntro')}
+              </p>
+              {checkbookStatus?.connected ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-ink-800">
+                    {t('teamExtra.checkbookConnectedStatus', {
+                      env: checkbookStatus.environment || 'sandbox',
+                      last4: checkbookStatus.publishableKeyLast4 || '····'
+                    })}
+                  </p>
+                  <p className="text-[11px] text-emerald-950/80 break-all">
+                    {t('teamExtra.checkbookWebhookHint')}{' '}
+                    <span className="font-mono">{checkbookStatus.webhookUrl}</span>
+                  </p>
+                  <button
+                    type="button"
+                    disabled={checkbookBusy || busy}
+                    onClick={() => void handleDisconnectCheckbook()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                  >
+                    <Unlink className="h-3.5 w-3.5" />
+                    {t('teamExtra.disconnect')}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold text-emerald-950">
+                    {t('teamExtra.checkbookEnvironment')}
+                    <select
+                      value={checkbookEnv}
+                      onChange={(e) =>
+                        setCheckbookEnv(e.target.value === 'production' ? 'production' : 'sandbox')
+                      }
+                      className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                    >
+                      <option value="sandbox">Sandbox (demo.checkbook.io)</option>
+                      <option value="production">Production (api.checkbook.io)</option>
+                    </select>
+                  </label>
+                  <input
+                    value={checkbookPubKey}
+                    onChange={(e) => setCheckbookPubKey(e.target.value)}
+                    placeholder={t('teamExtra.checkbookPublishable')}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                    autoComplete="off"
+                  />
+                  <input
+                    type="password"
+                    value={checkbookSecret}
+                    onChange={(e) => setCheckbookSecret(e.target.value)}
+                    placeholder={t('teamExtra.checkbookSecret')}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                    autoComplete="off"
+                  />
+                  <input
+                    value={checkbookWebhookKey}
+                    onChange={(e) => setCheckbookWebhookKey(e.target.value)}
+                    placeholder={t('teamExtra.checkbookWebhookKey')}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    disabled={checkbookBusy || busy}
+                    onClick={() => void handleConnectCheckbook()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    {checkbookBusy ? t('common.pleaseWait') : t('teamExtra.connectCheckbook')}
+                  </button>
+                </div>
+              )}
+              {checkbookError && (
+                <p className="text-[11px] text-red-700 leading-relaxed">{checkbookError}</p>
               )}
             </div>
           )}

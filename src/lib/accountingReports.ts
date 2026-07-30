@@ -540,3 +540,334 @@ export function buildExpenseReport(
       .slice(0, 25)
   };
 }
+
+export interface BalanceSheetLine {
+  id: string;
+  section: 'assets' | 'liabilities' | 'equity';
+  amount: number;
+}
+
+export interface BalanceSheetReport {
+  asOf: string;
+  cashEstimated: number;
+  accountsReceivable: number;
+  inventoryAtCost: number;
+  inventoryValuedUnits: number;
+  inventoryUnvaluedUnits: number;
+  totalAssets: number;
+  accountsPayable: number;
+  salesTaxPayable: number;
+  totalLiabilities: number;
+  equity: number;
+  totalLiabilitiesAndEquity: number;
+  balanced: boolean;
+  notes: string[];
+  lines: BalanceSheetLine[];
+}
+
+function plantKey(name: string, size: string): string {
+  return `${String(name || '')
+    .trim()
+    .toLowerCase()}|${String(size || '')
+    .trim()
+    .toLowerCase()}`;
+}
+
+/** Latest known plant unit cost from vendor bills, then invoice lines. */
+function buildPlantCostLookup(
+  documents: CustomerDocument[],
+  bills: VendorBill[]
+): Map<string, { cost: number; at: number }> {
+  const map = new Map<string, { cost: number; at: number }>();
+
+  function consider(key: string, cost: number, atRaw?: string | null) {
+    if (!key || key.startsWith('|') || key.endsWith('|') || cost <= 0) return;
+    const at = parseDate(atRaw)?.getTime() || 0;
+    const prev = map.get(key);
+    if (!prev || at >= prev.at) map.set(key, { cost, at });
+  }
+
+  for (const bill of bills) {
+    for (const line of bill.items || []) {
+      const category = purchaseCategoryLabel(
+        line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
+      );
+      if (!isPlantPurchaseCategory(category)) continue;
+      consider(
+        plantKey(line.plantName, line.containerSize),
+        line.unitCost || 0,
+        bill.billDate || bill.createdAt
+      );
+    }
+  }
+
+  for (const doc of documents) {
+    if (doc.type !== 'invoice') continue;
+    for (const item of doc.items || []) {
+      consider(
+        plantKey(item.plantName, item.containerSize),
+        item.unitCost || 0,
+        doc.documentDate || doc.createdAt
+      );
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Operating balance sheet from NurseryOS data:
+ * cash (receipts − payments), AR, inventory at estimated cost, AP, sales tax payable.
+ * Equity is the balancing figure (assets − liabilities).
+ */
+export function buildBalanceSheet(
+  documents: CustomerDocument[],
+  bills: VendorBill[],
+  inventory: Array<{
+    plantName: string;
+    containerSize: string;
+    quantityAvailable: number;
+  }>,
+  asOf = new Date()
+): BalanceSheetReport {
+  const ar = buildArAging(documents, asOf);
+  const ap = buildApAging(bills, asOf);
+  const cash = buildCashMovement(documents, bills, 'all', asOf);
+
+  const costLookup = buildPlantCostLookup(documents, bills);
+  let inventoryAtCost = 0;
+  let inventoryValuedUnits = 0;
+  let inventoryUnvaluedUnits = 0;
+  for (const plant of inventory) {
+    const qty = Math.max(0, plant.quantityAvailable || 0);
+    if (qty <= 0) continue;
+    const hit = costLookup.get(plantKey(plant.plantName, plant.containerSize));
+    if (hit && hit.cost > 0) {
+      inventoryAtCost += qty * hit.cost;
+      inventoryValuedUnits += qty;
+    } else {
+      inventoryUnvaluedUnits += qty;
+    }
+  }
+
+  let salesTaxPayable = 0;
+  for (const doc of documents) {
+    if (doc.type !== 'invoice') continue;
+    salesTaxPayable += doc.salesTax || 0;
+  }
+
+  const cashEstimated = cash.net;
+  const accountsReceivable = ar.total;
+  const accountsPayable = ap.total;
+  const totalAssets = cashEstimated + accountsReceivable + inventoryAtCost;
+  const totalLiabilities = accountsPayable + salesTaxPayable;
+  const equity = totalAssets - totalLiabilities;
+  const totalLiabilitiesAndEquity = totalLiabilities + equity;
+
+  const notes: string[] = ['bs_operating'];
+  notes.push('bs_cash');
+  if (inventoryUnvaluedUnits > 0) notes.push('bs_inventory');
+  notes.push('bs_tax');
+
+  const lines: BalanceSheetLine[] = [
+    { id: 'cash', section: 'assets', amount: cashEstimated },
+    { id: 'ar', section: 'assets', amount: accountsReceivable },
+    { id: 'inventory', section: 'assets', amount: inventoryAtCost },
+    { id: 'total_assets', section: 'assets', amount: totalAssets },
+    { id: 'ap', section: 'liabilities', amount: accountsPayable },
+    { id: 'sales_tax', section: 'liabilities', amount: salesTaxPayable },
+    { id: 'total_liabilities', section: 'liabilities', amount: totalLiabilities },
+    { id: 'equity', section: 'equity', amount: equity },
+    { id: 'total_liab_equity', section: 'equity', amount: totalLiabilitiesAndEquity }
+  ];
+
+  return {
+    asOf: asOf.toISOString().slice(0, 10),
+    cashEstimated,
+    accountsReceivable,
+    inventoryAtCost,
+    inventoryValuedUnits,
+    inventoryUnvaluedUnits,
+    totalAssets,
+    accountsPayable,
+    salesTaxPayable,
+    totalLiabilities,
+    equity,
+    totalLiabilitiesAndEquity,
+    balanced: Math.abs(totalAssets - totalLiabilitiesAndEquity) < 0.01,
+    notes,
+    lines
+  };
+}
+
+export type CsvRow = Record<string, string | number>;
+
+function csvEscape(value: unknown): string {
+  const raw = value == null ? '' : String(value);
+  if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
+  return raw;
+}
+
+export function rowsToCsv(rows: CsvRow[]): string {
+  if (rows.length === 0) return '';
+  const headers = Object.keys(rows[0]);
+  return [
+    headers.join(','),
+    ...rows.map((row) => headers.map((h) => csvEscape(row[h])).join(','))
+  ].join('\n');
+}
+
+export function downloadCsv(filename: string, rows: CsvRow[]) {
+  const blob = new Blob([rowsToCsv(rows)], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function exportProfitAndLossCsv(
+  pnl: PlReport,
+  labels: {
+    period: string;
+    grossRevenue: string;
+    salesTax: string;
+    netSales: string;
+    freight: string;
+    discounts: string;
+    cogs: string;
+    grossProfit: string;
+    opEx: string;
+    netOperating: string;
+    category: string;
+    amount: string;
+    section: string;
+    line: string;
+  }
+): CsvRow[] {
+  const rows: CsvRow[] = [
+    { [labels.section]: 'Period', [labels.line]: labels.period, [labels.amount]: '' },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.grossRevenue,
+      [labels.amount]: Number(pnl.revenue.toFixed(2))
+    },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.salesTax,
+      [labels.amount]: Number((-pnl.salesTax).toFixed(2))
+    },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.netSales,
+      [labels.amount]: Number((pnl.revenue - pnl.salesTax).toFixed(2))
+    },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.freight,
+      [labels.amount]: Number(pnl.freightIncome.toFixed(2))
+    },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.discounts,
+      [labels.amount]: Number((-pnl.discounts).toFixed(2))
+    },
+    {
+      [labels.section]: 'COGS',
+      [labels.line]: labels.cogs,
+      [labels.amount]: Number((-pnl.cogs).toFixed(2))
+    },
+    {
+      [labels.section]: 'Profit',
+      [labels.line]: labels.grossProfit,
+      [labels.amount]: Number(pnl.grossProfit.toFixed(2))
+    },
+    {
+      [labels.section]: 'Expenses',
+      [labels.line]: labels.opEx,
+      [labels.amount]: Number((-pnl.operatingExpenses).toFixed(2))
+    },
+    {
+      [labels.section]: 'Profit',
+      [labels.line]: labels.netOperating,
+      [labels.amount]: Number(pnl.netOperating.toFixed(2))
+    }
+  ];
+  for (const row of pnl.expensesByCategory) {
+    rows.push({
+      [labels.section]: 'Expense detail',
+      [labels.line]: row.category,
+      [labels.amount]: Number(row.amount.toFixed(2))
+    });
+  }
+  return rows;
+}
+
+export function exportBalanceSheetCsv(
+  bs: BalanceSheetReport,
+  labels: {
+    asOf: string;
+    section: string;
+    line: string;
+    amount: string;
+    cash: string;
+    ar: string;
+    inventory: string;
+    totalAssets: string;
+    ap: string;
+    salesTax: string;
+    totalLiabilities: string;
+    equity: string;
+    totalLiabEquity: string;
+  }
+): CsvRow[] {
+  return [
+    { [labels.section]: 'As of', [labels.line]: labels.asOf, [labels.amount]: '' },
+    {
+      [labels.section]: 'Assets',
+      [labels.line]: labels.cash,
+      [labels.amount]: Number(bs.cashEstimated.toFixed(2))
+    },
+    {
+      [labels.section]: 'Assets',
+      [labels.line]: labels.ar,
+      [labels.amount]: Number(bs.accountsReceivable.toFixed(2))
+    },
+    {
+      [labels.section]: 'Assets',
+      [labels.line]: labels.inventory,
+      [labels.amount]: Number(bs.inventoryAtCost.toFixed(2))
+    },
+    {
+      [labels.section]: 'Assets',
+      [labels.line]: labels.totalAssets,
+      [labels.amount]: Number(bs.totalAssets.toFixed(2))
+    },
+    {
+      [labels.section]: 'Liabilities',
+      [labels.line]: labels.ap,
+      [labels.amount]: Number(bs.accountsPayable.toFixed(2))
+    },
+    {
+      [labels.section]: 'Liabilities',
+      [labels.line]: labels.salesTax,
+      [labels.amount]: Number(bs.salesTaxPayable.toFixed(2))
+    },
+    {
+      [labels.section]: 'Liabilities',
+      [labels.line]: labels.totalLiabilities,
+      [labels.amount]: Number(bs.totalLiabilities.toFixed(2))
+    },
+    {
+      [labels.section]: 'Equity',
+      [labels.line]: labels.equity,
+      [labels.amount]: Number(bs.equity.toFixed(2))
+    },
+    {
+      [labels.section]: 'Equity',
+      [labels.line]: labels.totalLiabEquity,
+      [labels.amount]: Number(bs.totalLiabilitiesAndEquity.toFixed(2))
+    }
+  ];
+}

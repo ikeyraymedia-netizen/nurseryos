@@ -745,6 +745,7 @@ export function ReportsWorkspace({
           <AccountingReportsPanel
             documents={documents}
             bills={vendorBills}
+            inventory={inventory}
             canViewPurchasing={permissions.canViewPurchasing}
           />
         ) : (

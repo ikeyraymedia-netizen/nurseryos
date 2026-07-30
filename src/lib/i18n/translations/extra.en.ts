@@ -437,16 +437,17 @@ const extra = {
     tabSales: 'Sales',
     tabAccounting: 'Accounting',
     subtitleAccounting:
-      'Fixed operating statements from invoices and vendor bills — AR, AP, P&L, tax, and cash.',
+      'Fixed operating statements from invoices and vendor bills — P&L, balance sheet, AR, AP, tax, and cash. Export P&L and balance sheet to CSV.',
     acctIntroTitle: 'Accounting pack',
     acctIntroBody:
-      'These reports use your NurseryOS invoices and vendor bills. They cover day-to-day operating accounting so you can run without QuickBooks for sales, receivables, payables, tax collected, and spend. They are not a full GAAP ledger or bank reconciliation.',
+      'These reports use your NurseryOS invoices, vendor bills, and inventory. They cover day-to-day operating accounting — P&L, balance sheet, receivables, payables, tax collected, and spend — with CSV export for P&L and the balance sheet. They are not a full GAAP ledger or bank reconciliation.',
     acctPeriod: 'Period',
     acctPeriodMonth: 'This month',
     acctPeriodQuarter: 'This quarter',
     acctPeriodYear: 'This year',
     acctPeriodAll: 'All time',
     acctPnl: 'P&L',
+    acctBalance: 'Balance sheet',
     acctAr: 'AR aging',
     acctAp: 'AP aging',
     acctTax: 'Sales tax',
@@ -508,7 +509,32 @@ const extra = {
     acctTotalSpend: 'Total vendor spend',
     acctByCategory: 'Spend by category',
     acctByVendor: 'Spend by vendor',
-    acctExpensesEmpty: 'No vendor bills in this period.'
+    acctExpensesEmpty: 'No vendor bills in this period.',
+    acctExportCsv: 'Export CSV',
+    acctSection: 'Section',
+    acctLine: 'Line',
+    acctBsTitle: 'Balance sheet',
+    acctBsSubtitle: 'As of {{asOf}}',
+    acctBsAssets: 'Assets',
+    acctBsLiabEquity: 'Liabilities & equity',
+    acctBsCash: 'Cash (estimated from NurseryOS)',
+    acctBsAr: 'Accounts receivable',
+    acctBsInventory: 'Inventory at cost',
+    acctBsInventoryHint: '{{valued}} valued · {{unvalued}} without cost',
+    acctBsTotalAssets: 'Total assets',
+    acctBsAp: 'Accounts payable',
+    acctBsSalesTax: 'Sales tax payable',
+    acctBsTotalLiabilities: 'Total liabilities',
+    acctBsEquity: "Owner's equity (balancing)",
+    acctBsTotalLiabEquity: 'Total liabilities & equity',
+    acctBsNoteOperating:
+      'Operating balance sheet from NurseryOS invoices, bills, and inventory — not a full GAAP statement.',
+    acctBsNoteCash:
+      'Cash is estimated as all-time paid invoice receipts minus paid vendor bills. Connect your bank separately for true cash.',
+    acctBsNoteInventory:
+      '{{unvalued}} on-hand unit(s) have no plant cost yet — enter costs on invoices or plant vendor bills to value them.',
+    acctBsNoteTax:
+      'Sales tax payable is tax charged on invoices. NurseryOS does not track remittances to the state — reduce this when you file/pay.'
   },
   bol: {
     title: 'Bill of Lading',

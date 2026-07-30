@@ -442,16 +442,17 @@ const extra = {
     tabSales: 'Ventas',
     tabAccounting: 'Contabilidad',
     subtitleAccounting:
-      'Estados operativos fijos de facturas y facturas de proveedores — CxC, CxP, P&G, impuestos y efectivo.',
+      'Estados operativos fijos de facturas y facturas de proveedores — P&G, balance, CxC, CxP, impuestos y efectivo. Exporte P&G y balance a CSV.',
     acctIntroTitle: 'Paquete contable',
     acctIntroBody:
-      'Estos reportes usan las facturas y facturas de proveedores de NurseryOS. Cubren la contabilidad operativa diaria para que pueda trabajar sin QuickBooks en ventas, cuentas por cobrar, por pagar, impuestos cobrados y gastos. No son un libro GAAP completo ni una conciliación bancaria.',
+      'Estos reportes usan las facturas, facturas de proveedores e inventario de NurseryOS. Cubren la contabilidad operativa diaria — P&G, balance general, cuentas por cobrar, por pagar, impuestos cobrados y gastos — con exportación CSV del P&G y el balance. No son un libro GAAP completo ni una conciliación bancaria.',
     acctPeriod: 'Período',
     acctPeriodMonth: 'Este mes',
     acctPeriodQuarter: 'Este trimestre',
     acctPeriodYear: 'Este año',
     acctPeriodAll: 'Todo el tiempo',
     acctPnl: 'P&G',
+    acctBalance: 'Balance general',
     acctAr: 'Antigüedad CxC',
     acctAp: 'Antigüedad CxP',
     acctTax: 'Impuesto sobre ventas',
@@ -515,7 +516,32 @@ const extra = {
     acctTotalSpend: 'Gasto total a proveedores',
     acctByCategory: 'Gasto por categoría',
     acctByVendor: 'Gasto por proveedor',
-    acctExpensesEmpty: 'No hay facturas de proveedores en este período.'
+    acctExpensesEmpty: 'No hay facturas de proveedores en este período.',
+    acctExportCsv: 'Exportar CSV',
+    acctSection: 'Sección',
+    acctLine: 'Línea',
+    acctBsTitle: 'Balance general',
+    acctBsSubtitle: 'Al {{asOf}}',
+    acctBsAssets: 'Activos',
+    acctBsLiabEquity: 'Pasivos y patrimonio',
+    acctBsCash: 'Efectivo (estimado desde NurseryOS)',
+    acctBsAr: 'Cuentas por cobrar',
+    acctBsInventory: 'Inventario al costo',
+    acctBsInventoryHint: '{{valued}} valorizadas · {{unvalued}} sin costo',
+    acctBsTotalAssets: 'Total de activos',
+    acctBsAp: 'Cuentas por pagar',
+    acctBsSalesTax: 'Impuesto sobre ventas por pagar',
+    acctBsTotalLiabilities: 'Total de pasivos',
+    acctBsEquity: 'Patrimonio del dueño (balanceo)',
+    acctBsTotalLiabEquity: 'Total pasivos y patrimonio',
+    acctBsNoteOperating:
+      'Balance operativo de facturas, facturas de proveedores e inventario de NurseryOS — no es un estado GAAP completo.',
+    acctBsNoteCash:
+      'El efectivo se estima como cobros de facturas pagadas menos pagos a proveedores (todo el tiempo). Conecte su banco por separado para el efectivo real.',
+    acctBsNoteInventory:
+      '{{unvalued}} unidad(es) en mano aún no tienen costo — ingrese costos en facturas o facturas de plantas de proveedores para valorizarlas.',
+    acctBsNoteTax:
+      'El impuesto por pagar es el impuesto cobrado en facturas. NurseryOS no registra remesas al estado — redúzcalo cuando declare/pague.'
   },
   bol: {
     title: 'Conocimiento de embarque',

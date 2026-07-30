@@ -3,26 +3,33 @@ import {
   Building2,
   Calculator,
   CreditCard,
+  Download,
   FileSpreadsheet,
   Landmark,
   Receipt,
+  Scale,
   Wallet
 } from 'lucide-react';
-import { CustomerDocument, VendorBill } from '../types';
+import { CustomerDocument, InventoryPlant, VendorBill } from '../types';
 import { useT } from '../lib/i18n';
 import {
   AccountingPeriod,
   AgingBucketId,
   buildApAging,
   buildArAging,
+  buildBalanceSheet,
   buildCashMovement,
   buildExpenseReport,
   buildProfitAndLoss,
-  buildSalesTaxReport
+  buildSalesTaxReport,
+  downloadCsv,
+  exportBalanceSheetCsv,
+  exportProfitAndLossCsv
 } from '../lib/accountingReports';
 
 type AccountingReportId =
   | 'pnl'
+  | 'balance'
   | 'ar'
   | 'ap'
   | 'tax'
@@ -32,6 +39,7 @@ type AccountingReportId =
 interface AccountingReportsPanelProps {
   documents: CustomerDocument[];
   bills: VendorBill[];
+  inventory: InventoryPlant[];
   canViewPurchasing: boolean;
 }
 
@@ -52,6 +60,7 @@ function pct(n: number) {
 export function AccountingReportsPanel({
   documents,
   bills,
+  inventory,
   canViewPurchasing
 }: AccountingReportsPanelProps) {
   const t = useT();
@@ -72,6 +81,7 @@ export function AccountingReportsPanel({
     needsPurchasing?: boolean;
   }> = [
     { id: 'pnl', label: t('reports.acctPnl'), icon: Calculator },
+    { id: 'balance', label: t('reports.acctBalance'), icon: Scale },
     { id: 'ar', label: t('reports.acctAr'), icon: Building2 },
     { id: 'ap', label: t('reports.acctAp'), icon: Landmark, needsPurchasing: true },
     { id: 'tax', label: t('reports.acctTax'), icon: Receipt },
@@ -94,6 +104,10 @@ export function AccountingReportsPanel({
     () => buildProfitAndLoss(documents, bills, period),
     [documents, bills, period]
   );
+  const balance = useMemo(
+    () => buildBalanceSheet(documents, bills, inventory),
+    [documents, bills, inventory]
+  );
   const ar = useMemo(() => buildArAging(documents), [documents]);
   const ap = useMemo(() => buildApAging(bills), [bills]);
   const tax = useMemo(() => buildSalesTaxReport(documents, period), [documents, period]);
@@ -105,8 +119,57 @@ export function AccountingReportsPanel({
 
   const showPeriod = reportId === 'pnl' || reportId === 'tax' || reportId === 'cash' || reportId === 'expenses';
   const needsPurchasing =
-    reportId === 'ap' || reportId === 'expenses' || reportId === 'pnl' || reportId === 'cash';
+    reportId === 'ap' ||
+    reportId === 'expenses' ||
+    reportId === 'pnl' ||
+    reportId === 'cash' ||
+    reportId === 'balance';
   const missingPurchasing = needsPurchasing && !canViewPurchasing;
+
+  function exportPnl() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(
+      `profit-and-loss-${period}-${stamp}.csv`,
+      exportProfitAndLossCsv(pnl, {
+        period: periodLabel,
+        grossRevenue: t('reports.acctGrossRevenue'),
+        salesTax: t('reports.acctLessSalesTax'),
+        netSales: t('reports.acctNetSales'),
+        freight: t('reports.acctFreightIncome'),
+        discounts: t('reports.acctDiscounts'),
+        cogs: t('reports.acctCogs'),
+        grossProfit: t('reports.acctGrossProfit'),
+        opEx: t('reports.acctOpEx'),
+        netOperating: t('reports.acctNetOperating'),
+        category: t('reports.acctCategory'),
+        amount: t('reports.acctAmount'),
+        section: t('reports.acctSection'),
+        line: t('reports.acctLine')
+      })
+    );
+  }
+
+  function exportBalance() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(
+      `balance-sheet-${balance.asOf}.csv`,
+      exportBalanceSheetCsv(balance, {
+        asOf: balance.asOf,
+        section: t('reports.acctSection'),
+        line: t('reports.acctLine'),
+        amount: t('reports.acctAmount'),
+        cash: t('reports.acctBsCash'),
+        ar: t('reports.acctBsAr'),
+        inventory: t('reports.acctBsInventory'),
+        totalAssets: t('reports.acctBsTotalAssets'),
+        ap: t('reports.acctBsAp'),
+        salesTax: t('reports.acctBsSalesTax'),
+        totalLiabilities: t('reports.acctBsTotalLiabilities'),
+        equity: t('reports.acctBsEquity'),
+        totalLiabEquity: t('reports.acctBsTotalLiabEquity')
+      })
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -174,6 +237,9 @@ export function AccountingReportsPanel({
 
       {reportId === 'pnl' && (
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportPnl} />
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard label={t('reports.acctNetSales')} value={money(pnl.revenue - pnl.salesTax)} hint={periodLabel} />
             <StatCard label={t('reports.acctCogs')} value={money(pnl.cogs)} hint={t('reports.acctInvoiceCount', { n: pnl.invoiceCount })} />
@@ -248,6 +314,88 @@ export function AccountingReportsPanel({
                     : note === 'cogs_empty'
                       ? t('reports.acctNoteCogsEmpty')
                       : note}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {reportId === 'balance' && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-slate-900">{t('reports.acctBsTitle')}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {t('reports.acctBsSubtitle', { asOf: balance.asOf })}
+              </p>
+            </div>
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportBalance} />
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard label={t('reports.acctBsTotalAssets')} value={money(balance.totalAssets)} emphasize />
+            <StatCard label={t('reports.acctBsTotalLiabilities')} value={money(balance.totalLiabilities)} />
+            <StatCard label={t('reports.acctBsEquity')} value={money(balance.equity)} />
+            <StatCard
+              label={t('reports.acctBsInventory')}
+              value={money(balance.inventoryAtCost)}
+              hint={t('reports.acctBsInventoryHint', {
+                valued: balance.inventoryValuedUnits,
+                unvalued: balance.inventoryUnvaluedUnits
+              })}
+            />
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <p className="text-xs font-bold text-slate-800">{t('reports.acctBsAssets')}</p>
+              </div>
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-slate-100">
+                  <PlRow label={t('reports.acctBsCash')} amount={balance.cashEstimated} />
+                  <PlRow label={t('reports.acctBsAr')} amount={balance.accountsReceivable} />
+                  <PlRow label={t('reports.acctBsInventory')} amount={balance.inventoryAtCost} />
+                  <PlRow label={t('reports.acctBsTotalAssets')} amount={balance.totalAssets} bold emphasize />
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <p className="text-xs font-bold text-slate-800">{t('reports.acctBsLiabEquity')}</p>
+              </div>
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-slate-100">
+                  <PlRow label={t('reports.acctBsAp')} amount={balance.accountsPayable} />
+                  <PlRow label={t('reports.acctBsSalesTax')} amount={balance.salesTaxPayable} />
+                  <PlRow label={t('reports.acctBsTotalLiabilities')} amount={balance.totalLiabilities} bold />
+                  <PlRow label={t('reports.acctBsEquity')} amount={balance.equity} />
+                  <PlRow
+                    label={t('reports.acctBsTotalLiabEquity')}
+                    amount={balance.totalLiabilitiesAndEquity}
+                    bold
+                    emphasize
+                  />
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <ul className="space-y-1">
+            {balance.notes.map((note) => (
+              <li key={note} className="text-[11px] text-slate-500 leading-relaxed">
+                •{' '}
+                {note === 'bs_operating'
+                  ? t('reports.acctBsNoteOperating')
+                  : note === 'bs_cash'
+                    ? t('reports.acctBsNoteCash')
+                    : note === 'bs_inventory'
+                      ? t('reports.acctBsNoteInventory', {
+                          unvalued: balance.inventoryUnvaluedUnits
+                        })
+                      : note === 'bs_tax'
+                        ? t('reports.acctBsNoteTax')
+                        : note}
               </li>
             ))}
           </ul>
@@ -421,6 +569,19 @@ export function AccountingReportsPanel({
         </div>
       )}
     </div>
+  );
+}
+
+function ExportButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+    >
+      <Download className="h-3.5 w-3.5" />
+      {label}
+    </button>
   );
 }
 

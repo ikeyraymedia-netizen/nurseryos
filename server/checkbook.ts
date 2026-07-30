@@ -432,17 +432,18 @@ export function registerCheckbookRoutes(app: Express) {
 
       const now = new Date().toISOString();
       const existing = await loadIntegration(tenantId);
+      const resolvedWebhook = webhookKey || existing?.webhookKey || '';
       const payload: CheckbookIntegration = {
         provider: 'checkbook',
         publishableKey: keys.publishableKey,
         secretKey: keys.secretKey,
-        webhookKey: webhookKey || existing?.webhookKey || undefined,
         environment,
         apiBase,
         connectedAt: existing?.connectedAt || now,
         connectedByUserId: uid,
         updatedAt: now,
-        publishableKeyLast4: last4(keys.publishableKey)
+        publishableKeyLast4: last4(keys.publishableKey),
+        ...(resolvedWebhook ? { webhookKey: resolvedWebhook } : {})
       };
       await integrationRef(tenantId).set(payload, { merge: true });
 
@@ -451,7 +452,7 @@ export function registerCheckbookRoutes(app: Express) {
         environment,
         apiBase,
         publishableKeyLast4: payload.publishableKeyLast4,
-        hasWebhookKey: Boolean(payload.webhookKey),
+        hasWebhookKey: Boolean(resolvedWebhook),
         connectedAt: payload.connectedAt,
         webhookUrl: `${(process.env.APP_URL || 'https://nurseryos.app').replace(/\/$/, '')}/api/checkbook/webhook?tenantId=${encodeURIComponent(tenantId)}`
       });

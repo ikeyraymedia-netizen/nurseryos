@@ -22,7 +22,8 @@ import {
 import {
   decodeBase64Text,
   isPlainTextMime,
-  parseOrderTextLocally
+  parseOrderTextLocally,
+  localParseLooksIncomplete
 } from './server/orderTextParse';
 
 dotenv.config();
@@ -416,13 +417,21 @@ app.post('/api/parse-order', async (req, res) => {
     }
 
     // Pasted plain text: parse locally first so upload works even when Gemini is slow/down.
+    // If local parse looks incomplete (e.g. one merged line), fall through to AI.
+    let localFallback: ReturnType<typeof parseOrderTextLocally> = null;
     if (looksLikeText) {
       const textBody = providedText || (base64Data ? decodeBase64Text(base64Data) : '');
       const local = parseOrderTextLocally(textBody);
-      if (local) {
+      localFallback = local;
+      if (local && !localParseLooksIncomplete(textBody, local)) {
         console.log(`Parsed pasted order locally (${local.items.length} items).`);
         res.json(local);
         return;
+      }
+      if (local) {
+        console.log(
+          `Local paste parse looks incomplete (${local.items.length} items) — trying AI.`
+        );
       }
     }
 
@@ -491,9 +500,33 @@ Return your response in structured JSON format matching the schema provided.`;
     } catch {
       throw new Error('AI returned invalid JSON. Please try uploading again.');
     }
+    const aiItems = Array.isArray(parsedData?.items) ? parsedData.items : [];
+    if (
+      localFallback &&
+      localFallback.items.length > aiItems.length
+    ) {
+      console.log(
+        `AI returned ${aiItems.length} items; keeping stronger local parse (${localFallback.items.length}).`
+      );
+      res.json(localFallback);
+      return;
+    }
     res.json(parsedData);
   } catch (error: any) {
     console.error('Error parsing order with Gemini:', error);
+    // Prefer any local paste parse over a hard failure.
+    try {
+      const raw =
+        typeof req.body?.orderText === 'string' ? req.body.orderText : '';
+      const local = raw.trim() ? parseOrderTextLocally(raw) : null;
+      if (local && local.items.length > 0) {
+        console.log(`Gemini failed; returning local paste parse (${local.items.length} items).`);
+        res.json(local);
+        return;
+      }
+    } catch {
+      // ignore and continue with normal error response
+    }
     const msg = String(error?.message || error || '');
     if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
       res.status(500).json({

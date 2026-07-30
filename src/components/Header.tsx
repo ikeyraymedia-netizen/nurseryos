@@ -5,7 +5,6 @@ import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../
 import { BrandLogo } from './BrandLogo';
 import { getMemberRoles } from '../lib/permissions';
 import { useRoleLabel, useT } from '../lib/i18n';
-import { AppLocale, useT } from '../lib/i18n';
 
 interface HeaderProps {
   orders: CustomerOrder[];

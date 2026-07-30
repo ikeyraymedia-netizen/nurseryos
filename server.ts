@@ -1012,6 +1012,224 @@ ${snapshot}`;
   }
 });
 
+type PromoFormat = 'email' | 'social' | 'sms';
+type PromoAudience = 'wholesale' | 'retail' | 'ready';
+
+async function fetchImageAsInlineData(
+  photoUrl: string
+): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const url = String(photoUrl || '').trim();
+    if (!/^https?:\/\//i.test(url)) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!resp.ok) return null;
+    const contentType = String(resp.headers.get('content-type') || 'image/jpeg')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    const mimeType =
+      contentType === 'image/png' || contentType === 'image/webp' || contentType === 'image/jpeg'
+        ? contentType
+        : 'image/jpeg';
+    const buf = Buffer.from(await resp.arrayBuffer());
+    if (buf.length < 100 || buf.length > 8 * 1024 * 1024) return null;
+    return { mimeType, data: buf.toString('base64') };
+  } catch {
+    return null;
+  }
+}
+
+app.post('/api/generate-plant-promo', async (req, res) => {
+  try {
+    const {
+      plantName,
+      containerSize,
+      quantityAvailable,
+      category,
+      listPrice,
+      notes,
+      photoUrl,
+      nurseryName,
+      format,
+      audience,
+      locale
+    } = req.body || {};
+
+    const name = typeof plantName === 'string' ? plantName.trim() : '';
+    if (!name) {
+      res.status(400).json({ error: 'Missing plant name.' });
+      return;
+    }
+
+    const fmt: PromoFormat =
+      format === 'email' || format === 'sms' || format === 'social' ? format : 'social';
+    const aud: PromoAudience =
+      audience === 'retail' || audience === 'ready' || audience === 'wholesale'
+        ? audience
+        : 'wholesale';
+    const lang = locale === 'es' ? 'es' : 'en';
+    const nursery =
+      typeof nurseryName === 'string' && nurseryName.trim() ? nurseryName.trim() : 'our nursery';
+
+    const facts = [
+      `Plant: ${name}`,
+      containerSize ? `Container size: ${containerSize}` : null,
+      quantityAvailable != null && quantityAvailable !== ''
+        ? `Quantity available: ${quantityAvailable}`
+        : null,
+      category ? `Category: ${category}` : null,
+      listPrice != null && listPrice !== '' ? `List price: $${Number(listPrice).toFixed(2)}` : null,
+      notes ? `Notes: ${String(notes).slice(0, 240)}` : null
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const formatGuide =
+      fmt === 'email'
+        ? 'Write a short customer email: subject line + body (2–4 short paragraphs). Friendly wholesale nursery tone. Include a soft call to action to inquire or order.'
+        : fmt === 'sms'
+          ? 'Write a short SMS / text blast (under 280 characters). One hook + plant + size + call to action. No hashtags.'
+          : 'Write an Instagram/Facebook caption (2–5 short lines) plus 5–10 relevant hashtags on the last line. Conversational, not corporate.';
+
+    const audienceGuide =
+      aud === 'retail'
+        ? 'Audience: homeowners / retail garden customers.'
+        : aud === 'ready'
+          ? 'Audience: landscapers and buyers looking for material ready to load now.'
+          : 'Audience: wholesale landscapers, garden centers, and contractors.';
+
+    const languageGuide =
+      lang === 'es'
+        ? 'Write the entire response in Spanish (Mexico/US nursery Spanish is fine).'
+        : 'Write the entire response in English.';
+
+    const prompt = `You are a marketing assistant for "${nursery}", a plant nursery using NurseryOS.
+
+${languageGuide}
+${formatGuide}
+${audienceGuide}
+
+Use ONLY these plant facts (do not invent availability, prices, or botanical claims beyond what's given):
+${facts}
+
+${photoUrl ? 'A plant photo is attached when available — reference the look only if the image is present.' : 'No photo was provided.'}
+
+Return JSON only with this shape:
+{
+  "headline": "short headline or subject",
+  "body": "main email body or social caption without hashtags",
+  "hashtags": "optional space-separated hashtags for social, else empty string",
+  "imageTip": "one short tip for how to use the photo in the post/email"
+}`;
+
+    const ai = getAiClient();
+    const imagePart = typeof photoUrl === 'string' ? await fetchImageAsInlineData(photoUrl) : null;
+
+    const contents: any[] = [];
+    if (imagePart) {
+      contents.push({
+        inlineData: {
+          mimeType: imagePart.mimeType,
+          data: imagePart.data
+        }
+      });
+    }
+    contents.push(prompt);
+
+    let lastError: any = null;
+    let parsed: {
+      headline?: string;
+      body?: string;
+      hashtags?: string;
+      imageTip?: string;
+    } | null = null;
+
+    for (const model of PARSE_MODELS) {
+      try {
+        console.log(`Generating plant promo with ${model}...`);
+        const response = await withTimeout(
+          ai.models.generateContent({
+            model,
+            contents,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  headline: { type: Type.STRING },
+                  body: { type: Type.STRING },
+                  hashtags: { type: Type.STRING },
+                  imageTip: { type: Type.STRING }
+                },
+                required: ['headline', 'body', 'hashtags', 'imageTip']
+              }
+            }
+          }),
+          `Plant promo (${model})`,
+          GEMINI_REQUEST_TIMEOUT_MS
+        );
+        const text = (response.text || '').trim();
+        if (!text) throw new Error('Empty promo response.');
+        const cleaned = text
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/\s*```$/i, '')
+          .trim();
+        parsed = JSON.parse(cleaned);
+        if (parsed?.body) break;
+        throw new Error('Promo JSON missing body.');
+      } catch (err: any) {
+        lastError = err;
+        if (isSkippableModelError(err) || isRetryableModelError(err)) {
+          console.warn(`${model} unavailable/busy for plant promo, trying fallback...`);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!parsed?.body) {
+      throw lastError || new Error('Failed to generate plant promo.');
+    }
+
+    res.json({
+      headline: String(parsed.headline || '').trim(),
+      body: String(parsed.body || '').trim(),
+      hashtags: String(parsed.hashtags || '').trim(),
+      imageTip: String(parsed.imageTip || '').trim(),
+      photoUrl: typeof photoUrl === 'string' ? photoUrl : null,
+      usedPhoto: Boolean(imagePart),
+      format: fmt,
+      audience: aud,
+      locale: lang
+    });
+  } catch (error: any) {
+    console.error('Error generating plant promo:', error);
+    const msg = String(error?.message || error || '');
+    if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
+      res.status(500).json({
+        error: 'GEMINI_API_KEY is missing on the server. Add it in Railway → Variables, then redeploy.',
+        details: msg
+      });
+      return;
+    }
+    const statusCode = getApiStatusCode(error);
+    if (statusCode === 429 || statusCode === 503) {
+      res.status(503).json({
+        error: 'AI service is temporarily busy. Please try again in a few seconds.',
+        details: msg
+      });
+      return;
+    }
+    res.status(500).json({
+      error: 'Failed to generate marketing copy.',
+      details: msg
+    });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

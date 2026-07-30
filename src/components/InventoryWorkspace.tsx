@@ -14,7 +14,8 @@ import {
   FileSpreadsheet,
   FileText,
   ImageIcon,
-  Building2
+  Building2,
+  Megaphone
 } from 'lucide-react';
 import { CustomerOrder, InventoryPlant, Truck as TruckType, Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
@@ -39,6 +40,7 @@ import {
   uploadInventoryPlantPhoto
 } from '../lib/inventoryPhotos';
 import { PdfShareSheet } from './PdfShareSheet';
+import { PlantPromoModal } from './PlantPromoModal';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 
@@ -162,6 +164,7 @@ export function InventoryWorkspace({
   const [fertDate, setFertDate] = useState(new Date().toISOString().split('T')[0]);
   const [fertNotes, setFertNotes] = useState('');
   const [sourceCustomMode, setSourceCustomMode] = useState(false);
+  const [promoPlant, setPromoPlant] = useState<InventoryPlant | null>(null);
 
   useEffect(() => {
     return subscribeToInventory(setPlants);
@@ -990,7 +993,25 @@ export function InventoryWorkspace({
                         {t('inventory.remove')}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setPromoPlant(selected)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-ink-200 bg-ink-50 text-[11px] font-bold text-ink-800 hover:bg-ink-100"
+                    >
+                      <Megaphone className="h-3.5 w-3.5" />
+                      {t('inventory.promoCreate')}
+                    </button>
                   </div>
+                )}
+                {!permissions.canEditInventory && (
+                  <button
+                    type="button"
+                    onClick={() => setPromoPlant(selected)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-ink-200 bg-ink-50 text-[11px] font-bold text-ink-800 hover:bg-ink-100"
+                  >
+                    <Megaphone className="h-3.5 w-3.5" />
+                    {t('inventory.promoCreate')}
+                  </button>
                 )}
               </div>
 
@@ -1284,6 +1305,14 @@ export function InventoryWorkspace({
           blob={pdfSheet.blob}
           title={t('inventory.pdfReady')}
           onClose={() => setPdfSheet(null)}
+        />
+      )}
+
+      {promoPlant && (
+        <PlantPromoModal
+          plant={promoPlant}
+          nurseryName={nurseryName}
+          onClose={() => setPromoPlant(null)}
         />
       )}
     </div>

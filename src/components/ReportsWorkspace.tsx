@@ -14,12 +14,14 @@ import {
   DollarSign,
   FileText
 } from 'lucide-react';
-import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument } from '../types';
+import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument, VendorBill } from '../types';
 import { useLocale, useT } from '../lib/i18n';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
 import { listAllDocuments, subscribeToDocuments } from '../lib/documents';
 import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
+import { subscribeToVendorBills } from '../lib/purchasing';
+import { AccountingReportsPanel } from './AccountingReportsPanel';
 
 interface ReportsWorkspaceProps {
   orders: CustomerOrder[];
@@ -499,6 +501,8 @@ export function ReportsWorkspace({
   const [copied, setCopied] = useState(false);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [vendorBills, setVendorBills] = useState<VendorBill[]>([]);
+  const [viewMode, setViewMode] = useState<'sales' | 'accounting'>('sales');
 
   useEffect(() => {
     if (!permissions.canViewInventory) {
@@ -507,6 +511,14 @@ export function ReportsWorkspace({
     }
     return subscribeToInventory(setInventory);
   }, [permissions.canViewInventory]);
+
+  useEffect(() => {
+    if (!permissions.canViewPurchasing) {
+      setVendorBills([]);
+      return;
+    }
+    return subscribeToVendorBills(setVendorBills);
+  }, [permissions.canViewPurchasing]);
 
   useEffect(() => {
     if (!permissions.canViewReports) {
@@ -685,7 +697,9 @@ export function ReportsWorkspace({
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-black tracking-tight">{t('reports.title')}</h2>
-            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">{t('reports.subtitle')}</p>
+            <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+              {viewMode === 'accounting' ? t('reports.subtitleAccounting') : t('reports.subtitle')}
+            </p>
           </div>
         </div>
         <button
@@ -702,6 +716,39 @@ export function ReportsWorkspace({
       </div>
 
       <div className="p-5 space-y-5 flex-1 flex flex-col">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setViewMode('sales')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border ${
+              viewMode === 'sales'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t('reports.tabSales')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('accounting')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border ${
+              viewMode === 'accounting'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t('reports.tabAccounting')}
+          </button>
+        </div>
+
+        {viewMode === 'accounting' ? (
+          <AccountingReportsPanel
+            documents={documents}
+            bills={vendorBills}
+            canViewPurchasing={permissions.canViewPurchasing}
+          />
+        ) : (
+          <>
         {docsError && (
           <p className="text-xs text-red-700 font-semibold bg-red-50 border border-red-100 rounded-xl px-3 py-2">
             {t('reports.loadFailed')} {docsError}
@@ -1247,6 +1294,8 @@ export function ReportsWorkspace({
             )}
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

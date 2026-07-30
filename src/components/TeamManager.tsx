@@ -346,7 +346,7 @@ export function TeamManager({
         tenantId: tenant.id,
         publishableKey: checkbookPubKey.trim(),
         secretKey: checkbookSecret.trim(),
-        webhookKey: checkbookWebhookKey.trim() || undefined,
+        ...(checkbookWebhookKey.trim() ? { webhookKey: checkbookWebhookKey.trim() } : {}),
         environment: checkbookEnv
       });
       setCheckbookStatus(status);

@@ -868,7 +868,8 @@ app.get('/api/config-status', (req, res) => {
   res.json({
     hasGeminiKey: !!process.env.GEMINI_API_KEY,
     hasQuickbooks: isQuickbooksConfigured(),
-    hasStripe: isStripeConfigured()
+    hasStripe: isStripeConfigured(),
+    checkbookConnectVersion: 4
   });
 });
 

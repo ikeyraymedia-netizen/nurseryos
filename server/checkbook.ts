@@ -17,6 +17,8 @@ interface CheckbookIntegration {
   /** Webhook signing key from Checkbook developer settings (optional but recommended). */
   webhookKey?: string;
   environment: CheckbookEnvironment;
+  /** Resolved API host that accepted these keys. */
+  apiBase: string;
   connectedAt: string;
   connectedByUserId: string;
   updatedAt: string;
@@ -24,9 +26,95 @@ interface CheckbookIntegration {
   publishableKeyLast4: string;
 }
 
-function checkbookBase(env: CheckbookEnvironment): string {
-  // Sandbox keys only work on api.sandbox.checkbook.io (not demo.checkbook.io).
-  return env === 'production' ? 'https://api.checkbook.io' : 'https://api.sandbox.checkbook.io';
+const CHECKBOOK_HOSTS: Record<CheckbookEnvironment, string[]> = {
+  sandbox: [
+    'https://api.sandbox.checkbook.io',
+    'https://sandbox.checkbook.io',
+    'https://demo.checkbook.io'
+  ],
+  production: ['https://api.checkbook.io']
+};
+
+function checkbookBase(integration: Pick<CheckbookIntegration, 'environment' | 'apiBase'>): string {
+  if (integration.apiBase) return integration.apiBase.replace(/\/$/, '');
+  return CHECKBOOK_HOSTS[integration.environment][0];
+}
+
+function normalizeCheckbookKey(value: string): string {
+  return value
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, '');
+}
+
+function splitPastedKeys(
+  publishableKey: string,
+  secretKey: string
+): { publishableKey: string; secretKey: string } {
+  let pub = normalizeCheckbookKey(publishableKey);
+  let secret = normalizeCheckbookKey(secretKey);
+  // User pasted "publishable:secret" into the first field
+  if (pub.includes(':') && !secret) {
+    const [a, ...rest] = pub.split(':');
+    pub = a;
+    secret = rest.join(':');
+  }
+  // Swapped fields: secret-looking long key in publishable alone is hard to detect;
+  // if publishable contains a colon and secret also set, prefer left/right of publishable.
+  if (pub.includes(':') && secret) {
+    const [a, ...rest] = pub.split(':');
+    if (rest.join(':') === secret || !secret) {
+      pub = a;
+      secret = rest.join(':') || secret;
+    }
+  }
+  return { publishableKey: pub, secretKey: secret };
+}
+
+async function probeCheckbookKeys(
+  environment: CheckbookEnvironment,
+  publishableKey: string,
+  secretKey: string
+): Promise<{ apiBase: string }> {
+  const auth = `${publishableKey}:${secretKey}`;
+  const hosts = CHECKBOOK_HOSTS[environment];
+  const errors: string[] = [];
+
+  for (const host of hosts) {
+    try {
+      const probe = await fetch(`${host}/v3/check?page=1`, {
+        headers: {
+          Authorization: auth,
+          Accept: 'application/json'
+        }
+      });
+      if (probe.ok || probe.status === 404) {
+        return { apiBase: host };
+      }
+      // Some accounts return empty list as 200; 401/403 means wrong host or wrong keys
+      const detail = await readCheckbookError(probe);
+      errors.push(`${host.replace(/^https:\/\//, '')}: ${detail}`);
+      if (probe.status !== 401 && probe.status !== 403) {
+        // Unexpected but host accepted auth shape — still treat non-auth errors carefully
+        if (probe.status === 400 && /invalid key/i.test(detail)) {
+          continue;
+        }
+      }
+    } catch (err) {
+      errors.push(
+        `${host.replace(/^https:\/\//, '')}: ${err instanceof Error ? err.message : 'network error'}`
+      );
+    }
+  }
+
+  throw Object.assign(
+    new Error(
+      `Could not verify Checkbook keys (${environment}). ${errors.join(' · ') || 'Unauthorized'}. ` +
+        'In Checkbook go to Settings → Developer, switch to Sandbox, generate keys there, then paste those (not production keys).'
+    ),
+    { status: 400 }
+  );
 }
 
 function integrationRef(tenantId: string) {
@@ -76,7 +164,7 @@ async function checkbookFetch(
   path: string,
   init?: RequestInit
 ): Promise<globalThis.Response> {
-  const url = `${checkbookBase(integration.environment)}${path}`;
+  const url = `${checkbookBase(integration)}${path}`;
   return fetch(url, {
     ...init,
     headers: {
@@ -302,6 +390,7 @@ export function registerCheckbookRoutes(app: Express) {
       res.json({
         connected: Boolean(integration),
         environment: integration?.environment || null,
+        apiBase: integration?.apiBase || null,
         publishableKeyLast4: integration?.publishableKeyLast4 || null,
         hasWebhookKey: Boolean(integration?.webhookKey),
         connectedAt: integration?.connectedAt || null,
@@ -329,39 +418,38 @@ export function registerCheckbookRoutes(app: Express) {
       const uid = await readBearerUid(req);
       await assertAdminOrOwner(tenantId, uid);
 
-      const probe = await fetch(`${checkbookBase(environment)}/v3/check?page=1`, {
-        headers: {
-          Authorization: `${publishableKey}:${secretKey}`,
-          Accept: 'application/json'
-        }
-      });
-      if (!probe.ok && probe.status !== 404) {
-        throw Object.assign(
-          new Error(
-            `Could not verify Checkbook keys (${environment}): ${await readCheckbookError(probe)}`
-          ),
-          { status: 400 }
-        );
+      const keys = splitPastedKeys(publishableKey, secretKey);
+      if (!keys.publishableKey || !keys.secretKey) {
+        res.status(400).json({ error: 'Publishable key and secret key are both required.' });
+        return;
       }
+
+      const { apiBase } = await probeCheckbookKeys(
+        environment,
+        keys.publishableKey,
+        keys.secretKey
+      );
 
       const now = new Date().toISOString();
       const existing = await loadIntegration(tenantId);
       const payload: CheckbookIntegration = {
         provider: 'checkbook',
-        publishableKey,
-        secretKey,
+        publishableKey: keys.publishableKey,
+        secretKey: keys.secretKey,
         webhookKey: webhookKey || existing?.webhookKey || undefined,
         environment,
+        apiBase,
         connectedAt: existing?.connectedAt || now,
         connectedByUserId: uid,
         updatedAt: now,
-        publishableKeyLast4: last4(publishableKey)
+        publishableKeyLast4: last4(keys.publishableKey)
       };
       await integrationRef(tenantId).set(payload, { merge: true });
 
       res.json({
         connected: true,
         environment,
+        apiBase,
         publishableKeyLast4: payload.publishableKeyLast4,
         hasWebhookKey: Boolean(payload.webhookKey),
         connectedAt: payload.connectedAt,

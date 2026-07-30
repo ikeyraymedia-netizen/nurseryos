@@ -25,6 +25,7 @@ async function readApiError(res: Response): Promise<string> {
 export interface CheckbookStatus {
   connected: boolean;
   environment: 'sandbox' | 'production' | null;
+  apiBase?: string | null;
   publishableKeyLast4: string | null;
   hasWebhookKey: boolean;
   connectedAt: string | null;

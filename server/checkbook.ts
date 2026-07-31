@@ -233,6 +233,38 @@ function mapPaymentStatus(checkbookStatus: string): 'payment_pending' | 'paid' |
   return null;
 }
 
+/** Sandbox-only: Checkbook ACH often stays IN_PROCESS; force a terminal PAID for testing. */
+async function completeSandboxPayment(
+  integration: CheckbookIntegration,
+  paymentId: string
+): Promise<string | null> {
+  if (integration.environment !== 'sandbox') return null;
+  const putRes = await checkbookFetch(integration, `/v3/check/webhook/${paymentId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'PAID' })
+  });
+  if (!putRes.ok) {
+    console.warn('[checkbook] sandbox status simulate failed', await readCheckbookError(putRes));
+    return null;
+  }
+  return 'PAID';
+}
+
+async function fetchCheckbookPayment(
+  integration: CheckbookIntegration,
+  paymentId: string
+): Promise<{ id?: string; status?: string; deposit_option?: string }> {
+  const payRes = await checkbookFetch(integration, `/v3/check/${paymentId}`);
+  if (!payRes.ok) {
+    throw Object.assign(new Error(await readCheckbookError(payRes)), { status: 400 });
+  }
+  return (await payRes.json()) as {
+    id?: string;
+    status?: string;
+    deposit_option?: string;
+  };
+}
+
 async function applyPaymentStatusToBill(params: {
   tenantId: string;
   billId: string;
@@ -645,21 +677,38 @@ export function registerCheckbookRoutes(app: Express) {
         throw Object.assign(new Error('No Checkbook payment on this bill.'), { status: 400 });
       }
 
-      const payRes = await checkbookFetch(integration, `/v3/check/${paymentId}`);
-      if (!payRes.ok) {
-        throw Object.assign(new Error(await readCheckbookError(payRes)), { status: 400 });
+      let payment = await fetchCheckbookPayment(integration, paymentId);
+      let status = String(payment.status || '').toUpperCase();
+
+      // Sandbox ACH often never leaves IN_PROCESS / "ACH pending". Simulate PAID
+      // via Checkbook's sandbox webhook endpoint so NurseryOS can mark the bill paid.
+      const terminal =
+        status === 'PAID' ||
+        status === 'FAILED' ||
+        status === 'VOID' ||
+        status === 'EXPIRED' ||
+        status === 'REFUNDED';
+      if (integration.environment === 'sandbox' && !terminal) {
+        const forced = await completeSandboxPayment(integration, paymentId);
+        if (forced) {
+          payment = await fetchCheckbookPayment(integration, paymentId);
+          status = String(payment.status || forced).toUpperCase();
+        }
       }
-      const payment = (await payRes.json()) as { id?: string; status?: string };
 
       await applyPaymentStatusToBill({
         tenantId,
         billId,
         paymentId,
-        checkbookStatus: String(payment.status || ''),
-        depositOption: null
+        checkbookStatus: status || String(payment.status || ''),
+        depositOption: payment.deposit_option || null
       });
 
-      res.json({ paymentId, status: payment.status || null });
+      res.json({
+        paymentId,
+        status: status || payment.status || null,
+        environment: integration.environment
+      });
     })
   );
 }

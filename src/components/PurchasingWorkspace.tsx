@@ -762,9 +762,16 @@ export function PurchasingWorkspace({
             )}
             {bill.status === 'payment_pending' && (
               <p className="text-[11px] font-bold text-sky-800 mt-1">
-                {t('purchasing.achPending', {
-                  recipient: bill.checkbookRecipient || bill.vendorName
-                })}
+                {String(bill.checkbookPaymentStatus || '').toUpperCase() === 'IN_PROCESS'
+                  ? t('purchasing.achProcessing', {
+                      recipient: bill.checkbookRecipient || bill.vendorName
+                    })
+                  : t('purchasing.achPending', {
+                      recipient: bill.checkbookRecipient || bill.vendorName
+                    })}
+                {bill.checkbookPaymentStatus
+                  ? ` · Checkbook: ${bill.checkbookPaymentStatus}`
+                  : ''}
                 {bill.checkbookPaymentError ? ` · ${bill.checkbookPaymentError}` : ''}
               </p>
             )}

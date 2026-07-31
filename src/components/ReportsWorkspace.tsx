@@ -444,7 +444,8 @@ function buildDataSnapshot(params: {
       containerSize: p.containerSize,
       quantityAvailable: p.quantityAvailable,
       location: p.location || null,
-      weeksUntilReady: p.weeksUntilReady ?? null
+      plantedDate: p.plantedDate || null,
+      readyDate: p.readyDate || null
     })),
     invoices: invoices.slice(0, 200).map((d) => ({
       documentNumber: d.documentNumber,

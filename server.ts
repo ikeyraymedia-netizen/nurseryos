@@ -209,7 +209,8 @@ function getInventoryParseSchema() {
               plantName: { type: Type.STRING },
               containerSize: { type: Type.STRING },
               quantityAvailable: { type: Type.INTEGER },
-              weeksUntilReady: { type: Type.INTEGER },
+              plantedDate: { type: Type.STRING },
+              readyDate: { type: Type.STRING },
               location: { type: Type.STRING },
               notes: { type: Type.STRING },
               cutBackAt: { type: Type.STRING },
@@ -589,11 +590,12 @@ Extract a clean plant inventory list where each item includes:
 1) plantName
 2) containerSize (standardized if possible: #1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other)
 3) quantityAvailable (integer, default 0 if unknown)
-4) weeksUntilReady (integer if shown, otherwise omit)
-5) location (if present)
-6) notes (if relevant)
-7) cutBackAt date if clearly mentioned, otherwise omit
-8) recentChemicals array if sprays are listed (chemicalName, appliedAt if available, notes if available)
+4) plantedDate (YYYY-MM-DD if shown, otherwise omit)
+5) readyDate (YYYY-MM-DD if shown, otherwise omit)
+6) location (if present)
+7) notes (if relevant)
+8) cutBackAt date if clearly mentioned, otherwise omit
+9) recentChemicals array if sprays are listed (chemicalName, appliedAt if available, notes if available)
 
 Return strict JSON matching schema. Do not include narrative text.`;
 

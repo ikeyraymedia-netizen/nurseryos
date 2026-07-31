@@ -74,6 +74,8 @@ export interface PlantOrderItem {
   inventorySyncConfirmed?: boolean; // True only after inventory write succeeded
   pulledQuantity?: number; // To track pulled/delivered progress
   notes?: string;
+  /** Possible substitute plant material (shown on estimates). Free text, e.g. "Boxwood, Holly". */
+  substitutes?: string;
   isAddition?: boolean; // Tag for items added to an existing order
   /** ISO timestamp when this line was added to an existing order (for activity alerts) */
   addedAt?: string;
@@ -153,6 +155,8 @@ export interface CustomerDocumentLineItem {
   unitPrice: number;
   unitCost?: number; // Our cost per plant (internal profit tracking; never shown to customer)
   notes?: string;
+  /** Possible substitute plant material — mainly for estimates. */
+  substitutes?: string;
 }
 
 /** Estimate or invoice saved under a customer record. */
@@ -249,7 +253,10 @@ export interface InventoryPlant {
   plantName: string;
   containerSize: string;
   quantityAvailable: number;
-  weeksUntilReady?: number | null;
+  /** Local calendar date YYYY-MM-DD when planted / potted up. */
+  plantedDate?: string | null;
+  /** Local calendar date YYYY-MM-DD when expected ready to sell/load. */
+  readyDate?: string | null;
   chemicals: ChemicalApplication[];
   fertilizers?: FertilizerApplication[];
   cutBackAt?: string | null;

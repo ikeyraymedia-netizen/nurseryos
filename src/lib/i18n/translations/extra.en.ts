@@ -102,7 +102,7 @@ const extra = {
   },
   inventory: {
     title: 'Live Plant Inventory',
-    subtitle: 'Track qty, photos, weeks until ready, sprays, and cut-backs.',
+    subtitle: 'Track qty, photos, planted/ready dates, sprays, and cut-backs.',
     exportExcel: 'Export Excel',
     exportPdf: 'Export PDF',
     inStockOnly: 'In-stock only ({{n}})',
@@ -116,7 +116,6 @@ const extra = {
     plantName: 'Plant name',
     size: 'Size (#3)',
     qty: 'Qty',
-    weeksReady: 'Weeks until ready (optional)',
     location: 'Location (optional)',
     addToInventory: 'Add to inventory',
     added: 'Plant added to inventory.',
@@ -213,6 +212,10 @@ const extra = {
     removedItems: 'Removed {{n}} item(s) from inventory.',
     clearInventoryFailed: 'Failed to clear inventory.',
     weeksUntilReady: 'Weeks until ready',
+    plantedDate: 'Planted date',
+    readyDate: 'Ready date',
+    plantedShort: 'Planted',
+    readyShort: 'Ready',
     promoCreate: 'Create post',
     promoTitle: 'Marketing post',
     promoIntro:

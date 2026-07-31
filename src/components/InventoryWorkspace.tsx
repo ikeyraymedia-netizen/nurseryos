@@ -152,7 +152,6 @@ export function InventoryWorkspace({
   const [newPlantName, setNewPlantName] = useState('');
   const [newContainerSize, setNewContainerSize] = useState('#3');
   const [newQty, setNewQty] = useState(0);
-  const [newWeeks, setNewWeeks] = useState<number | ''>('');
   const [newLocation, setNewLocation] = useState('');
   const [showAddPlant, setShowAddPlant] = useState(false);
 
@@ -233,7 +232,6 @@ export function InventoryWorkspace({
         plantName: newPlantName.trim(),
         containerSize: newContainerSize.trim(),
         quantityAvailable: newQty,
-        weeksUntilReady: newWeeks === '' ? null : Number(newWeeks),
         chemicals: [],
         fertilizers: [],
         cutBackAt: null,
@@ -243,7 +241,6 @@ export function InventoryWorkspace({
       setSelectedId(id);
       setNewPlantName('');
       setNewQty(0);
-      setNewWeeks('');
       setNewLocation('');
       setMessage(t('inventory.added'));
       setMessageIsError(false);
@@ -401,10 +398,8 @@ export function InventoryWorkspace({
           plantName: String(item?.plantName || 'Unknown Plant'),
           containerSize: String(item?.containerSize || 'Other'),
           quantityAvailable: Number(item?.quantityAvailable ?? 0) || 0,
-          weeksUntilReady:
-            item?.weeksUntilReady === null || item?.weeksUntilReady === undefined || item?.weeksUntilReady === ''
-              ? null
-              : Number(item.weeksUntilReady) || null,
+          plantedDate: item?.plantedDate ? String(item.plantedDate).slice(0, 10) : null,
+          readyDate: item?.readyDate ? String(item.readyDate).slice(0, 10) : null,
           chemicals,
           cutBackAt: item?.cutBackAt ? String(item.cutBackAt) : null,
           notes: item?.notes ? String(item.notes) : ''
@@ -756,14 +751,6 @@ export function InventoryWorkspace({
                   />
                 </div>
                 <input
-                  type="number"
-                  min={0}
-                  value={newWeeks}
-                  onChange={(e) => setNewWeeks(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder={t('inventory.weeksReady')}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
-                />
-                <input
                   value={newLocation}
                   onChange={(e) => setNewLocation(e.target.value)}
                   placeholder={t('inventory.location')}
@@ -897,7 +884,8 @@ export function InventoryWorkspace({
                     {dp.size(plant.containerSize)}
                     {plant.listPrice != null ? ` · $${plant.listPrice.toFixed(2)}` : ''}
                     {` · ${t('common.qty')} ${plant.quantityAvailable}`}
-                    {plant.weeksUntilReady != null ? ` · ${plant.weeksUntilReady} ${t('inventory.weeks')}` : ''}
+                    {plant.plantedDate ? ` · ${t('inventory.plantedShort')} ${plant.plantedDate}` : ''}
+                    {plant.readyDate ? ` · ${t('inventory.readyShort')} ${plant.readyDate}` : ''}
                   </p>
                   {(plant.sourceName || plant.goodLiners) && (
                     <p className="text-[11px] text-ink-700 mt-0.5">
@@ -1056,16 +1044,25 @@ export function InventoryWorkspace({
                   />
                 </label>
                 <label className="block text-xs">
-                  <span className="font-bold text-gray-500 uppercase">{t('inventory.weeksUntilReady')}</span>
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.plantedDate')}</span>
                   <input
-                    type="number"
-                    min={0}
+                    type="date"
                     disabled={!permissions.canEditInventory}
-                    value={selected.weeksUntilReady ?? ''}
+                    value={selected.plantedDate || ''}
                     onChange={(e) =>
-                      saveSelected({
-                        weeksUntilReady: e.target.value === '' ? null : Number(e.target.value)
-                      })
+                      saveSelected({ plantedDate: e.target.value || null })
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block text-xs">
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.readyDate')}</span>
+                  <input
+                    type="date"
+                    disabled={!permissions.canEditInventory}
+                    value={selected.readyDate || ''}
+                    onChange={(e) =>
+                      saveSelected({ readyDate: e.target.value || null })
                     }
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   />

@@ -102,7 +102,7 @@ const extra = {
   },
   inventory: {
     title: 'Inventario de plantas en vivo',
-    subtitle: 'Controle cant., fotos, semanas hasta listo, fumigaciones y podas.',
+    subtitle: 'Controle cant., fotos, fechas de plantación/listo, fumigaciones y podas.',
     exportExcel: 'Exportar Excel',
     exportPdf: 'Exportar PDF',
     inStockOnly: 'Solo en stock ({{n}})',
@@ -116,7 +116,6 @@ const extra = {
     plantName: 'Nombre de planta',
     size: 'Tamaño (#3)',
     qty: 'Cant.',
-    weeksReady: 'Semanas hasta listo (opcional)',
     location: 'Ubicación (opcional)',
     addToInventory: 'Agregar al inventario',
     added: 'Planta agregada al inventario.',
@@ -216,6 +215,10 @@ const extra = {
     removedItems: 'Eliminados {{n}} artículo(s) del inventario.',
     clearInventoryFailed: 'No se pudo borrar el inventario.',
     weeksUntilReady: 'Semanas hasta listo',
+    plantedDate: 'Fecha de plantación',
+    readyDate: 'Fecha listo',
+    plantedShort: 'Plantado',
+    readyShort: 'Listo',
     promoCreate: 'Crear publicación',
     promoTitle: 'Publicación de marketing',
     promoIntro:

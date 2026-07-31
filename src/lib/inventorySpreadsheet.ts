@@ -8,7 +8,6 @@ export type SpreadsheetInventoryItem = {
   plantName: string;
   containerSize: string;
   quantityAvailable: number;
-  weeksUntilReady: number | null;
   location?: string;
   category?: string;
   listPrice?: number | null;
@@ -171,7 +170,6 @@ function mapTableToInventory(table: string[][]): SpreadsheetInventoryItem[] {
       'inventory'
     ]
   ]);
-  const weeksIdx = pickColumn(headers, [['weeks until ready', 'weeks', 'week', 'ready']]);
   const locationIdx = pickColumn(headers, [
     ['location', 'bed', 'block', 'bay', 'zone', 'aisle', 'house', 'yard']
   ]);
@@ -187,10 +185,6 @@ function mapTableToInventory(table: string[][]): SpreadsheetInventoryItem[] {
       plantName,
       containerSize: sizeIdx >= 0 ? String(row[sizeIdx] || '').trim() || 'Other' : 'Other',
       quantityAvailable: qtyIdx >= 0 ? parseQty(row[qtyIdx]) : 0,
-      weeksUntilReady:
-        weeksIdx >= 0 && String(row[weeksIdx] || '').trim()
-          ? Number(String(row[weeksIdx]).replace(/[^\d.-]/g, '')) || null
-          : null,
       chemicals: [],
       fertilizers: [],
       cutBackAt: null,
@@ -359,7 +353,6 @@ export function parseCatalogMatrix(table: string[][]): SpreadsheetInventoryItem[
           plantName,
           containerSize: size,
           quantityAvailable: 0,
-          weeksUntilReady: null,
           chemicals: [],
           fertilizers: [],
           cutBackAt: null,
@@ -478,7 +471,6 @@ export function parseQuickbooksProductList(table: string[][]): SpreadsheetInvent
       plantName,
       containerSize,
       quantityAvailable: 0,
-      weeksUntilReady: null,
       chemicals: [],
       fertilizers: [],
       cutBackAt: null,

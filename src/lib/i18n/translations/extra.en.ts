@@ -1373,7 +1373,7 @@ const extra = {
     stripeIntro:
       "Connect this nursery's Stripe account so customers can pay invoices by card. Funds go to the nursery (merchant of record). Owner/admin only.",
     stripeSandboxEinHint:
-      'Sandbox tip: Stripe’s EIN/SSN boxes auto-hyphenate and reject typed 00-0000000 / 000-00-0000. NurseryOS prefills test tax + SSN via API — click Continue onboarding (or Disconnect + Connect), leave those fields if filled, and finish bank/TOS.',
+      'Sandbox tip: Do not type EIN/SSN — Stripe’s form rejects those test values. Click Continue onboarding (resets the sandbox account and prefills Jenny Rosen + test IDs). Confirm prefilled details; finish bank + TOS only.',
     stripeReady: 'Ready to collect payments',
     stripeFinish: 'Connected — finish onboarding to accept payments',
     stripeConnectedPartial: 'Connected — finish onboarding to enable charges',

@@ -62,9 +62,10 @@ async function loadIntegration(tenantId: string): Promise<StripeIntegration | nu
 }
 
 /**
- * Stripe's hosted Connect form auto-hyphenates EIN/SSN and rejects documented
- * test values (00-0000000 / 000-00-0000) as "not an allowed value". Prefill
- * via API instead so sandbox onboarding can complete.
+ * Stripe's hosted Connect form auto-hyphenates EIN/SSN and rejects typed
+ * test values as "not an allowed value". Prefill via API before the first
+ * Account Link. After any Account Link exists, Express locks KYC updates —
+ * so stuck sandbox accounts must be deleted and recreated (see connect).
  */
 async function prefillTestConnectVerification(
   stripe: Stripe,
@@ -77,6 +78,7 @@ async function prefillTestConnectVerification(
     company: {
       name: tenantName,
       tax_id: '000000000',
+      phone: '0000000000',
       address: {
         line1: 'address_full_match',
         city: 'South San Francisco',
@@ -92,15 +94,14 @@ async function prefillTestConnectVerification(
     }
   });
 
-  const persons = await stripe.accounts.listPersons(accountId, { limit: 10 });
-  const representative =
-    persons.data.find((p) => p.relationship?.representative) || persons.data[0];
-
-  const personPayload: Stripe.AccountCreatePersonParams = {
-    first_name: 'Test',
-    last_name: 'Owner',
+  // 222222222 = immediate successful ID match in test mode (Stripe docs).
+  // Prefill before the first Account Link so hosted onboarding skips SSN entry.
+  await stripe.accounts.createPerson(accountId, {
+    first_name: 'Jenny',
+    last_name: 'Rosen',
     email: email || undefined,
-    id_number: '000000000',
+    phone: '0000000000',
+    id_number: '222222222',
     dob: { day: 1, month: 1, year: 1901 },
     address: {
       line1: 'address_full_match',
@@ -114,15 +115,9 @@ async function prefillTestConnectVerification(
       executive: true,
       owner: true,
       percent_ownership: 100,
-      title: 'Owner'
+      title: 'CEO'
     }
-  };
-
-  if (representative) {
-    await stripe.accounts.updatePerson(accountId, representative.id, personPayload);
-  } else {
-    await stripe.accounts.createPerson(accountId, personPayload);
-  }
+  });
 }
 
 async function readBearerUid(req: Request): Promise<string> {
@@ -502,11 +497,24 @@ export function registerStripeRoutes(app: Express) {
 
       const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
       const tenantName = String(tenantSnap.data()?.name || 'Nursery');
+      const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
+      const email = String(memberSnap.data()?.email || '');
+
+      // Sandbox: Express locks KYC after the first Account Link, so updating
+      // SSN/EIN on a stuck account fails. Delete and recreate so we can prefill
+      // before opening onboarding again.
+      if (isTestMode && accountId && !integration?.chargesEnabled) {
+        try {
+          await stripe.accounts.del(accountId);
+        } catch (err) {
+          console.warn('[stripe] test-mode account delete failed', err);
+        }
+        await integrationRef(tenantId).delete();
+        accountId = undefined;
+        integration = null;
+      }
 
       if (!accountId) {
-        const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
-        const email = String(memberSnap.data()?.email || '');
-
         // SaaS Connect: nursery is merchant of record; Stripe owns pricing/losses.
         // Express + Account Links is the reliable Phase-1 onboarding path.
         // Do not prefill business_profile.url with the platform origin — Stripe
@@ -541,29 +549,13 @@ export function registerStripeRoutes(app: Express) {
         });
         accountId = account.id;
         if (isTestMode) {
-          try {
-            await prefillTestConnectVerification(stripe, accountId, {
-              tenantName,
-              email: email || undefined
-            });
-          } catch (err) {
-            console.warn('[stripe] test-mode verification prefill failed', err);
-          }
-        }
-        integration = await refreshAccountStatus(tenantId, accountId, uid);
-      } else if (isTestMode && !integration?.chargesEnabled) {
-        // Existing sandbox account stuck on hosted EIN/SSN: push test IDs via API.
-        try {
-          const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
-          const email = String(memberSnap.data()?.email || '');
+          // Must succeed before Account Link — Express cannot update KYC after.
           await prefillTestConnectVerification(stripe, accountId, {
             tenantName,
             email: email || undefined
           });
-          integration = await refreshAccountStatus(tenantId, accountId, uid);
-        } catch (err) {
-          console.warn('[stripe] test-mode verification prefill failed', err);
         }
+        integration = await refreshAccountStatus(tenantId, accountId, uid);
       }
 
       const link = await stripe.accountLinks.create({
@@ -591,6 +583,15 @@ export function registerStripeRoutes(app: Express) {
         return;
       }
       await assertAdminOrOwner(tenantId, uid);
+      const existing = await loadIntegration(tenantId);
+      if (existing?.accountId && isStripeConfigured()) {
+        try {
+          const stripe = getStripe();
+          await stripe.accounts.del(existing.accountId);
+        } catch (err) {
+          console.warn('[stripe] disconnect account delete failed', err);
+        }
+      }
       await integrationRef(tenantId).delete();
       res.json({ success: true });
     })

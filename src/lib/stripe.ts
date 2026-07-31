@@ -42,8 +42,9 @@ export async function fetchStripeStatus(tenantId: string): Promise<StripeStatus>
 }
 
 export async function startStripeConnect(tenantId: string): Promise<{
-  onboardingUrl: string;
+  onboardingUrl: string | null;
   accountId: string;
+  chargesEnabled: boolean;
 }> {
   const res = await fetch('/api/stripe/connect', {
     method: 'POST',
@@ -51,11 +52,20 @@ export async function startStripeConnect(tenantId: string): Promise<{
     body: JSON.stringify({ tenantId })
   });
   if (!res.ok) throw new Error(await readApiError(res));
-  const data = (await res.json()) as { onboardingUrl?: string; accountId?: string };
-  if (!data?.onboardingUrl) throw new Error('No Stripe onboarding URL returned.');
+  const data = (await res.json()) as {
+    onboardingUrl?: string | null;
+    accountId?: string;
+    chargesEnabled?: boolean;
+  };
+  const chargesEnabled = Boolean(data?.chargesEnabled);
+  const onboardingUrl = data?.onboardingUrl ? String(data.onboardingUrl) : null;
+  if (!onboardingUrl && !chargesEnabled) {
+    throw new Error('No Stripe onboarding URL returned.');
+  }
   return {
-    onboardingUrl: String(data.onboardingUrl),
-    accountId: String(data.accountId || '')
+    onboardingUrl,
+    accountId: String(data.accountId || ''),
+    chargesEnabled
   };
 }
 

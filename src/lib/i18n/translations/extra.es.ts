@@ -1387,7 +1387,8 @@ const extra = {
     stripeIntro:
       'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta. Los fondos van al vivero. Solo dueño/admin.',
     stripeSandboxEinHint:
-      'Consejo sandbox: no escriba EIN/SSN — Stripe los rechaza. Pulse Continuar onboarding (reinicia la cuenta sandbox y precarga Jenny Rosen + IDs de prueba). Confirme los datos; termine solo banco + TOS.',
+      'Sandbox: Connect omite el formulario SSN de Stripe (rechaza IDs de prueba). NurseryOS crea una cuenta de prueba verificada al instante — pulse Conectar / Continuar y debería ver Listo para cobrar.',
+    stripeSandboxReady: 'Stripe sandbox conectado — listo para cobros de prueba.',
     stripeReady: 'Listo para cobrar pagos',
     stripeFinish: 'Conectado — complete el onboarding para aceptar pagos',
     stripeConnectedPartial: 'Conectado — complete el onboarding para habilitar cobros',

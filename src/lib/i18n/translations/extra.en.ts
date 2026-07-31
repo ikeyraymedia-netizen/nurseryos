@@ -1373,7 +1373,8 @@ const extra = {
     stripeIntro:
       "Connect this nursery's Stripe account so customers can pay invoices by card. Funds go to the nursery (merchant of record). Owner/admin only.",
     stripeSandboxEinHint:
-      'Sandbox tip: Do not type EIN/SSN — Stripe’s form rejects those test values. Click Continue onboarding (resets the sandbox account and prefills Jenny Rosen + test IDs). Confirm prefilled details; finish bank + TOS only.',
+      'Sandbox: Connect skips Stripe’s hosted SSN form (it rejects test IDs). NurseryOS creates a verified test account instantly — click Connect Stripe / Continue onboarding and you should see Ready to collect payments.',
+    stripeSandboxReady: 'Sandbox Stripe connected — ready to collect test payments.',
     stripeReady: 'Ready to collect payments',
     stripeFinish: 'Connected — finish onboarding to accept payments',
     stripeConnectedPartial: 'Connected — finish onboarding to enable charges',

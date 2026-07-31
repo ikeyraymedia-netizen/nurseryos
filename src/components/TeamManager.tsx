@@ -301,12 +301,19 @@ export function TeamManager({
     setError(null);
     setMessage(null);
     try {
-      const { onboardingUrl } = await startStripeConnect(tenant.id);
+      const result = await startStripeConnect(tenant.id);
       void logAuditEvent({
         action: 'stripe.connect_started',
-        summary: 'Started Stripe Connect onboarding'
+        summary: result.chargesEnabled
+          ? 'Connected Stripe sandbox account'
+          : 'Started Stripe Connect onboarding'
       });
-      window.location.href = onboardingUrl;
+      if (result.chargesEnabled || !result.onboardingUrl) {
+        setMessage(t('teamExtra.stripeSandboxReady'));
+        await refreshStripe();
+        return;
+      }
+      window.location.href = result.onboardingUrl;
     } catch (err: any) {
       setStripeError(err?.message || t('teamExtra.stripeConnectFailed'));
     } finally {

@@ -62,23 +62,38 @@ async function loadIntegration(tenantId: string): Promise<StripeIntegration | nu
 }
 
 /**
- * Stripe's hosted Connect form auto-hyphenates EIN/SSN and rejects typed
- * test values as "not an allowed value". Prefill via API before the first
- * Account Link. After any Account Link exists, Express locks KYC updates —
- * so stuck sandbox accounts must be deleted and recreated (see connect).
+ * Sandbox-only: Express hosted onboarding forces SSN entry and rejects Stripe’s
+ * own test IDs after auto-hyphenating. Create a Custom account fully verified
+ * via API so Connect works without the hosted KYC form.
  */
-async function prefillTestConnectVerification(
+async function createSandboxReadyAccount(
   stripe: Stripe,
-  accountId: string,
-  opts: { tenantName: string; email?: string }
-): Promise<void> {
-  const { tenantName, email } = opts;
-  await stripe.accounts.update(accountId, {
-    business_type: 'company',
-    company: {
+  opts: { tenantId: string; tenantName: string; email?: string; ip: string }
+): Promise<Stripe.Account> {
+  const { tenantId, tenantName, email, ip } = opts;
+  return stripe.accounts.create({
+    type: 'custom',
+    country: 'US',
+    email: email || undefined,
+    business_type: 'individual',
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+      us_bank_account_ach_payments: { requested: true }
+    },
+    business_profile: {
       name: tenantName,
-      tax_id: '000000000',
+      mcc: '5261',
+      url: 'https://accessible.stripe.com',
+      product_description: `${tenantName} nursery wholesale and plant orders`
+    },
+    individual: {
+      first_name: 'Jenny',
+      last_name: 'Rosen',
+      email: email || undefined,
       phone: '0000000000',
+      id_number: '222222222',
+      dob: { day: 1, month: 1, year: 1901 },
       address: {
         line1: 'address_full_match',
         city: 'South San Francisco',
@@ -87,37 +102,28 @@ async function prefillTestConnectVerification(
         country: 'US'
       }
     },
-    business_profile: {
-      name: tenantName,
-      url: 'https://accessible.stripe.com',
-      product_description: `${tenantName} nursery wholesale and plant orders`
-    }
-  });
-
-  // 222222222 = immediate successful ID match in test mode (Stripe docs).
-  // Prefill before the first Account Link so hosted onboarding skips SSN entry.
-  await stripe.accounts.createPerson(accountId, {
-    first_name: 'Jenny',
-    last_name: 'Rosen',
-    email: email || undefined,
-    phone: '0000000000',
-    id_number: '222222222',
-    dob: { day: 1, month: 1, year: 1901 },
-    address: {
-      line1: 'address_full_match',
-      city: 'South San Francisco',
-      state: 'CA',
-      postal_code: '94080',
-      country: 'US'
+    external_account: {
+      object: 'bank_account',
+      country: 'US',
+      currency: 'usd',
+      routing_number: '110000000',
+      account_number: '000123456789',
+      account_holder_name: 'Jenny Rosen',
+      account_holder_type: 'individual'
     },
-    relationship: {
-      representative: true,
-      executive: true,
-      owner: true,
-      percent_ownership: 100,
-      title: 'CEO'
-    }
+    tos_acceptance: {
+      date: Math.floor(Date.now() / 1000),
+      ip: ip || '127.0.0.1'
+    },
+    metadata: { tenantId, nurseryos: '1', sandbox: '1' }
   });
+}
+
+function clientIp(req: Request): string {
+  const forwarded = String(req.headers['x-forwarded-for'] || '');
+  const first = forwarded.split(',')[0]?.trim();
+  if (first) return first;
+  return String(req.socket.remoteAddress || '127.0.0.1');
 }
 
 async function readBearerUid(req: Request): Promise<string> {
@@ -500,9 +506,7 @@ export function registerStripeRoutes(app: Express) {
       const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
       const email = String(memberSnap.data()?.email || '');
 
-      // Sandbox: Express locks KYC after the first Account Link, so updating
-      // SSN/EIN on a stuck account fails. Delete and recreate so we can prefill
-      // before opening onboarding again.
+      // Sandbox: drop incomplete Express accounts that are stuck on hosted SSN.
       if (isTestMode && accountId && !integration?.chargesEnabled) {
         try {
           await stripe.accounts.del(accountId);
@@ -515,26 +519,44 @@ export function registerStripeRoutes(app: Express) {
       }
 
       if (!accountId) {
-        // SaaS Connect: nursery is merchant of record; Stripe owns pricing/losses.
-        // Express + Account Links is the reliable Phase-1 onboarding path.
+        if (isTestMode) {
+          // Skip Express hosted KYC entirely — Custom + API test tokens.
+          const account = await createSandboxReadyAccount(stripe, {
+            tenantId,
+            tenantName,
+            email: email || undefined,
+            ip: clientIp(req)
+          });
+          accountId = account.id;
+          integration = await refreshAccountStatus(tenantId, accountId, uid);
+          if (!integration.chargesEnabled) {
+            const due = (account.requirements?.currently_due || []).join(', ');
+            throw Object.assign(
+              new Error(
+                `Sandbox Stripe account created but charges are not enabled yet${
+                  due ? ` (still due: ${due})` : ''
+                }. Check Stripe Dashboard → Connect.`
+              ),
+              { status: 502 }
+            );
+          }
+          res.json({
+            accountId,
+            onboardingUrl: null,
+            chargesEnabled: true,
+            detailsSubmitted: Boolean(integration.detailsSubmitted),
+            testMode: true
+          });
+          return;
+        }
+
+        // Live: Express + Account Links (nurseries complete real KYC on Stripe).
         // Do not prefill business_profile.url with the platform origin — Stripe
-        // crawls that URL for verification, and bot-blocking CDNs often 403 it
-        // (surfaced in onboarding as "Native fetch error: Failed to fetch").
-        // Test mode: use Stripe's accessible test site. Live: let the nursery
-        // enter their own site, with product_description as a fallback.
+        // crawls that URL for verification, and bot-blocking CDNs often 403 it.
         const account = await stripe.accounts.create({
           type: 'express',
           country: 'US',
           email: email || undefined,
-          ...(isTestMode
-            ? {
-                business_type: 'company' as const,
-                company: {
-                  name: tenantName,
-                  tax_id: '000000000'
-                }
-              }
-            : {}),
           capabilities: {
             card_payments: { requested: true },
             transfers: { requested: true },
@@ -542,19 +564,11 @@ export function registerStripeRoutes(app: Express) {
           },
           business_profile: {
             name: tenantName,
-            product_description: `${tenantName} nursery wholesale and plant orders`,
-            ...(isTestMode ? { url: 'https://accessible.stripe.com' } : {})
+            product_description: `${tenantName} nursery wholesale and plant orders`
           },
           metadata: { tenantId, nurseryos: '1' }
         });
         accountId = account.id;
-        if (isTestMode) {
-          // Must succeed before Account Link — Express cannot update KYC after.
-          await prefillTestConnectVerification(stripe, accountId, {
-            tenantName,
-            email: email || undefined
-          });
-        }
         integration = await refreshAccountStatus(tenantId, accountId, uid);
       }
 

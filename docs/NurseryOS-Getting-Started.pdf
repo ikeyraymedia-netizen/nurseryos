@@ -1,0 +1,1441 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 1247
+>>
+stream
+0.200025 w
+0 G
+0.06 0.09 0.16 rg
+0. 792. 612. -792. re
+f
+0.05 0.45 0.56 rg
+0. 792. 14. -792. re
+f
+1. 0.42 0.29 rg
+14. 792. 4. -792. re
+f
+0.12 0.16 0.23 rg
+60. 672. m
+552. 672. l
+558.6274169979694761 672. 564. 666.6274169979694761 564. 660. c
+564. 364. l
+564. 357.372583002030467 557.3725830020305239 352. 552. 352. c
+60. 352. l
+53.3725830020304812 352. 48. 358.627416997969533 48. 364. c
+48. 660. l
+48. 666.6274169979694761 54.6274169979695188 672. 60. 672. c
+h
+f
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+1. 0.42 0.29 rg
+72. 632. Td
+(CLIENT GUIDE) Tj
+ET
+BT
+/F2 36 Tf
+41.3999999999999986 TL
+1. g
+72. 582. Td
+(NurseryOS) Tj
+ET
+BT
+/F1 13 Tf
+14.9499999999999993 TL
+0.647 0.953 0.988 rg
+72. 556. Td
+(Getting started for your nursery) Tj
+ET
+BT
+/F1 10.5 Tf
+12.0749999999999993 TL
+0.58 0.639 0.722 rg
+72. 522. Td
+(Inventory, trucks, invoices, and vendor payments — one place for the yard and the office.) Tj
+T* (Works on phone, tablet, or computer.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+0.055 0.455 0.565 rg
+72. 452. Td
+(nurseryos.app) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.58 0.639 0.722 rg
+72. 434. Td
+(Questions?  owner@nurseryos.app) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+72. 48. Td
+(Keep this handy while you set up Team, Stripe, and Checkbook.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 5200
+>>
+stream
+0.200025 w
+0 G
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 740. Td
+(Welcome to NurseryOS) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 736. m
+194.9800000000000182 736. l
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+40. 722. Td
+(NurseryOS keeps live inventory, loading trucks, customer invoices, and vendor bill pay in one bilingual workspace) Tj
+T* (\(English · Español\). This guide covers first-week setup for owners and office staff.) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 686. Td
+(1. Sign in & invite your team) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 682. m
+227.0400000000000489 682. l
+S
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 668. m
+566. 668. l
+569.3137084989847381 668. 572. 665.3137084989847381 572. 662. c
+572. 612. l
+572. 608.6862915010152619 568.6862915010152619 606. 566. 606. c
+46. 606. l
+42.6862915010152406 606. 40. 609.3137084989847381 40. 612. c
+40. 662. l
+40. 665.3137084989847381 43.3137084989847594 668. 46. 668. c
+h
+B
+0.05 0.45 0.56 rg
+67. 652. m
+67. 656.970562748477164 62.9705627484771426 661. 58. 661. c
+53.0294372515228574 661. 49. 656.970562748477164 49. 652. c
+49. 647.029437251522836 53.0294372515228574 643. 58. 643. c
+62.9705627484771426 643. 67. 647.029437251522836 67. 652. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 649. Td
+(1) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 649. Td
+(Open NurseryOS) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 634. Td
+(Go to https://nurseryos.app on any phone, tablet, or computer.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 622. Td
+(Sign in with the account you were invited with, or complete signup if you requested access.) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 596. m
+566. 596. l
+569.3137084989847381 596. 572. 593.3137084989847381 572. 590. c
+572. 528. l
+572. 524.6862915010152619 568.6862915010152619 522. 566. 522. c
+46. 522. l
+42.6862915010152406 522. 40. 525.3137084989847381 40. 528. c
+40. 590. l
+40. 593.3137084989847381 43.3137084989847594 596. 46. 596. c
+h
+B
+0.05 0.45 0.56 rg
+67. 580. m
+67. 584.970562748477164 62.9705627484771426 589. 58. 589. c
+53.0294372515228574 589. 49. 584.970562748477164 49. 580. c
+49. 575.029437251522836 53.0294372515228574 571. 58. 571. c
+62.9705627484771426 571. 67. 575.029437251522836 67. 580. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 577. Td
+(2) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 577. Td
+(Invite the crew \(Team\)) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 562. Td
+(Open Team from the header. Owner/admin can invite people by email.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 550. Td
+(Assign roles: owner/admin \(settings & payments\), office/sales \(invoices & customers\),) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 538. Td
+(field/loader \(trucks & inventory as permitted\).) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 512. m
+566. 512. l
+569.3137084989847381 512. 572. 509.3137084989847381 572. 506. c
+572. 456. l
+572. 452.6862915010152619 568.6862915010152619 450. 566. 450. c
+46. 450. l
+42.6862915010152406 450. 40. 453.3137084989847381 40. 456. c
+40. 506. l
+40. 509.3137084989847381 43.3137084989847594 512. 46. 512. c
+h
+B
+0.05 0.45 0.56 rg
+67. 496. m
+67. 500.970562748477164 62.9705627484771426 505. 58. 505. c
+53.0294372515228574 505. 49. 500.970562748477164 49. 496. c
+49. 491.029437251522836 53.0294372515228574 487. 58. 487. c
+62.9705627484771426 487. 67. 491.029437251522836 67. 496. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 493. Td
+(3) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 493. Td
+(Language) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 478. Td
+(Anyone can switch the whole app between English and Spanish from their profile / language control.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 466. Td
+(Yard and office can each work in the language they prefer.) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 436. Td
+(2. Inventory & availability) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 432. m
+207.4399999999999693 432. l
+S
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 418. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 418. Td
+(Add plants manually, or upload CSV / Excel / PDF catalogs.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 401. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 401. Td
+(Set quantity, photos, planted date, and ready date on each plant.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 384. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 384. Td
+(Export Availability \(Excel or PDF\) to send customers what’s in stock — Ready Date shows on the list.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 367. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 367. Td
+(Log sprays, fertilizers, and cut-backs so the yard stays in sync with the office.) Tj
+ET
+0.89 0.91 0.94 RG
+0.6 w
+40. 36. m
+572. 36. l
+S
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+40. 22. Td
+(nurseryos.app  ·  owner@nurseryos.app) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+556.4800000000000182 22. Td
+(1 / 4) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 4697
+>>
+stream
+1.5 w
+0.05 0.45 0.56 RG
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 740. Td
+(3. Orders & trucks) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 736. m
+160.9600000000000364 736. l
+S
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 722. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 722. Td
+(Upload or enter customer plant orders.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 705. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 705. Td
+(Build a truck, set a loading date, and assign orders.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 688. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 688. Td
+(Loaders check off plants on their phone; inventory updates live.) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+1. 0.42 0.29 rg
+44. 671. Td
+(•) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+56. 671. Td
+(Print or share a Bill of Lading when the truck rolls.) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 646. Td
+(4. Invoices & getting paid \(Stripe\)) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 642. m
+260.9199999999999591 642. l
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+40. 628. Td
+(You do not need a Stripe account beforehand. NurseryOS creates a connected Stripe Express account when you click) Tj
+T* (Connect.) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 596. m
+566. 596. l
+569.3137084989847381 596. 572. 593.3137084989847381 572. 590. c
+572. 528. l
+572. 524.6862915010152619 568.6862915010152619 522. 566. 522. c
+46. 522. l
+42.6862915010152406 522. 40. 525.3137084989847381 40. 528. c
+40. 590. l
+40. 593.3137084989847381 43.3137084989847594 596. 46. 596. c
+h
+B
+0.05 0.45 0.56 rg
+67. 580. m
+67. 584.970562748477164 62.9705627484771426 589. 58. 589. c
+53.0294372515228574 589. 49. 584.970562748477164 49. 580. c
+49. 575.029437251522836 53.0294372515228574 571. 58. 571. c
+62.9705627484771426 571. 67. 575.029437251522836 67. 580. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 577. Td
+(1) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 577. Td
+(Connect Stripe) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 562. Td
+( T e a m  !’   S t r i p e   C o n n e c t  !’   C o n n e c t   S t r i p e   \( o w n e r   o r   a d m i n   o n l y \) .) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 550. Td
+(Stripe opens a secure form: business details, bank account, and identity.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 538. Td
+(When finished, return to NurseryOS — you should see ready to collect payments.) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 512. m
+566. 512. l
+569.3137084989847381 512. 572. 509.3137084989847381 572. 506. c
+572. 444. l
+572. 440.6862915010152619 568.6862915010152619 438. 566. 438. c
+46. 438. l
+42.6862915010152406 438. 40. 441.3137084989847381 40. 444. c
+40. 506. l
+40. 509.3137084989847381 43.3137084989847594 512. 46. 512. c
+h
+B
+0.05 0.45 0.56 rg
+67. 496. m
+67. 500.970562748477164 62.9705627484771426 505. 58. 505. c
+53.0294372515228574 505. 49. 500.970562748477164 49. 496. c
+49. 491.029437251522836 53.0294372515228574 487. 58. 487. c
+62.9705627484771426 487. 67. 491.029437251522836 67. 496. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 493. Td
+(2) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 493. Td
+(Send a pay link) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 478. Td
+( O p e n   a n   i n v o i c e  !’   c r e a t e   a   S t r i p e   p a y   l i n k   a n d   s e n d   i t   t o   y o u r   c u s t o m e r .) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 466. Td
+(They pay by card \(or ACH when enabled\). Funds go to your nursery’s Stripe account.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 454. Td
+(Start with a small invoice to confirm everything end-to-end.) Tj
+ET
+1. 0.97 0.93 rg
+0.99 0.73 0.45 RG
+0.8 w
+48. 424. m
+564. 424. l
+568.4182779986463174 424. 572. 420.4182779986463743 572. 416. c
+572. 384. l
+572. 379.5817220013536257 567.5817220013536826 376. 564. 376. c
+48. 376. l
+43.5817220013536542 376. 40. 380.4182779986463743 40. 384. c
+40. 416. l
+40. 420.4182779986463743 44.4182779986463458 424. 48. 424. c
+h
+B
+BT
+/F2 9.5 Tf
+10.9249999999999989 TL
+0.604 0.204 0.071 rg
+56. 406. Td
+(Note) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.604 0.204 0.071 rg
+56. 390. Td
+(Use real business EIN / SSN on Stripe’s live form. Test IDs only work in sandbox and often fail in the hosted UI.) Tj
+ET
+0.89 0.91 0.94 RG
+0.6 w
+40. 36. m
+572. 36. l
+S
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+40. 22. Td
+(nurseryos.app  ·  owner@nurseryos.app) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+556.4800000000000182 22. Td
+(2 / 4) Tj
+ET
+endstream
+endobj
+9 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 10 0 R
+>>
+endobj
+10 0 obj
+<<
+/Length 4784
+>>
+stream
+0.8 w
+0.99 0.73 0.45 RG
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 740. Td
+(5. Paying vendors \(Checkbook ACH\)) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 736. m
+281.6399999999999864 736. l
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+40. 722. Td
+(Unlike Stripe, you create a Checkbook account first, then paste API keys into NurseryOS.) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 703. m
+566. 703. l
+569.3137084989847381 703. 572. 700.3137084989847381 572. 697. c
+572. 635. l
+572. 631.6862915010152619 568.6862915010152619 629. 566. 629. c
+46. 629. l
+42.6862915010152406 629. 40. 632.3137084989847381 40. 635. c
+40. 697. l
+40. 700.3137084989847381 43.3137084989847594 703. 46. 703. c
+h
+B
+0.05 0.45 0.56 rg
+67. 687. m
+67. 691.970562748477164 62.9705627484771426 696. 58. 696. c
+53.0294372515228574 696. 49. 691.970562748477164 49. 687. c
+49. 682.029437251522836 53.0294372515228574 678. 58. 678. c
+62.9705627484771426 678. 67. 682.029437251522836 67. 687. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 684. Td
+(1) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 684. Td
+(Create & verify Checkbook) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 669. Td
+(Sign up at checkbook.io and add your business bank account.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 657. Td
+(If Checkbook uses microdeposits, expect 1–3 business days before you can confirm amounts.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 645. Td
+( A f t e r   t h e   b a n k   i s   v e r i f i e d ,   o p e n   S e t t i n g s  !’   D e v e l o p e r .) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 619. m
+566. 619. l
+569.3137084989847381 619. 572. 616.3137084989847381 572. 613. c
+572. 551. l
+572. 547.6862915010152619 568.6862915010152619 545. 566. 545. c
+46. 545. l
+42.6862915010152406 545. 40. 548.3137084989847381 40. 551. c
+40. 613. l
+40. 616.3137084989847381 43.3137084989847594 619. 46. 619. c
+h
+B
+0.05 0.45 0.56 rg
+67. 603. m
+67. 607.970562748477164 62.9705627484771426 612. 58. 612. c
+53.0294372515228574 612. 49. 607.970562748477164 49. 603. c
+49. 598.029437251522836 53.0294372515228574 594. 58. 594. c
+62.9705627484771426 594. 67. 598.029437251522836 67. 603. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 600. Td
+(2) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 600. Td
+(Connect in NurseryOS) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 585. Td
+( T e a m  !’   V e n d o r   A C H   B i l l   P a y   \( C h e c k b o o k \) .) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 573. Td
+(Choose Production, paste Publishable key + Secret key, then Connect.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 561. Td
+(Copy the webhook URL shown in Team \(includes your nursery id\).) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+0.6 w
+46. 535. m
+566. 535. l
+569.3137084989847381 535. 572. 532.3137084989847381 572. 529. c
+572. 455. l
+572. 451.6862915010152619 568.6862915010152619 449. 566. 449. c
+46. 449. l
+42.6862915010152406 449. 40. 452.3137084989847381 40. 455. c
+40. 529. l
+40. 532.3137084989847381 43.3137084989847594 535. 46. 535. c
+h
+B
+0.05 0.45 0.56 rg
+67. 519. m
+67. 523.970562748477164 62.9705627484771426 528. 58. 528. c
+53.0294372515228574 528. 49. 523.970562748477164 49. 519. c
+49. 514.029437251522836 53.0294372515228574 510. 58. 510. c
+62.9705627484771426 510. 67. 514.029437251522836 67. 519. c
+f
+BT
+/F2 10 Tf
+11.5 TL
+1. g
+55.25 516. Td
+(3) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.059 0.09 0.165 rg
+76. 516. Td
+(Webhook in Checkbook) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 501. Td
+(In Checkbook Developer settings, paste that exact webhook URL.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 489. Td
+(Example shape: https://nurseryos.app/api/checkbook/webhook?tenantId=YOUR_ID) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 477. Td
+(Optional: paste the webhook signing key back into NurseryOS.) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.392 0.455 0.545 rg
+76. 465. Td
+(Then pay a small vendor bill from Purchasing to confirm ACH.) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 433. Td
+(Need help?) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 429. m
+115.1800000000000068 429. l
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+40. 415. Td
+(Email owner@nurseryos.app — we’re happy to walk through setup on a call with your first invoice and first vendor) Tj
+T* (payment.) Tj
+ET
+0.89 0.91 0.94 RG
+0.6 w
+40. 36. m
+572. 36. l
+S
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+40. 22. Td
+(nurseryos.app  ·  owner@nurseryos.app) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+556.4800000000000182 22. Td
+(3 / 4) Tj
+ET
+endstream
+endobj
+11 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 12 0 R
+>>
+endobj
+12 0 obj
+<<
+/Length 6702
+>>
+stream
+1.5 w
+0.05 0.45 0.56 RG
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0.055 0.455 0.565 rg
+40. 740. Td
+(Quick setup checklist) Tj
+ET
+0.05 0.45 0.56 RG
+1.5 w
+40. 736. m
+183.2200000000000273 736. l
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+40. 722. Td
+(Use this list when onboarding. Check items off as you go — most nurseries finish core setup in one sitting once bank) Tj
+T* (verify is done.) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 691. m
+52.5 691. l
+53.3284271247461916 691. 54. 690.3284271247462129 54. 689.5 c
+54. 682.5 l
+54. 681.6715728752537871 53.1715728752538084 681. 52.5 681. c
+45.5 681. l
+44.6715728752538084 681. 44. 681.8284271247462129 44. 682.5 c
+44. 689.5 l
+44. 690.3284271247462129 44.8284271247461916 691. 45.5 691. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 684. Td
+(Sign in at nurseryos.app \(or accept your invite link\)) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 672. m
+52.5 672. l
+53.3284271247461916 672. 54. 671.3284271247462129 54. 670.5 c
+54. 663.5 l
+54. 662.6715728752537871 53.1715728752538084 662. 52.5 662. c
+45.5 662. l
+44.6715728752538084 662. 44. 662.8284271247462129 44. 663.5 c
+44. 670.5 l
+44. 671.3284271247462129 44.8284271247461916 672. 45.5 672. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 665. Td
+(Confirm nursery name and invite your team \(Team\)) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 653. m
+52.5 653. l
+53.3284271247461916 653. 54. 652.3284271247462129 54. 651.5 c
+54. 644.5 l
+54. 643.6715728752537871 53.1715728752538084 643. 52.5 643. c
+45.5 643. l
+44.6715728752538084 643. 44. 643.8284271247462129 44. 644.5 c
+44. 651.5 l
+44. 652.3284271247462129 44.8284271247461916 653. 45.5 653. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 646. Td
+(Add or import plant inventory \(with photos + ready dates\)) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 634. m
+52.5 634. l
+53.3284271247461916 634. 54. 633.3284271247462129 54. 632.5 c
+54. 625.5 l
+54. 624.6715728752537871 53.1715728752538084 624. 52.5 624. c
+45.5 624. l
+44.6715728752538084 624. 44. 624.8284271247462129 44. 625.5 c
+44. 632.5 l
+44. 633.3284271247462129 44.8284271247461916 634. 45.5 634. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 627. Td
+(Export an availability list and share with a customer) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 615. m
+52.5 615. l
+53.3284271247461916 615. 54. 614.3284271247462129 54. 613.5 c
+54. 606.5 l
+54. 605.6715728752537871 53.1715728752538084 605. 52.5 605. c
+45.5 605. l
+44.6715728752538084 605. 44. 605.8284271247462129 44. 606.5 c
+44. 613.5 l
+44. 614.3284271247462129 44.8284271247461916 615. 45.5 615. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 608. Td
+(Create a truck and load a sample order) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 596. m
+52.5 596. l
+53.3284271247461916 596. 54. 595.3284271247462129 54. 594.5 c
+54. 587.5 l
+54. 586.6715728752537871 53.1715728752538084 586. 52.5 586. c
+45.5 586. l
+44.6715728752538084 586. 44. 586.8284271247462129 44. 587.5 c
+44. 594.5 l
+44. 595.3284271247462129 44.8284271247461916 596. 45.5 596. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 589. Td
+(Create a test invoice \(or small live invoice\)) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 577. m
+52.5 577. l
+53.3284271247461916 577. 54. 576.3284271247462129 54. 575.5 c
+54. 568.5 l
+54. 567.6715728752537871 53.1715728752538084 567. 52.5 567. c
+45.5 567. l
+44.6715728752538084 567. 44. 567.8284271247462129 44. 568.5 c
+44. 575.5 l
+44. 576.3284271247462129 44.8284271247461916 577. 45.5 577. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 570. Td
+(Connect Stripe \(owner/admin\) and finish Stripe’s form) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 558. m
+52.5 558. l
+53.3284271247461916 558. 54. 557.3284271247462129 54. 556.5 c
+54. 549.5 l
+54. 548.6715728752537871 53.1715728752538084 548. 52.5 548. c
+45.5 548. l
+44.6715728752538084 548. 44. 548.8284271247462129 44. 549.5 c
+44. 556.5 l
+44. 557.3284271247462129 44.8284271247461916 558. 45.5 558. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 551. Td
+(Collect one real customer card payment) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 539. m
+52.5 539. l
+53.3284271247461916 539. 54. 538.3284271247462129 54. 537.5 c
+54. 530.5 l
+54. 529.6715728752537871 53.1715728752538084 529. 52.5 529. c
+45.5 529. l
+44.6715728752538084 529. 44. 529.8284271247462129 44. 530.5 c
+44. 537.5 l
+44. 538.3284271247462129 44.8284271247461916 539. 45.5 539. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 532. Td
+(Create a Checkbook account and verify your bank \(microdeposits may take 1–3 business days\)) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 520. m
+52.5 520. l
+53.3284271247461916 520. 54. 519.3284271247462129 54. 518.5 c
+54. 511.5 l
+54. 510.6715728752537871 53.1715728752538084 510. 52.5 510. c
+45.5 510. l
+44.6715728752538084 510. 44. 510.8284271247462129 44. 511.5 c
+44. 518.5 l
+44. 519.3284271247462129 44.8284271247461916 520. 45.5 520. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 513. Td
+(Paste Checkbook production keys in Team) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 501. m
+52.5 501. l
+53.3284271247461916 501. 54. 500.3284271247462129 54. 499.5 c
+54. 492.5 l
+54. 491.6715728752537871 53.1715728752538084 491. 52.5 491. c
+45.5 491. l
+44.6715728752538084 491. 44. 491.8284271247462129 44. 492.5 c
+44. 499.5 l
+44. 500.3284271247462129 44.8284271247461916 501. 45.5 501. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 494. Td
+(Copy the webhook URL from Team into Checkbook Developer settings) Tj
+ET
+0.05 0.45 0.56 RG
+1. w
+45.5 482. m
+52.5 482. l
+53.3284271247461916 482. 54. 481.3284271247462129 54. 480.5 c
+54. 473.5 l
+54. 472.6715728752537871 53.1715728752538084 472. 52.5 472. c
+45.5 472. l
+44.6715728752538084 472. 44. 472.8284271247462129 44. 473.5 c
+44. 480.5 l
+44. 481.3284271247462129 44.8284271247461916 482. 45.5 482. c
+h
+S
+BT
+/F1 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+62. 475. Td
+(Pay one small vendor bill via ACH to confirm bill pay) Tj
+ET
+0.93 1. 1. rg
+0.05 0.45 0.56 RG
+0.8 w
+48. 448. m
+564. 448. l
+568.4182779986463174 448. 572. 444.4182779986463743 572. 440. c
+572. 400. l
+572. 395.5817220013536257 567.5817220013536826 392. 564. 392. c
+48. 392. l
+43.5817220013536542 392. 40. 396.4182779986463743 40. 400. c
+40. 440. l
+40. 444.4182779986463743 44.4182779986463458 448. 48. 448. c
+h
+B
+BT
+/F2 10 Tf
+11.5 TL
+0.082 0.369 0.459 rg
+56. 428. Td
+(Tip) Tj
+ET
+BT
+/F1 9.5 Tf
+10.9249999999999989 TL
+0.059 0.09 0.165 rg
+56. 412. Td
+(Stripe and Checkbook can be set up in either order. You can invoice customers) Tj
+T* (before vendor ACH is ready — Checkbook only blocks paying vendor bills.) Tj
+ET
+0.89 0.91 0.94 RG
+0.6 w
+40. 36. m
+572. 36. l
+S
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+40. 22. Td
+(nurseryos.app  ·  owner@nurseryos.app) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.392 0.455 0.545 rg
+556.4800000000000182 22. Td
+(4 / 4) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R ]
+/Count 5
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+21 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+22 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+23 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+24 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+25 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+26 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 13 0 R
+/F2 14 0 R
+/F3 15 0 R
+/F4 16 0 R
+/F5 17 0 R
+/F6 18 0 R
+/F7 19 0 R
+/F8 20 0 R
+/F9 21 0 R
+/F10 22 0 R
+/F11 23 0 R
+/F12 24 0 R
+/F13 25 0 R
+/F14 26 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+27 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260731152112-05'00')
+>>
+endobj
+28 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 29
+0000000000 65535 f 
+0000023435 00000 n 
+0000025282 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000001419 00000 n 
+0000001524 00000 n 
+0000006776 00000 n 
+0000006881 00000 n 
+0000011630 00000 n 
+0000011736 00000 n 
+0000016573 00000 n 
+0000016680 00000 n 
+0000023517 00000 n 
+0000023643 00000 n 
+0000023774 00000 n 
+0000023908 00000 n 
+0000024046 00000 n 
+0000024170 00000 n 
+0000024299 00000 n 
+0000024431 00000 n 
+0000024567 00000 n 
+0000024695 00000 n 
+0000024822 00000 n 
+0000024951 00000 n 
+0000025084 00000 n 
+0000025186 00000 n 
+0000025535 00000 n 
+0000025621 00000 n 
+trailer
+<<
+/Size 29
+/Root 28 0 R
+/Info 27 0 R
+/ID [ <CFF6C97655F7510496A067A8AA75CD0D> <CFF6C97655F7510496A067A8AA75CD0D> ]
+>>
+startxref
+25725
+%%EOF

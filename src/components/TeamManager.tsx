@@ -247,7 +247,8 @@ export function TeamManager({
           detailsSubmitted: false,
           payoutsEnabled: false,
           connectedAt: null,
-          configured: ready
+          configured: ready,
+          testMode: Boolean(cfg?.testMode)
         });
         if (!ready) {
           if (cfg?.stripe && !cfg?.firebaseAdmin) {
@@ -822,9 +823,13 @@ export function TeamManager({
             <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 space-y-2">
               <p className="text-xs font-bold uppercase text-violet-900">{t('teamExtra.stripe')}</p>
               <p className="text-[11px] text-violet-950/80 leading-relaxed">
-                Connect this nursery’s Stripe account so customers can pay invoices by card. Funds
-                go to the nursery (merchant of record). Owner/admin only.
+                {t('teamExtra.stripeIntro')}
               </p>
+              {stripeStatus?.testMode && (
+                <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 leading-relaxed">
+                  {t('teamExtra.stripeSandboxEinHint')}
+                </p>
+              )}
               {stripeStatus?.connected ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-ink-800">

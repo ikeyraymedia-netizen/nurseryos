@@ -30,6 +30,7 @@ export interface StripeStatus {
   payoutsEnabled: boolean;
   connectedAt: string | null;
   configured: boolean;
+  testMode?: boolean;
 }
 
 export async function fetchStripeStatus(tenantId: string): Promise<StripeStatus> {

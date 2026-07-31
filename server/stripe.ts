@@ -61,6 +61,70 @@ async function loadIntegration(tenantId: string): Promise<StripeIntegration | nu
   return snap.data() as StripeIntegration;
 }
 
+/**
+ * Stripe's hosted Connect form auto-hyphenates EIN/SSN and rejects documented
+ * test values (00-0000000 / 000-00-0000) as "not an allowed value". Prefill
+ * via API instead so sandbox onboarding can complete.
+ */
+async function prefillTestConnectVerification(
+  stripe: Stripe,
+  accountId: string,
+  opts: { tenantName: string; email?: string }
+): Promise<void> {
+  const { tenantName, email } = opts;
+  await stripe.accounts.update(accountId, {
+    business_type: 'company',
+    company: {
+      name: tenantName,
+      tax_id: '000000000',
+      address: {
+        line1: 'address_full_match',
+        city: 'South San Francisco',
+        state: 'CA',
+        postal_code: '94080',
+        country: 'US'
+      }
+    },
+    business_profile: {
+      name: tenantName,
+      url: 'https://accessible.stripe.com',
+      product_description: `${tenantName} nursery wholesale and plant orders`
+    }
+  });
+
+  const persons = await stripe.accounts.listPersons(accountId, { limit: 10 });
+  const representative =
+    persons.data.find((p) => p.relationship?.representative) || persons.data[0];
+
+  const personPayload: Stripe.AccountCreatePersonParams = {
+    first_name: 'Test',
+    last_name: 'Owner',
+    email: email || undefined,
+    id_number: '000000000',
+    dob: { day: 1, month: 1, year: 1901 },
+    address: {
+      line1: 'address_full_match',
+      city: 'South San Francisco',
+      state: 'CA',
+      postal_code: '94080',
+      country: 'US'
+    },
+    relationship: {
+      representative: true,
+      executive: true,
+      owner: true,
+      percent_ownership: 100,
+      title: 'Owner'
+    }
+  };
+
+  if (representative) {
+    await stripe.accounts.updatePerson(accountId, representative.id, personPayload);
+  } else {
+    await stripe.accounts.createPerson(accountId, personPayload);
+  }
+}
+
 async function readBearerUid(req: Request): Promise<string> {
   const header = String(req.headers.authorization || '');
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -376,11 +440,13 @@ export function registerStripeWebhookRoute(app: Express) {
 
 export function registerStripeRoutes(app: Express) {
   app.get('/api/stripe/config-status', (_req, res) => {
+    const secret = process.env.STRIPE_SECRET_KEY?.trim() || '';
     res.json({
       configured: isStripeConfigured() && isFirebaseAdminConfigured(),
       stripe: isStripeConfigured(),
       firebaseAdmin: isFirebaseAdminConfigured(),
-      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || null
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() || null,
+      testMode: secret.startsWith('sk_test_')
     });
   });
 
@@ -409,7 +475,8 @@ export function registerStripeRoutes(app: Express) {
         detailsSubmitted: Boolean(integration?.detailsSubmitted),
         payoutsEnabled: Boolean(integration?.payoutsEnabled),
         connectedAt: integration?.connectedAt || null,
-        configured: isStripeConfigured() && isFirebaseAdminConfigured()
+        configured: isStripeConfigured() && isFirebaseAdminConfigured(),
+        testMode: isStripeConfigured() && requireStripeSecret().startsWith('sk_test_')
       });
     })
   );
@@ -431,10 +498,12 @@ export function registerStripeRoutes(app: Express) {
       const stripe = getStripe();
       let integration = await loadIntegration(tenantId);
       let accountId = integration?.accountId;
+      const isTestMode = requireStripeSecret().startsWith('sk_test_');
+
+      const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
+      const tenantName = String(tenantSnap.data()?.name || 'Nursery');
 
       if (!accountId) {
-        const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
-        const tenantName = String(tenantSnap.data()?.name || 'Nursery');
         const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
         const email = String(memberSnap.data()?.email || '');
 
@@ -445,11 +514,19 @@ export function registerStripeRoutes(app: Express) {
         // (surfaced in onboarding as "Native fetch error: Failed to fetch").
         // Test mode: use Stripe's accessible test site. Live: let the nursery
         // enter their own site, with product_description as a fallback.
-        const isTestMode = requireStripeSecret().startsWith('sk_test_');
         const account = await stripe.accounts.create({
           type: 'express',
           country: 'US',
           email: email || undefined,
+          ...(isTestMode
+            ? {
+                business_type: 'company' as const,
+                company: {
+                  name: tenantName,
+                  tax_id: '000000000'
+                }
+              }
+            : {}),
           capabilities: {
             card_payments: { requested: true },
             transfers: { requested: true },
@@ -463,7 +540,30 @@ export function registerStripeRoutes(app: Express) {
           metadata: { tenantId, nurseryos: '1' }
         });
         accountId = account.id;
+        if (isTestMode) {
+          try {
+            await prefillTestConnectVerification(stripe, accountId, {
+              tenantName,
+              email: email || undefined
+            });
+          } catch (err) {
+            console.warn('[stripe] test-mode verification prefill failed', err);
+          }
+        }
         integration = await refreshAccountStatus(tenantId, accountId, uid);
+      } else if (isTestMode && !integration?.chargesEnabled) {
+        // Existing sandbox account stuck on hosted EIN/SSN: push test IDs via API.
+        try {
+          const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
+          const email = String(memberSnap.data()?.email || '');
+          await prefillTestConnectVerification(stripe, accountId, {
+            tenantName,
+            email: email || undefined
+          });
+          integration = await refreshAccountStatus(tenantId, accountId, uid);
+        } catch (err) {
+          console.warn('[stripe] test-mode verification prefill failed', err);
+        }
       }
 
       const link = await stripe.accountLinks.create({
@@ -477,7 +577,8 @@ export function registerStripeRoutes(app: Express) {
         accountId,
         onboardingUrl: link.url,
         chargesEnabled: Boolean(integration?.chargesEnabled),
-        detailsSubmitted: Boolean(integration?.detailsSubmitted)
+        detailsSubmitted: Boolean(integration?.detailsSubmitted),
+        testMode: isTestMode
       });
     })
   );

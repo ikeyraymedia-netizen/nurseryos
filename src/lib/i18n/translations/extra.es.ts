@@ -813,6 +813,8 @@ const extra = {
     invoiceNotesDelivery: 'Notas de factura / Instrucciones de entrega',
     thankYouFooter: '{{nurseryName}} • ¡Gracias por su negocio!',
     defaultNotesEstimate: 'Este presupuesto es válido por 30 días. Precios sujetos a disponibilidad.',
+    possibleSubs: 'Sustitutos posibles',
+    possibleSubsPlaceholder: 'ej. Boj, Yaupon enano, Acebo',
     defaultNotesInvoice:
       'Gracias por su negocio. El saldo pendiente es pagadero en su totalidad según los términos anteriores.',
     emailSubjectFrom: '{{docLabel}} {{number}} de {{nurseryName}}',
@@ -1384,6 +1386,8 @@ const extra = {
     stripe: 'Stripe Connect',
     stripeIntro:
       'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta. Los fondos van al vivero. Solo dueño/admin.',
+    stripeSandboxEinHint:
+      'Consejo sandbox: EIN/SSN de Stripe agregan guiones y rechazan 00-0000000 / 000-00-0000. NurseryOS precarga tax ID y SSN de prueba — Continuar onboarding (o Desconectar + Conectar), deje esos campos si ya están y termine banco/TOS.',
     stripeReady: 'Listo para cobrar pagos',
     stripeFinish: 'Conectado — complete el onboarding para aceptar pagos',
     stripeConnectedPartial: 'Conectado — complete el onboarding para habilitar cobros',

@@ -1026,15 +1026,14 @@ const extra = {
     statusPaymentPending: 'ACH pendiente',
     statusPaid: 'pagado',
     payViaAch: 'Pagar por ACH',
-    refreshAchStatus: 'Actualizar / completar ACH',
+    refreshAchStatus: 'Actualizar estado ACH',
     achRecipientPrompt: 'Correo del proveedor para el enlace de depósito ACH:',
     achPayConfirm:
       '¿Enviar pago ACH de {{amount}} a {{vendor}} a {{email}}? Recibirán un correo de Checkbook para depositar en su banco.',
     achPaymentSent: 'Pago ACH enviado. Correo del proveedor: {{email}}',
     achStatusRefreshed: 'Estado del pago: {{status}}',
     achPending: 'ACH enviado — esperando depósito de {{recipient}}',
-    achProcessing:
-      'ACH en proceso para {{recipient}} — pulse Actualizar / completar ACH si el sandbox está atascado'
+    achProcessing: 'ACH en proceso para {{recipient}}'
   },
   vendor: {
     aiRead: 'IA leyó:',

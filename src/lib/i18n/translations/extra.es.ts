@@ -1029,14 +1029,21 @@ const extra = {
     statusPaymentPending: 'ACH pendiente',
     statusPaid: 'pagado',
     payViaAch: 'Pagar por ACH',
+    paySelectedAch: 'Pagar {{n}} facturas · {{amount}}',
+    selectBillsToPay: 'Seleccione facturas sin pagar para pagar juntas',
+    clearSelection: 'Borrar',
     refreshAchStatus: 'Actualizar estado ACH',
     achRecipientPrompt: 'Correo del proveedor para el enlace de depósito ACH:',
     achPayConfirm:
       '¿Enviar pago ACH de {{amount}} a {{vendor}} a {{email}}? Recibirán un correo de Checkbook para depositar en su banco.',
+    achPayConfirmMulti:
+      '¿Enviar un pago ACH de {{amount}} por {{n}} facturas a {{vendor}} a {{email}}? Reciben un solo correo de depósito de Checkbook.',
     achPaymentSent: 'Pago ACH enviado. Correo del proveedor: {{email}}',
+    achPaymentSentMulti: 'Un pago ACH enviado por {{n}} facturas. Correo: {{email}}',
     achStatusRefreshed: 'Estado del pago: {{status}}',
     achPending: 'ACH enviado — esperando depósito de {{recipient}}',
-    achProcessing: 'ACH en proceso para {{recipient}}'
+    achProcessing: 'ACH en proceso para {{recipient}}',
+    selectSameVendor: 'Las facturas seleccionadas deben ser del mismo proveedor.'
   },
   vendor: {
     aiRead: 'IA leyó:',

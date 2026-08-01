@@ -67,9 +67,17 @@ export async function disconnectCheckbook(tenantId: string): Promise<void> {
 
 export async function payVendorBillAch(params: {
   tenantId: string;
-  billId: string;
+  billId?: string;
+  billIds?: string[];
   recipientEmail?: string;
-}): Promise<{ paymentId: string; status: string; recipient: string; amount: number }> {
+}): Promise<{
+  paymentId: string;
+  status: string;
+  recipient: string;
+  amount: number;
+  billIds?: string[];
+  billCount?: number;
+}> {
   const res = await fetch('/api/checkbook/pay-bill', {
     method: 'POST',
     headers: await authHeaders(),
@@ -81,6 +89,8 @@ export async function payVendorBillAch(params: {
     status: string;
     recipient: string;
     amount: number;
+    billIds?: string[];
+    billCount?: number;
   };
 }
 

@@ -1017,14 +1017,21 @@ const extra = {
     statusPaymentPending: 'ACH pending',
     statusPaid: 'paid',
     payViaAch: 'Pay via ACH',
+    paySelectedAch: 'Pay {{n}} bills · {{amount}}',
+    selectBillsToPay: 'Select unpaid bills to pay together',
+    clearSelection: 'Clear',
     refreshAchStatus: 'Refresh ACH status',
     achRecipientPrompt: 'Vendor email for ACH deposit link:',
     achPayConfirm:
       'Send {{amount}} ACH payment to {{vendor}} at {{email}}? They will get a Checkbook email to deposit to their bank.',
+    achPayConfirmMulti:
+      'Send one ACH payment of {{amount}} for {{n}} bills to {{vendor}} at {{email}}? They get one Checkbook deposit email.',
     achPaymentSent: 'ACH payment sent. Vendor email: {{email}}',
+    achPaymentSentMulti: 'One ACH payment sent for {{n}} bills. Vendor email: {{email}}',
     achStatusRefreshed: 'Payment status: {{status}}',
     achPending: 'ACH sent — waiting for {{recipient}} to deposit',
-    achProcessing: 'ACH processing for {{recipient}}'
+    achProcessing: 'ACH processing for {{recipient}}',
+    selectSameVendor: 'Selected bills must be for the same vendor.'
   },
   vendor: {
     aiRead: 'AI read:',

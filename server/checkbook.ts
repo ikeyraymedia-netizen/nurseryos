@@ -384,25 +384,28 @@ export function registerCheckbookWebhookRoute(app: Express) {
         const billsSnap = await getAdminDb()
           .collection(`tenants/${tenantId}/vendorBills`)
           .where('checkbookPaymentId', '==', paymentId)
-          .limit(1)
+          .limit(50)
           .get();
 
-        const billId = billsSnap.empty ? null : billsSnap.docs[0].id;
-        if (!billId) {
+        if (billsSnap.empty) {
           // Acknowledge — payment may not be from NurseryOS
           res.json({ ok: true, matched: false });
           return;
         }
 
-        await applyPaymentStatusToBill({
-          tenantId,
-          billId,
-          paymentId,
-          checkbookStatus: status,
-          depositOption: payload.deposit_option || null
-        });
+        const billIds: string[] = [];
+        for (const doc of billsSnap.docs) {
+          billIds.push(doc.id);
+          await applyPaymentStatusToBill({
+            tenantId,
+            billId: doc.id,
+            paymentId,
+            checkbookStatus: status,
+            depositOption: payload.deposit_option || null
+          });
+        }
 
-        res.json({ ok: true, matched: true, billId });
+        res.json({ ok: true, matched: true, billIds });
       })
   );
 }
@@ -524,11 +527,19 @@ export function registerCheckbookRoutes(app: Express) {
   app.post('/api/checkbook/pay-bill', (req, res) =>
     void handleAsync(res, async () => {
       const tenantId = String(req.body?.tenantId || '').trim();
-      const billId = String(req.body?.billId || '').trim();
+      const singleBillId = String(req.body?.billId || '').trim();
+      const billIdsRaw = Array.isArray(req.body?.billIds) ? req.body.billIds : [];
+      const billIds = [
+        ...new Set(
+          [singleBillId, ...billIdsRaw.map((id: unknown) => String(id || '').trim())].filter(
+            Boolean
+          )
+        )
+      ];
       const recipientOverride = String(req.body?.recipientEmail || '').trim();
 
-      if (!tenantId || !billId) {
-        res.status(400).json({ error: 'tenantId and billId are required.' });
+      if (!tenantId || billIds.length === 0) {
+        res.status(400).json({ error: 'tenantId and billId(s) are required.' });
         return;
       }
 
@@ -543,12 +554,8 @@ export function registerCheckbookRoutes(app: Express) {
         );
       }
 
-      const billRef = getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`);
-      const billSnap = await billRef.get();
-      if (!billSnap.exists) {
-        throw Object.assign(new Error('Vendor bill not found.'), { status: 404 });
-      }
-      const bill = billSnap.data() as {
+      type BillRow = {
+        id: string;
         status?: string;
         vendorId?: string;
         vendorName?: string;
@@ -557,27 +564,56 @@ export function registerCheckbookRoutes(app: Express) {
         checkbookPaymentId?: string;
       };
 
-      if (bill.status === 'paid') {
-        throw Object.assign(new Error('This bill is already marked paid.'), { status: 400 });
-      }
-      if (bill.status === 'payment_pending' && bill.checkbookPaymentId) {
-        throw Object.assign(
-          new Error('A payment is already in progress for this bill. Refresh status instead.'),
-          { status: 400 }
-        );
+      const bills: BillRow[] = [];
+      for (const billId of billIds) {
+        const billSnap = await getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`).get();
+        if (!billSnap.exists) {
+          throw Object.assign(new Error(`Vendor bill not found (${billId}).`), { status: 404 });
+        }
+        bills.push({ id: billId, ...(billSnap.data() as Omit<BillRow, 'id'>) });
       }
 
-      const amount = Number(bill.grandTotal || 0);
+      for (const bill of bills) {
+        if (bill.status === 'paid') {
+          throw Object.assign(
+            new Error(`Bill ${bill.billNumber || bill.id} is already marked paid.`),
+            { status: 400 }
+          );
+        }
+        if (bill.status === 'payment_pending' && bill.checkbookPaymentId) {
+          throw Object.assign(
+            new Error(
+              `Bill ${bill.billNumber || bill.id} already has an ACH payment in progress. Refresh status instead.`
+            ),
+            { status: 400 }
+          );
+        }
+      }
+
+      const vendorIds = [
+        ...new Set(bills.map((b) => String(b.vendorId || '').trim()).filter(Boolean))
+      ];
+      if (vendorIds.length > 1) {
+        throw Object.assign(new Error('All selected bills must be for the same vendor.'), {
+          status: 400
+        });
+      }
+
+      const amount = bills.reduce((sum, bill) => {
+        const n = Number(bill.grandTotal || 0);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
       if (!Number.isFinite(amount) || amount <= 0) {
-        throw Object.assign(new Error('Bill total must be greater than zero.'), { status: 400 });
+        throw Object.assign(new Error('Combined bill total must be greater than zero.'), {
+          status: 400
+        });
       }
 
       let recipient = recipientOverride;
-      let vendorName = String(bill.vendorName || 'Vendor');
-      if (bill.vendorId) {
-        const vendorSnap = await getAdminDb()
-          .doc(`tenants/${tenantId}/vendors/${bill.vendorId}`)
-          .get();
+      let vendorName = String(bills[0]?.vendorName || 'Vendor');
+      const vendorId = vendorIds[0] || String(bills[0]?.vendorId || '').trim();
+      if (vendorId) {
+        const vendorSnap = await getAdminDb().doc(`tenants/${tenantId}/vendors/${vendorId}`).get();
         if (vendorSnap.exists) {
           const vendor = vendorSnap.data() as {
             name?: string;
@@ -597,13 +633,22 @@ export function registerCheckbookRoutes(app: Express) {
         );
       }
 
-      const description = `NurseryOS bill ${bill.billNumber || billId}`.slice(0, 100);
+      const billNumbers = bills
+        .map((b) => String(b.billNumber || b.id).trim())
+        .filter(Boolean)
+        .slice(0, 8);
+      const description =
+        bills.length === 1
+          ? `NurseryOS bill ${billNumbers[0] || bills[0].id}`.slice(0, 100)
+          : `NurseryOS bills ${billNumbers.join(', ')}${
+              bills.length > billNumbers.length ? '…' : ''
+            } (${bills.length} bills)`.slice(0, 100);
       const body = {
         name: vendorName.slice(0, 100),
         recipient,
         amount: Math.round(amount * 100) / 100,
         description,
-        comment: `tenant:${tenantId}|bill:${billId}`
+        comment: `tenant:${tenantId}|bills:${billIds.join(',')}`
       };
 
       const payRes = await checkbookFetch(integration, '/v3/check/digital', {
@@ -625,26 +670,33 @@ export function registerCheckbookRoutes(app: Express) {
       }
 
       const now = new Date().toISOString();
-      await billRef.set(
-        {
-          status: 'payment_pending',
-          paymentMethod: 'ach',
-          paymentReference: paymentId,
-          checkbookPaymentId: paymentId,
-          checkbookPaymentStatus: payment.status || 'UNPAID',
-          checkbookPaymentNumber: payment.number ?? null,
-          checkbookRecipient: recipient,
-          checkbookPaymentError: null,
-          updatedAt: now
-        },
-        { merge: true }
-      );
+      const batch = getAdminDb().batch();
+      for (const bill of bills) {
+        batch.set(
+          getAdminDb().doc(`tenants/${tenantId}/vendorBills/${bill.id}`),
+          {
+            status: 'payment_pending',
+            paymentMethod: 'ach',
+            paymentReference: paymentId,
+            checkbookPaymentId: paymentId,
+            checkbookPaymentStatus: payment.status || 'UNPAID',
+            checkbookPaymentNumber: payment.number ?? null,
+            checkbookRecipient: recipient,
+            checkbookPaymentError: null,
+            updatedAt: now
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
 
       res.json({
         paymentId,
         status: payment.status || 'UNPAID',
         recipient,
-        amount
+        amount: Math.round(amount * 100) / 100,
+        billIds,
+        billCount: bills.length
       });
     })
   );
@@ -696,18 +748,28 @@ export function registerCheckbookRoutes(app: Express) {
         }
       }
 
-      await applyPaymentStatusToBill({
-        tenantId,
-        billId,
-        paymentId,
-        checkbookStatus: status || String(payment.status || ''),
-        depositOption: payment.deposit_option || null
-      });
+      const linkedSnap = await getAdminDb()
+        .collection(`tenants/${tenantId}/vendorBills`)
+        .where('checkbookPaymentId', '==', paymentId)
+        .limit(50)
+        .get();
+      const linkedIds = linkedSnap.empty ? [billId] : linkedSnap.docs.map((d) => d.id);
+
+      for (const linkedId of linkedIds) {
+        await applyPaymentStatusToBill({
+          tenantId,
+          billId: linkedId,
+          paymentId,
+          checkbookStatus: status || String(payment.status || ''),
+          depositOption: payment.deposit_option || null
+        });
+      }
 
       res.json({
         paymentId,
         status: status || payment.status || null,
-        environment: integration.environment
+        environment: integration.environment,
+        billIds: linkedIds
       });
     })
   );

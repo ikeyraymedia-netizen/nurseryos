@@ -221,6 +221,7 @@ export function PurchasingWorkspace({
   const [billNotes, setBillNotes] = useState('');
   const [billLines, setBillLines] = useState<BillFormLine[]>([emptyBillLine()]);
   const [markingPaidBill, setMarkingPaidBill] = useState<VendorBill | null>(null);
+  const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
 
   useEffect(() => {
     const unsubV = subscribeToVendors(setVendors);
@@ -280,6 +281,24 @@ export function PurchasingWorkspace({
     }
     return list.sort((a, b) => (b.billDate || '').localeCompare(a.billDate || ''));
   }, [bills, selectedVendorId, q]);
+
+  const selectedBills = useMemo(() => {
+    const set = new Set(selectedBillIds);
+    return bills.filter((b) => set.has(b.id) && b.status === 'unpaid');
+  }, [bills, selectedBillIds]);
+
+  const selectedBillsTotal = useMemo(
+    () => selectedBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0),
+    [selectedBills]
+  );
+
+  useEffect(() => {
+    const unpaidIds = new Set(bills.filter((b) => b.status === 'unpaid').map((b) => b.id));
+    setSelectedBillIds((prev) => {
+      const next = prev.filter((id) => unpaidIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [bills]);
 
   const billsByVendorId = useMemo(() => {
     const map = new Map<string, { count: number; outstanding: number }>();
@@ -717,7 +736,98 @@ export function PurchasingWorkspace({
     }
   }
 
+  function toggleBillSelection(billId: string) {
+    setSelectedBillIds((prev) =>
+      prev.includes(billId) ? prev.filter((id) => id !== billId) : [...prev, billId]
+    );
+  }
+
+  async function payBillsAch(targetBills: VendorBill[]) {
+    if (targetBills.length === 0) return;
+    const vendorIds = new Set(targetBills.map((b) => b.vendorId));
+    if (vendorIds.size > 1) {
+      setError(t('purchasing.selectSameVendor'));
+      return;
+    }
+    const first = targetBills[0];
+    const vendor = vendors.find((v) => v.id === first.vendorId);
+    let recipientEmail = vendor?.contactEmail?.trim() || '';
+    const amount = money(targetBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0));
+    if (!recipientEmail) {
+      const entered = window.prompt(t('purchasing.achRecipientPrompt'), '');
+      if (!entered?.trim()) return;
+      recipientEmail = entered.trim();
+    } else {
+      const ok = window.confirm(
+        targetBills.length > 1
+          ? t('purchasing.achPayConfirmMulti', {
+              amount,
+              n: targetBills.length,
+              vendor: first.vendorName,
+              email: recipientEmail
+            })
+          : t('purchasing.achPayConfirm', {
+              amount,
+              vendor: first.vendorName,
+              email: recipientEmail
+            })
+      );
+      if (!ok) return;
+    }
+    await payVendorBillAch({
+      tenantId,
+      billIds: targetBills.map((b) => b.id),
+      recipientEmail
+    });
+    setSelectedBillIds([]);
+    setStatus(
+      targetBills.length > 1
+        ? t('purchasing.achPaymentSentMulti', {
+            n: targetBills.length,
+            email: recipientEmail
+          })
+        : t('purchasing.achPaymentSent', { email: recipientEmail })
+    );
+  }
+
+  function renderBillSelectionBar() {
+    if (!permissions.canPayVendorBills || selectedBills.length === 0) return null;
+    return (
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 mb-2">
+        <p className="text-[11px] font-bold text-ink-800">
+          {t('purchasing.selectBillsToPay')}
+          {selectedBills.length > 0
+            ? ` · ${selectedBills.length} · ${money(selectedBillsTotal)}`
+            : ''}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setSelectedBillIds([])}
+            className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700"
+          >
+            {t('purchasing.clearSelection')}
+          </button>
+          <button
+            type="button"
+            disabled={busy || selectedBills.length === 0}
+            onClick={() => void run(async () => payBillsAch(selectedBills))}
+            className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white disabled:opacity-50"
+          >
+            {t('purchasing.paySelectedAch', {
+              n: selectedBills.length,
+              amount: money(selectedBillsTotal)
+            })}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function renderBillCard(bill: VendorBill) {
+    const isSelected = selectedBillIds.includes(bill.id);
+    const canSelect = bill.status === 'unpaid' && permissions.canPayVendorBills;
     return (
       <div
         key={bill.id}
@@ -735,11 +845,24 @@ export function PurchasingWorkspace({
         className={`border rounded-xl p-3 transition text-left w-full ${
           editingBill?.id === bill.id
             ? 'border-ink-400 bg-ink-50/30'
-            : 'border-gray-100 hover:border-ink-200 cursor-pointer'
+            : isSelected
+              ? 'border-ink-300 bg-ink-50/40'
+              : 'border-gray-100 hover:border-ink-200 cursor-pointer'
         }`}
       >
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="flex items-start gap-2 min-w-0">
+            {canSelect && (
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => toggleBillSelection(bill.id)}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
+                aria-label={t('purchasing.selectBillsToPay')}
+              />
+            )}
+            <div className="min-w-0">
             <p className="text-sm font-bold text-gray-900">
               {bill.billNumber}
               {!selectedVendorId && (
@@ -798,6 +921,7 @@ export function PurchasingWorkspace({
                 ))}
               </div>
             )}
+            </div>
           </div>
           <span
             className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusBadge(bill.status)}`}
@@ -833,32 +957,7 @@ export function PurchasingWorkspace({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    const vendor = vendors.find((v) => v.id === bill.vendorId);
-                    let recipientEmail = vendor?.contactEmail?.trim() || '';
-                    if (!recipientEmail) {
-                      const entered = window.prompt(t('purchasing.achRecipientPrompt'), '');
-                      if (!entered?.trim()) return;
-                      recipientEmail = entered.trim();
-                    } else {
-                      const ok = window.confirm(
-                        t('purchasing.achPayConfirm', {
-                          amount: money(bill.grandTotal),
-                          vendor: bill.vendorName,
-                          email: recipientEmail
-                        })
-                      );
-                      if (!ok) return;
-                    }
-                    await payVendorBillAch({
-                      tenantId,
-                      billId: bill.id,
-                      recipientEmail
-                    });
-                    setStatus(t('purchasing.achPaymentSent', { email: recipientEmail }));
-                  })
-                }
+                onClick={() => void run(async () => payBillsAch([bill]))}
                 className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white"
               >
                 {t('purchasing.payViaAch')}
@@ -1138,6 +1237,7 @@ export function PurchasingWorkspace({
               {t('purchasing.billsForVendor', { name: selectedVendor.name })}
             </p>
             <div className="space-y-2 max-h-[480px] overflow-y-auto">
+              {renderBillSelectionBar()}
               {selectedVendorBills.length === 0 ? (
                 <p className="text-xs text-gray-500 py-8 text-center">
                   {t('purchasing.noBillsForVendor')}
@@ -1902,6 +2002,7 @@ export function PurchasingWorkspace({
           )}
 
           <div className="space-y-2 max-h-[480px] overflow-y-auto">
+            {renderBillSelectionBar()}
             {filteredBills.length === 0 ? (
               <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noBills')}</p>
             ) : (

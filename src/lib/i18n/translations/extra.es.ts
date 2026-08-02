@@ -105,6 +105,7 @@ const extra = {
     subtitle: 'Controle cant., fotos, fechas de plantación/listo, fumigaciones y podas.',
     exportExcel: 'Exportar Excel',
     exportPdf: 'Exportar PDF',
+    exportIncludeQty: 'Incluir cantidad de inventario al exportar',
     inStockOnly: 'Solo en stock ({{n}})',
     uploadCsv: 'Subir CSV',
     uploadExcel: 'Excel',

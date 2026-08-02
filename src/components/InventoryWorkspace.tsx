@@ -54,6 +54,7 @@ interface InventoryWorkspaceProps {
 }
 
 const LOW_STOCK_TOGGLE_KEY = 'nurseryos:inventory:showLowStockUpcoming';
+const EXPORT_INCLUDE_QTY_KEY = 'nurseryos:inventory:exportIncludeQty';
 const INVENTORY_UPLOAD_TIMEOUT_MS = 360_000;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -137,6 +138,16 @@ export function InventoryWorkspace({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
+  const [exportIncludeQty, setExportIncludeQty] = useState(() => {
+    try {
+      const raw = localStorage.getItem(EXPORT_INCLUDE_QTY_KEY);
+      if (raw === '0' || raw === 'false') return false;
+      if (raw === '1' || raw === 'true') return true;
+    } catch {
+      /* ignore */
+    }
+    return true;
+  });
   const [exportInStockOnly, setExportInStockOnly] = useState(true);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
@@ -480,11 +491,12 @@ export function InventoryWorkspace({
   }
 
   const exportPlants = useMemo(() => {
-    const list = exportInStockOnly
-      ? plants.filter((p) => (p.quantityAvailable || 0) > 0)
-      : plants;
+    const list =
+      exportIncludeQty && exportInStockOnly
+        ? plants.filter((p) => (p.quantityAvailable || 0) > 0)
+        : plants;
     return [...list].sort((a, b) => a.plantName.localeCompare(b.plantName));
-  }, [plants, exportInStockOnly]);
+  }, [plants, exportInStockOnly, exportIncludeQty]);
 
   async function handleExportExcel() {
     setExportBusy(true);
@@ -493,7 +505,8 @@ export function InventoryWorkspace({
         nurseryName,
         nurseryLogoSrc,
         plants: exportPlants,
-        inStockOnly: false
+        inStockOnly: false,
+        includeQuantity: exportIncludeQty
       });
       setMessage(t('inventory.exportedExcel', { n: exportPlants.length }));
       setMessageIsError(false);
@@ -512,7 +525,8 @@ export function InventoryWorkspace({
         nurseryName,
         nurseryLogoSrc,
         plants: exportPlants,
-        inStockOnly: false
+        inStockOnly: false,
+        includeQuantity: exportIncludeQty
       });
       if (result.method === 'preview') {
         setPdfSheet({ url: result.url, fileName: result.fileName, blob: result.blob });
@@ -635,14 +649,34 @@ export function InventoryWorkspace({
                 {t('inventory.exportPdf')}
               </button>
             </div>
-            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-              <input
-                type="checkbox"
-                checked={exportInStockOnly}
-                onChange={(e) => setExportInStockOnly(e.target.checked)}
-              />
-              {t('inventory.inStockOnly', { n: exportPlants.length })}
-            </label>
+            <div className="flex flex-col items-stretch sm:items-end gap-1.5">
+              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={exportIncludeQty}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setExportIncludeQty(on);
+                    try {
+                      localStorage.setItem(EXPORT_INCLUDE_QTY_KEY, on ? '1' : '0');
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                />
+                {t('inventory.exportIncludeQty')}
+              </label>
+              {exportIncludeQty && (
+                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={exportInStockOnly}
+                    onChange={(e) => setExportInStockOnly(e.target.checked)}
+                  />
+                  {t('inventory.inStockOnly', { n: exportPlants.length })}
+                </label>
+              )}
+            </div>
           </div>
         </div>
 

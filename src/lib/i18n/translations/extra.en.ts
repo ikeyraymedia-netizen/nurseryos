@@ -105,6 +105,7 @@ const extra = {
     subtitle: 'Track qty, photos, planted/ready dates, sprays, and cut-backs.',
     exportExcel: 'Export Excel',
     exportPdf: 'Export PDF',
+    exportIncludeQty: 'Include inventory qty on export',
     inStockOnly: 'In-stock only ({{n}})',
     uploadCsv: 'Upload CSV',
     uploadExcel: 'Excel',

@@ -867,6 +867,7 @@ function NurseryApp({
                 orders={dynamicOrders}
                 tenantId={tenant.id}
                 nurseryName={tenant.name}
+                nurseryLogoSrc={nurseryLogoSrc}
               />
             )}
           </main>
@@ -1111,6 +1112,7 @@ function NurseryApp({
               orders={dynamicOrders}
               tenantId={tenant.id}
               nurseryName={tenant.name}
+              nurseryLogoSrc={nurseryLogoSrc}
             />
           ) : activeTab === 'customers' && permissions.canViewCustomers ? (
             <CustomersWorkspace

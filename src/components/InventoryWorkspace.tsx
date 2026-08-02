@@ -50,6 +50,7 @@ interface InventoryWorkspaceProps {
   orders?: CustomerOrder[];
   tenantId?: string;
   nurseryName?: string;
+  nurseryLogoSrc?: string | null;
 }
 
 const LOW_STOCK_TOGGLE_KEY = 'nurseryos:inventory:showLowStockUpcoming';
@@ -119,7 +120,8 @@ export function InventoryWorkspace({
   trucks = [],
   orders = [],
   tenantId,
-  nurseryName = 'Nursery'
+  nurseryName = 'Nursery',
+  nurseryLogoSrc = null
 }: InventoryWorkspaceProps) {
   const t = useT();
   const dp = usePlantDisplay();
@@ -489,6 +491,7 @@ export function InventoryWorkspace({
     try {
       await exportAvailabilityExcel({
         nurseryName,
+        nurseryLogoSrc,
         plants: exportPlants,
         inStockOnly: false
       });
@@ -507,6 +510,7 @@ export function InventoryWorkspace({
     try {
       const result = await exportAvailabilityPdf({
         nurseryName,
+        nurseryLogoSrc,
         plants: exportPlants,
         inStockOnly: false
       });

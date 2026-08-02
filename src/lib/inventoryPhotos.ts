@@ -9,6 +9,11 @@ import { storage } from '../firebase';
 import { InventoryPlant } from '../types';
 import { updateInventoryPlant } from './inventory';
 import { deliverPdfBlob, type PdfDelivery } from './downloadPdf';
+import {
+  imageSrcToDataUrl,
+  resolveNurseryLogoSrc,
+  type JsPdfImageFormat
+} from './nurseryBranding';
 
 /** Compress an image file to a JPEG blob suitable for Storage upload. */
 export async function fileToCompressedJpegBlob(
@@ -155,125 +160,286 @@ function filterExportPlants(plants: InventoryPlant[], inStockOnly?: boolean): In
     : plants.filter((p) => (p.quantityAvailable || 0) > 0);
 }
 
-/** Build & download an Excel availability list with clickable photo links. */
+async function resolveExportLogo(
+  nurseryName: string,
+  nurseryLogoSrc?: string | null
+): Promise<{ dataUrl: string; format: JsPdfImageFormat } | null> {
+  const src = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
+  if (!src) return null;
+  try {
+    return await imageSrcToDataUrl(src);
+  } catch (err) {
+    console.warn('Availability export logo could not be loaded:', err);
+    return null;
+  }
+}
+
+async function logoBytesForExcel(
+  logo: { dataUrl: string; format: JsPdfImageFormat } | null
+): Promise<{ buffer: ArrayBuffer; extension: 'png' | 'jpeg' } | null> {
+  if (!logo) return null;
+  const comma = logo.dataUrl.indexOf(',');
+  if (comma < 0) return null;
+  const b64 = logo.dataUrl.slice(comma + 1);
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return {
+    buffer: bytes.buffer,
+    extension: logo.format === 'PNG' ? 'png' : 'jpeg'
+  };
+}
+
+function todayLabel(): string {
+  return new Date().toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
+/** Build & download a polished Excel availability list (logo, no raw photo URL column). */
 export async function exportAvailabilityExcel(params: {
   nurseryName: string;
   plants: InventoryPlant[];
   inStockOnly?: boolean;
+  nurseryLogoSrc?: string | null;
 }): Promise<void> {
-  const XLSX = await import('xlsx');
+  const ExcelJS = (await import('exceljs')).default;
   const groups = groupPlantsByCategory(filterExportPlants(params.plants, params.inStockOnly));
+  const logo = await resolveExportLogo(params.nurseryName, params.nurseryLogoSrc);
+  const logoBytes = await logoBytesForExcel(logo);
 
-  type Row = {
-    Plant: string;
-    Size: string | number;
-    Qty: string | number;
-    Price: string | number;
-    'Ready Date': string;
-    Photo: string;
-    'Photo URL': string;
-  };
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'NurseryOS';
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet('Availability');
 
-  const rows: Row[] = [];
-  /** Excel row index (1-based data rows; header is row 0) → plant for photo hyperlinks */
-  const photoBySheetRow = new Map<number, InventoryPlant>();
+  sheet.columns = [
+    { key: 'plant', width: logoBytes ? 14 : 36 },
+    { key: 'size', width: 12 },
+    { key: 'qty', width: 10 },
+    { key: 'price', width: 12 },
+    { key: 'ready', width: 14 },
+    { key: 'photo', width: 14 }
+  ];
 
-  for (const group of groups) {
-    rows.push({
-      Plant: group.category,
-      Size: '',
-      Qty: '',
-      Price: '',
-      'Ready Date': '',
-      Photo: '',
-      'Photo URL': ''
-    });
-    for (const plant of group.plants) {
-      const sheetRow = rows.length; // 0-based among data rows; +1 for header when linking
-      rows.push({
-        Plant: plant.plantName,
-        Size: plant.containerSize || '',
-        Qty: plant.quantityAvailable ?? 0,
-        Price: plant.listPrice != null ? plant.listPrice : '',
-        'Ready Date': plant.readyDate?.trim() ? formatReadyDate(plant.readyDate) : '',
-        Photo: isHttpUrl(plant.photoUrl) ? 'View photo' : '',
-        'Photo URL': isHttpUrl(plant.photoUrl) ? plant.photoUrl : ''
-      });
-      photoBySheetRow.set(sheetRow, plant);
-    }
+  // Brand header — logo in col A, titles from col B
+  if (logoBytes) {
+    sheet.getColumn(1).width = 12;
+    sheet.getColumn(2).width = 28;
+  } else {
+    sheet.mergeCells('A1:F1');
+    sheet.mergeCells('A2:F2');
+    sheet.mergeCells('A3:F3');
   }
 
-  const sheet = XLSX.utils.json_to_sheet(
-    rows.length
-      ? rows
-      : [
-          {
-            Plant: '',
-            Size: '',
-            Qty: '',
-            Price: '',
-            'Ready Date': '',
-            Photo: '',
-            'Photo URL': ''
-          }
-        ]
-  );
+  if (logoBytes) {
+    sheet.mergeCells('B1:F1');
+    sheet.mergeCells('B2:F2');
+    sheet.mergeCells('B3:F3');
+  }
 
-  // Clickable "View photo" cells (column F = index 5)
-  for (const [sheetRow, plant] of photoBySheetRow) {
-    if (!isHttpUrl(plant.photoUrl)) continue;
-    const cellRef = XLSX.utils.encode_cell({ r: sheetRow + 1, c: 5 });
-    sheet[cellRef] = {
-      t: 's',
-      v: 'View photo',
-      l: { Target: plant.photoUrl, Tooltip: plant.plantName }
+  sheet.getRow(1).height = logoBytes ? 28 : 22;
+  sheet.getRow(2).height = logoBytes ? 20 : 18;
+  sheet.getRow(3).height = 16;
+  if (logoBytes) {
+    sheet.getRow(4).height = 18;
+  }
+
+  const titleCell = sheet.getCell(logoBytes ? 'B1' : 'A1');
+  titleCell.value = (params.nurseryName || 'Nursery').toUpperCase();
+  titleCell.font = { name: 'Calibri', size: 18, bold: true, color: { argb: 'FF0F172A' } };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'left' };
+
+  const subtitleCell = sheet.getCell(logoBytes ? 'B2' : 'A2');
+  subtitleCell.value = 'Current Availability';
+  subtitleCell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF0E7490' } };
+  subtitleCell.alignment = { vertical: 'middle' };
+
+  const metaCell = sheet.getCell(logoBytes ? 'B3' : 'A3');
+  metaCell.value = `Generated ${todayLabel()} · Click “View photo” to open plant photos`;
+  metaCell.font = { name: 'Calibri', size: 9, color: { argb: 'FF64748B' } };
+  metaCell.alignment = { vertical: 'middle' };
+
+  if (logoBytes) {
+    const imageId = workbook.addImage({
+      buffer: logoBytes.buffer,
+      extension: logoBytes.extension
+    });
+    sheet.addImage(imageId, {
+      tl: { col: 0, row: 0 },
+      ext: { width: 72, height: 72 }
+    });
+  }
+
+  // Column headers
+  const headerRowNum = logoBytes ? 6 : 5;
+  sheet.views = [{ state: 'frozen', ySplit: headerRowNum }];
+  const headerRow = sheet.getRow(headerRowNum);
+  headerRow.values = ['Plant', 'Size', 'Qty', 'Price', 'Ready Date', 'Photo'];
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF334155' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF1F5F9' }
+    };
+    cell.border = {
+      bottom: { style: 'thin', color: { argb: 'FF94A3B8' } }
+    };
+    cell.alignment = { vertical: 'middle' };
+  });
+
+  // When logo is present, Plant column is col A — restore a readable width for data rows
+  if (logoBytes) {
+    sheet.getColumn(1).width = 32;
+  }
+
+  let rowIdx = headerRowNum + 1;
+  let alt = false;
+
+  for (const group of groups) {
+    const catRow = sheet.getRow(rowIdx);
+    sheet.mergeCells(rowIdx, 1, rowIdx, 6);
+    catRow.getCell(1).value = group.category.toUpperCase();
+    catRow.getCell(1).font = {
+      name: 'Calibri',
+      size: 10,
+      bold: true,
+      color: { argb: 'FFFFFFFF' }
+    };
+    catRow.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0E7490' }
+    };
+    catRow.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+    catRow.height = 20;
+    rowIdx += 1;
+    alt = false;
+
+    for (const plant of group.plants) {
+      const row = sheet.getRow(rowIdx);
+      row.values = [
+        plant.plantName || '',
+        plant.containerSize || '',
+        plant.quantityAvailable ?? 0,
+        plant.listPrice != null ? plant.listPrice : '',
+        plant.readyDate?.trim() ? formatReadyDate(plant.readyDate) : '',
+        ''
+      ];
+      row.height = 18;
+
+      const bg = alt ? 'FFF8FAFC' : 'FFFFFFFF';
+      for (let c = 1; c <= 6; c++) {
+        const cell = row.getCell(c);
+        cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF0F172A' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+        cell.alignment = { vertical: 'middle' };
+        if (c === 3 || c === 4) cell.alignment = { vertical: 'middle', horizontal: 'right' };
+      }
+
+      if (plant.listPrice != null) {
+        row.getCell(4).numFmt = '"$"#,##0.00';
+      }
+
+      if (isHttpUrl(plant.photoUrl)) {
+        const photoCell = row.getCell(6);
+        photoCell.value = {
+          text: 'View photo',
+          hyperlink: plant.photoUrl
+        };
+        photoCell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF0E7490' },
+          underline: true
+        };
+      }
+
+      rowIdx += 1;
+      alt = !alt;
+    }
+
+    // Spacer between categories
+    rowIdx += 1;
+  }
+
+  if (groups.length === 0) {
+    sheet.getCell(`A${rowIdx}`).value = 'No plants to list.';
+    sheet.getCell(`A${rowIdx}`).font = {
+      name: 'Calibri',
+      size: 10,
+      italic: true,
+      color: { argb: 'FF64748B' }
     };
   }
 
-  sheet['!cols'] = [
-    { wch: 32 },
-    { wch: 10 },
-    { wch: 8 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 48 }
-  ];
-
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Availability');
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
   const fileName = `${safeFileStem(params.nurseryName)}_availability.xlsx`;
-  XLSX.writeFile(workbook, fileName);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-/** Build a PDF availability list with clickable photo links. */
+/** Build a PDF availability list with nursery logo and clickable photo links. */
 export async function exportAvailabilityPdf(params: {
   nurseryName: string;
   plants: InventoryPlant[];
   inStockOnly?: boolean;
+  nurseryLogoSrc?: string | null;
 }): Promise<PdfDelivery> {
   const { default: autoTable } = await import('jspdf-autotable');
   const groups = groupPlantsByCategory(filterExportPlants(params.plants, params.inStockOnly));
+  const logo = await resolveExportLogo(params.nurseryName, params.nurseryLogoSrc);
 
   const pdf = new jsPDF('p', 'pt', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const margin = 40;
+  const headerTop = margin;
+  let textX = margin;
   let cursor = margin;
+
+  if (logo) {
+    try {
+      const logoSize = 52;
+      pdf.addImage(logo.dataUrl, logo.format, margin, headerTop, logoSize, logoSize);
+      textX = margin + logoSize + 12;
+    } catch (logoErr) {
+      console.warn('Availability PDF logo could not be embedded:', logoErr);
+    }
+  }
 
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(16);
+  pdf.setTextColor(15, 23, 42);
+  pdf.text((params.nurseryName || 'Nursery').toUpperCase(), textX, headerTop + 18);
+  pdf.setFontSize(11);
   pdf.setTextColor(14, 116, 144);
-  pdf.text((params.nurseryName || 'Nursery').toUpperCase(), margin, cursor);
-  cursor += 18;
-  pdf.setFontSize(9);
-  pdf.setTextColor(100, 116, 139);
-  pdf.text('CURRENT AVAILABILITY', margin, cursor);
-  cursor += 14;
+  pdf.text('CURRENT AVAILABILITY', textX, headerTop + 34);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
-  pdf.setTextColor(71, 85, 105);
-  pdf.text('Click “View photo” to open a plant photo in your browser.', margin, cursor);
-  cursor += 20;
+  pdf.setTextColor(100, 116, 139);
+  pdf.text(
+    `Generated ${todayLabel()}  ·  Click “View photo” to open a plant photo`,
+    textX,
+    headerTop + 48
+  );
+  cursor = headerTop + (logo ? 68 : 60);
+
+  pdf.setDrawColor(226, 232, 240);
+  pdf.setLineWidth(0.8);
+  pdf.line(margin, cursor, pageWidth - margin, cursor);
+  cursor += 16;
 
   if (groups.length === 0) {
     pdf.setFontSize(10);
@@ -302,8 +468,6 @@ export async function exportAvailabilityPdf(params: {
       isHttpUrl(plant.photoUrl) ? 'View photo' : '—'
     ]);
 
-    // Striped rows, no body grid lines — avoids text sitting on cell borders
-    // (a recurring issue with manual jsPDF line + baseline layout).
     autoTable(pdf, {
       startY: cursor,
       margin: { left: margin, right: margin },

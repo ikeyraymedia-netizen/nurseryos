@@ -21,6 +21,7 @@ import { setAuditTenant } from '../lib/audit';
 import { setTasksTenant } from '../lib/tasks';
 import { setVendorsTenant } from '../lib/vendors';
 import { setPurchasingTenant } from '../lib/purchasing';
+import { setBankFeedTenant } from '../lib/bankFeed';
 import { BrandLogo } from './BrandLogo';
 import { bootstrapWorkspaceUrl } from '../lib/workspaceUrl';
 import { AuthPanel, WelcomePage } from './WelcomePage';
@@ -56,6 +57,7 @@ function clearTenantContexts() {
   setTasksTenant(null);
   setVendorsTenant(null);
   setPurchasingTenant(null);
+  setBankFeedTenant(null);
 }
 
 function bindTenantContexts(tenantId: string) {
@@ -67,6 +69,7 @@ function bindTenantContexts(tenantId: string) {
   setTasksTenant(tenantId);
   setVendorsTenant(tenantId);
   setPurchasingTenant(tenantId);
+  setBankFeedTenant(tenantId);
 }
 
 export function AuthGate({ children }: AuthGateProps) {

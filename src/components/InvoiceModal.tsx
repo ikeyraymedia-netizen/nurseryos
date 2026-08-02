@@ -140,6 +140,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Store editable item prices
   const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
+  /** Possible plant substitutes per line (estimate-focused). */
+  const [itemSubstitutes, setItemSubstitutes] = useState<Record<string, string>>({});
   // Store editable item costs (internal profit tracking only)
   const [itemCosts, setItemCosts] = useState<Record<string, number>>({});
 
@@ -284,6 +286,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       });
     }
     setItemPrices(pricesMap);
+
+    const subsMap: Record<string, string> = {};
+    order.items.forEach((item) => {
+      if (item.substitutes) subsMap[item.id] = item.substitutes;
+    });
+    existingDocument?.items?.forEach((item) => {
+      if (item.substitutes != null) subsMap[item.id] = item.substitutes;
+    });
+    setItemSubstitutes(subsMap);
 
     const costsMap: Record<string, number> = {};
     order.items.forEach((item) => {
@@ -439,9 +450,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
       const total = qty * price;
+      const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
+      const subsHtml = subs
+        ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">Possible subs: ${subs}</div>`
+        : '';
       return `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}</td>
+          <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}${subsHtml}</td>
           <td style="padding: 10px 0; text-align: center; color: #64748b; font-family: sans-serif;">${item.containerSize}</td>
           <td style="padding: 10px 0; text-align: center; font-weight: bold; color: #0f172a; font-family: sans-serif;">${qty}</td>
           <td style="padding: 10px 0; text-align: right; color: #0e7490; font-family: sans-serif;">$${price.toFixed(2)}</td>
@@ -572,7 +587,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
       const total = qty * price;
-      return `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: $${price.toFixed(2).padEnd(6)} | Total: $${total.toFixed(2)}`;
+      const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
+      const line = `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: $${price.toFixed(2).padEnd(6)} | Total: $${total.toFixed(2)}`;
+      return subs ? `${line}\n  Possible subs: ${subs}` : line;
     }).join('\n');
 
     return `
@@ -831,7 +848,8 @@ Thank you for choosing ${nurseryName}!
           itemPrices[item.id] !== undefined
             ? itemPrices[item.id]
             : getDefaultPriceForSize(item.containerSize),
-        unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost
+        unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
+        substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined
       }));
 
       const invoiceDetailsPayload: InvoiceDetails = {
@@ -867,7 +885,8 @@ Thank you for choosing ${nurseryName}!
         quantity: getItemQty(item),
         unitPrice: item.unitPrice ?? 0,
         unitCost: item.unitCost,
-        notes: item.notes
+        notes: item.notes,
+        substitutes: item.substitutes
       }));
 
       const customerId = customer?.id || order.customerId;
@@ -1301,10 +1320,15 @@ Thank you for choosing ${nurseryName}!
             ? itemPrices[item.id]
             : getDefaultPriceForSize(item.containerSize);
         const total = qty * price;
+        const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
 
         const nameLines = pdf.splitTextToSize(item.plantName || '—', xSize - xPlant - 10);
+        const subLines = subs
+          ? pdf.splitTextToSize(`${t('invoice.possibleSubs')}: ${subs}`, xSize - xPlant - 10)
+          : [];
         const linePitch = 11;
-        const textBlockHeight = Math.max(9, nameLines.length * linePitch);
+        const textBlockHeight =
+          Math.max(9, nameLines.length * linePitch) + (subLines.length ? subLines.length * 10 + 2 : 0);
         // Space for text + padding under glyphs + rule + gap before next baseline
         const rowSpan = textBlockHeight + 16;
         if (y + rowSpan > pageHeight - margin) {
@@ -1320,6 +1344,15 @@ Thank you for choosing ${nurseryName}!
         nameLines.forEach((l: string, i: number) => {
           pdf.text(l, xPlant, baseline + i * linePitch);
         });
+        if (subLines.length) {
+          pdf.setFontSize(8);
+          pdf.setTextColor(100, 100, 100);
+          const subStart = baseline + nameLines.length * linePitch + 1;
+          subLines.forEach((l: string, i: number) => {
+            pdf.text(l, xPlant, subStart + i * 10);
+          });
+          pdf.setFontSize(9);
+        }
         pdf.setTextColor(90, 90, 90);
         pdf.text(String(item.containerSize || ''), xSize, baseline);
         pdf.setTextColor(20, 20, 20);
@@ -2369,6 +2402,7 @@ Thank you for choosing ${nurseryName}!
                       const qty = getItemQty(item);
                       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
                       const total = qty * price;
+                      const subs = itemSubstitutes[item.id] ?? item.substitutes ?? '';
 
                       return (
                         <tr
@@ -2382,6 +2416,29 @@ Thank you for choosing ${nurseryName}!
                                 Note: {item.notes}
                               </span>
                             )}
+                            {documentType === 'estimate' ? (
+                              <label className="block mt-1.5">
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                  {t('invoice.possibleSubs')}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={subs}
+                                  onChange={(e) =>
+                                    setItemSubstitutes((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value
+                                    }))
+                                  }
+                                  placeholder={t('invoice.possibleSubsPlaceholder')}
+                                  className="mt-0.5 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white"
+                                />
+                              </label>
+                            ) : subs.trim() ? (
+                              <span className="block text-[10px] text-slate-500 font-normal italic mt-0.5">
+                                {t('invoice.possibleSubs')}: {subs.trim()}
+                              </span>
+                            ) : null}
                           </td>
                           <td className="py-3 text-center font-mono font-bold text-gray-500">
                             {item.containerSize}

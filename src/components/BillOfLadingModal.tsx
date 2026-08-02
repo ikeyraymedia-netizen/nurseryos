@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Truck, CustomerOrder, ContainerWeight } from '../types';
-import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin } from 'lucide-react';
+import { Truck, CustomerOrder, ContainerWeight, Customer } from '../types';
+import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin, EyeOff } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -14,6 +14,7 @@ interface BillOfLadingModalProps {
   truck: Truck;
   orders: CustomerOrder[];
   containerWeights: ContainerWeight[];
+  customers?: Customer[];
   nurseryName?: string;
   /** Ship-from / origin address for the nursery. */
   nurseryAddress?: string;
@@ -26,6 +27,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   onClose,
   truck,
   orders = [],
+  customers = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
   nurseryLogoSrc = null,
@@ -50,6 +52,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   // State for document selection: 'consolidated' or a specific customer order ID
   const [selectedBOLType, setSelectedBOLType] = useState<'consolidated' | string>('consolidated');
+  /** Hide consignee / customer name on printed BOL — address only (drop-ships). */
+  const [blindBol, setBlindBol] = useState(false);
 
   // State for customizable document fields
   const [shipperAddress, setShipperAddress] = useState(
@@ -80,7 +84,22 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     blob: Blob;
   } | null>(null);
 
-  // Prefill the customer PO # from the selected order(s)' saved invoice details.
+  function resolveOrderDeliveryAddress(order: CustomerOrder): string {
+    const byId = order.customerId
+      ? customers.find((c) => c.id === order.customerId)
+      : undefined;
+    const byName = customers.find(
+      (c) => c.name.trim().toLowerCase() === order.customerName.trim().toLowerCase()
+    );
+    const customer = byId || byName;
+    return (
+      customer?.shippingAddress?.trim() ||
+      customer?.receiverAddress?.trim() ||
+      ''
+    );
+  }
+
+  // Prefill the customer PO # and delivery address from the selected order(s).
   // MUST stay above any early return — calling useEffect only when isOpen flips
   // true crashes React ("Rendered more hooks than during the previous render").
   useEffect(() => {
@@ -97,6 +116,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       )
     );
     setPoNumber(pos.join(', '));
+    const addrs = Array.from(
+      new Set(scoped.map((o) => resolveOrderDeliveryAddress(o)).filter(Boolean))
+    );
+    setReceiverAddress(addrs.join('\n\n'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, selectedBOLType]);
 
@@ -314,22 +337,36 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         selectedBOLType === 'consolidated' ? t('bol.pdfStopsConsignees') : t('bol.pdfConsignee')
       );
       currentBOLOrders.forEach((order, idx) => {
-        writeWrapped(
-          selectedBOLType === 'consolidated'
+        const stopLabel = blindBol
+          ? selectedBOLType === 'consolidated'
+            ? t('bol.pdfStopBlind', { n: idx + 1, num: order.orderNumber })
+            : t('bol.pdfConsigneeBlind', { num: order.orderNumber })
+          : selectedBOLType === 'consolidated'
             ? t('bol.pdfStopOrder', {
                 n: idx + 1,
                 customer: order.customerName,
                 num: order.orderNumber
               })
-            : `${order.customerName} (${t('common.order')} #${order.orderNumber})`,
-          margin + 4,
-          pageWidth - margin * 2 - 8,
-          10,
-          true,
-          13
-        );
+            : `${order.customerName} (${t('common.order')} #${order.orderNumber})`;
+        writeWrapped(stopLabel, margin + 4, pageWidth - margin * 2 - 8, 10, true, 13);
+        if (blindBol || selectedBOLType !== 'consolidated') {
+          const addr =
+            selectedBOLType === 'consolidated'
+              ? resolveOrderDeliveryAddress(order)
+              : receiverAddress.trim() || resolveOrderDeliveryAddress(order);
+          if (addr) {
+            writeWrapped(
+              t('bol.pdfReceiverAddress', { address: addr }),
+              margin + 4,
+              pageWidth - margin * 2 - 8,
+              10,
+              false,
+              13
+            );
+          }
+        }
       });
-      if (receiverAddress.trim()) {
+      if (!blindBol && selectedBOLType === 'consolidated' && receiverAddress.trim()) {
         writeWrapped(
           t('bol.pdfReceiverAddress', { address: receiverAddress }),
           margin + 4,
@@ -478,6 +515,31 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
           </div>
 
           <div className="space-y-4 text-xs">
+            {/* Blind BOL — hide customer name on printed document */}
+            <button
+              type="button"
+              onClick={() => setBlindBol((v) => !v)}
+              className={`w-full flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                blindBol
+                  ? 'border-ink-400 bg-ink-100/70 text-ink-950'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-ink-200'
+              }`}
+              aria-pressed={blindBol}
+            >
+              <EyeOff
+                className={`h-4 w-4 mt-0.5 shrink-0 ${blindBol ? 'text-ink-800' : 'text-gray-400'}`}
+              />
+              <span className="min-w-0">
+                <span className="block font-black uppercase tracking-wider text-[10px] font-mono">
+                  {t('bol.blindBol')}
+                  {blindBol ? ` · ${t('bol.blindBolOn')}` : ''}
+                </span>
+                <span className="block mt-0.5 text-[10px] font-medium leading-snug text-gray-600">
+                  {t('bol.blindBolHint')}
+                </span>
+              </span>
+            </button>
+
             {/* BOL Type Selection */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
@@ -662,10 +724,16 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
           {/* Action header inside modal (Hidden during print) */}
           <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
             <div>
-              <h2 className="text-base font-black text-gray-900">
+              <h2 className="text-base font-black text-gray-900 flex items-center gap-2 flex-wrap">
                 {selectedBOLType === 'consolidated'
                   ? t('bol.consolidatedTitle')
                   : t('bol.orderTitle', { num: singleOrder?.orderNumber })}
+                {blindBol && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-ink-100 text-ink-900 border border-ink-200">
+                    <EyeOff className="h-3 w-3" />
+                    {t('bol.blindBol')}
+                  </span>
+                )}
               </h2>
               <p className="text-[10px] text-gray-500 mt-0.5 font-sans">{t('bol.previewBody')}</p>
             </div>
@@ -816,6 +884,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {sortedOrders.map((order, index) => {
                       const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
+                      const stopAddress = resolveOrderDeliveryAddress(order);
                       return (
                         <div
                           key={order.id}
@@ -829,9 +898,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                               {t('bol.orderNum', { num: order.orderNumber })}
                             </span>
                           </div>
-                          <p className="text-xs font-black text-gray-950 truncate">
-                            {order.customerName}
-                          </p>
+                          {blindBol ? (
+                            <p className="text-xs font-medium text-gray-800 whitespace-pre-wrap leading-snug">
+                              {stopAddress ||
+                                receiverAddress.trim() ||
+                                t('bol.deliveryAddressOnly')}
+                            </p>
+                          ) : (
+                            <p className="text-xs font-black text-gray-950 truncate">
+                              {order.customerName}
+                            </p>
+                          )}
                           <div className="text-[10px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-gray-200/50">
                             <span>{t('bol.plants', { n: totalItems })}</span>
                           </div>
@@ -849,24 +926,32 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   <div className="border border-gray-300 p-4 rounded-xl bg-slate-50 font-sans max-w-xl">
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black font-mono bg-ink-100 text-ink-900 border border-ink-200 uppercase">
-                        {t('bol.activeConsignee', {
-                          n: sortedOrders.indexOf(singleOrder!) + 1
-                        })}
+                        {blindBol
+                          ? t('bol.deliveryDestination')
+                          : t('bol.activeConsignee', {
+                              n: sortedOrders.indexOf(singleOrder!) + 1
+                            })}
                       </span>
                       <span className="text-xs font-mono font-bold text-gray-500">
                         {t('bol.orderNum', { num: singleOrder?.orderNumber })}
                       </span>
                     </div>
-                    <p className="text-sm font-black text-gray-950">
-                      {singleOrder?.customerName}
-                    </p>
+                    {!blindBol && (
+                      <p className="text-sm font-black text-gray-950">
+                        {singleOrder?.customerName}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                      {t('bol.deliverInstruction', { num: singleOrder?.orderNumber })}
+                      {blindBol
+                        ? t('bol.blindDeliverInstruction', { num: singleOrder?.orderNumber })
+                        : t('bol.deliverInstruction', { num: singleOrder?.orderNumber })}
                     </p>
-                    {receiverAddress && (
-                      <p className="text-xs text-gray-700 mt-2 leading-relaxed">
+                    {(receiverAddress ||
+                      (singleOrder && resolveOrderDeliveryAddress(singleOrder))) && (
+                      <p className="text-xs text-gray-700 mt-2 leading-relaxed whitespace-pre-wrap">
                         <span className="font-bold text-gray-500">{t('bol.receiverAddressLabel')}</span>{' '}
-                        {receiverAddress}
+                        {receiverAddress ||
+                          (singleOrder ? resolveOrderDeliveryAddress(singleOrder) : '')}
                       </p>
                     )}
                     {receiverContact && (
@@ -1022,14 +1107,32 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     {currentBOLOrders.map((order, index) => (
                       <div key={order.id} className="pt-2 border-t border-gray-200 first:border-none first:pt-0">
                         <p className="text-[10px] font-black text-gray-900 font-sans">
-                          {selectedBOLType === 'consolidated'
-                            ? t('bol.stopCustomer', {
-                                n: index + 1,
-                                customer: order.customerName,
-                                num: order.orderNumber
-                              })
-                            : `${order.customerName} (${t('common.order')} #${order.orderNumber})`}
+                          {blindBol
+                            ? selectedBOLType === 'consolidated'
+                              ? t('bol.stopBlind', {
+                                  n: index + 1,
+                                  num: order.orderNumber
+                                })
+                              : t('bol.pdfConsigneeBlind', { num: order.orderNumber })
+                            : selectedBOLType === 'consolidated'
+                              ? t('bol.stopCustomer', {
+                                  n: index + 1,
+                                  customer: order.customerName,
+                                  num: order.orderNumber
+                                })
+                              : `${order.customerName} (${t('common.order')} #${order.orderNumber})`}
                         </p>
+                        {blindBol && (
+                          <p className="text-[10px] text-gray-600 font-sans mt-1 whitespace-pre-wrap leading-snug">
+                            {selectedBOLType === 'consolidated'
+                              ? resolveOrderDeliveryAddress(order) ||
+                                receiverAddress.trim() ||
+                                t('bol.deliveryAddressOnly')
+                              : receiverAddress.trim() ||
+                                resolveOrderDeliveryAddress(order) ||
+                                t('bol.deliveryAddressOnly')}
+                          </p>
+                        )}
                         <div className="flex items-end pt-3 border-b border-gray-300">
                           <span className="text-[9px] text-gray-400 mr-2 shrink-0">{t('bol.receivedBy')}</span>
                           <span className="flex-1"></span>

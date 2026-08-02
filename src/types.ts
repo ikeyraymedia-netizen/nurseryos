@@ -308,6 +308,8 @@ export interface Vendor {
   billingAddress?: string;
   paymentTerms?: string;
   notes?: string;
+  /** Bank/card merchant strings that map to this vendor (learned from feed tagging). */
+  merchantAliases?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -404,6 +406,39 @@ export interface VendorBill {
   checkbookRecipient?: string | null;
   checkbookDepositOption?: string | null;
   checkbookPaymentError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Bank or credit-card line imported from CSV for expense tagging. */
+export type BankFeedStatus = 'unreviewed' | 'tagged' | 'ignored';
+
+export type BankFeedAccountKind = 'bank' | 'card';
+
+export interface BankFeedTransaction {
+  id: string;
+  /** YYYY-MM-DD */
+  date: string;
+  description: string;
+  /** Cleaned payee / merchant hint when available. */
+  merchant?: string;
+  /**
+   * Signed amount in USD.
+   * Negative = money out (expense). Positive = money in (deposit / card payment credit).
+   */
+  amount: number;
+  accountKind: BankFeedAccountKind;
+  accountLabel?: string;
+  source: 'csv';
+  importBatchId: string;
+  /** Dedupe key: date|amount|normalized description */
+  fingerprint: string;
+  status: BankFeedStatus;
+  vendorId?: string | null;
+  vendorName?: string | null;
+  category?: string | null;
+  vendorBillId?: string | null;
+  matchConfidence?: 'exact' | 'fuzzy' | 'none' | 'manual';
   createdAt: string;
   updatedAt: string;
 }

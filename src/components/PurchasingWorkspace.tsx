@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Building2,
   ClipboardList,
+  CreditCard,
   FileText,
   Mail,
   PackagePlus,
@@ -64,8 +65,9 @@ import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { BillEditModal } from './BillEditModal';
 import { payVendorBillAch, refreshVendorBillPayment } from '../lib/checkbook';
+import { BankFeedPanel } from './BankFeedPanel';
 
-type PurchasingView = 'vendors' | 'orders' | 'bills';
+type PurchasingView = 'vendors' | 'orders' | 'bills' | 'feed';
 
 const VENDOR_TERM_PRESETS = [
   'COD',
@@ -1036,7 +1038,8 @@ export function PurchasingWorkspace({
             [
               ['orders', t('purchasing.pos'), ClipboardList],
               ['vendors', t('purchasing.vendors'), Building2],
-              ['bills', t('purchasing.bills'), Receipt]
+              ['bills', t('purchasing.bills'), Receipt],
+              ['feed', t('purchasing.feedTab'), CreditCard]
             ] as const
           ).map(([id, label, Icon]) => (
             <button
@@ -1071,7 +1074,9 @@ export function PurchasingWorkspace({
                 ? t('purchasing.searchVendors')
                 : view === 'orders'
                   ? t('purchasing.searchPos')
-                  : t('purchasing.searchBills')
+                  : view === 'feed'
+                    ? t('purchasing.searchFeed')
+                    : t('purchasing.searchBills')
           }
           className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
         />
@@ -1086,6 +1091,17 @@ export function PurchasingWorkspace({
         <p className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
           {status}
         </p>
+      )}
+
+      {view === 'feed' && (
+        <BankFeedPanel
+          vendors={vendors}
+          bills={bills}
+          permissions={permissions}
+          search={search}
+          onStatus={setStatus}
+          onError={(msg) => setError(msg || null)}
+        />
       )}
 
       {view === 'bills' && (

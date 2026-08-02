@@ -1505,6 +1505,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         onClose={() => setIsBOLOpen(false)}
         truck={truck}
         orders={orders}
+        customers={customers}
         containerWeights={containerWeights}
         nurseryName={nurseryName}
         nurseryAddress={nurseryAddress}

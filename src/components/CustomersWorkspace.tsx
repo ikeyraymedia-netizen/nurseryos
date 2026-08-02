@@ -554,7 +554,8 @@ export function CustomersWorkspace({
         quantity: item.quantity,
         loadedQuantity: 0,
         unitPrice: item.unitPrice,
-        notes: item.notes
+        notes: item.notes,
+        substitutes: item.substitutes
       }));
 
       if (items.length === 0) {

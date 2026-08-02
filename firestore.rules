@@ -234,6 +234,11 @@ service cloud.firestore {
         allow create, update, delete: if canManagePurchasingWrite(tenantId);
       }
 
+      match /bankFeedTransactions/{docId} {
+        allow read: if canManagePurchasing(tenantId);
+        allow create, update, delete: if canManagePurchasingWrite(tenantId);
+      }
+
       match /auditLog/{eventId} {
         allow read: if isAdminOrOwner(tenantId) || isOffice(tenantId) || isSales(tenantId);
         allow create: if isMember(tenantId);

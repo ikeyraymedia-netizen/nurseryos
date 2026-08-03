@@ -132,6 +132,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Public availability slug → tenant map. Client reads go through Admin SDK API only.
+    match /publicSlugs/{slug} {
+      allow read, write: if false;
+    }
+
     match /tenants/{tenantId} {
       allow read: if isMember(tenantId) || isPlatformAdmin();
       allow create: if signedIn()

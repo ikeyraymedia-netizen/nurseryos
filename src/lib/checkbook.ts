@@ -30,6 +30,12 @@ export interface CheckbookStatus {
   hasWebhookKey: boolean;
   connectedAt: string | null;
   webhookUrl: string;
+  bankSummary?: {
+    total: number;
+    verified: number;
+    fundingAccountLast4: string | null;
+    statuses: string[];
+  } | null;
 }
 
 export async function fetchCheckbookStatus(tenantId: string): Promise<CheckbookStatus> {

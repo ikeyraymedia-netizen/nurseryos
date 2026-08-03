@@ -15,9 +15,13 @@ import {
   FileText,
   ImageIcon,
   Building2,
-  Megaphone
+  Megaphone,
+  Copy,
+  Check,
+  Link2,
+  Globe
 } from 'lucide-react';
-import { CustomerOrder, InventoryPlant, Truck as TruckType, Vendor } from '../types';
+import { CustomerOrder, InventoryPlant, Tenant, Truck as TruckType, Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
@@ -39,6 +43,12 @@ import {
   removeInventoryPlantPhoto,
   uploadInventoryPlantPhoto
 } from '../lib/inventoryPhotos';
+import {
+  publicAvailabilityApiUrl,
+  publicAvailabilityPageUrl,
+  savePublicAvailabilitySettings,
+  suggestPublicAvailabilitySlug
+} from '../lib/publicAvailability';
 import { PdfShareSheet } from './PdfShareSheet';
 import { PlantPromoModal } from './PlantPromoModal';
 import { useT } from '../lib/i18n';
@@ -49,8 +59,10 @@ interface InventoryWorkspaceProps {
   trucks?: TruckType[];
   orders?: CustomerOrder[];
   tenantId?: string;
+  tenant?: Tenant;
   nurseryName?: string;
   nurseryLogoSrc?: string | null;
+  onRefreshTenant?: () => Promise<void>;
 }
 
 const LOW_STOCK_TOGGLE_KEY = 'nurseryos:inventory:showLowStockUpcoming';
@@ -122,8 +134,10 @@ export function InventoryWorkspace({
   trucks = [],
   orders = [],
   tenantId,
+  tenant,
   nurseryName = 'Nursery',
-  nurseryLogoSrc = null
+  nurseryLogoSrc = null,
+  onRefreshTenant
 }: InventoryWorkspaceProps) {
   const t = useT();
   const dp = usePlantDisplay();
@@ -139,6 +153,17 @@ export function InventoryWorkspace({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
+  const [pubBusy, setPubBusy] = useState(false);
+  const [copiedPublic, setCopiedPublic] = useState<'page' | 'api' | null>(null);
+  const [pubEnabled, setPubEnabled] = useState(Boolean(tenant?.publicAvailabilityEnabled));
+  const [pubSlug, setPubSlug] = useState(
+    tenant?.publicAvailabilitySlug || suggestPublicAvailabilitySlug(nurseryName)
+  );
+  const [pubShowQty, setPubShowQty] = useState(tenant?.publicAvailabilityShowQty !== false);
+  const [pubShowPhotos, setPubShowPhotos] = useState(tenant?.publicAvailabilityShowPhotos !== false);
+  const [pubInStockOnly, setPubInStockOnly] = useState(
+    Boolean(tenant?.publicAvailabilityInStockOnly)
+  );
   const [exportIncludeQty, setExportIncludeQty] = useState(() => {
     try {
       const raw = localStorage.getItem(EXPORT_INCLUDE_QTY_KEY);
@@ -196,6 +221,24 @@ export function InventoryWorkspace({
   useEffect(() => {
     return subscribeToVendors(setVendors);
   }, []);
+
+  useEffect(() => {
+    setPubEnabled(Boolean(tenant?.publicAvailabilityEnabled));
+    setPubSlug(
+      tenant?.publicAvailabilitySlug || suggestPublicAvailabilitySlug(nurseryName)
+    );
+    setPubShowQty(tenant?.publicAvailabilityShowQty !== false);
+    setPubShowPhotos(tenant?.publicAvailabilityShowPhotos !== false);
+    setPubInStockOnly(Boolean(tenant?.publicAvailabilityInStockOnly));
+  }, [
+    tenant?.id,
+    tenant?.publicAvailabilityEnabled,
+    tenant?.publicAvailabilitySlug,
+    tenant?.publicAvailabilityShowQty,
+    tenant?.publicAvailabilityShowPhotos,
+    tenant?.publicAvailabilityInStockOnly,
+    nurseryName
+  ]);
 
   useEffect(() => {
     try {
@@ -603,6 +646,51 @@ export function InventoryWorkspace({
     }
   }
 
+  async function handleSavePublicAvailability() {
+    if (!tenantId || !permissions.canManageTeam) return;
+    const slug = pubSlug.trim().toLowerCase();
+    if (pubEnabled && !slug) {
+      setMessage(t('inventory.publicAvailabilitySlugRequired'));
+      setMessageIsError(true);
+      return;
+    }
+    setPubBusy(true);
+    setMessage(null);
+    setMessageIsError(false);
+    try {
+      await savePublicAvailabilitySettings({
+        tenantId,
+        enabled: pubEnabled,
+        slug,
+        showQty: pubShowQty,
+        showPhotos: pubShowPhotos,
+        inStockOnly: pubInStockOnly
+      });
+      await onRefreshTenant?.();
+      setMessage(t('inventory.publicAvailabilitySaved'));
+    } catch (err: any) {
+      setMessage(err?.message || t('inventory.publicAvailabilitySaveFailed'));
+      setMessageIsError(true);
+    } finally {
+      setPubBusy(false);
+    }
+  }
+
+  async function copyPublicLink(kind: 'page' | 'api') {
+    const slug = pubSlug.trim().toLowerCase();
+    if (!slug) return;
+    const url =
+      kind === 'page' ? publicAvailabilityPageUrl(slug) : publicAvailabilityApiUrl(slug);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedPublic(kind);
+      window.setTimeout(() => setCopiedPublic(null), 1600);
+    } catch {
+      setMessage(t('inventory.publicAvailabilityCopyFailed'));
+      setMessageIsError(true);
+    }
+  }
+
   async function handleClearAllInventory() {
     if (!permissions.canEditInventory) return;
     if (plants.length === 0) {
@@ -853,6 +941,148 @@ export function InventoryWorkspace({
           </p>
         )}
       </div>
+
+      {permissions.canManageTeam && tenantId ? (
+        <div className="bg-white rounded-2xl border border-teal-100 p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+              <Globe className="h-5 w-5 text-teal-700" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-gray-900">
+                {t('inventory.publicAvailability')}
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                {t('inventory.publicAvailabilityIntro')}
+              </p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-teal-950">
+            <input
+              type="checkbox"
+              checked={pubEnabled}
+              disabled={pubBusy || busy}
+              onChange={(e) => setPubEnabled(e.target.checked)}
+            />
+            {t('inventory.publicAvailabilityEnable')}
+          </label>
+          <label className="block text-[11px] font-bold text-teal-950">
+            {t('inventory.publicAvailabilitySlug')}
+            <input
+              value={pubSlug}
+              disabled={pubBusy || busy}
+              onChange={(e) =>
+                setPubSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
+              }
+              placeholder={suggestPublicAvailabilitySlug(nurseryName)}
+              className="mt-1 w-full max-w-md px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-xs font-mono"
+            />
+          </label>
+          <p className="text-[10px] text-teal-900/70">{t('inventory.publicAvailabilitySlugHint')}</p>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-teal-950">
+              <input
+                type="checkbox"
+                checked={pubShowQty}
+                disabled={pubBusy || busy}
+                onChange={(e) => setPubShowQty(e.target.checked)}
+              />
+              {t('inventory.publicAvailabilityShowQty')}
+            </label>
+            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-teal-950">
+              <input
+                type="checkbox"
+                checked={pubShowPhotos}
+                disabled={pubBusy || busy}
+                onChange={(e) => setPubShowPhotos(e.target.checked)}
+              />
+              {t('inventory.publicAvailabilityShowPhotos')}
+            </label>
+            <label
+              className={`inline-flex items-center gap-2 text-[11px] font-semibold ${
+                pubShowQty ? 'text-teal-950' : 'text-teal-900/40'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={pubInStockOnly}
+                disabled={pubBusy || busy || !pubShowQty}
+                onChange={(e) => setPubInStockOnly(e.target.checked)}
+              />
+              {t('inventory.publicAvailabilityInStockOnly')}
+            </label>
+          </div>
+          {pubSlug.trim() ? (
+            <div className="rounded-xl border border-teal-100 bg-teal-50/40 px-3 py-2.5 space-y-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-teal-900">
+                  {t('inventory.publicAvailabilityPageUrl')}
+                </p>
+                <p className="text-[11px] font-mono text-teal-950 break-all">
+                  {publicAvailabilityPageUrl(pubSlug.trim().toLowerCase())}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase text-teal-900">
+                  {t('inventory.publicAvailabilityApiUrl')}
+                </p>
+                <p className="text-[11px] font-mono text-teal-950 break-all">
+                  {publicAvailabilityApiUrl(pubSlug.trim().toLowerCase())}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={pubBusy || busy}
+                  onClick={() => void copyPublicLink('page')}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-teal-900 text-[11px] font-bold disabled:opacity-50"
+                >
+                  {copiedPublic === 'page' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {t('inventory.publicAvailabilityCopyPage')}
+                </button>
+                <button
+                  type="button"
+                  disabled={pubBusy || busy}
+                  onClick={() => void copyPublicLink('api')}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-teal-900 text-[11px] font-bold disabled:opacity-50"
+                >
+                  {copiedPublic === 'api' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {t('inventory.publicAvailabilityCopyApi')}
+                </button>
+                {pubEnabled ? (
+                  <a
+                    href={publicAvailabilityPageUrl(pubSlug.trim().toLowerCase())}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-700 text-white text-[11px] font-bold"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    {t('inventory.publicAvailabilityOpen')}
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            disabled={pubBusy || busy}
+            onClick={() => void handleSavePublicAvailability()}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold hover:bg-teal-800 disabled:opacity-50"
+          >
+            {pubBusy
+              ? t('inventory.publicAvailabilitySaving')
+              : t('inventory.publicAvailabilitySave')}
+          </button>
+        </div>
+      ) : null}
 
       <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">

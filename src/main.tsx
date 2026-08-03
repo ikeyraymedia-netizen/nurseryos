@@ -1,15 +1,16 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { PublicAvailabilityPage, readPublicAvailabilitySlugFromPath } from './components/PublicAvailabilityPage';
 import { bootstrapWorkspaceUrl } from './lib/workspaceUrl';
 import './index.css';
 
-// Restore ?tab=/order=/truck= from sessionStorage before AuthGate mounts,
-// so a refresh never loses the workspace while Firebase auth is loading.
 bootstrapWorkspaceUrl();
+
+const publicSlug = readPublicAvailabilitySlugFromPath();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {publicSlug ? <PublicAvailabilityPage slug={publicSlug} /> : <App />}
   </StrictMode>,
 );

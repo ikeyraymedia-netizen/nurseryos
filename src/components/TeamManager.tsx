@@ -99,7 +99,8 @@ export function TeamManager({
   const [checkbookPubKey, setCheckbookPubKey] = useState('');
   const [checkbookSecret, setCheckbookSecret] = useState('');
   const [checkbookWebhookKey, setCheckbookWebhookKey] = useState('');
-  const [checkbookEnv, setCheckbookEnv] = useState<'sandbox' | 'production'>('sandbox');
+  const [checkbookEnv, setCheckbookEnv] = useState<'sandbox' | 'production'>('production');
+  const [checkbookShowReconnect, setCheckbookShowReconnect] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -361,11 +362,16 @@ export function TeamManager({
       setCheckbookPubKey('');
       setCheckbookSecret('');
       setCheckbookWebhookKey('');
+      setCheckbookShowReconnect(false);
       void logAuditEvent({
         action: 'checkbook.connected',
         summary: `Connected Checkbook (${checkbookEnv})`
       });
-      setMessage(t('teamExtra.checkbookConnected'));
+      setMessage(
+        checkbookEnv === 'production'
+          ? 'Checkbook production connected for live vendor ACH.'
+          : t('teamExtra.checkbookConnected')
+      );
     } catch (err: any) {
       setCheckbookError(err?.message || t('teamExtra.checkbookConnectFailed'));
     } finally {
@@ -385,6 +391,7 @@ export function TeamManager({
         summary: 'Disconnected Checkbook bill pay'
       });
       setCheckbookStatus(null);
+      setCheckbookShowReconnect(false);
       setMessage(t('teamExtra.checkbookDisconnected'));
     } catch (err: any) {
       setCheckbookError(err?.message || t('teamExtra.checkbookDisconnectFailed'));
@@ -904,9 +911,10 @@ export function TeamManager({
                 {t('teamExtra.checkbookIntro')}
               </p>
               <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-relaxed">
-                Use keys from Checkbook <span className="font-bold">Settings → Developer</span> with
-                the environment toggle set to <span className="font-bold">Sandbox</span>. Production
-                keys will fail here. Webhook key is optional.
+                For live vendor ACH, choose <span className="font-bold">Production</span> and paste
+                keys from Checkbook <span className="font-bold">Settings → Developer</span> with the
+                environment set to <span className="font-bold">Production</span> (where your bank is
+                verified). Use Sandbox only for test payments. Keys and environment must match.
               </p>
               {checkbookStatus?.connected ? (
                 <div className="space-y-2">
@@ -916,19 +924,131 @@ export function TeamManager({
                       last4: checkbookStatus.publishableKeyLast4 || '····'
                     })}
                   </p>
+                  {checkbookStatus.environment === 'sandbox' ? (
+                    <p className="text-[11px] text-amber-900 leading-relaxed">
+                      You are on Sandbox. Use{' '}
+                      <span className="font-bold">Reconnect with Production keys</span> below to send
+                      real ACH payments.
+                    </p>
+                  ) : null}
+                  {checkbookStatus.bankSummary ? (
+                    <p
+                      className={`text-[11px] leading-relaxed ${
+                        checkbookStatus.bankSummary.verified > 0
+                          ? 'text-emerald-900'
+                          : 'text-amber-900'
+                      }`}
+                    >
+                      {checkbookStatus.bankSummary.verified > 0
+                        ? `Verified funding bank found via API${
+                            checkbookStatus.bankSummary.fundingAccountLast4
+                              ? ` (…${checkbookStatus.bankSummary.fundingAccountLast4})`
+                              : ''
+                          }.`
+                        : checkbookStatus.bankSummary.total > 0
+                          ? `API sees ${checkbookStatus.bankSummary.total} bank(s) but none VERIFIED (${checkbookStatus.bankSummary.statuses.join(', ') || 'unknown'}). Finish verification in this same Checkbook environment.`
+                          : `No banks visible to these API keys (${checkbookStatus.environment}). Reconnect keys from the Checkbook login/environment where the bank is verified.`}
+                    </p>
+                  ) : null}
                   <p className="text-[11px] text-emerald-950/80 break-all">
                     {t('teamExtra.checkbookWebhookHint')}{' '}
                     <span className="font-mono">{checkbookStatus.webhookUrl}</span>
                   </p>
-                  <button
-                    type="button"
-                    disabled={checkbookBusy || busy}
-                    onClick={() => void handleDisconnectCheckbook()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
-                  >
-                    <Unlink className="h-3.5 w-3.5" />
-                    {t('teamExtra.disconnect')}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={checkbookBusy || busy}
+                      onClick={() => {
+                        setCheckbookEnv('production');
+                        setCheckbookShowReconnect(true);
+                        setCheckbookError(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      Reconnect with Production keys
+                    </button>
+                    <button
+                      type="button"
+                      disabled={checkbookBusy || busy}
+                      onClick={() => void handleDisconnectCheckbook()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                    >
+                      <Unlink className="h-3.5 w-3.5" />
+                      {t('teamExtra.disconnect')}
+                    </button>
+                  </div>
+                  {checkbookShowReconnect ? (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-2.5 py-2 space-y-2">
+                      <p className="text-[11px] font-bold text-emerald-950">
+                        Paste Production keys from Checkbook Developer settings
+                      </p>
+                      <label className="block text-[11px] font-bold text-emerald-950">
+                        {t('teamExtra.checkbookEnvironment')}
+                        <select
+                          value={checkbookEnv}
+                          onChange={(e) =>
+                            setCheckbookEnv(
+                              e.target.value === 'sandbox' ? 'sandbox' : 'production'
+                            )
+                          }
+                          className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                        >
+                          <option value="production">
+                            Production (api.checkbook.io) — live ACH
+                          </option>
+                          <option value="sandbox">Sandbox — test only</option>
+                        </select>
+                      </label>
+                      <input
+                        value={checkbookPubKey}
+                        onChange={(e) => setCheckbookPubKey(e.target.value)}
+                        placeholder={t('teamExtra.checkbookPublishable')}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                        autoComplete="off"
+                      />
+                      <input
+                        type="password"
+                        value={checkbookSecret}
+                        onChange={(e) => setCheckbookSecret(e.target.value)}
+                        placeholder={t('teamExtra.checkbookSecret')}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                        autoComplete="off"
+                      />
+                      <input
+                        value={checkbookWebhookKey}
+                        onChange={(e) => setCheckbookWebhookKey(e.target.value)}
+                        placeholder={t('teamExtra.checkbookWebhookKey')}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
+                        autoComplete="off"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={checkbookBusy || busy}
+                          onClick={() => void handleConnectCheckbook()}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
+                        >
+                          <Link2 className="h-3.5 w-3.5" />
+                          {checkbookBusy ? t('common.pleaseWait') : 'Save connection'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={checkbookBusy || busy}
+                          onClick={() => {
+                            setCheckbookShowReconnect(false);
+                            setCheckbookPubKey('');
+                            setCheckbookSecret('');
+                            setCheckbookWebhookKey('');
+                            setCheckbookError(null);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50"
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -937,12 +1057,14 @@ export function TeamManager({
                     <select
                       value={checkbookEnv}
                       onChange={(e) =>
-                        setCheckbookEnv(e.target.value === 'production' ? 'production' : 'sandbox')
+                        setCheckbookEnv(e.target.value === 'sandbox' ? 'sandbox' : 'production')
                       }
                       className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white text-xs"
                     >
-                      <option value="sandbox">Sandbox (api.sandbox.checkbook.io)</option>
-                      <option value="production">Production (api.checkbook.io)</option>
+                      <option value="production">
+                        Production (api.checkbook.io) — live ACH
+                      </option>
+                      <option value="sandbox">Sandbox — test only</option>
                     </select>
                   </label>
                   <input

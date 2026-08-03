@@ -15,6 +15,7 @@ import {
 } from './server/checkbook';
 import { registerEmailRoutes } from './server/email';
 import { registerPlatformRoutes } from './server/platform';
+import { registerPublicAvailabilityRoutes } from './server/publicAvailability';
 import {
   isSpreadsheetInventoryUpload,
   parseInventorySpreadsheetBuffer
@@ -45,6 +46,7 @@ registerStripeRoutes(app);
 registerCheckbookRoutes(app);
 registerEmailRoutes(app);
 registerPlatformRoutes(app);
+registerPublicAvailabilityRoutes(app);
 
 // Lazy initialize Google Gen AI
 let aiClient: GoogleGenAI | null = null;

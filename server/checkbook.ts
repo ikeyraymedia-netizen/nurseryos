@@ -111,7 +111,9 @@ async function probeCheckbookKeys(
   throw Object.assign(
     new Error(
       `Could not verify Checkbook keys (${environment}). ${errors.join(' · ') || 'Unauthorized'}. ` +
-        'In Checkbook go to Settings → Developer, switch to Sandbox, generate keys there, then paste those (not production keys).'
+        `In Checkbook go to Settings → Developer, switch to ${
+          environment === 'production' ? 'Production' : 'Sandbox'
+        }, generate keys there, then paste those keys and choose ${environment} in NurseryOS.`
     ),
     { status: 400 }
   );
@@ -178,15 +180,90 @@ async function checkbookFetch(
 
 async function readCheckbookError(res: globalThis.Response): Promise<string> {
   const text = await res.text();
+  let message = '';
   try {
     const data = JSON.parse(text) as { error?: string; message?: string; codes?: unknown };
-    if (data?.error) return String(data.error);
-    if (data?.message) return String(data.message);
+    if (data?.error) message = String(data.error);
+    else if (data?.message) message = String(data.message);
   } catch {
     // non-JSON
   }
-  if (text?.trim()) return text.trim().slice(0, 280);
-  return `Checkbook request failed (${res.status})`;
+  if (!message && text?.trim()) message = text.trim().slice(0, 280);
+  if (!message) message = `Checkbook request failed (${res.status})`;
+
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('sending limit') ||
+    lower.includes('send limit') ||
+    lower.includes('limits exceeded') ||
+    lower.includes('limit exceeded')
+  ) {
+    return (
+      `${message} This is a Checkbook account restriction (not the bill amount). ` +
+      'Even a small payment fails if: (1) the API keys in NurseryOS don’t see a verified bank (wrong sandbox/production keys), ' +
+      '(2) today’s/month’s send capacity is already used by pending payments, or ' +
+      '(3) your Checkbook send limit is still $0. ' +
+      'In Checkbook: confirm Settings → Accounts shows VERIFIED, cancel unused pending payments, match Developer keys to the same environment, then retry.'
+    );
+  }
+  return message;
+}
+
+type CheckbookBankAccount = {
+  id: string;
+  status?: string;
+  default?: boolean;
+  account?: string;
+  name?: string | null;
+};
+
+async function listCheckbookBanks(
+  integration: CheckbookIntegration
+): Promise<CheckbookBankAccount[]> {
+  const res = await checkbookFetch(integration, '/v3/account/bank');
+  if (!res.ok) {
+    throw Object.assign(new Error(await readCheckbookError(res)), { status: 400 });
+  }
+  const body = (await res.json()) as
+    | CheckbookBankAccount[]
+    | { banks?: CheckbookBankAccount[]; data?: CheckbookBankAccount[]; accounts?: CheckbookBankAccount[] };
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body.banks)) return body.banks;
+  if (Array.isArray(body.data)) return body.data;
+  if (Array.isArray(body.accounts)) return body.accounts;
+  return [];
+}
+
+function pickFundingBankAccount(banks: CheckbookBankAccount[]): CheckbookBankAccount | null {
+  const verified = banks.filter((b) => String(b.status || '').toUpperCase() === 'VERIFIED');
+  if (verified.length === 0) return null;
+  return verified.find((b) => b.default) || verified[0] || null;
+}
+
+async function resolveFundingAccountId(integration: CheckbookIntegration): Promise<{
+  accountId: string;
+  banks: CheckbookBankAccount[];
+}> {
+  const banks = await listCheckbookBanks(integration);
+  const funding = pickFundingBankAccount(banks);
+  if (!funding?.id) {
+    const statuses = banks
+      .map((b) => `${b.id?.slice(0, 8) || '?'}…=${String(b.status || 'unknown')}`)
+      .slice(0, 6)
+      .join(', ');
+    throw Object.assign(
+      new Error(
+        banks.length === 0
+          ? `No bank accounts found for these Checkbook API keys (${integration.environment}). ` +
+              'You may have verified a bank in the Checkbook website under a different login/environment. ' +
+              'In Checkbook Developer settings, copy keys from the same environment (sandbox vs production) where the bank shows as Verified, then reconnect in Team.'
+          : `No VERIFIED bank account on these Checkbook API keys (${integration.environment}). ` +
+              `Found: ${statuses || 'none'}. Finish micro-deposit verification for that environment, or reconnect keys from the account that has the verified bank.`
+      ),
+      { status: 400 }
+    );
+  }
+  return { accountId: funding.id, banks };
 }
 
 function last4(value: string): string {
@@ -433,6 +510,29 @@ export function registerCheckbookRoutes(app: Express) {
       await assertAdminOrOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
+      let bankSummary: {
+        total: number;
+        verified: number;
+        fundingAccountLast4: string | null;
+        statuses: string[];
+      } | null = null;
+      if (integration) {
+        try {
+          const banks = await listCheckbookBanks(integration);
+          const funding = pickFundingBankAccount(banks);
+          bankSummary = {
+            total: banks.length,
+            verified: banks.filter((b) => String(b.status || '').toUpperCase() === 'VERIFIED')
+              .length,
+            fundingAccountLast4: funding?.account
+              ? String(funding.account).replace(/\D/g, '').slice(-4) || null
+              : null,
+            statuses: banks.map((b) => String(b.status || 'unknown').toUpperCase()).slice(0, 8)
+          };
+        } catch {
+          bankSummary = { total: 0, verified: 0, fundingAccountLast4: null, statuses: [] };
+        }
+      }
       res.json({
         connected: Boolean(integration),
         environment: integration?.environment || null,
@@ -440,6 +540,7 @@ export function registerCheckbookRoutes(app: Express) {
         publishableKeyLast4: integration?.publishableKeyLast4 || null,
         hasWebhookKey: Boolean(integration?.webhookKey),
         connectedAt: integration?.connectedAt || null,
+        bankSummary,
         webhookUrl: `${(process.env.APP_URL || 'https://nurseryos.app').replace(/\/$/, '')}/api/checkbook/webhook?tenantId=${encodeURIComponent(tenantId)}`
       });
     })
@@ -643,20 +744,43 @@ export function registerCheckbookRoutes(app: Express) {
           : `NurseryOS bills ${billNumbers.join(', ')}${
               bills.length > billNumbers.length ? '…' : ''
             } (${bills.length} bills)`.slice(0, 100);
+      const { accountId, banks } = await resolveFundingAccountId(integration);
+      const payAmount = Math.round(amount * 100) / 100;
       const body = {
         name: vendorName.slice(0, 100),
         recipient,
-        amount: Math.round(amount * 100) / 100,
+        amount: payAmount,
         description,
-        comment: `tenant:${tenantId}|bills:${billIds.join(',')}`
+        comment: `tenant:${tenantId}|bills:${billIds.join(',')}`,
+        account: accountId,
+        deposit_options: ['BANK']
       };
+
+      console.log('[checkbook] pay-bill', {
+        tenantId,
+        environment: integration.environment,
+        apiBase: checkbookBase(integration),
+        amount: payAmount,
+        billCount: bills.length,
+        fundingAccountId: accountId,
+        verifiedBanks: banks.filter((b) => String(b.status || '').toUpperCase() === 'VERIFIED')
+          .length,
+        recipient
+      });
 
       const payRes = await checkbookFetch(integration, '/v3/check/digital', {
         method: 'POST',
         body: JSON.stringify(body)
       });
       if (!payRes.ok) {
-        throw Object.assign(new Error(await readCheckbookError(payRes)), { status: 400 });
+        const detail = await readCheckbookError(payRes);
+        throw Object.assign(
+          new Error(
+            `${detail} [sent $${payAmount.toFixed(2)} via ${integration.environment} · ` +
+              `${banks.filter((b) => String(b.status || '').toUpperCase() === 'VERIFIED').length} verified bank(s)]`
+          ),
+          { status: 400 }
+        );
       }
 
       const payment = (await payRes.json()) as {

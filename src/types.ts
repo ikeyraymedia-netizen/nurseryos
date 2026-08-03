@@ -32,6 +32,16 @@ export interface Tenant {
    * `[]` = nothing enabled (new signups until activated in seller console).
    */
   modules?: TenantModuleId[];
+  /** When true, `/a/:slug` and the public JSON API are live. */
+  publicAvailabilityEnabled?: boolean;
+  /** URL slug for public availability, e.g. bayou-state → /a/bayou-state */
+  publicAvailabilitySlug?: string;
+  /** Include qty on the public availability page/API. Default true. */
+  publicAvailabilityShowQty?: boolean;
+  /** Include photos on the public availability page/API. Default true. */
+  publicAvailabilityShowPhotos?: boolean;
+  /** When show qty is on, only list plants with qty > 0. Default false. */
+  publicAvailabilityInStockOnly?: boolean;
 }
 
 export interface TenantMember {

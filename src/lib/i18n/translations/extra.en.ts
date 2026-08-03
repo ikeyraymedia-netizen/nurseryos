@@ -240,7 +240,27 @@ const extra = {
     promoImageTip: 'Photo tip',
     promoOpenPhoto: 'Open photo',
     promoNoPhotoHint: 'Add a plant photo for stronger posts — copy still works without one.',
-    promoFailed: 'Could not generate marketing copy.'
+    promoFailed: 'Could not generate marketing copy.',
+    publicAvailability: 'Website availability',
+    publicAvailabilityIntro:
+      'Publish a shareable plant list and JSON feed for your website so photos and inventory stay in NurseryOS. Owner/admin only.',
+    publicAvailabilityEnable: 'Publish public availability page',
+    publicAvailabilitySlug: 'Public URL slug',
+    publicAvailabilitySlugHint: 'Letters, numbers, and hyphens only (e.g. bayou-state).',
+    publicAvailabilityShowQty: 'Show quantities on the public page',
+    publicAvailabilityShowPhotos: 'Show plant photos on the public page',
+    publicAvailabilityInStockOnly: 'Only plants with quantity on hand',
+    publicAvailabilityPageUrl: 'Public page',
+    publicAvailabilityApiUrl: 'JSON feed (for your website)',
+    publicAvailabilityCopyPage: 'Copy page link',
+    publicAvailabilityCopyApi: 'Copy API link',
+    publicAvailabilityOpen: 'Open page',
+    publicAvailabilitySave: 'Save public availability',
+    publicAvailabilitySaving: 'Saving…',
+    publicAvailabilitySaved: 'Public availability settings saved.',
+    publicAvailabilitySaveFailed: 'Could not save public availability settings.',
+    publicAvailabilitySlugRequired: 'Enter a URL slug before publishing.',
+    publicAvailabilityCopyFailed: 'Could not copy link.'
   },
   match: {
     title: 'Match to inventory',
@@ -1440,7 +1460,7 @@ const extra = {
     stripeDisconnected: 'Stripe disconnected.',
     checkbook: 'Vendor ACH Bill Pay (Checkbook)',
     checkbookIntro:
-      'Connect your Checkbook account to pay vendor bills by ACH from Purchasing. Create a free Checkbook account, verify your bank, then paste API keys from Settings → Developer. Owner/admin only.',
+      'Connect your Checkbook account to pay vendor bills by ACH from Purchasing. For live payments use Production keys from Checkbook Settings → Developer (with Production selected) and a verified bank. Owner/admin only.',
     checkbookConnectedStatus: 'Connected ({{env}}) · key …{{last4}}',
     checkbookWebhookHint:
       'In Checkbook Developer settings, set webhook URL to:',
@@ -1524,6 +1544,21 @@ const extra = {
     removeMemberFailed: 'Failed to remove member.',
     noEmailOnFile: 'This team member has no email on file.',
     passwordResetFailed: 'Failed to send password reset.'
+  },
+  publicAvailability: {
+    loading: 'Loading availability…',
+    unavailable: 'Availability unavailable',
+    notFound: 'This availability list was not found or is not published.',
+    currentAvailability: 'Current availability',
+    updated: 'Updated {{date}}',
+    empty: 'No plants to show right now.',
+    photo: 'Photo',
+    plant: 'Plant',
+    size: 'Size',
+    qty: 'Qty',
+    price: 'Price',
+    ready: 'Ready',
+    poweredBy: 'Powered by NurseryOS'
   }
 } as const;
 

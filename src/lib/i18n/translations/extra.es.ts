@@ -243,7 +243,27 @@ const extra = {
     promoImageTip: 'Consejo de foto',
     promoOpenPhoto: 'Abrir foto',
     promoNoPhotoHint: 'Agregue una foto de la planta para publicaciones más fuertes — el texto igual funciona sin ella.',
-    promoFailed: 'No se pudo generar el texto de marketing.'
+    promoFailed: 'No se pudo generar el texto de marketing.',
+    publicAvailability: 'Disponibilidad para el sitio web',
+    publicAvailabilityIntro:
+      'Publique una lista compartible de plantas y un feed JSON para su sitio web, para que fotos e inventario vivan en NurseryOS. Solo dueño/admin.',
+    publicAvailabilityEnable: 'Publicar página de disponibilidad',
+    publicAvailabilitySlug: 'Slug de URL pública',
+    publicAvailabilitySlugHint: 'Solo letras, números y guiones (ej. bayou-state).',
+    publicAvailabilityShowQty: 'Mostrar cantidades en la página pública',
+    publicAvailabilityShowPhotos: 'Mostrar fotos de plantas en la página pública',
+    publicAvailabilityInStockOnly: 'Solo plantas con cantidad disponible',
+    publicAvailabilityPageUrl: 'Página pública',
+    publicAvailabilityApiUrl: 'Feed JSON (para su sitio web)',
+    publicAvailabilityCopyPage: 'Copiar enlace de página',
+    publicAvailabilityCopyApi: 'Copiar enlace API',
+    publicAvailabilityOpen: 'Abrir página',
+    publicAvailabilitySave: 'Guardar disponibilidad pública',
+    publicAvailabilitySaving: 'Guardando…',
+    publicAvailabilitySaved: 'Configuración de disponibilidad pública guardada.',
+    publicAvailabilitySaveFailed: 'No se pudo guardar la disponibilidad pública.',
+    publicAvailabilitySlugRequired: 'Ingrese un slug de URL antes de publicar.',
+    publicAvailabilityCopyFailed: 'No se pudo copiar el enlace.'
   },
   match: {
     title: 'Vincular al inventario',
@@ -1454,7 +1474,7 @@ const extra = {
     stripeDisconnected: 'Stripe desconectado.',
     checkbook: 'Pago ACH a proveedores (Checkbook)',
     checkbookIntro:
-      'Conecte su cuenta Checkbook para pagar facturas de proveedores por ACH desde Compras. Cree una cuenta Checkbook, verifique su banco y pegue las claves API de Configuración → Desarrollador. Solo propietario/admin.',
+      'Conecte su cuenta Checkbook para pagar facturas de proveedores por ACH desde Compras. Para pagos reales use claves de Producción en Checkbook Configuración → Desarrollador (con Producción seleccionado) y un banco verificado. Solo dueño/admin.',
     checkbookConnectedStatus: 'Conectado ({{env}}) · clave …{{last4}}',
     checkbookWebhookHint:
       'En la configuración de desarrollador de Checkbook, establezca la URL del webhook a:',
@@ -1538,6 +1558,21 @@ const extra = {
     removeMemberFailed: 'No se pudo eliminar el miembro.',
     noEmailOnFile: 'Este miembro no tiene correo registrado.',
     passwordResetFailed: 'No se pudo enviar el restablecimiento de contraseña.'
+  },
+  publicAvailability: {
+    loading: 'Cargando disponibilidad…',
+    unavailable: 'Disponibilidad no disponible',
+    notFound: 'Esta lista no se encontró o no está publicada.',
+    currentAvailability: 'Disponibilidad actual',
+    updated: 'Actualizado {{date}}',
+    empty: 'No hay plantas para mostrar ahora.',
+    photo: 'Foto',
+    plant: 'Planta',
+    size: 'Tamaño',
+    qty: 'Cant.',
+    price: 'Precio',
+    ready: 'Listo',
+    poweredBy: 'Con tecnología de NurseryOS'
   }
 } as const;
 

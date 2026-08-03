@@ -55,6 +55,7 @@ interface InventoryWorkspaceProps {
 
 const LOW_STOCK_TOGGLE_KEY = 'nurseryos:inventory:showLowStockUpcoming';
 const EXPORT_INCLUDE_QTY_KEY = 'nurseryos:inventory:exportIncludeQty';
+const EXPORT_INCLUDE_PHOTOS_KEY = 'nurseryos:inventory:exportIncludePhotos';
 const INVENTORY_UPLOAD_TIMEOUT_MS = 360_000;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -141,6 +142,16 @@ export function InventoryWorkspace({
   const [exportIncludeQty, setExportIncludeQty] = useState(() => {
     try {
       const raw = localStorage.getItem(EXPORT_INCLUDE_QTY_KEY);
+      if (raw === '0' || raw === 'false') return false;
+      if (raw === '1' || raw === 'true') return true;
+    } catch {
+      /* ignore */
+    }
+    return true;
+  });
+  const [exportIncludePhotos, setExportIncludePhotos] = useState(() => {
+    try {
+      const raw = localStorage.getItem(EXPORT_INCLUDE_PHOTOS_KEY);
       if (raw === '0' || raw === 'false') return false;
       if (raw === '1' || raw === 'true') return true;
     } catch {
@@ -506,7 +517,8 @@ export function InventoryWorkspace({
         nurseryLogoSrc,
         plants: exportPlants,
         inStockOnly: false,
-        includeQuantity: exportIncludeQty
+        includeQuantity: exportIncludeQty,
+        includePhotos: exportIncludePhotos
       });
       setMessage(t('inventory.exportedExcel', { n: exportPlants.length }));
       setMessageIsError(false);
@@ -526,7 +538,8 @@ export function InventoryWorkspace({
         nurseryLogoSrc,
         plants: exportPlants,
         inStockOnly: false,
-        includeQuantity: exportIncludeQty
+        includeQuantity: exportIncludeQty,
+        includePhotos: exportIncludePhotos
       });
       if (result.method === 'preview') {
         setPdfSheet({ url: result.url, fileName: result.fileName, blob: result.blob });
@@ -665,6 +678,22 @@ export function InventoryWorkspace({
                   }}
                 />
                 {t('inventory.exportIncludeQty')}
+              </label>
+              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={exportIncludePhotos}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setExportIncludePhotos(on);
+                    try {
+                      localStorage.setItem(EXPORT_INCLUDE_PHOTOS_KEY, on ? '1' : '0');
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                />
+                {t('inventory.exportIncludePhotos')}
               </label>
               {exportIncludeQty && (
                 <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">

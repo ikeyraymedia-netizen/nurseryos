@@ -106,6 +106,7 @@ const extra = {
     exportExcel: 'Exportar Excel',
     exportPdf: 'Exportar PDF',
     exportIncludeQty: 'Incluir cantidad de inventario al exportar',
+    exportIncludePhotos: 'Incluir enlaces de fotos al exportar',
     inStockOnly: 'Solo en stock ({{n}})',
     uploadCsv: 'Subir CSV',
     uploadExcel: 'Excel',

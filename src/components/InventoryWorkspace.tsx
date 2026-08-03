@@ -154,6 +154,7 @@ export function InventoryWorkspace({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [pubBusy, setPubBusy] = useState(false);
+  const [showPublicAvailability, setShowPublicAvailability] = useState(false);
   const [copiedPublic, setCopiedPublic] = useState<'page' | 'api' | null>(null);
   const [pubEnabled, setPubEnabled] = useState(Boolean(tenant?.publicAvailabilityEnabled));
   const [pubSlug, setPubSlug] = useState(
@@ -731,6 +732,21 @@ export function InventoryWorkspace({
           </div>
           <div className="flex flex-col items-stretch sm:items-end gap-2">
             <div className="flex flex-wrap gap-2 justify-end">
+              {permissions.canManageTeam && tenantId ? (
+                <button
+                  type="button"
+                  onClick={() => setShowPublicAvailability(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-teal-900 text-xs font-bold hover:bg-teal-100"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  {t('inventory.publicAvailability')}
+                  {pubEnabled ? (
+                    <span className="text-[10px] font-black uppercase tracking-wide text-teal-700">
+                      · {t('inventory.on')}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={exportBusy || exportPlants.length === 0}
@@ -942,145 +958,156 @@ export function InventoryWorkspace({
         )}
       </div>
 
-      {permissions.canManageTeam && tenantId ? (
-        <div className="bg-white rounded-2xl border border-teal-100 p-5 space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-              <Globe className="h-5 w-5 text-teal-700" />
+      {showPublicAvailability && permissions.canManageTeam && tenantId ? (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Globe className="h-5 w-5 text-teal-700 shrink-0" />
+                <h3 className="font-bold text-gray-900 truncate">
+                  {t('inventory.publicAvailability')}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPublicAvailability(false)}
+                className="text-xs font-bold text-gray-500 shrink-0"
+              >
+                {t('common.close')}
+              </button>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-gray-900">
-                {t('inventory.publicAvailability')}
-              </h3>
-              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+            <div className="p-5 space-y-3 max-h-[75vh] overflow-y-auto">
+              <p className="text-xs text-gray-500 leading-relaxed">
                 {t('inventory.publicAvailabilityIntro')}
               </p>
+              <label className="flex items-center gap-2 text-xs font-semibold text-teal-950">
+                <input
+                  type="checkbox"
+                  checked={pubEnabled}
+                  disabled={pubBusy || busy}
+                  onChange={(e) => setPubEnabled(e.target.checked)}
+                />
+                {t('inventory.publicAvailabilityEnable')}
+              </label>
+              <label className="block text-[11px] font-bold text-teal-950">
+                {t('inventory.publicAvailabilitySlug')}
+                <input
+                  value={pubSlug}
+                  disabled={pubBusy || busy}
+                  onChange={(e) =>
+                    setPubSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
+                  }
+                  placeholder={suggestPublicAvailabilitySlug(nurseryName)}
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-xs font-mono"
+                />
+              </label>
+              <p className="text-[10px] text-teal-900/70">
+                {t('inventory.publicAvailabilitySlugHint')}
+              </p>
+              <div className="flex flex-col gap-2">
+                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-teal-950">
+                  <input
+                    type="checkbox"
+                    checked={pubShowQty}
+                    disabled={pubBusy || busy}
+                    onChange={(e) => setPubShowQty(e.target.checked)}
+                  />
+                  {t('inventory.publicAvailabilityShowQty')}
+                </label>
+                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-teal-950">
+                  <input
+                    type="checkbox"
+                    checked={pubShowPhotos}
+                    disabled={pubBusy || busy}
+                    onChange={(e) => setPubShowPhotos(e.target.checked)}
+                  />
+                  {t('inventory.publicAvailabilityShowPhotos')}
+                </label>
+                <label
+                  className={`inline-flex items-center gap-2 text-[11px] font-semibold ${
+                    pubShowQty ? 'text-teal-950' : 'text-teal-900/40'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={pubInStockOnly}
+                    disabled={pubBusy || busy || !pubShowQty}
+                    onChange={(e) => setPubInStockOnly(e.target.checked)}
+                  />
+                  {t('inventory.publicAvailabilityInStockOnly')}
+                </label>
+              </div>
+              {pubSlug.trim() ? (
+                <div className="rounded-xl border border-teal-100 bg-teal-50/40 px-3 py-2.5 space-y-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-teal-900">
+                      {t('inventory.publicAvailabilityPageUrl')}
+                    </p>
+                    <p className="text-[11px] font-mono text-teal-950 break-all">
+                      {publicAvailabilityPageUrl(pubSlug.trim().toLowerCase())}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-teal-900">
+                      {t('inventory.publicAvailabilityApiUrl')}
+                    </p>
+                    <p className="text-[11px] font-mono text-teal-950 break-all">
+                      {publicAvailabilityApiUrl(pubSlug.trim().toLowerCase())}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={pubBusy || busy}
+                      onClick={() => void copyPublicLink('page')}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-teal-900 text-[11px] font-bold disabled:opacity-50"
+                    >
+                      {copiedPublic === 'page' ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      {t('inventory.publicAvailabilityCopyPage')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pubBusy || busy}
+                      onClick={() => void copyPublicLink('api')}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-teal-900 text-[11px] font-bold disabled:opacity-50"
+                    >
+                      {copiedPublic === 'api' ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      {t('inventory.publicAvailabilityCopyApi')}
+                    </button>
+                    {pubEnabled ? (
+                      <a
+                        href={publicAvailabilityPageUrl(pubSlug.trim().toLowerCase())}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-700 text-white text-[11px] font-bold"
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                        {t('inventory.publicAvailabilityOpen')}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                disabled={pubBusy || busy}
+                onClick={() => void handleSavePublicAvailability()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold hover:bg-teal-800 disabled:opacity-50"
+              >
+                {pubBusy
+                  ? t('inventory.publicAvailabilitySaving')
+                  : t('inventory.publicAvailabilitySave')}
+              </button>
             </div>
           </div>
-          <label className="flex items-center gap-2 text-xs font-semibold text-teal-950">
-            <input
-              type="checkbox"
-              checked={pubEnabled}
-              disabled={pubBusy || busy}
-              onChange={(e) => setPubEnabled(e.target.checked)}
-            />
-            {t('inventory.publicAvailabilityEnable')}
-          </label>
-          <label className="block text-[11px] font-bold text-teal-950">
-            {t('inventory.publicAvailabilitySlug')}
-            <input
-              value={pubSlug}
-              disabled={pubBusy || busy}
-              onChange={(e) =>
-                setPubSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
-              }
-              placeholder={suggestPublicAvailabilitySlug(nurseryName)}
-              className="mt-1 w-full max-w-md px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-xs font-mono"
-            />
-          </label>
-          <p className="text-[10px] text-teal-900/70">{t('inventory.publicAvailabilitySlugHint')}</p>
-          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
-            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-teal-950">
-              <input
-                type="checkbox"
-                checked={pubShowQty}
-                disabled={pubBusy || busy}
-                onChange={(e) => setPubShowQty(e.target.checked)}
-              />
-              {t('inventory.publicAvailabilityShowQty')}
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-teal-950">
-              <input
-                type="checkbox"
-                checked={pubShowPhotos}
-                disabled={pubBusy || busy}
-                onChange={(e) => setPubShowPhotos(e.target.checked)}
-              />
-              {t('inventory.publicAvailabilityShowPhotos')}
-            </label>
-            <label
-              className={`inline-flex items-center gap-2 text-[11px] font-semibold ${
-                pubShowQty ? 'text-teal-950' : 'text-teal-900/40'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={pubInStockOnly}
-                disabled={pubBusy || busy || !pubShowQty}
-                onChange={(e) => setPubInStockOnly(e.target.checked)}
-              />
-              {t('inventory.publicAvailabilityInStockOnly')}
-            </label>
-          </div>
-          {pubSlug.trim() ? (
-            <div className="rounded-xl border border-teal-100 bg-teal-50/40 px-3 py-2.5 space-y-2">
-              <div>
-                <p className="text-[10px] font-bold uppercase text-teal-900">
-                  {t('inventory.publicAvailabilityPageUrl')}
-                </p>
-                <p className="text-[11px] font-mono text-teal-950 break-all">
-                  {publicAvailabilityPageUrl(pubSlug.trim().toLowerCase())}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase text-teal-900">
-                  {t('inventory.publicAvailabilityApiUrl')}
-                </p>
-                <p className="text-[11px] font-mono text-teal-950 break-all">
-                  {publicAvailabilityApiUrl(pubSlug.trim().toLowerCase())}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={pubBusy || busy}
-                  onClick={() => void copyPublicLink('page')}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-teal-900 text-[11px] font-bold disabled:opacity-50"
-                >
-                  {copiedPublic === 'page' ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  {t('inventory.publicAvailabilityCopyPage')}
-                </button>
-                <button
-                  type="button"
-                  disabled={pubBusy || busy}
-                  onClick={() => void copyPublicLink('api')}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-200 bg-white text-teal-900 text-[11px] font-bold disabled:opacity-50"
-                >
-                  {copiedPublic === 'api' ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  {t('inventory.publicAvailabilityCopyApi')}
-                </button>
-                {pubEnabled ? (
-                  <a
-                    href={publicAvailabilityPageUrl(pubSlug.trim().toLowerCase())}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-700 text-white text-[11px] font-bold"
-                  >
-                    <Link2 className="h-3.5 w-3.5" />
-                    {t('inventory.publicAvailabilityOpen')}
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            disabled={pubBusy || busy}
-            onClick={() => void handleSavePublicAvailability()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold hover:bg-teal-800 disabled:opacity-50"
-          >
-            {pubBusy
-              ? t('inventory.publicAvailabilitySaving')
-              : t('inventory.publicAvailabilitySave')}
-          </button>
         </div>
       ) : null}
 

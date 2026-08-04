@@ -705,7 +705,10 @@ function NurseryApp({
           quantity: item.quantity,
           loadedQuantity: 0,
           unitPrice: item.unitPrice,
-          notes: item.notes
+          unitCost: item.unitCost,
+          notes: item.notes,
+          substitutes: item.substitutes,
+          vendor: item.vendor
         })),
         originalText: '',
         dateCreated: doc.createdAt,

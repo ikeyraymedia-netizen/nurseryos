@@ -91,7 +91,8 @@ export interface PlantOrderItem {
   addedAt?: string;
   unitPrice?: number; // Optional price per plant item for invoices
   unitCost?: number; // Our cost per plant (for profit tracking; internal only)
-  vendor?: string; // Vendor name/id we are buying this plant from
+  /** Quoted / supply vendor — internal (estimates, purchasing memory); never on customer PDF/email. */
+  vendor?: string;
 }
 
 export interface InvoiceDetails {
@@ -167,6 +168,8 @@ export interface CustomerDocumentLineItem {
   notes?: string;
   /** Possible substitute plant material — mainly for estimates. */
   substitutes?: string;
+  /** Quoted source vendor — estimates/internal only; never on customer PDF/email. */
+  vendor?: string;
 }
 
 /** Estimate, invoice, or credit memo saved under a customer record. */

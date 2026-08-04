@@ -48,6 +48,7 @@ import {
 } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { DEFAULT_VENDORS } from '../data/vendors';
+import { subscribeToVendors } from '../lib/vendors';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
 import {
@@ -196,6 +197,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   /** Only include a Stripe pay button when Stripe is actually connected. */
   const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
   const [stripePaymentsReady, setStripePaymentsReady] = useState(false);
+  const [vendorSuggestions, setVendorSuggestions] = useState<string[]>(DEFAULT_VENDORS);
 
   // Initialize or reload states when order / document type changes
   useEffect(() => {
@@ -294,7 +296,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           unitPrice: item.unitPrice,
           unitCost: item.unitCost,
           notes: item.notes,
-          substitutes: item.substitutes
+          substitutes: item.substitutes,
+          vendor: item.vendor
         }));
       }
       if (order.items.length > 0 && !order.id.startsWith('preview-new-')) {
@@ -879,6 +882,20 @@ Thank you for choosing ${nurseryName}!
 
   // Must stay above the !isOpen early return — hooks cannot run conditionally.
   useEffect(() => {
+    if (!isOpen || !tenantId) {
+      setVendorSuggestions(DEFAULT_VENDORS);
+      return;
+    }
+    return subscribeToVendors((vendors) => {
+      const names = vendors.map((v) => v.name.trim()).filter(Boolean);
+      const merged = Array.from(new Set([...names, ...DEFAULT_VENDORS])).sort((a, b) =>
+        a.localeCompare(b)
+      );
+      setVendorSuggestions(merged);
+    });
+  }, [isOpen, tenantId]);
+
+  useEffect(() => {
     if (!isOpen || !tenantId || !canCollectPayments) {
       setStripePaymentsReady(false);
       return;
@@ -1028,7 +1045,13 @@ Thank you for choosing ${nurseryName}!
             ? itemPrices[item.id]
             : getDefaultPriceForSize(item.containerSize),
         unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
-        substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined
+        substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined,
+        vendor:
+          isEstimate
+            ? String(item.vendor || '').trim() || undefined
+            : isCreditMemo
+              ? undefined
+              : item.vendor
       }));
 
       if (canEditLines) {
@@ -1077,7 +1100,8 @@ Thank you for choosing ${nurseryName}!
         unitPrice: item.unitPrice ?? 0,
         unitCost: item.unitCost,
         notes: item.notes,
-        substitutes: item.substitutes
+        substitutes: item.substitutes,
+        vendor: isEstimate ? item.vendor : undefined
       }));
 
       const customerId = customer?.id || order.customerId;
@@ -2709,6 +2733,7 @@ Thank you for choosing ${nurseryName}!
                               </span>
                             )}
                             {documentType === 'estimate' ? (
+                              <>
                               <label className="block mt-1.5">
                                 <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                                   {t('invoice.possibleSubs')}
@@ -2726,6 +2751,25 @@ Thank you for choosing ${nurseryName}!
                                   className="mt-0.5 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white"
                                 />
                               </label>
+                              <label className="block mt-1.5 print:hidden">
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-indigo-500 inline-flex items-center gap-1">
+                                  {t('invoice.quotedVendor')}
+                                  <span className="normal-case tracking-normal font-semibold text-indigo-400">
+                                    ({t('invoice.internalOnly')})
+                                  </span>
+                                </span>
+                                <input
+                                  type="text"
+                                  list="estimate-vendor-suggestions"
+                                  value={item.vendor || ''}
+                                  onChange={(e) =>
+                                    updateDraftLine(item.id, { vendor: e.target.value })
+                                  }
+                                  placeholder={t('invoice.quotedVendorPlaceholder')}
+                                  className="mt-0.5 w-full max-w-md rounded-lg border border-indigo-200 bg-indigo-50/50 px-2 py-1 text-[11px] font-normal text-indigo-950 placeholder:text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
+                                />
+                              </label>
+                              </>
                             ) : subs.trim() ? (
                               <span className="block text-[10px] text-slate-500 font-normal italic mt-0.5">
                                 {t('invoice.possibleSubs')}: {subs.trim()}
@@ -2809,6 +2853,13 @@ Thank you for choosing ${nurseryName}!
                     <Plus className="h-3.5 w-3.5" />
                     {isCreditMemo ? t('invoice.addCreditLine') : t('invoice.addEstimateLine')}
                   </button>
+                )}
+                {isEstimate && (
+                  <datalist id="estimate-vendor-suggestions">
+                    {vendorSuggestions.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
                 )}
               </div>
 

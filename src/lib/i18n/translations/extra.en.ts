@@ -886,6 +886,9 @@ const extra = {
       'This credit applies to the referenced invoice and may be applied to future purchases or balances.',
     possibleSubs: 'Possible subs',
     possibleSubsPlaceholder: 'e.g. Boxwood, Dwarf Yaupon, Holly',
+    quotedVendor: 'Vendor',
+    quotedVendorPlaceholder: 'Who you quoted this plant from',
+    internalOnly: 'internal only',
     defaultNotesInvoice:
       'Thank you for your business. Balance due is payable in full per the terms above.',
     emailSubjectFrom: '{{docLabel}} {{number}} from {{nurseryName}}',

@@ -745,8 +745,10 @@ export function CustomersWorkspace({
         quantity: item.quantity,
         loadedQuantity: 0,
         unitPrice: item.unitPrice,
+        unitCost: item.unitCost,
         notes: item.notes,
-        substitutes: item.substitutes
+        substitutes: item.substitutes,
+        vendor: item.vendor
       }));
 
       if (items.length === 0) {

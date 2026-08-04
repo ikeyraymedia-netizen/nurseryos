@@ -896,6 +896,9 @@ const extra = {
       'Este crédito se aplica a la factura referenciada y puede usarse en compras futuras o saldos pendientes.',
     possibleSubs: 'Sustitutos posibles',
     possibleSubsPlaceholder: 'ej. Boj, Yaupon enano, Acebo',
+    quotedVendor: 'Proveedor',
+    quotedVendorPlaceholder: 'De quién cotizó esta planta',
+    internalOnly: 'solo interno',
     defaultNotesInvoice:
       'Gracias por su negocio. El saldo pendiente es pagadero en su totalidad según los términos anteriores.',
     emailSubjectFrom: '{{docLabel}} {{number}} de {{nurseryName}}',

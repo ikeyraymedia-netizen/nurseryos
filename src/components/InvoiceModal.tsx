@@ -575,13 +575,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
       const total = qty * price;
+      const note = String(item.notes || '').trim();
+      const noteHtml = note
+        ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">${t('invoice.notePrefix')} ${note}</div>`
+        : '';
       const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
       const subsHtml = subs
         ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">Possible subs: ${subs}</div>`
         : '';
       return `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}${subsHtml}</td>
+          <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}${noteHtml}${subsHtml}</td>
           <td style="padding: 10px 0; text-align: center; color: #64748b; font-family: sans-serif;">${item.containerSize}</td>
           <td style="padding: 10px 0; text-align: center; font-weight: bold; color: #0f172a; font-family: sans-serif;">${qty}</td>
           <td style="padding: 10px 0; text-align: right; color: #0e7490; font-family: sans-serif;">$${price.toFixed(2)}</td>
@@ -718,9 +722,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
       const total = qty * price;
+      const note = String(item.notes || '').trim();
       const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
       const line = `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: $${price.toFixed(2).padEnd(6)} | Total: $${total.toFixed(2)}`;
-      return subs ? `${line}\n  Possible subs: ${subs}` : line;
+      const extras = [
+        note ? `  Note: ${note}` : '',
+        subs ? `  Possible subs: ${subs}` : ''
+      ]
+        .filter(Boolean)
+        .join('\n');
+      return extras ? `${line}\n${extras}` : line;
     }).join('\n');
 
     return `
@@ -1544,14 +1555,20 @@ Thank you for choosing ${nurseryName}!
             : getDefaultPriceForSize(item.containerSize);
         const total = qty * price;
         const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
+        const note = String(item.notes || '').trim();
 
         const nameLines = pdf.splitTextToSize(item.plantName || '—', xSize - xPlant - 10);
+        const noteLines = note
+          ? pdf.splitTextToSize(`${t('invoice.notePrefix')} ${note}`, xSize - xPlant - 10)
+          : [];
         const subLines = subs
           ? pdf.splitTextToSize(`${t('invoice.possibleSubs')}: ${subs}`, xSize - xPlant - 10)
           : [];
         const linePitch = 11;
         const textBlockHeight =
-          Math.max(9, nameLines.length * linePitch) + (subLines.length ? subLines.length * 10 + 2 : 0);
+          Math.max(9, nameLines.length * linePitch) +
+          (noteLines.length ? noteLines.length * 10 + 2 : 0) +
+          (subLines.length ? subLines.length * 10 + 2 : 0);
         // Space for text + padding under glyphs + rule + gap before next baseline
         const rowSpan = textBlockHeight + 16;
         if (y + rowSpan > pageHeight - margin) {
@@ -1567,12 +1584,21 @@ Thank you for choosing ${nurseryName}!
         nameLines.forEach((l: string, i: number) => {
           pdf.text(l, xPlant, baseline + i * linePitch);
         });
+        let belowName = baseline + nameLines.length * linePitch + 1;
+        if (noteLines.length) {
+          pdf.setFontSize(8);
+          pdf.setTextColor(100, 100, 100);
+          noteLines.forEach((l: string, i: number) => {
+            pdf.text(l, xPlant, belowName + i * 10);
+          });
+          belowName += noteLines.length * 10 + 2;
+          pdf.setFontSize(9);
+        }
         if (subLines.length) {
           pdf.setFontSize(8);
           pdf.setTextColor(100, 100, 100);
-          const subStart = baseline + nameLines.length * linePitch + 1;
           subLines.forEach((l: string, i: number) => {
-            pdf.text(l, xPlant, subStart + i * 10);
+            pdf.text(l, xPlant, belowName + i * 10);
           });
           pdf.setFontSize(9);
         }

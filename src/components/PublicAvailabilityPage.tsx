@@ -36,7 +36,7 @@ function formatReadyDate(readyDate: string | null | undefined): string {
   return raw.slice(0, 10);
 }
 
-function groupByCategory(plants: PublicPlant[]) {
+function groupByCategory(plants: PublicPlant[]): Array<[string, PublicPlant[]]> {
   const map = new Map<string, PublicPlant[]>();
   for (const plant of plants) {
     const key = plant.category?.trim() || 'Uncategorized';
@@ -44,7 +44,25 @@ function groupByCategory(plants: PublicPlant[]) {
     list.push(plant);
     map.set(key, list);
   }
-  return Array.from(map.entries());
+  return Array.from(map.entries())
+    .sort(([a], [b]) => {
+      const aUncat = a === 'Uncategorized';
+      const bUncat = b === 'Uncategorized';
+      if (aUncat && !bUncat) return 1;
+      if (!aUncat && bUncat) return -1;
+      return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    })
+    .map(([category, list]) => {
+      const sorted = [...list].sort((a, b) => {
+        const name = a.plantName.localeCompare(b.plantName, undefined, { sensitivity: 'base' });
+        if (name !== 0) return name;
+        return a.containerSize.localeCompare(b.containerSize, undefined, {
+          sensitivity: 'base',
+          numeric: true
+        });
+      });
+      return [category, sorted];
+    });
 }
 
 function PublicAvailabilityInner({ slug }: { slug: string }) {

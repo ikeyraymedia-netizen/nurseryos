@@ -79,6 +79,28 @@ function categoryLabel(raw?: string | null): string | null {
   return v || null;
 }
 
+function isSizeDerivedCategory(raw?: string | null): boolean {
+  const v = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  if (!v) return false;
+  if (v === 'b&b' || v === 'b and b' || v === 'flats' || v === 'caliper' || v === 'tray') {
+    return true;
+  }
+  if (/^#?\d+(\.\d+)?$/.test(v)) return true;
+  if (/^\d+(\.\d+)?\s*(gal|gallon|gallons|g)$/.test(v)) return true;
+  if (/^#\d+(\.\d+)?\s*(gal|gallon|gallons|g)?$/.test(v)) return true;
+  return false;
+}
+
+/** Prefer entered section/category; ignore gallon/size auto-labels. */
+function publicCategoryLabel(raw?: string | null): string | null {
+  const v = categoryLabel(raw);
+  if (!v || isSizeDerivedCategory(v)) return null;
+  return v;
+}
+
 async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityPayload | null> {
   const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
   if (!tenantSnap.exists) return null;
@@ -126,7 +148,7 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
       id: docSnap.id,
       plantName: String(data.plantName || '').trim() || 'Plant',
       containerSize: String(data.containerSize || '').trim(),
-      category: categoryLabel(data.category),
+      category: publicCategoryLabel(data.category),
       ...(showQty ? { quantityAvailable: qty } : {}),
       listPrice:
         data.listPrice != null && Number.isFinite(Number(data.listPrice))
@@ -138,13 +160,20 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
   });
 
   plants.sort((a, b) => {
-    const cat = String(a.category || 'Uncategorized').localeCompare(
-      String(b.category || 'Uncategorized'),
-      undefined,
-      { sensitivity: 'base' }
-    );
+    const aCat = a.category || 'Uncategorized';
+    const bCat = b.category || 'Uncategorized';
+    const aUncat = !a.category;
+    const bUncat = !b.category;
+    if (aUncat && !bUncat) return 1;
+    if (!aUncat && bUncat) return -1;
+    const cat = aCat.localeCompare(bCat, undefined, { sensitivity: 'base' });
     if (cat !== 0) return cat;
-    return a.plantName.localeCompare(b.plantName, undefined, { sensitivity: 'base' });
+    const name = a.plantName.localeCompare(b.plantName, undefined, { sensitivity: 'base' });
+    if (name !== 0) return name;
+    return a.containerSize.localeCompare(b.containerSize, undefined, {
+      sensitivity: 'base',
+      numeric: true
+    });
   });
 
   return {

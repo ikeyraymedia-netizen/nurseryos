@@ -478,12 +478,8 @@ export function parseQuickbooksProductList(table: string[][]): SpreadsheetInvent
       notes: notesParts.join(' · ')
     };
 
-    // Category from size so list groups cleanly (not QB parent folder names)
-    if (containerSize === 'B&B') entry.category = 'B&B';
-    else if (containerSize === 'Tray') entry.category = 'Flats';
-    else if (/^#\d+$/.test(containerSize)) entry.category = `${containerSize.slice(1)} gal`;
-    else if (/"$/.test(containerSize)) entry.category = 'Caliper';
-
+    // Leave category blank — availability lists group by the nursery’s entered
+    // section/category (Shrubs, Trees, …), not by gallon size.
     out.push(entry);
   }
 

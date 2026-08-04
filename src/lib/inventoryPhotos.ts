@@ -14,6 +14,7 @@ import {
   resolveNurseryLogoSrc,
   type JsPdfImageFormat
 } from './nurseryBranding';
+import { groupPlantsByAvailabilityCategory } from './availabilityGrouping';
 
 /** Compress an image file to a JPEG blob suitable for Storage upload. */
 export async function fileToCompressedJpegBlob(
@@ -119,39 +120,6 @@ function formatReadyDate(readyDate: string | null | undefined): string {
 
 function safeFileStem(name: string): string {
   return (name || 'availability').replace(/[^\w.\-]+/g, '_').slice(0, 60);
-}
-
-const UNCATEGORIZED = 'Uncategorized';
-
-function categoryLabel(plant: InventoryPlant): string {
-  const raw = (plant.category || '').trim();
-  return raw || UNCATEGORIZED;
-}
-
-/** Sort by category, then plant name. */
-function sortPlants(plants: InventoryPlant[]): InventoryPlant[] {
-  return [...plants].sort((a, b) => {
-    const cat = categoryLabel(a).localeCompare(categoryLabel(b), undefined, { sensitivity: 'base' });
-    if (cat !== 0) return cat;
-    return (a.plantName || '').localeCompare(b.plantName || '', undefined, { sensitivity: 'base' });
-  });
-}
-
-/** Group sorted plants into category sections (preserves sort order). */
-function groupPlantsByCategory(
-  plants: InventoryPlant[]
-): Array<{ category: string; plants: InventoryPlant[] }> {
-  const groups: Array<{ category: string; plants: InventoryPlant[] }> = [];
-  for (const plant of sortPlants(plants)) {
-    const category = categoryLabel(plant);
-    const last = groups[groups.length - 1];
-    if (last && last.category === category) {
-      last.plants.push(plant);
-    } else {
-      groups.push({ category, plants: [plant] });
-    }
-  }
-  return groups;
 }
 
 function filterExportPlants(plants: InventoryPlant[], inStockOnly?: boolean): InventoryPlant[] {
@@ -307,7 +275,7 @@ export async function exportAvailabilityExcel(params: {
   const cols = availabilityColumns(includeQuantity, includePhotos);
   const colCount = cols.length;
   const lastColLetter = colLetter(colCount);
-  const groups = groupPlantsByCategory(
+  const groups = groupPlantsByAvailabilityCategory(
     filterExportPlants(params.plants, includeQuantity ? params.inStockOnly : false)
   );
   const logo = await resolveExportLogo(params.nurseryName, params.nurseryLogoSrc);
@@ -499,7 +467,7 @@ export async function exportAvailabilityPdf(params: {
   const includeQuantity = params.includeQuantity !== false;
   const includePhotos = params.includePhotos !== false;
   const cols = availabilityColumns(includeQuantity, includePhotos);
-  const groups = groupPlantsByCategory(
+  const groups = groupPlantsByAvailabilityCategory(
     filterExportPlants(params.plants, includeQuantity ? params.inStockOnly : false)
   );
   const logo = await resolveExportLogo(params.nurseryName, params.nurseryLogoSrc);

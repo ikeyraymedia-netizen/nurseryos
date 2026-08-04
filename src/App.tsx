@@ -1144,6 +1144,7 @@ function NurseryApp({
               trucks={trucks}
               permissions={permissions}
               nurseryName={tenant.name}
+              tenantId={tenant.id}
               containerWeights={containerWeights}
               initialSelectedCustomerId={focusCustomerId}
               onOpenOrder={(orderId) => {

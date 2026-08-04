@@ -1,5 +1,17 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Upload, Users, Search, FileText, DollarSign, Plus, ArrowLeft, X, ClipboardList, Download } from 'lucide-react';
+import {
+  Upload,
+  Users,
+  Search,
+  FileText,
+  DollarSign,
+  Plus,
+  ArrowLeft,
+  X,
+  ClipboardList,
+  Download,
+  Mail
+} from 'lucide-react';
 import {
   Customer,
   CustomerOrder,
@@ -21,6 +33,13 @@ import { logAuditEvent } from '../lib/audit';
 import { exportNurseryBackup } from '../lib/backup';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
+import { sendTenantEmail } from '../lib/email';
+import {
+  buildCustomerStatementEmailHtml,
+  buildCustomerStatementEmailText,
+  buildCustomerStatementModel,
+  defaultCustomerStatementSubject
+} from '../lib/customerStatementEmail';
 import { formatPaymentRecord } from './MarkPaidModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
@@ -88,6 +107,7 @@ interface CustomersWorkspaceProps {
   trucks?: Truck[];
   permissions: AppPermissions;
   nurseryName?: string;
+  tenantId?: string;
   containerWeights?: ContainerWeight[];
   initialSelectedCustomerId?: string | null;
   onOpenOrder?: (orderId: string) => void;
@@ -105,6 +125,7 @@ export function CustomersWorkspace({
   trucks = [],
   permissions,
   nurseryName = 'NurseryOS',
+  tenantId,
   containerWeights = [],
   onOpenOrder,
   onOpenDocument,
@@ -149,6 +170,12 @@ export function CustomersWorkspace({
   const [customerDocuments, setCustomerDocuments] = useState<CustomerDocument[]>([]);
   const [customerDocFilter, setCustomerDocFilter] = useState<CustomerDocFilter>('all');
   const [convertingDocId, setConvertingDocId] = useState<string | null>(null);
+  const [showStatementEmail, setShowStatementEmail] = useState(false);
+  const [statementEmailTo, setStatementEmailTo] = useState('');
+  const [statementEmailSubject, setStatementEmailSubject] = useState('');
+  const [statementEmailMessage, setStatementEmailMessage] = useState('');
+  const [statementEmailSending, setStatementEmailSending] = useState(false);
+  const [statementEmailStatus, setStatementEmailStatus] = useState<string | null>(null);
 
   const invoicePeriodLabels = useMemo(
     (): Array<[InvoicePeriod, string]> => [
@@ -245,9 +272,13 @@ export function CustomersWorkspace({
   useEffect(() => {
     if (!selectedCustomerId) {
       setCustomerDocuments([]);
+      setShowStatementEmail(false);
+      setStatementEmailStatus(null);
       return;
     }
     setCustomerDocFilter('all');
+    setShowStatementEmail(false);
+    setStatementEmailStatus(null);
     return subscribeToCustomerDocuments(selectedCustomerId, setCustomerDocuments);
   }, [selectedCustomerId]);
 
@@ -272,10 +303,138 @@ export function CustomersWorkspace({
     };
   }, [customerDocuments]);
 
+  const customerStatement = useMemo(() => {
+    if (!selectedCustomer) return null;
+    return buildCustomerStatementModel({
+      customer: selectedCustomer,
+      documents: customerDocuments
+    });
+  }, [selectedCustomer, customerDocuments]);
+
   const filteredCustomerDocuments = useMemo(() => {
     if (customerDocFilter === 'all') return customerDocuments;
     return customerDocuments.filter((doc) => doc.type === customerDocFilter);
   }, [customerDocuments, customerDocFilter]);
+
+  function openStatementEmailPanel() {
+    if (!selectedCustomer || !customerStatement) return;
+    setStatementEmailTo(selectedCustomer.contactEmail || '');
+    setStatementEmailSubject(
+      defaultCustomerStatementSubject(
+        nurseryName,
+        selectedCustomer.name,
+        customerStatement.asOf
+      )
+    );
+    setStatementEmailMessage('');
+    setStatementEmailStatus(null);
+    setShowStatementEmail(true);
+  }
+
+  async function handleSendStatementEmail(e: FormEvent) {
+    e.preventDefault();
+    if (!permissions.canViewInvoices || !selectedCustomer || !customerStatement) return;
+    if (!tenantId) {
+      setStatementEmailStatus(t('customers.statementNurseryMissing'));
+      return;
+    }
+    const to = statementEmailTo.trim();
+    if (!to || !to.includes('@')) {
+      setStatementEmailStatus(t('customers.statementValidEmail'));
+      return;
+    }
+    setStatementEmailSending(true);
+    setStatementEmailStatus(null);
+    try {
+      const result = await sendTenantEmail({
+        tenantId,
+        to,
+        subject:
+          statementEmailSubject.trim() ||
+          defaultCustomerStatementSubject(
+            nurseryName,
+            selectedCustomer.name,
+            customerStatement.asOf
+          ),
+        text: buildCustomerStatementEmailText({
+          nurseryName,
+          statement: customerStatement,
+          message: statementEmailMessage
+        }),
+        html: buildCustomerStatementEmailHtml({
+          nurseryName,
+          statement: customerStatement,
+          message: statementEmailMessage
+        }),
+        fromName: nurseryName
+      });
+      if (!result.success) {
+        throw new Error(
+          result.message || result.error || t('customers.statementEmailNotConfigured')
+        );
+      }
+      if (
+        permissions.canEditCustomers &&
+        to !== (selectedCustomer.contactEmail || '')
+      ) {
+        await updateCustomer({
+          ...selectedCustomer,
+          contactEmail: to,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await logAuditEvent({
+        action: 'customer.statement_emailed',
+        summary: `Emailed account statement to ${to} for ${selectedCustomer.name}`,
+        meta: {
+          customerId: selectedCustomer.id,
+          to,
+          totalDue: customerStatement.totalDue,
+          totalPastDue: customerStatement.totalPastDue,
+          lineCount: customerStatement.lines.length
+        }
+      });
+      setStatementEmailStatus(t('customers.statementSent', { email: to }));
+      window.setTimeout(() => {
+        setShowStatementEmail(false);
+        setStatementEmailStatus(null);
+      }, 1400);
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : t('customers.statementSendFailed');
+      if (/firebase admin is not configured/i.test(raw)) {
+        setStatementEmailStatus(t('customers.statementFirebaseAdminMissing'));
+      } else {
+        setStatementEmailStatus(raw);
+      }
+    } finally {
+      setStatementEmailSending(false);
+    }
+  }
+
+  function handleStatementMailto() {
+    if (!selectedCustomer || !customerStatement) return;
+    const to = statementEmailTo.trim();
+    if (!to || !to.includes('@')) {
+      setStatementEmailStatus(t('customers.statementValidEmail'));
+      return;
+    }
+    const subject =
+      statementEmailSubject.trim() ||
+      defaultCustomerStatementSubject(
+        nurseryName,
+        selectedCustomer.name,
+        customerStatement.asOf
+      );
+    const body = buildCustomerStatementEmailText({
+      nurseryName,
+      statement: customerStatement,
+      message: statementEmailMessage
+    });
+    const href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+    window.location.href = href;
+  }
 
   useEffect(() => {
     if (workspaceView !== 'invoices' || !permissions.canViewInvoices) {
@@ -665,37 +824,122 @@ export function CustomersWorkspace({
               </div>
             </div>
             {permissions.canViewInvoices && (
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-ink-100 bg-ink-50/50 p-3">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-ink-700">
-                    {t('customers.totalDue')}
-                  </p>
-                  <p className="mt-1 text-xl font-black text-gray-950 tabular-nums">
-                    {formatMoney(customerBalances.totalDue)}
-                  </p>
-                </div>
-                <div
-                  className={`rounded-xl border p-3 ${
-                    customerBalances.totalPastDue > 0
-                      ? 'border-rose-200 bg-rose-50/70'
-                      : 'border-slate-200 bg-slate-50/70'
-                  }`}
-                >
-                  <p
-                    className={`text-[10px] font-black uppercase tracking-wider ${
-                      customerBalances.totalPastDue > 0 ? 'text-rose-800' : 'text-slate-600'
+              <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-ink-100 bg-ink-50/50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-ink-700">
+                      {t('customers.totalDue')}
+                    </p>
+                    <p className="mt-1 text-xl font-black text-gray-950 tabular-nums">
+                      {formatMoney(customerBalances.totalDue)}
+                    </p>
+                  </div>
+                  <div
+                    className={`rounded-xl border p-3 ${
+                      customerBalances.totalPastDue > 0
+                        ? 'border-rose-200 bg-rose-50/70'
+                        : 'border-slate-200 bg-slate-50/70'
                     }`}
                   >
-                    {t('customers.totalPastDue')}
-                  </p>
-                  <p
-                    className={`mt-1 text-xl font-black tabular-nums ${
-                      customerBalances.totalPastDue > 0 ? 'text-rose-900' : 'text-gray-950'
-                    }`}
-                  >
-                    {formatMoney(customerBalances.totalPastDue)}
-                  </p>
+                    <p
+                      className={`text-[10px] font-black uppercase tracking-wider ${
+                        customerBalances.totalPastDue > 0 ? 'text-rose-800' : 'text-slate-600'
+                      }`}
+                    >
+                      {t('customers.totalPastDue')}
+                    </p>
+                    <p
+                      className={`mt-1 text-xl font-black tabular-nums ${
+                        customerBalances.totalPastDue > 0 ? 'text-rose-900' : 'text-gray-950'
+                      }`}
+                    >
+                      {formatMoney(customerBalances.totalPastDue)}
+                    </p>
+                  </div>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      showStatementEmail
+                        ? setShowStatementEmail(false)
+                        : openStatementEmailPanel()
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    {showStatementEmail
+                      ? t('customers.hideStatementEmail')
+                      : t('customers.emailStatement')}
+                  </button>
+                </div>
+                {showStatementEmail && customerStatement && (
+                  <form
+                    onSubmit={handleSendStatementEmail}
+                    className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 space-y-2"
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-wider text-ink-800">
+                      {t('customers.emailStatementTitle')}
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      {t('customers.emailStatementHint', {
+                        due: formatMoney(customerStatement.totalDue),
+                        pastDue: formatMoney(customerStatement.totalPastDue),
+                        n: customerStatement.lines.length
+                      })}
+                    </p>
+                    <input
+                      type="email"
+                      value={statementEmailTo}
+                      onChange={(e) => setStatementEmailTo(e.target.value)}
+                      placeholder={t('customers.statementEmailPlaceholder')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={statementEmailSending}
+                      required
+                    />
+                    <input
+                      type="text"
+                      value={statementEmailSubject}
+                      onChange={(e) => setStatementEmailSubject(e.target.value)}
+                      placeholder={t('customers.statementSubjectPlaceholder')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={statementEmailSending}
+                    />
+                    <textarea
+                      rows={2}
+                      value={statementEmailMessage}
+                      onChange={(e) => setStatementEmailMessage(e.target.value)}
+                      placeholder={t('customers.statementMessagePlaceholder')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
+                      disabled={statementEmailSending}
+                    />
+                    {statementEmailStatus && (
+                      <p className="text-[11px] font-medium text-ink-800 bg-white border border-ink-100 rounded-lg px-2.5 py-1.5">
+                        {statementEmailStatus}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={statementEmailSending || !tenantId}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        {statementEmailSending
+                          ? t('customers.sendingStatement')
+                          : t('customers.sendStatement')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStatementMailto}
+                        disabled={statementEmailSending}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-white text-ink-800 text-xs font-bold hover:bg-ink-50 disabled:opacity-50"
+                      >
+                        {t('customers.openMailApp')}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             )}
             {message && (

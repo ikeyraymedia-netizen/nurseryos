@@ -323,6 +323,25 @@ const extra = {
     poNum: 'OC #',
     totalDue: 'Total adeudado',
     totalPastDue: 'Total vencido',
+    emailStatement: 'Enviar estado de cuenta',
+    hideStatementEmail: 'Ocultar correo',
+    emailStatementTitle: 'Enviar estado de cuenta',
+    emailStatementHint:
+      '{{n}} documento(s) abierto(s) · Adeudado {{due}} · Vencido {{pastDue}}',
+    statementEmailPlaceholder: 'Correo del cliente',
+    statementSubjectPlaceholder: 'Asunto',
+    statementMessagePlaceholder: 'Nota opcional para el cliente',
+    sendStatement: 'Enviar estado de cuenta',
+    sendingStatement: 'Enviando…',
+    openMailApp: 'Abrir app de correo',
+    statementSent: 'Estado de cuenta enviado a {{email}}',
+    statementValidEmail: 'Ingrese un correo válido del cliente.',
+    statementEmailNotConfigured:
+      'El correo saliente no está configurado. Abra Equipo → Correo saliente, o use Abrir app de correo.',
+    statementFirebaseAdminMissing:
+      'Este servidor aún no puede enviar correo (Firebase Admin no configurado). Use Abrir app de correo, o configure FIREBASE_SERVICE_ACCOUNT_BASE64 en Railway / en su .env local.',
+    statementNurseryMissing: 'Falta el contexto del vivero. Actualice e intente de nuevo.',
+    statementSendFailed: 'No se pudo enviar el estado de cuenta.',
     filterAll: 'Todos',
     filterInvoices: 'Facturas',
     filterEstimates: 'Presupuestos',
@@ -906,6 +925,8 @@ const extra = {
     emailFirstRequired: 'Ingrese primero el correo del cliente.',
     emailNotConfiguredResend:
       'El correo no está configurado. Abra Equipo → Correo saliente y asegúrese de que RESEND_API_KEY esté en Railway.',
+    firebaseAdminMissing:
+      'Este servidor aún no puede enviar correo (Firebase Admin no configurado). Use Abrir en el cliente de correo, o configure FIREBASE_SERVICE_ACCOUNT_BASE64 en Railway / en su .env local.',
     dispatchEmailFailed: 'Error al enviar correo.',
     unexpectedEmailError: 'Ocurrió un error inesperado al enviar el correo.',
     noCustomerLinked: 'Sin cliente vinculado. Asigne un cliente al pedido antes de guardar.',

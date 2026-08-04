@@ -57,7 +57,7 @@ import {
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks } from '../lib/quickbooks';
 import { sendInvoiceEmail } from '../lib/email';
-import { createInvoiceCheckout, confirmInvoicePayment } from '../lib/stripe';
+import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
@@ -193,7 +193,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [showEmailPanel, setShowEmailPanel] = useState(false);
-  const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(true);
+  /** Only include a Stripe pay button when Stripe is actually connected. */
+  const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
+  const [stripePaymentsReady, setStripePaymentsReady] = useState(false);
 
   // Initialize or reload states when order / document type changes
   useEffect(() => {
@@ -774,15 +776,23 @@ Thank you for choosing ${nurseryName}!
     setEmailErrorMessage('');
 
     try {
-      const payUrl =
+      // Stripe pay links are optional — never block sending the invoice email.
+      let payUrl: string | null = null;
+      if (
+        stripePaymentsReady &&
         canCollectPayments &&
         documentType === 'invoice' &&
         !isPaid &&
         includePayLinkInEmail &&
         tenantId &&
         savedDocumentId
-          ? await ensurePayLink()
-          : null;
+      ) {
+        try {
+          payUrl = await ensurePayLink();
+        } catch (payErr) {
+          console.warn('Invoice email continuing without Stripe pay link:', payErr);
+        }
+      }
       const emailHtml = generateEmailHTML(payUrl);
       const emailText = generateEmailText(payUrl);
 
@@ -796,13 +806,14 @@ Thank you for choosing ${nurseryName}!
       });
 
       if (result.success) {
-        const updatedOrder: CustomerOrder = {
-          ...order,
-          customerEmail,
-          emailSentAt: new Date().toISOString(),
-        };
-
-        await updateCustomerOrder(updatedOrder);
+        if (!order.id.startsWith('preview-')) {
+          const updatedOrder: CustomerOrder = {
+            ...order,
+            customerEmail,
+            emailSentAt: new Date().toISOString()
+          };
+          await updateCustomerOrder(updatedOrder);
+        }
         setEmailSentStatus('success');
       } else if (
         result.code === 'TENANT_SMTP_NOT_CONFIGURED' ||
@@ -821,7 +832,12 @@ Thank you for choosing ${nurseryName}!
     } catch (err: any) {
       console.error('Email sending error:', err);
       setEmailSentStatus('error_general');
-      setEmailErrorMessage(err.message || t('invoice.unexpectedEmailError'));
+      const raw = err?.message || t('invoice.unexpectedEmailError');
+      setEmailErrorMessage(
+        /firebase admin is not configured/i.test(String(raw))
+          ? t('invoice.firebaseAdminMissing')
+          : raw
+      );
     } finally {
       setIsSendingEmail(false);
     }
@@ -855,6 +871,29 @@ Thank you for choosing ${nurseryName}!
   };
 
   // Must stay above the !isOpen early return — hooks cannot run conditionally.
+  useEffect(() => {
+    if (!isOpen || !tenantId || !canCollectPayments) {
+      setStripePaymentsReady(false);
+      return;
+    }
+    let cancelled = false;
+    void fetchStripeStatus(tenantId)
+      .then((status) => {
+        if (cancelled) return;
+        const ready = Boolean(status.connected && status.chargesEnabled);
+        setStripePaymentsReady(ready);
+        setIncludePayLinkInEmail(ready);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStripePaymentsReady(false);
+        setIncludePayLinkInEmail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, tenantId, canCollectPayments]);
+
   useEffect(() => {
     if (!isOpen || !tenantId || !savedDocumentId || !canCollectPayments) return;
     if (documentType !== 'invoice' || localMarkedPaid) return;
@@ -2271,7 +2310,11 @@ Thank you for choosing ${nurseryName}!
                     </div>
                   )}
 
-                  {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
+                  {tenantId &&
+                    canCollectPayments &&
+                    stripePaymentsReady &&
+                    documentType === 'invoice' &&
+                    !isPaid && (
                     <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/70 p-2.5 cursor-pointer">
                       <input
                         type="checkbox"
@@ -2280,10 +2323,9 @@ Thank you for choosing ${nurseryName}!
                         className="mt-0.5 h-3.5 w-3.5 accent-violet-700"
                       />
                       <span className="text-[10px] font-bold text-violet-900 leading-relaxed">
-                        Include “Pay Invoice Online” button
+                        {t('invoice.includePay')}
                         <span className="block font-medium text-violet-700">
-                          Creates the Stripe pay link automatically and puts it inside the emailed
-                          invoice.
+                          {t('invoice.includePayHint')}
                         </span>
                       </span>
                     </label>
@@ -2346,7 +2388,7 @@ Thank you for choosing ${nurseryName}!
               </button>
             )}
 
-            {tenantId && canCollectPayments && documentType === 'invoice' && !isPaid && (
+            {tenantId && canCollectPayments && stripePaymentsReady && documentType === 'invoice' && !isPaid && (
               <button
                 type="button"
                 onClick={() => void handleRefreshPaymentStatus()}
@@ -2359,7 +2401,7 @@ Thank you for choosing ${nurseryName}!
             )}
 
             <div className="border-t border-gray-200 pt-3 space-y-2">
-              {tenantId && canCollectPayments && documentType === 'invoice' && (
+              {tenantId && canCollectPayments && stripePaymentsReady && documentType === 'invoice' && (
                 <button
                   type="button"
                   onClick={() => void handleCreatePayLink()}

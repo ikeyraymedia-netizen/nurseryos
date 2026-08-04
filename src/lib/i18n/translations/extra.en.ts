@@ -319,6 +319,25 @@ const extra = {
     poNum: 'PO #',
     totalDue: 'Total Due',
     totalPastDue: 'Total Past Due',
+    emailStatement: 'Email statement',
+    hideStatementEmail: 'Hide email',
+    emailStatementTitle: 'Email account statement',
+    emailStatementHint:
+      '{{n}} open document(s) · Due {{due}} · Past due {{pastDue}}',
+    statementEmailPlaceholder: 'Customer email',
+    statementSubjectPlaceholder: 'Subject',
+    statementMessagePlaceholder: 'Optional note to the customer',
+    sendStatement: 'Send statement',
+    sendingStatement: 'Sending…',
+    openMailApp: 'Open mail app',
+    statementSent: 'Statement sent to {{email}}',
+    statementValidEmail: 'Enter a valid customer email.',
+    statementEmailNotConfigured:
+      'Outbound email is not configured. Open Team → Outbound email, or use Open mail app.',
+    statementFirebaseAdminMissing:
+      'This server cannot send email yet (Firebase Admin not configured). Use Open mail app, or set FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway / in your local .env.',
+    statementNurseryMissing: 'Nursery context missing. Refresh and try again.',
+    statementSendFailed: 'Could not send the statement email.',
     filterAll: 'All',
     filterInvoices: 'Invoices',
     filterEstimates: 'Estimates',
@@ -896,6 +915,8 @@ const extra = {
     emailFirstRequired: 'Please enter a customer email address first.',
     emailNotConfiguredResend:
       'Email is not configured. Open Team → Outbound email, and make sure RESEND_API_KEY is set in Railway.',
+    firebaseAdminMissing:
+      'This server cannot send email yet (Firebase Admin not configured). Use Open in Default Mail Client, or set FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway / in your local .env.',
     dispatchEmailFailed: 'Failed to dispatch email.',
     unexpectedEmailError: 'An unexpected error occurred while sending the email.',
     noCustomerLinked: 'No customer linked. Assign a customer on the order before saving.',

@@ -25,6 +25,7 @@ import { formatPaymentRecord } from './MarkPaidModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 type CustomersView = 'customers' | 'invoices';
+type CustomerDocFilter = 'all' | CustomerDocumentType;
 
 function startOfInvoicePeriod(period: InvoicePeriod, now = new Date()): Date | null {
   if (period === 'all') return null;
@@ -93,7 +94,8 @@ interface CustomersWorkspaceProps {
   onOpenDocument?: (
     orderId: string | null,
     type: CustomerDocumentType,
-    existingDocument?: CustomerDocument | null
+    existingDocument?: CustomerDocument | null,
+    customerId?: string | null
   ) => void;
 }
 
@@ -145,6 +147,7 @@ export function CustomersWorkspace({
   const [editPaymentTermsType, setEditPaymentTermsType] = useState<string>('NET 30');
   const [editCustomPaymentTerms, setEditCustomPaymentTerms] = useState('');
   const [customerDocuments, setCustomerDocuments] = useState<CustomerDocument[]>([]);
+  const [customerDocFilter, setCustomerDocFilter] = useState<CustomerDocFilter>('all');
   const [convertingDocId, setConvertingDocId] = useState<string | null>(null);
 
   const invoicePeriodLabels = useMemo(
@@ -182,7 +185,9 @@ export function CustomersWorkspace({
   }
 
   function docTypeLabel(type: CustomerDocumentType): string {
-    return type === 'invoice' ? t('customers.invoice') : t('customers.estimate');
+    if (type === 'invoice') return t('customers.invoice');
+    if (type === 'credit_memo') return t('customers.creditMemo');
+    return t('customers.estimate');
   }
 
   const filtered = useMemo(() => {
@@ -242,8 +247,35 @@ export function CustomersWorkspace({
       setCustomerDocuments([]);
       return;
     }
+    setCustomerDocFilter('all');
     return subscribeToCustomerDocuments(selectedCustomerId, setCustomerDocuments);
   }, [selectedCustomerId]);
+
+  const customerBalances = useMemo(() => {
+    let unpaid = 0;
+    let pastDue = 0;
+    let credits = 0;
+    for (const doc of customerDocuments) {
+      if (doc.type === 'credit_memo') {
+        credits += Math.abs(doc.grandTotal || 0);
+        continue;
+      }
+      if (doc.type !== 'invoice') continue;
+      if (doc.paymentStatus === 'paid') continue;
+      const amount = doc.grandTotal || 0;
+      unpaid += amount;
+      if (isInvoiceOverdue(doc)) pastDue += amount;
+    }
+    return {
+      totalDue: Math.max(0, unpaid - credits),
+      totalPastDue: Math.max(0, pastDue)
+    };
+  }, [customerDocuments]);
+
+  const filteredCustomerDocuments = useMemo(() => {
+    if (customerDocFilter === 'all') return customerDocuments;
+    return customerDocuments.filter((doc) => doc.type === customerDocFilter);
+  }, [customerDocuments, customerDocFilter]);
 
   useEffect(() => {
     if (workspaceView !== 'invoices' || !permissions.canViewInvoices) {
@@ -632,6 +664,40 @@ export function CustomersWorkspace({
                 </p>
               </div>
             </div>
+            {permissions.canViewInvoices && (
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-ink-100 bg-ink-50/50 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-ink-700">
+                    {t('customers.totalDue')}
+                  </p>
+                  <p className="mt-1 text-xl font-black text-gray-950 tabular-nums">
+                    {formatMoney(customerBalances.totalDue)}
+                  </p>
+                </div>
+                <div
+                  className={`rounded-xl border p-3 ${
+                    customerBalances.totalPastDue > 0
+                      ? 'border-rose-200 bg-rose-50/70'
+                      : 'border-slate-200 bg-slate-50/70'
+                  }`}
+                >
+                  <p
+                    className={`text-[10px] font-black uppercase tracking-wider ${
+                      customerBalances.totalPastDue > 0 ? 'text-rose-800' : 'text-slate-600'
+                    }`}
+                  >
+                    {t('customers.totalPastDue')}
+                  </p>
+                  <p
+                    className={`mt-1 text-xl font-black tabular-nums ${
+                      customerBalances.totalPastDue > 0 ? 'text-rose-900' : 'text-gray-950'
+                    }`}
+                  >
+                    {formatMoney(customerBalances.totalPastDue)}
+                  </p>
+                </div>
+              </div>
+            )}
             {message && (
               <p className="mt-3 text-xs font-medium text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-3 py-2">
                 {message}
@@ -801,16 +867,62 @@ export function CustomersWorkspace({
             )}
 
             <div className="border-t border-gray-100 pt-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
-                {t('customers.estimatesInvoices', { n: customerDocuments.length })}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                  {t('customers.estimatesInvoices', {
+                    n:
+                      customerDocFilter === 'all'
+                        ? customerDocuments.length
+                        : filteredCustomerDocuments.length
+                  })}
+                </p>
+                {permissions.canViewInvoices && onOpenDocument && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenDocument(null, 'credit_memo', null, selectedCustomer.id)
+                    }
+                    className="inline-flex items-center gap-1 text-xs font-bold text-rose-800 hover:text-rose-950"
+                  >
+                    <DollarSign className="h-3.5 w-3.5" />
+                    {t('customers.newCreditMemo')}
+                  </button>
+                )}
+              </div>
+              {customerDocuments.length > 0 && (
+                <div className="mb-3 inline-flex flex-wrap rounded-xl border border-ink-200 overflow-hidden">
+                  {(
+                    [
+                      ['all', t('customers.filterAll')],
+                      ['invoice', t('customers.filterInvoices')],
+                      ['estimate', t('customers.filterEstimates')],
+                      ['credit_memo', t('customers.filterCreditMemos')]
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setCustomerDocFilter(id)}
+                      className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${
+                        customerDocFilter === id
+                          ? 'bg-ink-700 text-white'
+                          : 'bg-white text-ink-800 hover:bg-ink-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
               {customerDocuments.length === 0 ? (
                 <p className="text-xs text-gray-500 mb-3">
                   {t('customers.noDocsHint')}
                 </p>
+              ) : filteredCustomerDocuments.length === 0 ? (
+                <p className="text-xs text-gray-500 mb-3">{t('customers.noDocsFiltered')}</p>
               ) : (
                 <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 mb-3">
-                  {customerDocuments.map((doc) => (
+                  {filteredCustomerDocuments.map((doc) => (
                     <div key={doc.id} className="border border-gray-100 rounded-xl p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -818,6 +930,10 @@ export function CustomersWorkspace({
                           <p className="text-xs text-gray-500">
                             {new Date(doc.documentDate).toLocaleDateString()} • ${doc.grandTotal.toFixed(2)}
                             {doc.orderNumber ? ` • ${t('customers.orderNum')}${doc.orderNumber}` : ''}
+                            {doc.referencedInvoiceNumber
+                              ? ` • ${t('customers.refInvoice')}${doc.referencedInvoiceNumber}`
+                              : ''}
+                            {doc.poNumber ? ` • ${t('customers.poNum')}${doc.poNumber}` : ''}
                             {doc.type === 'invoice' && doc.paymentStatus === 'paid'
                               ? ` • ${t('customers.balance')}`
                               : ''}
@@ -828,7 +944,9 @@ export function CustomersWorkspace({
                             className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
                               doc.type === 'invoice'
                                 ? 'bg-ink-100 text-ink-800'
-                                : 'bg-sky-100 text-sky-800'
+                                : doc.type === 'credit_memo'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-sky-100 text-sky-800'
                             }`}
                           >
                             {docTypeLabel(doc.type)}

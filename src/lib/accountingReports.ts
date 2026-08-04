@@ -179,6 +179,27 @@ export function buildArAging(documents: CustomerDocument[], asOf = new Date()): 
   const rowMap = new Map<string, AgingRow>();
 
   for (const doc of documents) {
+    if (doc.type === 'credit_memo') {
+      const credit = Math.abs(doc.grandTotal || 0);
+      if (credit <= 0) continue;
+      const name = doc.customerName || 'Unknown customer';
+      const row =
+        rowMap.get(name) ||
+        ({
+          name,
+          current: 0,
+          b1_30: 0,
+          b31_60: 0,
+          b61_90: 0,
+          b90_plus: 0,
+          total: 0
+        } satisfies AgingRow);
+      row.current -= credit;
+      row.total -= credit;
+      rowMap.set(name, row);
+      totals.current.amount -= credit;
+      continue;
+    }
     if (doc.type !== 'invoice') continue;
     const status = doc.paymentStatus || 'unpaid';
     if (status === 'paid') continue;
@@ -205,6 +226,19 @@ export function buildArAging(documents: CustomerDocument[], asOf = new Date()): 
     row[bucket] += amount;
     row.total += amount;
     rowMap.set(name, row);
+  }
+
+  for (const id of Object.keys(BUCKET_LABELS) as AgingBucketId[]) {
+    totals[id].amount = Math.max(0, totals[id].amount);
+  }
+  for (const [name, row] of [...rowMap.entries()]) {
+    row.current = Math.max(0, row.current);
+    row.b1_30 = Math.max(0, row.b1_30);
+    row.b31_60 = Math.max(0, row.b31_60);
+    row.b61_90 = Math.max(0, row.b61_90);
+    row.b90_plus = Math.max(0, row.b90_plus);
+    row.total = row.current + row.b1_30 + row.b31_60 + row.b61_90 + row.b90_plus;
+    if (row.total <= 0.005) rowMap.delete(name);
   }
 
   return finalizeAging(asOf, totals, rowMap);

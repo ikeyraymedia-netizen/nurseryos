@@ -152,7 +152,7 @@ export interface Customer {
   updatedAt: string;
 }
 
-export type CustomerDocumentType = 'estimate' | 'invoice';
+export type CustomerDocumentType = 'estimate' | 'invoice' | 'credit_memo';
 
 /** How a customer invoice or vendor bill was paid (offline / recorded). */
 export type PaymentMethod = 'check' | 'ach' | 'wire' | 'cc' | 'stripe';
@@ -169,7 +169,7 @@ export interface CustomerDocumentLineItem {
   substitutes?: string;
 }
 
-/** Estimate or invoice saved under a customer record. */
+/** Estimate, invoice, or credit memo saved under a customer record. */
 export interface CustomerDocument {
   id: string;
   customerId: string;
@@ -181,6 +181,8 @@ export interface CustomerDocument {
   documentDate: string;
   dueDate?: string;
   poNumber?: string; // Customer purchase order number
+  /** Invoice number this credit memo applies to (credit memos). */
+  referencedInvoiceNumber?: string;
   paymentTerms?: string;
   taxRate?: number;
   freightCharge?: number;

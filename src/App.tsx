@@ -472,6 +472,7 @@ function NurseryApp({
     orderId: string | null;
     type: CustomerDocumentType;
     existingDocument?: CustomerDocument | null;
+    customerId?: string | null;
   } | null>(null);
   const [focusCustomerId, setFocusCustomerId] = useState<string | null>(null);
   const [orderIdsNeedingInvoice, setOrderIdsNeedingInvoice] = useState<Set<string>>(
@@ -690,39 +691,57 @@ function NurseryApp({
       return dynamicOrders.find((o) => o.id === documentModal.orderId) || null;
     }
     const doc = documentModal.existingDocument;
-    if (!doc) return null;
-    // Synthetic order so estimate-only documents can open in InvoiceModal
-    return {
-      id: `preview-${doc.id}`,
-      customerName: doc.customerName,
-      customerId: doc.customerId,
-      orderNumber: doc.orderNumber || doc.documentNumber,
-      items: (doc.items || []).map((item) => ({
-        id: item.id,
-        plantName: item.plantName,
-        containerSize: item.containerSize,
-        quantity: item.quantity,
-        loadedQuantity: 0,
-        unitPrice: item.unitPrice,
-        notes: item.notes
-      })),
-      originalText: '',
-      dateCreated: doc.createdAt,
-      status: 'pending' as const,
-      totalWeightLbs: 0,
-      customerEmail: doc.customerEmail,
-      invoiceDetails: {
-        invoiceNumber: doc.documentNumber,
-        invoiceDate: doc.documentDate,
-        dueDate: doc.dueDate,
-        paymentTerms: doc.paymentTerms,
-        taxRate: doc.taxRate,
-        freightCharge: doc.freightCharge,
-        discount: doc.discount,
-        notes: doc.notes
-      }
-    } satisfies CustomerOrder;
-  }, [documentModal, dynamicOrders]);
+    if (doc) {
+      // Synthetic order so estimate-only documents can open in InvoiceModal
+      return {
+        id: `preview-${doc.id}`,
+        customerName: doc.customerName,
+        customerId: doc.customerId,
+        orderNumber: doc.orderNumber || doc.documentNumber,
+        items: (doc.items || []).map((item) => ({
+          id: item.id,
+          plantName: item.plantName,
+          containerSize: item.containerSize,
+          quantity: item.quantity,
+          loadedQuantity: 0,
+          unitPrice: item.unitPrice,
+          notes: item.notes
+        })),
+        originalText: '',
+        dateCreated: doc.createdAt,
+        status: 'pending' as const,
+        totalWeightLbs: 0,
+        customerEmail: doc.customerEmail,
+        invoiceDetails: {
+          invoiceNumber: doc.documentNumber,
+          invoiceDate: doc.documentDate,
+          dueDate: doc.dueDate,
+          paymentTerms: doc.paymentTerms,
+          taxRate: doc.taxRate,
+          freightCharge: doc.freightCharge,
+          discount: doc.discount,
+          notes: doc.notes
+        }
+      } satisfies CustomerOrder;
+    }
+    if (documentModal.customerId) {
+      const customer =
+        customers.find((c) => c.id === documentModal.customerId) || null;
+      return {
+        id: `preview-new-${documentModal.customerId}`,
+        customerName: customer?.name || '',
+        customerId: documentModal.customerId,
+        orderNumber: '',
+        items: [],
+        originalText: '',
+        dateCreated: new Date().toISOString(),
+        status: 'pending' as const,
+        totalWeightLbs: 0,
+        customerEmail: customer?.contactEmail
+      } satisfies CustomerOrder;
+    }
+    return null;
+  }, [documentModal, dynamicOrders, customers]);
   const documentModalCustomer = documentModalOrder
     ? customers.find((c) => c.id === documentModalOrder.customerId) ||
       customers.find(
@@ -1133,8 +1152,8 @@ function NurseryApp({
                 setIsEditingTruck(false);
                 setActiveTab('orders');
               }}
-              onOpenDocument={(orderId, type, existingDocument) => {
-                setDocumentModal({ orderId, type, existingDocument });
+              onOpenDocument={(orderId, type, existingDocument, customerId) => {
+                setDocumentModal({ orderId, type, existingDocument, customerId });
               }}
             />
           ) : activeTab === 'purchasing' && permissions.canViewPurchasing ? (

@@ -184,6 +184,11 @@ export function parseSequentialDocumentNumber(
     if (est) return Number(est[1]);
     return null;
   }
+  if (type === 'credit_memo') {
+    const cm = raw.match(/^CM-(\d+)$/i);
+    if (cm) return Number(cm[1]);
+    return null;
+  }
   // Invoices: plain digits (1000) or legacy INV-1000
   const inv = raw.match(/^(?:INV-)?(\d+)$/i);
   if (!inv) return null;
@@ -191,9 +196,10 @@ export function parseSequentialDocumentNumber(
 }
 
 /**
- * Next invoice/estimate number for this nursery.
- * Invoices: 1000, 1001, 1002…
- * Estimates: EST-1000, EST-1001…
+ * Next document number for this nursery.
+ * Invoices: 1000, 1001…
+ * Estimates: EST-1000…
+ * Credit memos: CM-1000…
  * Continues from the highest existing number of that type (never below 1000).
  */
 export async function nextDocumentNumber(type: CustomerDocumentType): Promise<string> {
@@ -205,7 +211,9 @@ export async function nextDocumentNumber(type: CustomerDocumentType): Promise<st
     if (n != null && Number.isFinite(n) && n > max) max = n;
   }
   const next = Math.max(max + 1, DOCUMENT_NUMBER_START);
-  return type === 'estimate' ? `EST-${next}` : String(next);
+  if (type === 'estimate') return `EST-${next}`;
+  if (type === 'credit_memo') return `CM-${next}`;
+  return String(next);
 }
 
 /** Sync fallback before async allocation finishes. */
@@ -213,7 +221,9 @@ export function defaultDocumentNumber(
   type: CustomerDocumentType,
   _orderNumber?: string
 ): string {
-  return type === 'estimate' ? `EST-${DOCUMENT_NUMBER_START}` : String(DOCUMENT_NUMBER_START);
+  if (type === 'estimate') return `EST-${DOCUMENT_NUMBER_START}`;
+  if (type === 'credit_memo') return `CM-${DOCUMENT_NUMBER_START}`;
+  return String(DOCUMENT_NUMBER_START);
 }
 
 export function subscribeToDocuments(

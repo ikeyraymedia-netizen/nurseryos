@@ -32,7 +32,9 @@ import {
   Info,
   Download,
   Link2,
-  TrendingUp
+  TrendingUp,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { updateCustomerOrder } from '../lib/db';
 import {
@@ -93,7 +95,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   isOpen,
   onClose,
   order,
-  documentType: initialDocumentType = 'invoice',
+  documentType: initialDocumentTypeProp = 'invoice',
   customer = null,
   existingDocument = null,
   truckOrders = [],
@@ -105,6 +107,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   canCollectPayments = false,
   canUseQuickbooks = false
 }) => {
+  const initialDocumentType: CustomerDocumentType =
+    (initialDocumentTypeProp as CustomerDocumentType) || 'invoice';
   const printRef = useRef<HTMLDivElement | null>(null);
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const salesRepOptions = useSalesRepOptions(tenantId);
@@ -126,9 +130,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Custom invoice properties (saved in invoiceDetails)
   const [invoiceNumber, setInvoiceNumber] = useState(
     existingDocument?.documentNumber ||
-      defaultDocumentNumber(initialDocumentType === 'estimate' ? 'estimate' : 'invoice')
+      defaultDocumentNumber(initialDocumentType)
   );
   const [poNumber, setPoNumber] = useState('');
+  const [referencedInvoiceNumber, setReferencedInvoiceNumber] = useState('');
+  /** Editable plant lines for credit memos (document-only; not tied to an order). */
+  const [creditLines, setCreditLines] = useState<PlantOrderItem[]>([]);
   const [salesRep, setSalesRep] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
@@ -174,10 +181,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
   const [emailSubject, setEmailSubject] = useState(
-    `${initialDocumentType === 'estimate' ? 'Estimate' : 'Invoice'} ${
-      existingDocument?.documentNumber ||
-      defaultDocumentNumber(initialDocumentType === 'estimate' ? 'estimate' : 'invoice')
-    }`
+    `${
+      initialDocumentType === 'estimate'
+        ? 'Estimate'
+        : initialDocumentType === 'credit_memo'
+          ? 'Credit Memo'
+          : 'Invoice'
+    } ${existingDocument?.documentNumber || defaultDocumentNumber(initialDocumentType)}`
   );
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
@@ -237,6 +247,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
     setDueDate(existingDocument?.dueDate || details?.dueDate || '');
     setPoNumber(existingDocument?.poNumber || details?.poNumber || '');
+    setReferencedInvoiceNumber(existingDocument?.referencedInvoiceNumber || '');
     setSalesRep(existingDocument?.owner || order.owner || '');
     setTaxRate(
       existingDocument?.taxRate !== undefined
@@ -264,8 +275,42 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         details?.notes ||
         (type === 'estimate'
           ? t('invoice.defaultNotesEstimate')
-          : t('invoice.defaultNotesInvoice'))
+          : type === 'credit_memo'
+            ? t('invoice.defaultNotesCreditMemo')
+            : t('invoice.defaultNotesInvoice'))
     );
+
+    const seedCreditLines = (): PlantOrderItem[] => {
+      const fromDoc = existingDocument?.items || [];
+      if (fromDoc.length > 0) {
+        return fromDoc.map((item) => ({
+          id: item.id,
+          plantName: item.plantName,
+          containerSize: item.containerSize,
+          quantity: item.quantity,
+          loadedQuantity: 0,
+          unitPrice: item.unitPrice,
+          unitCost: item.unitCost,
+          notes: item.notes,
+          substitutes: item.substitutes
+        }));
+      }
+      if (order.items.length > 0 && !order.id.startsWith('preview-new-')) {
+        return order.items.map((item) => ({ ...item }));
+      }
+      return [
+        {
+          id: `cm-line-${Date.now()}`,
+          plantName: '',
+          containerSize: '',
+          quantity: 1,
+          loadedQuantity: 0,
+          unitPrice: 0
+        }
+      ];
+    };
+    const seededCreditLines = type === 'credit_memo' ? seedCreditLines() : [];
+    setCreditLines(seededCreditLines);
 
     const pricesMap: Record<string, number> = {};
     if (existingDocument?.items?.length) {
@@ -285,6 +330,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
       });
     }
+    seededCreditLines.forEach((item) => {
+      if (pricesMap[item.id] === undefined) {
+        pricesMap[item.id] = item.unitPrice ?? 0;
+      }
+    });
     setItemPrices(pricesMap);
 
     const subsMap: Record<string, string> = {};
@@ -303,6 +353,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     existingDocument?.items?.forEach((item) => {
       if (item.unitCost !== undefined) costsMap[item.id] = item.unitCost;
     });
+    seededCreditLines.forEach((item) => {
+      if (costsMap[item.id] === undefined) costsMap[item.id] = item.unitCost ?? 0;
+    });
     setItemCosts(costsMap);
 
     setSaveSuccess(false);
@@ -311,9 +364,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       existingDocument?.customerEmail || order.customerEmail || customer?.contactEmail || ''
     );
     setEmailSubject(
-      `${type === 'estimate' ? t('invoice.estimate') : t('invoice.invoice')} ${
-        existingNumber || defaultDocumentNumber(type)
-      } from ${nurseryName}`
+      `${
+        type === 'estimate'
+          ? t('invoice.estimate')
+          : type === 'credit_memo'
+            ? t('invoice.creditMemo')
+            : t('invoice.invoice')
+      } ${existingNumber || defaultDocumentNumber(type)} from ${nurseryName}`
     );
     setEmailSentStatus('idle');
     setEmailErrorMessage('');
@@ -390,15 +447,44 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Synchronize email subject when document number / type changes
   useEffect(() => {
     setEmailSubject(
-      t('invoice.emailSubjectFrom', { docLabel: documentType === 'estimate' ? t('invoice.estimate') : t('invoice.invoice'), number: invoiceNumber, nurseryName })
+      t('invoice.emailSubjectFrom', {
+        docLabel:
+          documentType === 'estimate'
+            ? t('invoice.estimate')
+            : documentType === 'credit_memo'
+              ? t('invoice.creditMemo')
+              : t('invoice.invoice'),
+        number: invoiceNumber,
+        nurseryName
+      })
     );
-  }, [invoiceNumber, documentType, nurseryName]);
+  }, [invoiceNumber, documentType, nurseryName, t]);
 
-  const docLabel = documentType === 'estimate' ? t('invoice.estimate') : t('invoice.invoice');
+  const isCreditMemo = documentType === 'credit_memo';
+  const docLabel =
+    documentType === 'estimate'
+      ? t('invoice.estimate')
+      : isCreditMemo
+        ? t('invoice.creditMemo')
+        : t('invoice.invoice');
   const docLabelUpper = docLabel.toUpperCase();
+  const workingItems = isCreditMemo ? creditLines : order.items;
+  const totalLabel =
+    documentType === 'estimate'
+      ? t('invoice.estimateTotal')
+      : isCreditMemo
+        ? t('invoice.creditAmount')
+        : t('invoice.balanceDue');
+  const totalLabelUsd =
+    documentType === 'estimate'
+      ? t('invoice.estimateTotalUsd')
+      : isCreditMemo
+        ? t('invoice.creditAmountUsd')
+        : t('invoice.balanceDueUsd');
 
   // Compute Active Item Quantity based on Qty Basis
   const getItemQty = (item: PlantOrderItem): number => {
+    if (isCreditMemo) return Math.max(0, Number(item.quantity) || 0);
     if (qtyBasis === 'pulled') {
       return item.pulledQuantity ?? 0;
     }
@@ -408,11 +494,38 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return item.quantity;
   };
 
+  const updateCreditLine = (id: string, patch: Partial<PlantOrderItem>) => {
+    setCreditLines((prev) =>
+      prev.map((line) => (line.id === id ? { ...line, ...patch } : line))
+    );
+  };
+
+  const addCreditLine = () => {
+    const id = `cm-line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setCreditLines((prev) => [
+      ...prev,
+      {
+        id,
+        plantName: '',
+        containerSize: '',
+        quantity: 1,
+        loadedQuantity: 0,
+        unitPrice: 0
+      }
+    ]);
+    setItemPrices((prev) => ({ ...prev, [id]: 0 }));
+    setItemCosts((prev) => ({ ...prev, [id]: 0 }));
+  };
+
+  const removeCreditLine = (id: string) => {
+    setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
+  };
+
   // Calculate Order Totals
-  const subtotal = order.items.reduce((sum, item) => {
+  const subtotal = workingItems.reduce((sum, item) => {
     const qty = getItemQty(item);
     const price = itemPrices[item.id] ?? 0;
-    return sum + (qty * price);
+    return sum + qty * price;
   }, 0);
 
   const discountAmount = Math.min(subtotal, discount);
@@ -435,7 +548,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       : null;
 
   // Internal cost/profit (never shown to the customer)
-  const totalCost = order.items.reduce((sum, item) => {
+  const totalCost = workingItems.reduce((sum, item) => {
     const qty = getItemQty(item);
     const cost = itemCosts[item.id] ?? 0;
     return sum + qty * cost;
@@ -446,7 +559,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // HTML Email Layout Builder
   const generateEmailHTML = (payUrlOverride?: string | null): string => {
     const payUrl = payUrlOverride ?? activePayLinkUrl;
-    const itemsRows = order.items.map((item) => {
+    const itemsRows = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
       const total = qty * price;
@@ -545,7 +658,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #047857;">$${amountPaid.toFixed(2)}</td>
             </tr>` : ''}
             <tr style="border-top: 1px solid #cbd5e1;">
-              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #0e7490; text-transform: uppercase;">${documentType === 'estimate' ? 'Estimate Total' : 'Balance Due'}:</td>
+              <td style="padding: 10px 0 0 0; font-size: 15px; font-weight: bold; color: #0e7490; text-transform: uppercase;">${
+                documentType === 'estimate'
+                  ? 'Estimate Total'
+                  : isCreditMemo
+                    ? 'Credit Amount'
+                    : 'Balance Due'
+              }:</td>
               <td style="padding: 10px 0 0 0; text-align: right; font-size: 16px; font-weight: 800; color: #0e7490;">$${balanceDue.toFixed(2)}</td>
             </tr>
           </table>
@@ -583,7 +702,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Plain Text Email Builder
   const generateEmailText = (payUrlOverride?: string | null): string => {
     const payUrl = payUrlOverride ?? activePayLinkUrl;
-    const itemsText = order.items.map((item) => {
+    const itemsText = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
       const total = qty * price;
@@ -598,9 +717,15 @@ Wholesale Nursery
 
 ${docLabelUpper}: ${invoiceNumber}
 Date: ${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
-Terms: ${paymentTerms}
-Due Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}
-
+${poNumber.trim() ? `P.O. #: ${poNumber.trim()}\n` : ''}${
+      referencedInvoiceNumber.trim()
+        ? `Ref Invoice #: ${referencedInvoiceNumber.trim()}\n`
+        : ''
+    }${
+      isCreditMemo
+        ? ''
+        : `Terms: ${paymentTerms}\nDue Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}\n`
+    }
 BILL TO:
 ${billToName}
 ${billToAddress}
@@ -612,7 +737,15 @@ ${itemsText}
 --------------------------------------------------------------------------------
 
 Subtotal: $${subtotal.toFixed(2)}
-${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${documentType === 'estimate' ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}` : isPaid ? `INVOICE TOTAL (USD): $${grandTotal.toFixed(2)}\nAmount Paid: $${amountPaid.toFixed(2)}\nBALANCE DUE (USD): $0.00` : `BALANCE DUE (USD): $${balanceDue.toFixed(2)}`}
+${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${
+      documentType === 'estimate'
+        ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}`
+        : isCreditMemo
+          ? `CREDIT AMOUNT (USD): $${grandTotal.toFixed(2)}`
+          : isPaid
+            ? `INVOICE TOTAL (USD): $${grandTotal.toFixed(2)}\nAmount Paid: $${amountPaid.toFixed(2)}\nBALANCE DUE (USD): $0.00`
+            : `BALANCE DUE (USD): $${balanceDue.toFixed(2)}`
+    }
 
 ${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}${
       payUrl
@@ -781,7 +914,7 @@ Thank you for choosing ${nurseryName}!
   // Restore Default Wholesale Prices
   const handleResetPrices = () => {
     const defaultPrices: Record<string, number> = {};
-    order.items.forEach((item) => {
+    workingItems.forEach((item) => {
       defaultPrices[item.id] = getDefaultPriceForSize(item.containerSize);
     });
     setItemPrices(defaultPrices);
@@ -842,7 +975,7 @@ Thank you for choosing ${nurseryName}!
           : order.invoiceDetails?.freightAllocation || existingDocument?.freightAllocation;
       const savedGrandTotal = subtotal - discountAmount + salesTax + currentFreight;
 
-      const updatedItems = order.items.map((item) => ({
+      const updatedItems = workingItems.map((item) => ({
         ...item,
         unitPrice:
           itemPrices[item.id] !== undefined
@@ -851,6 +984,13 @@ Thank you for choosing ${nurseryName}!
         unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
         substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined
       }));
+
+      if (isCreditMemo) {
+        const blank = updatedItems.some((item) => !String(item.plantName || '').trim());
+        if (blank || updatedItems.length === 0) {
+          throw new Error(t('invoice.creditMemoLinesRequired'));
+        }
+      }
 
       const invoiceDetailsPayload: InvoiceDetails = {
         invoiceNumber,
@@ -873,15 +1013,16 @@ Thank you for choosing ${nurseryName}!
         owner: salesRep.trim() || order.owner || undefined
       };
 
-      const isDocumentOnlyOrder = order.id.startsWith('preview-');
+      const isDocumentOnlyOrder =
+        order.id.startsWith('preview-') || isCreditMemo;
       if (!isDocumentOnlyOrder) {
         await updateCustomerOrder(updatedOrder);
       }
 
       const lineItems = updatedItems.map((item) => ({
         id: item.id,
-        plantName: item.plantName,
-        containerSize: item.containerSize,
+        plantName: String(item.plantName || '').trim(),
+        containerSize: String(item.containerSize || '').trim(),
         quantity: getItemQty(item),
         unitPrice: item.unitPrice ?? 0,
         unitCost: item.unitCost,
@@ -898,17 +1039,20 @@ Thank you for choosing ${nurseryName}!
           customerId,
           customerName: billToName || customer?.name || order.customerName,
           orderId: isDocumentOnlyOrder ? undefined : order.id,
-          orderNumber: order.orderNumber,
+          orderNumber: isDocumentOnlyOrder ? undefined : order.orderNumber,
           type: documentType,
           documentNumber: invoiceNumber,
           documentDate: invoiceDate,
           dueDate: dueDate || undefined,
           poNumber: poNumber.trim() || undefined,
-          paymentTerms,
+          referencedInvoiceNumber: isCreditMemo
+            ? referencedInvoiceNumber.trim() || undefined
+            : undefined,
+          paymentTerms: isCreditMemo ? undefined : paymentTerms,
           taxRate,
-          freightCharge: currentFreight,
-          freightAllocation,
-          discount,
+          freightCharge: isCreditMemo ? 0 : currentFreight,
+          freightAllocation: isCreditMemo ? undefined : freightAllocation,
+          discount: isCreditMemo ? 0 : discount,
           notes: invoiceNotes,
           billToName,
           billToAddress: billToAddress || undefined,
@@ -1228,10 +1372,15 @@ Thank you for choosing ${nurseryName}!
         `Date: ${invoiceDate ? new Date(invoiceDate).toLocaleDateString() : '—'}`
       ];
       if (poNumber.trim()) metaLines.push(`P.O. #: ${poNumber.trim()}`);
-      metaLines.push(`Terms: ${paymentTerms || '—'}`);
-      metaLines.push(
-        `Due: ${dueDate ? new Date(dueDate).toLocaleDateString() : t('invoice.uponReceipt')}`
-      );
+      if (isCreditMemo && referencedInvoiceNumber.trim()) {
+        metaLines.push(`Ref Invoice #: ${referencedInvoiceNumber.trim()}`);
+      }
+      if (!isCreditMemo) {
+        metaLines.push(`Terms: ${paymentTerms || '—'}`);
+        metaLines.push(
+          `Due: ${dueDate ? new Date(dueDate).toLocaleDateString() : t('invoice.uponReceipt')}`
+        );
+      }
       metaLines.forEach((line) => {
         pdf.text(line, rightX, y, { align: 'right' });
         y += 12;
@@ -1313,7 +1462,7 @@ Thank you for choosing ${nurseryName}!
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
-      order.items.forEach((item) => {
+      workingItems.forEach((item) => {
         const qty = getItemQty(item);
         const price =
           itemPrices[item.id] !== undefined
@@ -1396,7 +1545,7 @@ Thank you for choosing ${nurseryName}!
         writeTotal(t('invoice.amountPaid'), money(amountPaid), true, false);
         writeTotal(t('invoice.balanceDue'), money(0), true, true);
       } else {
-        writeTotal(documentType === 'estimate' ? t('invoice.estimateTotal') : t('invoice.balanceDue'), money(balanceDue), true, true);
+        writeTotal(totalLabel, money(balanceDue), true, true);
       }
 
       // Notes
@@ -1444,6 +1593,39 @@ Thank you for choosing ${nurseryName}!
     setInvoiceNumber(defaultDocumentNumber(type));
     void nextDocumentNumber(type).then(setInvoiceNumber);
     setSaveSuccess(false);
+    if (type === 'credit_memo') {
+      setCreditLines((prev) => {
+        if (prev.length > 0) return prev;
+        if (order.items.length > 0 && !order.id.startsWith('preview-new-')) {
+          const lines = order.items.map((item) => ({ ...item }));
+          setItemPrices((prices) => {
+            const next = { ...prices };
+            lines.forEach((item) => {
+              if (next[item.id] === undefined) {
+                next[item.id] =
+                  item.unitPrice !== undefined
+                    ? item.unitPrice
+                    : getDefaultPriceForSize(item.containerSize);
+              }
+            });
+            return next;
+          });
+          return lines;
+        }
+        const id = `cm-line-${Date.now()}`;
+        setItemPrices((prices) => ({ ...prices, [id]: 0 }));
+        return [
+          {
+            id,
+            plantName: '',
+            containerSize: '',
+            quantity: 1,
+            loadedQuantity: 0,
+            unitPrice: 0
+          }
+        ];
+      });
+    }
   };
 
   return (
@@ -1615,13 +1797,13 @@ Thank you for choosing ${nurseryName}!
           )}
 
           <div className="space-y-3.5 text-xs">
-            {/* Estimate vs Invoice */}
+            {/* Estimate / Invoice / Credit memo */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
                 Document Type
               </label>
-              <div className="grid grid-cols-2 gap-1 bg-gray-200/60 p-1 rounded-lg">
-                {(['estimate', 'invoice'] as const).map((type) => (
+              <div className="grid grid-cols-3 gap-1 bg-gray-200/60 p-1 rounded-lg">
+                {(['estimate', 'invoice', 'credit_memo'] as const).map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -1632,7 +1814,11 @@ Thank you for choosing ${nurseryName}!
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/40'
                     }`}
                   >
-                    {type === 'estimate' ? t('invoice.estimate') : t('invoice.invoice')}
+                    {type === 'estimate'
+                      ? t('invoice.estimate')
+                      : type === 'credit_memo'
+                        ? t('invoice.creditMemo')
+                        : t('invoice.invoice')}
                   </button>
                 ))}
               </div>
@@ -1644,6 +1830,7 @@ Thank you for choosing ${nurseryName}!
             </div>
 
             {/* Quantity Basis Toggle */}
+            {!isCreditMemo && (
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
                 Quantity Basis
@@ -1668,6 +1855,7 @@ Thank you for choosing ${nurseryName}!
                 Invoicing based on {qtyBasis === 'ordered' ? 'original customer order counts' : qtyBasis === 'pulled' ? 'items delivered/pulled from nursery' : 'items loaded onto the truck'}.
               </p>
             </div>
+            )}
 
             {/* Invoice Number */}
             <div>
@@ -1682,21 +1870,39 @@ Thank you for choosing ${nurseryName}!
               />
             </div>
 
-            {/* Customer PO Number */}
-            <div>
-              <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Customer P.O. #
-              </label>
-              <input
-                type="text"
-                value={poNumber}
-                onChange={(e) => setPoNumber(e.target.value)}
-                placeholder={t('invoice.customerPoPlaceholder')}
-                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
-              />
-              <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-                Prints on the invoice & BOL, and syncs to the QuickBooks P.O. field.
-              </p>
+            {/* Customer PO Number + referenced invoice (credit memos) */}
+            <div className={isCreditMemo ? 'grid grid-cols-1 gap-2' : ''}>
+              <div>
+                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                  Customer P.O. #
+                </label>
+                <input
+                  type="text"
+                  value={poNumber}
+                  onChange={(e) => setPoNumber(e.target.value)}
+                  placeholder={t('invoice.customerPoPlaceholder')}
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
+                />
+                {!isCreditMemo && (
+                  <p className="text-[10px] text-gray-400 mt-1 leading-snug">
+                    Prints on the invoice & BOL, and syncs to the QuickBooks P.O. field.
+                  </p>
+                )}
+              </div>
+              {isCreditMemo && (
+                <div>
+                  <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                    {t('invoice.referencedInvoice')}
+                  </label>
+                  <input
+                    type="text"
+                    value={referencedInvoiceNumber}
+                    onChange={(e) => setReferencedInvoiceNumber(e.target.value)}
+                    placeholder={t('invoice.referencedInvoicePlaceholder')}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Sales Rep (profit attribution) */}
@@ -1726,10 +1932,10 @@ Thank you for choosing ${nurseryName}!
             </div>
 
             {/* Date and Terms */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid gap-2 ${isCreditMemo ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <div>
                 <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                  Invoice Date
+                  {isCreditMemo ? t('invoice.creditMemoDate') : 'Invoice Date'}
                 </label>
                 <input
                   type="date"
@@ -1738,6 +1944,7 @@ Thank you for choosing ${nurseryName}!
                   className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
                 />
               </div>
+              {!isCreditMemo && (
               <div>
                 <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                   Terms
@@ -1754,9 +1961,11 @@ Thank you for choosing ${nurseryName}!
                   <option value="Net 45">Net 45</option>
                 </select>
               </div>
+              )}
             </div>
 
             {/* Due Date */}
+            {!isCreditMemo && (
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                 Due Date
@@ -1768,12 +1977,14 @@ Thank you for choosing ${nurseryName}!
                 className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
+            )}
 
             {/* Financial Adjustments */}
             <div className="bg-slate-100 p-2.5 rounded-xl space-y-2 border border-slate-200">
               <span className="block font-mono font-bold text-[9px] text-gray-400 uppercase tracking-widest">{t('invoice.charges')}</span>
               
               {/* Freight Charge */}
+              {!isCreditMemo && (
               <div>
                 <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
                   <span>{t('invoice.freight')}</span>
@@ -1793,6 +2004,7 @@ Thank you for choosing ${nurseryName}!
                   />
                 </div>
               </div>
+              )}
 
               {/* Tax Rate */}
               <div>
@@ -1821,6 +2033,7 @@ Thank you for choosing ${nurseryName}!
               </div>
 
               {/* Discount */}
+              {!isCreditMemo && (
               <div>
                 <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
                   <span>{t('invoice.discount')}</span>
@@ -1840,6 +2053,7 @@ Thank you for choosing ${nurseryName}!
                   />
                 </div>
               </div>
+              )}
             </div>
 
             {/* Invoice Notes */}
@@ -1868,7 +2082,7 @@ Thank you for choosing ${nurseryName}!
             </div>
 
             {/* Internal Cost & Profit (never printed or emailed to the customer) */}
-            {canViewProfit && (
+            {canViewProfit && !isCreditMemo && (
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="font-black uppercase tracking-wider text-[10px] text-indigo-800 flex items-center gap-1">
@@ -1879,7 +2093,7 @@ Thank you for choosing ${nurseryName}!
                   </span>
                 </div>
                 <div className="space-y-1.5">
-                  {order.items.map((item) => {
+                  {workingItems.map((item) => {
                     const qty = getItemQty(item);
                     const price =
                       itemPrices[item.id] !== undefined
@@ -2330,18 +2544,28 @@ Thank you for choosing ${nurseryName}!
                         <span className="font-bold text-gray-500">P.O. #:</span> <span className="font-bold text-gray-950">{poNumber}</span>
                       </p>
                     )}
+                    {isCreditMemo && referencedInvoiceNumber.trim() && (
+                      <p className="text-gray-800">
+                        <span className="font-bold text-gray-500">{t('invoice.referencedInvoiceShort')}:</span>{' '}
+                        <span className="font-bold text-gray-950">{referencedInvoiceNumber}</span>
+                      </p>
+                    )}
+                    {!isCreditMemo && (
+                      <>
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-ink-800">{paymentTerms}</span>
                     </p>
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Due Date:</span> <span className="font-bold">{dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}</span>
                     </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Bill To & Ship To section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6 border-b border-gray-300">
+              <div className={`grid grid-cols-1 gap-6 py-6 border-b border-gray-300 ${isCreditMemo ? '' : 'md:grid-cols-2'}`}>
                 <div>
                   <h3 className="text-xs font-black font-mono uppercase text-ink-800 tracking-wider mb-2">
                     Bill To Customer:
@@ -2365,6 +2589,7 @@ Thank you for choosing ${nurseryName}!
                   </div>
                 </div>
                 
+                {!isCreditMemo && (
                 <div>
                   <h3 className="text-xs font-black font-mono uppercase text-ink-800 tracking-wider mb-2">
                     Shipping Origin & Carrier:
@@ -2383,6 +2608,7 @@ Thank you for choosing ${nurseryName}!
                     </p>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Items Table */}
@@ -2395,10 +2621,11 @@ Thank you for choosing ${nurseryName}!
                       <th className="pb-2 text-center w-20">Quantity</th>
                       <th className="pb-2 text-right w-28">{t('invoice.unitPrice')}</th>
                       <th className="pb-2 text-right w-24">Total</th>
+                      {isCreditMemo && <th className="pb-2 w-10 print:hidden" />}
                     </tr>
                   </thead>
                   <tbody>
-                    {order.items.map((item) => {
+                    {workingItems.map((item) => {
                       const qty = getItemQty(item);
                       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
                       const total = qty * price;
@@ -2410,7 +2637,19 @@ Thank you for choosing ${nurseryName}!
                           className="border-b border-gray-200 text-xs font-medium text-gray-800"
                         >
                           <td className="py-3">
-                            <span className="font-black text-gray-950">{item.plantName}</span>
+                            {isCreditMemo ? (
+                              <input
+                                type="text"
+                                value={item.plantName}
+                                onChange={(e) =>
+                                  updateCreditLine(item.id, { plantName: e.target.value })
+                                }
+                                placeholder={t('invoice.plantVarietyName')}
+                                className="w-full font-black text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
+                              />
+                            ) : (
+                              <span className="font-black text-gray-950">{item.plantName}</span>
+                            )}
                             {item.notes && (
                               <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5">
                                 Note: {item.notes}
@@ -2441,10 +2680,37 @@ Thank you for choosing ${nurseryName}!
                             ) : null}
                           </td>
                           <td className="py-3 text-center font-mono font-bold text-gray-500">
-                            {item.containerSize}
+                            {isCreditMemo ? (
+                              <input
+                                type="text"
+                                value={item.containerSize}
+                                onChange={(e) =>
+                                  updateCreditLine(item.id, { containerSize: e.target.value })
+                                }
+                                placeholder={t('invoice.potSize')}
+                                className="w-24 mx-auto text-center font-mono font-bold text-gray-700 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
+                              />
+                            ) : (
+                              item.containerSize
+                            )}
                           </td>
                           <td className="py-3 text-center font-mono font-bold text-gray-900">
-                            {qty}
+                            {isCreditMemo ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={qty || ''}
+                                onChange={(e) =>
+                                  updateCreditLine(item.id, {
+                                    quantity: Math.max(0, Number(e.target.value) || 0)
+                                  })
+                                }
+                                className="w-16 mx-auto text-center font-mono font-bold text-gray-900 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
+                              />
+                            ) : (
+                              qty
+                            )}
                           </td>
                           <td className="py-3 text-right">
                             {/* Inline editable price */}
@@ -2463,11 +2729,34 @@ Thank you for choosing ${nurseryName}!
                           <td className="py-3 text-right font-mono font-black text-gray-950">
                             ${total.toFixed(2)}
                           </td>
+                          {isCreditMemo && (
+                            <td className="py-3 text-right print:hidden">
+                              <button
+                                type="button"
+                                onClick={() => removeCreditLine(item.id)}
+                                disabled={workingItems.length <= 1}
+                                className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30"
+                                title={t('invoice.removeLine')}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+                {isCreditMemo && (
+                  <button
+                    type="button"
+                    onClick={addCreditLine}
+                    className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900 print:hidden"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {t('invoice.addCreditLine')}
+                  </button>
+                )}
               </div>
 
               {/* Summary and Totals Area */}
@@ -2550,7 +2839,7 @@ Thank you for choosing ${nurseryName}!
                   )}
                   <div className="flex justify-between py-2 border-b-4 border-double border-ink-800 bg-ink-50/35 p-1.5 rounded-lg">
                     <span className="font-sans font-black text-ink-800 text-sm uppercase tracking-wide">
-                      {documentType === 'estimate' ? t('invoice.estimateTotalUsd') : t('invoice.balanceDueUsd')}
+                      {totalLabelUsd}
                     </span>
                     <span className="text-base font-black text-ink-950">${balanceDue.toFixed(2)}</span>
                   </div>

@@ -780,9 +780,12 @@ const extra = {
     referencedInvoicePlaceholder: 'Número de factura original',
     creditAmount: 'MONTO DEL CRÉDITO',
     addCreditLine: 'Agregar línea de planta',
+    addEstimateLine: 'Agregar línea de planta',
     removeLine: 'Quitar línea',
     creditMemoLinesRequired:
       'Agregue al menos una línea de planta con nombre antes de guardar la nota de crédito.',
+    estimateLinesRequired:
+      'Agregue al menos una línea de planta con nombre antes de guardar el presupuesto.',
     linkCustomer: 'Vincule un cliente al pedido para guardar esto en su cuenta.',
     quantityBasis: 'Base de cantidad',
     ordered: 'Pedido',

@@ -134,7 +134,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   );
   const [poNumber, setPoNumber] = useState('');
   const [referencedInvoiceNumber, setReferencedInvoiceNumber] = useState('');
-  /** Editable plant lines for credit memos (document-only; not tied to an order). */
+  /** Editable plant lines for estimates and credit memos. */
   const [creditLines, setCreditLines] = useState<PlantOrderItem[]>([]);
   const [salesRep, setSalesRep] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -282,7 +282,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             : t('invoice.defaultNotesInvoice'))
     );
 
-    const seedCreditLines = (): PlantOrderItem[] => {
+    const seedDraftLines = (): PlantOrderItem[] => {
       const fromDoc = existingDocument?.items || [];
       if (fromDoc.length > 0) {
         return fromDoc.map((item) => ({
@@ -302,7 +302,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       }
       return [
         {
-          id: `cm-line-${Date.now()}`,
+          id: `line-${Date.now()}`,
           plantName: '',
           containerSize: '',
           quantity: 1,
@@ -311,8 +311,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         }
       ];
     };
-    const seededCreditLines = type === 'credit_memo' ? seedCreditLines() : [];
-    setCreditLines(seededCreditLines);
+    const seededDraftLines =
+      type === 'credit_memo' || type === 'estimate' ? seedDraftLines() : [];
+    setCreditLines(seededDraftLines);
 
     const pricesMap: Record<string, number> = {};
     if (existingDocument?.items?.length) {
@@ -332,9 +333,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
       });
     }
-    seededCreditLines.forEach((item) => {
+    seededDraftLines.forEach((item) => {
       if (pricesMap[item.id] === undefined) {
-        pricesMap[item.id] = item.unitPrice ?? 0;
+        pricesMap[item.id] =
+          item.unitPrice !== undefined
+            ? item.unitPrice
+            : getDefaultPriceForSize(item.containerSize);
       }
     });
     setItemPrices(pricesMap);
@@ -355,7 +359,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     existingDocument?.items?.forEach((item) => {
       if (item.unitCost !== undefined) costsMap[item.id] = item.unitCost;
     });
-    seededCreditLines.forEach((item) => {
+    seededDraftLines.forEach((item) => {
       if (costsMap[item.id] === undefined) costsMap[item.id] = item.unitCost ?? 0;
     });
     setItemCosts(costsMap);
@@ -463,6 +467,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   }, [invoiceNumber, documentType, nurseryName, t]);
 
   const isCreditMemo = documentType === 'credit_memo';
+  const isEstimate = documentType === 'estimate';
+  /** Estimates and credit memos allow add/edit/remove plant lines in the document. */
+  const canEditLines = isCreditMemo || isEstimate;
   const docLabel =
     documentType === 'estimate'
       ? t('invoice.estimate')
@@ -470,7 +477,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         ? t('invoice.creditMemo')
         : t('invoice.invoice');
   const docLabelUpper = docLabel.toUpperCase();
-  const workingItems = isCreditMemo ? creditLines : order.items;
+  const workingItems = canEditLines ? creditLines : order.items;
   const totalLabel =
     documentType === 'estimate'
       ? t('invoice.estimateTotal')
@@ -486,7 +493,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Compute Active Item Quantity based on Qty Basis
   const getItemQty = (item: PlantOrderItem): number => {
-    if (isCreditMemo) return Math.max(0, Number(item.quantity) || 0);
+    if (canEditLines) return Math.max(0, Number(item.quantity) || 0);
     if (qtyBasis === 'pulled') {
       return item.pulledQuantity ?? 0;
     }
@@ -496,14 +503,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return item.quantity;
   };
 
-  const updateCreditLine = (id: string, patch: Partial<PlantOrderItem>) => {
+  const updateDraftLine = (id: string, patch: Partial<PlantOrderItem>) => {
     setCreditLines((prev) =>
       prev.map((line) => (line.id === id ? { ...line, ...patch } : line))
     );
   };
 
-  const addCreditLine = () => {
-    const id = `cm-line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const addDraftLine = () => {
+    const id = `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setCreditLines((prev) => [
       ...prev,
       {
@@ -519,7 +526,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setItemCosts((prev) => ({ ...prev, [id]: 0 }));
   };
 
-  const removeCreditLine = (id: string) => {
+  const removeDraftLine = (id: string) => {
     setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
   };
 
@@ -1024,10 +1031,14 @@ Thank you for choosing ${nurseryName}!
         substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined
       }));
 
-      if (isCreditMemo) {
+      if (canEditLines) {
         const blank = updatedItems.some((item) => !String(item.plantName || '').trim());
         if (blank || updatedItems.length === 0) {
-          throw new Error(t('invoice.creditMemoLinesRequired'));
+          throw new Error(
+            isCreditMemo
+              ? t('invoice.creditMemoLinesRequired')
+              : t('invoice.estimateLinesRequired')
+          );
         }
       }
 
@@ -1632,7 +1643,7 @@ Thank you for choosing ${nurseryName}!
     setInvoiceNumber(defaultDocumentNumber(type));
     void nextDocumentNumber(type).then(setInvoiceNumber);
     setSaveSuccess(false);
-    if (type === 'credit_memo') {
+    if (type === 'credit_memo' || type === 'estimate') {
       setCreditLines((prev) => {
         if (prev.length > 0) return prev;
         if (order.items.length > 0 && !order.id.startsWith('preview-new-')) {
@@ -1651,7 +1662,7 @@ Thank you for choosing ${nurseryName}!
           });
           return lines;
         }
-        const id = `cm-line-${Date.now()}`;
+        const id = `line-${Date.now()}`;
         setItemPrices((prices) => ({ ...prices, [id]: 0 }));
         return [
           {
@@ -1869,7 +1880,7 @@ Thank you for choosing ${nurseryName}!
             </div>
 
             {/* Quantity Basis Toggle */}
-            {!isCreditMemo && (
+            {!canEditLines && (
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
                 Quantity Basis
@@ -2663,7 +2674,7 @@ Thank you for choosing ${nurseryName}!
                       <th className="pb-2 text-center w-20">Quantity</th>
                       <th className="pb-2 text-right w-28">{t('invoice.unitPrice')}</th>
                       <th className="pb-2 text-right w-24">Total</th>
-                      {isCreditMemo && <th className="pb-2 w-10 print:hidden" />}
+                      {canEditLines && <th className="pb-2 w-10 print:hidden" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -2679,12 +2690,12 @@ Thank you for choosing ${nurseryName}!
                           className="border-b border-gray-200 text-xs font-medium text-gray-800"
                         >
                           <td className="py-3">
-                            {isCreditMemo ? (
+                            {canEditLines ? (
                               <input
                                 type="text"
                                 value={item.plantName}
                                 onChange={(e) =>
-                                  updateCreditLine(item.id, { plantName: e.target.value })
+                                  updateDraftLine(item.id, { plantName: e.target.value })
                                 }
                                 placeholder={t('invoice.plantVarietyName')}
                                 className="w-full font-black text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
@@ -2722,12 +2733,12 @@ Thank you for choosing ${nurseryName}!
                             ) : null}
                           </td>
                           <td className="py-3 text-center font-mono font-bold text-gray-500">
-                            {isCreditMemo ? (
+                            {canEditLines ? (
                               <input
                                 type="text"
                                 value={item.containerSize}
                                 onChange={(e) =>
-                                  updateCreditLine(item.id, { containerSize: e.target.value })
+                                  updateDraftLine(item.id, { containerSize: e.target.value })
                                 }
                                 placeholder={t('invoice.potSize')}
                                 className="w-24 mx-auto text-center font-mono font-bold text-gray-700 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
@@ -2737,14 +2748,14 @@ Thank you for choosing ${nurseryName}!
                             )}
                           </td>
                           <td className="py-3 text-center font-mono font-bold text-gray-900">
-                            {isCreditMemo ? (
+                            {canEditLines ? (
                               <input
                                 type="number"
                                 min="0"
                                 step="1"
                                 value={qty || ''}
                                 onChange={(e) =>
-                                  updateCreditLine(item.id, {
+                                  updateDraftLine(item.id, {
                                     quantity: Math.max(0, Number(e.target.value) || 0)
                                   })
                                 }
@@ -2771,11 +2782,11 @@ Thank you for choosing ${nurseryName}!
                           <td className="py-3 text-right font-mono font-black text-gray-950">
                             ${total.toFixed(2)}
                           </td>
-                          {isCreditMemo && (
+                          {canEditLines && (
                             <td className="py-3 text-right print:hidden">
                               <button
                                 type="button"
-                                onClick={() => removeCreditLine(item.id)}
+                                onClick={() => removeDraftLine(item.id)}
                                 disabled={workingItems.length <= 1}
                                 className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30"
                                 title={t('invoice.removeLine')}
@@ -2789,14 +2800,14 @@ Thank you for choosing ${nurseryName}!
                     })}
                   </tbody>
                 </table>
-                {isCreditMemo && (
+                {canEditLines && (
                   <button
                     type="button"
-                    onClick={addCreditLine}
+                    onClick={addDraftLine}
                     className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900 print:hidden"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    {t('invoice.addCreditLine')}
+                    {isCreditMemo ? t('invoice.addCreditLine') : t('invoice.addEstimateLine')}
                   </button>
                 )}
               </div>

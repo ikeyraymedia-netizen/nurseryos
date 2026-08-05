@@ -26,12 +26,126 @@ interface StripeIntegration {
   updatedAt: string;
 }
 
-const CONNECT_CAPABILITIES = {
+const BASE_CONNECT_CAPABILITIES = {
   card_payments: { requested: true },
   transfers: { requested: true },
-  us_bank_account_ach_payments: { requested: true },
+  us_bank_account_ach_payments: { requested: true }
+} as const;
+
+const CONNECT_CAPABILITIES = {
+  ...BASE_CONNECT_CAPABILITIES,
   treasury: { requested: true }
 } as const;
+
+const TREASURY_ACTIVATE_URL = 'https://dashboard.stripe.com/setup/treasury/activate';
+const TREASURY_DASHBOARD_URL = 'https://dashboard.stripe.com/test/connect/financial-accounts';
+
+function isUnknownTreasuryCapabilityError(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || '');
+  return /unknown capability:\s*treasury/i.test(msg);
+}
+
+async function retrievePlatformAccount(stripe: Stripe): Promise<{
+  id: string;
+  name: string;
+  livemode: boolean;
+  country: string | null;
+}> {
+  const account = await stripe.accounts.retrieve();
+  const name =
+    String(account.settings?.dashboard?.display_name || '').trim() ||
+    String(account.business_profile?.name || '').trim() ||
+    String(account.email || '').trim() ||
+    account.id;
+  return {
+    id: account.id,
+    name,
+    livemode: Boolean(account.livemode),
+    country: account.country || null
+  };
+}
+
+function keyHint(): string {
+  const key = requireStripeSecret();
+  if (key.length < 12) return 'sk_…';
+  return `${key.slice(0, 7)}…${key.slice(-4)}`;
+}
+
+function treasuryNotActivatedError(platform?: {
+  id: string;
+  name: string;
+  livemode: boolean;
+}): Error {
+  const where = platform
+    ? ` NurseryOS is using Stripe account ${platform.id} (${platform.name}, ${
+        platform.livemode ? 'LIVE' : 'TEST'
+      }, key ${keyHint()}).`
+    : ` NurseryOS key: ${keyHint()}.`;
+  return Object.assign(
+    new Error(
+      `Stripe Treasury is not activated for the API key NurseryOS is using (Unknown capability: treasury).${where} ` +
+        `In Dashboard, switch into THAT same account/sandbox (Account ID must match), open ${TREASURY_ACTIVATE_URL}, ` +
+        `activate Issuing & Treasury, confirm Connect → Stripe Treasury loads, then copy that sandbox’s Secret key into Railway STRIPE_SECRET_KEY and redeploy. ` +
+        `Activating Treasury on a different sandbox/account will not work.`
+    ),
+    { status: 400, code: 'treasury_not_activated' }
+  );
+}
+
+/** Cached probe — whether this secret key can request `treasury` on connected accounts. */
+let treasuryAccessCache: { fingerprint: string; ok: boolean; at: number } | null = null;
+
+async function platformHasTreasuryAccess(stripe: Stripe): Promise<boolean> {
+  const fingerprint = requireStripeSecret().slice(0, 14);
+  if (
+    treasuryAccessCache &&
+    treasuryAccessCache.fingerprint === fingerprint &&
+    Date.now() - treasuryAccessCache.at < 60 * 1000
+  ) {
+    return treasuryAccessCache.ok;
+  }
+
+  let accountId: string | null = null;
+  try {
+    const account = await stripe.accounts.create({
+      type: 'custom',
+      country: 'US',
+      capabilities: {
+        transfers: { requested: true },
+        treasury: { requested: true }
+      },
+      tos_acceptance: {
+        date: Math.floor(Date.now() / 1000),
+        ip: '127.0.0.1'
+      },
+      metadata: { nurseryos_probe: 'treasury' }
+    });
+    accountId = account.id;
+    const treasuryState = String(
+      (account.capabilities as Record<string, string | null> | undefined)?.treasury || ''
+    );
+    const ok = treasuryState === 'active' || treasuryState === 'pending' || treasuryState === 'inactive';
+    treasuryAccessCache = { fingerprint, ok, at: Date.now() };
+    return ok;
+  } catch (err) {
+    if (isUnknownTreasuryCapabilityError(err)) {
+      treasuryAccessCache = { fingerprint, ok: false, at: Date.now() };
+      return false;
+    }
+    // Don't treat unrelated errors as "treasury available" — probe again next time.
+    console.warn('[stripe] treasury access probe inconclusive', err);
+    treasuryAccessCache = { fingerprint, ok: false, at: Date.now() };
+    return false;
+  } finally {
+    if (accountId) {
+      try {
+        await stripe.accounts.del(accountId);
+      } catch {
+        // ignore probe cleanup failures
+      }
+    }
+  }
+}
 
 function appOrigin(): string {
   return (process.env.APP_URL || 'https://nurseryos.app').replace(/\/$/, '');
@@ -81,17 +195,25 @@ async function loadIntegration(tenantId: string): Promise<StripeIntegration | nu
  */
 async function createSandboxReadyAccount(
   stripe: Stripe,
-  opts: { tenantId: string; tenantName: string; email?: string; ip: string }
+  opts: {
+    tenantId: string;
+    tenantName: string;
+    email?: string;
+    ip: string;
+    withTreasury: boolean;
+  }
 ): Promise<Stripe.Account> {
-  const { tenantId, tenantName, email, ip } = opts;
+  const { tenantId, tenantName, email, ip, withTreasury } = opts;
   const tosDate = Math.floor(Date.now() / 1000);
   const tosIp = ip || '127.0.0.1';
-  return stripe.accounts.create({
+  const params: Stripe.AccountCreateParams = {
     type: 'custom',
     country: 'US',
     email: email || undefined,
     business_type: 'individual',
-    capabilities: { ...CONNECT_CAPABILITIES },
+    capabilities: withTreasury
+      ? { ...CONNECT_CAPABILITIES }
+      : { ...BASE_CONNECT_CAPABILITIES },
     business_profile: {
       name: tenantName,
       mcc: '5261',
@@ -126,16 +248,49 @@ async function createSandboxReadyAccount(
       date: tosDate,
       ip: tosIp
     },
-    settings: {
+    metadata: {
+      tenantId,
+      nurseryos: '1',
+      sandbox: '1',
+      ...(withTreasury ? { treasury: '1' } : {})
+    }
+  };
+
+  if (withTreasury) {
+    params.settings = {
       treasury: {
         tos_acceptance: {
           date: tosDate,
           ip: tosIp
         }
       }
-    },
-    metadata: { tenantId, nurseryos: '1', sandbox: '1' }
-  });
+    };
+  }
+
+  return stripe.accounts.create(params);
+}
+
+async function fundSandboxFinancialAccount(
+  stripe: Stripe,
+  accountId: string,
+  financialAccountId: string,
+  amountCents = 100_000
+): Promise<number | null> {
+  try {
+    const credit = await stripe.testHelpers.treasury.receivedCredits.create(
+      {
+        amount: amountCents,
+        currency: 'usd',
+        financial_account: financialAccountId,
+        network: 'ach'
+      },
+      { stripeAccount: accountId }
+    );
+    return typeof credit.amount === 'number' ? credit.amount : amountCents;
+  } catch (err) {
+    console.warn('[stripe] sandbox FA fund failed', err);
+    return null;
+  }
 }
 
 function accountKindFromStripe(account: Stripe.Account): StripeIntegration['accountKind'] {
@@ -682,6 +837,26 @@ export function registerStripeRoutes(app: Express) {
         }
       }
 
+      let treasuryPlatformAccess: boolean | null = null;
+      let platformAccountId: string | null = null;
+      let platformAccountName: string | null = null;
+      let platformKeyHint: string | null = null;
+      if (isStripeConfigured()) {
+        try {
+          const stripe = getStripe();
+          const platform = await retrievePlatformAccount(stripe);
+          platformAccountId = platform.id;
+          platformAccountName = platform.name;
+          platformKeyHint = keyHint();
+          if (requireStripeSecret().startsWith('sk_test_')) {
+            treasuryPlatformAccess = await platformHasTreasuryAccess(stripe);
+          }
+        } catch (err) {
+          console.warn('[stripe] platform status probe failed', err);
+          treasuryPlatformAccess = null;
+        }
+      }
+
       res.json({
         connected: Boolean(integration?.accountId),
         accountId: integration?.accountId || null,
@@ -696,6 +871,11 @@ export function registerStripeRoutes(app: Express) {
         treasuryReady:
           integration?.treasuryCapability === 'active' &&
           Boolean(integration?.financialAccountId),
+        treasuryPlatformAccess,
+        treasuryActivateUrl: TREASURY_ACTIVATE_URL,
+        platformAccountId,
+        platformAccountName,
+        platformKeyHint,
         configured: isStripeConfigured() && isFirebaseAdminConfigured(),
         testMode: isStripeConfigured() && requireStripeSecret().startsWith('sk_test_')
       });
@@ -759,13 +939,30 @@ export function registerStripeRoutes(app: Express) {
 
       if (!accountId) {
         if (isTestMode) {
+          const treasuryOk = await platformHasTreasuryAccess(stripe);
           // Skip Express hosted KYC entirely — Custom + API test tokens.
-          const account = await createSandboxReadyAccount(stripe, {
-            tenantId,
-            tenantName,
-            email: email || undefined,
-            ip: clientIp(req)
-          });
+          let account: Stripe.Account;
+          try {
+            account = await createSandboxReadyAccount(stripe, {
+              tenantId,
+              tenantName,
+              email: email || undefined,
+              ip: clientIp(req),
+              withTreasury: treasuryOk
+            });
+          } catch (err) {
+            if (isUnknownTreasuryCapabilityError(err)) {
+              account = await createSandboxReadyAccount(stripe, {
+                tenantId,
+                tenantName,
+                email: email || undefined,
+                ip: clientIp(req),
+                withTreasury: false
+              });
+            } else {
+              throw err;
+            }
+          }
           accountId = account.id;
           integration = await refreshAccountStatus(tenantId, accountId, uid);
           if (!integration.chargesEnabled) {
@@ -784,6 +981,10 @@ export function registerStripeRoutes(app: Express) {
             onboardingUrl: null,
             chargesEnabled: true,
             detailsSubmitted: Boolean(integration.detailsSubmitted),
+            treasuryReady:
+              integration.treasuryCapability === 'active' &&
+              Boolean(integration.financialAccountId),
+            treasuryPlatformAccess: treasuryOk,
             testMode: true
           });
           return;
@@ -792,17 +993,33 @@ export function registerStripeRoutes(app: Express) {
         // Live: Custom + Account Links (platform-managed; required for Treasury).
         // Do not prefill business_profile.url with the platform origin — Stripe
         // crawls that URL for verification, and bot-blocking CDNs often 403 it.
-        const account = await stripe.accounts.create({
-          type: 'custom',
-          country: 'US',
-          email: email || undefined,
-          capabilities: { ...CONNECT_CAPABILITIES },
-          business_profile: {
-            name: tenantName,
-            product_description: `${tenantName} nursery wholesale and plant orders`
-          },
-          metadata: { tenantId, nurseryos: '1' }
-        });
+        let account: Stripe.Account;
+        try {
+          account = await stripe.accounts.create({
+            type: 'custom',
+            country: 'US',
+            email: email || undefined,
+            capabilities: { ...CONNECT_CAPABILITIES },
+            business_profile: {
+              name: tenantName,
+              product_description: `${tenantName} nursery wholesale and plant orders`
+            },
+            metadata: { tenantId, nurseryos: '1' }
+          });
+        } catch (err) {
+          if (!isUnknownTreasuryCapabilityError(err)) throw err;
+          account = await stripe.accounts.create({
+            type: 'custom',
+            country: 'US',
+            email: email || undefined,
+            capabilities: { ...BASE_CONNECT_CAPABILITIES },
+            business_profile: {
+              name: tenantName,
+              product_description: `${tenantName} nursery wholesale and plant orders`
+            },
+            metadata: { tenantId, nurseryos: '1' }
+          });
+        }
         accountId = account.id;
         integration = await refreshAccountStatus(tenantId, accountId, uid);
       }
@@ -889,10 +1106,32 @@ export function registerStripeRoutes(app: Express) {
           }
         });
       } catch (err: any) {
+        if (isUnknownTreasuryCapabilityError(err)) {
+          const platform = await retrievePlatformAccount(stripe).catch(() => undefined);
+          throw treasuryNotActivatedError(platform);
+        }
         throw Object.assign(
           new Error(err?.message || 'Could not request Treasury on this Stripe account.'),
           { status: 400 }
         );
+      }
+
+      // Sandbox Custom: accept Treasury TOS via API so capability can activate without hosted form.
+      if (requireStripeSecret().startsWith('sk_test_')) {
+        try {
+          await stripe.accounts.update(integration.accountId, {
+            settings: {
+              treasury: {
+                tos_acceptance: {
+                  date: Math.floor(Date.now() / 1000),
+                  ip: clientIp(req)
+                }
+              }
+            }
+          });
+        } catch (err) {
+          console.warn('[stripe] sandbox treasury TOS accept failed', err);
+        }
       }
 
       const refreshed = await refreshAccountStatus(tenantId, integration.accountId, uid);
@@ -915,6 +1154,137 @@ export function registerStripeRoutes(app: Express) {
         treasuryReady:
           refreshed.treasuryCapability === 'active' && Boolean(refreshed.financialAccountId),
         onboardingUrl
+      });
+    })
+  );
+
+  /**
+   * Sandbox-only one-shot: wipe connected account, create Custom + Treasury + FA,
+   * and fund $1,000 test balance so vendor ACH can be tried immediately.
+   */
+  app.post('/api/stripe/sandbox-onboard-treasury', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '').trim();
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertAdminOrOwner(tenantId, uid);
+      if (!isFirebaseAdminConfigured()) {
+        throw Object.assign(new Error('Firebase Admin is not configured on the server.'), {
+          status: 503
+        });
+      }
+      if (!requireStripeSecret().startsWith('sk_test_')) {
+        throw Object.assign(
+          new Error('Sandbox Treasury onboard only works with sk_test_ keys.'),
+          { status: 400 }
+        );
+      }
+
+      const stripe = getStripe();
+      treasuryAccessCache = null; // force fresh probe
+      const platform = await retrievePlatformAccount(stripe);
+      const hasAccess = await platformHasTreasuryAccess(stripe);
+      if (!hasAccess) {
+        throw treasuryNotActivatedError(platform);
+      }
+
+      const existing = await loadIntegration(tenantId);
+      if (existing?.accountId) {
+        try {
+          await stripe.accounts.del(existing.accountId);
+        } catch (err) {
+          console.warn('[stripe] sandbox onboard delete failed', err);
+        }
+        await integrationRef(tenantId).delete();
+      }
+
+      const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
+      const tenantName = String(tenantSnap.data()?.name || 'Nursery');
+      const memberSnap = await getAdminDb().doc(`tenants/${tenantId}/members/${uid}`).get();
+      const email = String(memberSnap.data()?.email || '');
+
+      let account: Stripe.Account;
+      try {
+        account = await createSandboxReadyAccount(stripe, {
+          tenantId,
+          tenantName,
+          email: email || undefined,
+          ip: clientIp(req),
+          withTreasury: true
+        });
+      } catch (err) {
+        if (isUnknownTreasuryCapabilityError(err)) {
+          throw treasuryNotActivatedError(platform);
+        }
+        throw err;
+      }
+
+      let integration = await refreshAccountStatus(tenantId, account.id, uid);
+
+      // Poll briefly for treasury capability to flip active
+      for (let i = 0; i < 5 && integration.treasuryCapability !== 'active'; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        integration = await refreshAccountStatus(tenantId, account.id, uid);
+      }
+
+      if (integration.treasuryCapability !== 'active') {
+        throw Object.assign(
+          new Error(
+            `Sandbox account created but treasury capability is still "${integration.treasuryCapability}". ` +
+              `Check Stripe Dashboard → Connect → ${account.id} → Capabilities, and finish any due requirements.`
+          ),
+          { status: 502 }
+        );
+      }
+
+      if (!integration.financialAccountId) {
+        try {
+          const fa = await ensureFinancialAccount(stripe, account.id, null);
+          if (fa) {
+            await integrationRef(tenantId).set(
+              {
+                financialAccountId: fa.id,
+                financialAccountStatus: fa.status,
+                updatedAt: new Date().toISOString()
+              },
+              { merge: true }
+            );
+            integration = {
+              ...integration,
+              financialAccountId: fa.id,
+              financialAccountStatus: fa.status
+            };
+          }
+        } catch (err: any) {
+          throw Object.assign(
+            new Error(err?.message || 'Could not create Financial Account.'),
+            { status: 502 }
+          );
+        }
+      }
+
+      let fundedCents: number | null = null;
+      if (integration.financialAccountId) {
+        fundedCents = await fundSandboxFinancialAccount(
+          stripe,
+          account.id,
+          integration.financialAccountId,
+          100_000
+        );
+      }
+
+      res.json({
+        accountId: account.id,
+        chargesEnabled: Boolean(integration.chargesEnabled),
+        treasuryCapability: integration.treasuryCapability,
+        financialAccountId: integration.financialAccountId || null,
+        treasuryReady:
+          integration.treasuryCapability === 'active' &&
+          Boolean(integration.financialAccountId),
+        fundedCents,
+        testMode: true
       });
     })
   );

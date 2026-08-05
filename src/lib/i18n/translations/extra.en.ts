@@ -1536,6 +1536,19 @@ const extra = {
     treasuryNeedsReconnect:
       'This Express Stripe account cannot use Treasury. Disconnect, then Connect again to enable vendor ACH.',
     treasuryEnableFailed: 'Could not enable Stripe Treasury.',
+    sandboxOnboardTreasury: 'Onboard sandbox nursery (Treasury)',
+    sandboxOnboardConfirm:
+      'Reset this nursery’s Stripe Connect account and create a sandbox Custom account with Treasury + $1,000 test funds? Invoice Connect settings for this nursery will be replaced.',
+    sandboxOnboardSuccess:
+      'Sandbox Treasury ready. Test FA funded with ${{funded}}. Add vendor bank details, then Pay via ACH.',
+    sandboxOnboardFailed: 'Could not onboard sandbox Treasury.',
+    treasuryPlatformBlockedTitle: 'Treasury not activated on this Stripe sandbox/API key',
+    treasuryPlatformBlockedBody:
+      'NurseryOS cannot request the treasury capability until you activate Issuing & Treasury for platforms in the SAME sandbox that owns the Railway STRIPE_SECRET_KEY. Activating it in a different sandbox looks “enabled” in Dashboard but still returns Unknown capability.',
+    treasuryPlatformBlockedMatch:
+      'Dashboard Account ID must match {{id}}. Then copy THAT sandbox’s Secret key into Railway and redeploy.',
+    stripePlatformKey: 'Platform key in use: {{name}} · {{id}} · {{key}}',
+    treasuryActivateLink: 'Open Stripe Treasury activate page →',
     checkbook: 'Vendor ACH Bill Pay (Checkbook)',
     checkbookIntro:
       'Optional fallback if Stripe Treasury is not enabled. Prefer Team → Stripe → Enable vendor ACH. Checkbook still works for email-link ACH. Owner/admin only.',

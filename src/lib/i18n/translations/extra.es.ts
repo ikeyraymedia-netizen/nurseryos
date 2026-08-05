@@ -1552,6 +1552,19 @@ const extra = {
     treasuryNeedsReconnect:
       'Esta cuenta Express de Stripe no puede usar Treasury. Desconecte y vuelva a conectar para activar ACH a proveedores.',
     treasuryEnableFailed: 'No se pudo activar Stripe Treasury.',
+    sandboxOnboardTreasury: 'Onboard vivero sandbox (Treasury)',
+    sandboxOnboardConfirm:
+      '¿Restablecer Stripe Connect de este vivero y crear una cuenta Custom de sandbox con Treasury + $1,000 de prueba? Se reemplazará la configuración de Connect de este vivero.',
+    sandboxOnboardSuccess:
+      'Treasury sandbox listo. FA de prueba fondeada con ${{funded}}. Agregue datos bancarios del proveedor y pague por ACH.',
+    sandboxOnboardFailed: 'No se pudo hacer onboard de Treasury en sandbox.',
+    treasuryPlatformBlockedTitle: 'Treasury no está activado en esta clave/sandbox de Stripe',
+    treasuryPlatformBlockedBody:
+      'NurseryOS no puede solicitar treasury hasta que active Issuing & Treasury for platforms en el MISMO sandbox que posee STRIPE_SECRET_KEY en Railway. Activarlo en otro sandbox parece “habilitado” pero sigue dando Unknown capability.',
+    treasuryPlatformBlockedMatch:
+      'El Account ID del Dashboard debe coincidir con {{id}}. Luego copie la Secret key de ESE sandbox a Railway y redespliegue.',
+    stripePlatformKey: 'Clave de plataforma en uso: {{name}} · {{id}} · {{key}}',
+    treasuryActivateLink: 'Abrir activación de Stripe Treasury →',
     checkbook: 'Pago ACH a proveedores (Checkbook)',
     checkbookIntro:
       'Respaldo opcional si Stripe Treasury no está activo. Prefiera Equipo → Stripe → Activar ACH. Checkbook sigue funcionando con enlace por correo. Solo dueño/admin.',

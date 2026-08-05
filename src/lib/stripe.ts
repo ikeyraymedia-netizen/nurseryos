@@ -36,6 +36,11 @@ export interface StripeStatus {
   financialAccountId?: string | null;
   financialAccountStatus?: string | null;
   treasuryReady?: boolean;
+  treasuryPlatformAccess?: boolean | null;
+  treasuryActivateUrl?: string | null;
+  platformAccountId?: string | null;
+  platformAccountName?: string | null;
+  platformKeyHint?: string | null;
 }
 
 export async function fetchStripeStatus(tenantId: string): Promise<StripeStatus> {
@@ -105,6 +110,33 @@ export async function enableStripeTreasury(tenantId: string): Promise<{
     treasuryReady: Boolean(data.treasuryReady),
     onboardingUrl: data.onboardingUrl ? String(data.onboardingUrl) : null,
     treasuryCapability: String(data.treasuryCapability || 'unrequested')
+  };
+}
+
+/** Sandbox-only: recreate Custom Connect + Treasury FA + $1,000 test funds. */
+export async function sandboxOnboardTreasury(tenantId: string): Promise<{
+  treasuryReady: boolean;
+  accountId: string;
+  financialAccountId: string | null;
+  fundedCents: number | null;
+}> {
+  const res = await fetch('/api/stripe/sandbox-onboard-treasury', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ tenantId })
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as {
+    treasuryReady?: boolean;
+    accountId?: string;
+    financialAccountId?: string | null;
+    fundedCents?: number | null;
+  };
+  return {
+    treasuryReady: Boolean(data.treasuryReady),
+    accountId: String(data.accountId || ''),
+    financialAccountId: data.financialAccountId ? String(data.financialAccountId) : null,
+    fundedCents: typeof data.fundedCents === 'number' ? data.fundedCents : null
   };
 }
 

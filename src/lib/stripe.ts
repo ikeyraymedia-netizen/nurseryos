@@ -31,6 +31,11 @@ export interface StripeStatus {
   connectedAt: string | null;
   configured: boolean;
   testMode?: boolean;
+  accountKind?: string | null;
+  treasuryCapability?: string;
+  financialAccountId?: string | null;
+  financialAccountStatus?: string | null;
+  treasuryReady?: boolean;
 }
 
 export async function fetchStripeStatus(tenantId: string): Promise<StripeStatus> {
@@ -39,6 +44,17 @@ export async function fetchStripeStatus(tenantId: string): Promise<StripeStatus>
   });
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as StripeStatus;
+}
+
+/** For Purchasing ACH routing — available to office (not only admin). */
+export async function fetchStripeTreasuryReady(tenantId: string): Promise<boolean> {
+  const res = await fetch(
+    `/api/stripe/treasury-ready?tenantId=${encodeURIComponent(tenantId)}`,
+    { headers: await authHeaders() }
+  );
+  if (!res.ok) return false;
+  const data = (await res.json()) as { treasuryReady?: boolean };
+  return Boolean(data.treasuryReady);
 }
 
 export async function startStripeConnect(tenantId: string): Promise<{
@@ -66,6 +82,29 @@ export async function startStripeConnect(tenantId: string): Promise<{
     onboardingUrl,
     accountId: String(data.accountId || ''),
     chargesEnabled
+  };
+}
+
+export async function enableStripeTreasury(tenantId: string): Promise<{
+  treasuryReady: boolean;
+  onboardingUrl: string | null;
+  treasuryCapability: string;
+}> {
+  const res = await fetch('/api/stripe/enable-treasury', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ tenantId })
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as {
+    treasuryReady?: boolean;
+    onboardingUrl?: string | null;
+    treasuryCapability?: string;
+  };
+  return {
+    treasuryReady: Boolean(data.treasuryReady),
+    onboardingUrl: data.onboardingUrl ? String(data.onboardingUrl) : null,
+    treasuryCapability: String(data.treasuryCapability || 'unrequested')
   };
 }
 
@@ -117,5 +156,54 @@ export async function confirmInvoicePayment(params: {
     alreadyPaid?: boolean;
     paymentStatus?: string;
     hint?: string;
+  };
+}
+
+export async function payVendorBillStripeAch(params: {
+  tenantId: string;
+  billId?: string;
+  billIds?: string[];
+}): Promise<{
+  paymentId: string;
+  status: string;
+  amount: number;
+  billIds?: string[];
+  billCount?: number;
+  vendorName?: string;
+  last4?: string | null;
+  provider: 'stripe';
+}> {
+  const res = await fetch('/api/stripe/pay-bill', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as {
+    paymentId: string;
+    status: string;
+    amount: number;
+    billIds?: string[];
+    billCount?: number;
+    vendorName?: string;
+    last4?: string | null;
+    provider: 'stripe';
+  };
+}
+
+export async function refreshVendorBillStripePayment(params: {
+  tenantId: string;
+  billId: string;
+}): Promise<{ paymentId: string; status: string | null; provider: 'stripe' }> {
+  const res = await fetch('/api/stripe/refresh-bill', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as {
+    paymentId: string;
+    status: string | null;
+    provider: 'stripe';
   };
 }

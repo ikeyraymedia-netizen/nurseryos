@@ -15,10 +15,23 @@ interface StripeIntegration {
   chargesEnabled: boolean;
   detailsSubmitted: boolean;
   payoutsEnabled: boolean;
+  /** Stripe account type / controller dashboard — Express cannot use Treasury. */
+  accountKind?: 'express' | 'custom' | 'controller';
+  /** treasury capability: active | inactive | pending | unrequested */
+  treasuryCapability?: string;
+  financialAccountId?: string | null;
+  financialAccountStatus?: string | null;
   connectedAt: string;
   connectedByUserId: string;
   updatedAt: string;
 }
+
+const CONNECT_CAPABILITIES = {
+  card_payments: { requested: true },
+  transfers: { requested: true },
+  us_bank_account_ach_payments: { requested: true },
+  treasury: { requested: true }
+} as const;
 
 function appOrigin(): string {
   return (process.env.APP_URL || 'https://nurseryos.app').replace(/\/$/, '');
@@ -71,16 +84,14 @@ async function createSandboxReadyAccount(
   opts: { tenantId: string; tenantName: string; email?: string; ip: string }
 ): Promise<Stripe.Account> {
   const { tenantId, tenantName, email, ip } = opts;
+  const tosDate = Math.floor(Date.now() / 1000);
+  const tosIp = ip || '127.0.0.1';
   return stripe.accounts.create({
     type: 'custom',
     country: 'US',
     email: email || undefined,
     business_type: 'individual',
-    capabilities: {
-      card_payments: { requested: true },
-      transfers: { requested: true },
-      us_bank_account_ach_payments: { requested: true }
-    },
+    capabilities: { ...CONNECT_CAPABILITIES },
     business_profile: {
       name: tenantName,
       mcc: '5261',
@@ -112,11 +123,69 @@ async function createSandboxReadyAccount(
       account_holder_type: 'individual'
     },
     tos_acceptance: {
-      date: Math.floor(Date.now() / 1000),
-      ip: ip || '127.0.0.1'
+      date: tosDate,
+      ip: tosIp
+    },
+    settings: {
+      treasury: {
+        tos_acceptance: {
+          date: tosDate,
+          ip: tosIp
+        }
+      }
     },
     metadata: { tenantId, nurseryos: '1', sandbox: '1' }
   });
+}
+
+function accountKindFromStripe(account: Stripe.Account): StripeIntegration['accountKind'] {
+  if (account.type === 'express') return 'express';
+  if (account.type === 'custom') return 'custom';
+  const controller = account.controller as
+    | { dashboard?: { type?: string }; type?: string }
+    | undefined;
+  if (controller?.dashboard?.type === 'express') return 'express';
+  if (controller?.dashboard?.type === 'none') return 'controller';
+  return 'custom';
+}
+
+async function ensureFinancialAccount(
+  stripe: Stripe,
+  accountId: string,
+  existingId?: string | null
+): Promise<{ id: string; status: string } | null> {
+  if (existingId) {
+    try {
+      const fa = await stripe.treasury.financialAccounts.retrieve(existingId, {
+        stripeAccount: accountId
+      });
+      return { id: fa.id, status: String(fa.status || 'open') };
+    } catch (err) {
+      console.warn('[stripe] financial account retrieve failed', err);
+    }
+  }
+
+  const listed = await stripe.treasury.financialAccounts.list(
+    { limit: 1 },
+    { stripeAccount: accountId }
+  );
+  if (listed.data[0]) {
+    return { id: listed.data[0].id, status: String(listed.data[0].status || 'open') };
+  }
+
+  const created = await stripe.treasury.financialAccounts.create(
+    {
+      supported_currencies: ['usd'],
+      features: {
+        financial_addresses: { aba: { requested: true } },
+        inbound_transfers: { ach: { requested: true } },
+        outbound_payments: { ach: { requested: true } },
+        intra_stripe_flows: { requested: true }
+      }
+    },
+    { stripeAccount: accountId }
+  );
+  return { id: created.id, status: String(created.status || 'open') };
 }
 
 function clientIp(req: Request): string {
@@ -154,6 +223,15 @@ async function assertCanCreatePayLink(tenantId: string, uid: string) {
   }
 }
 
+async function assertCanPayVendorBills(tenantId: string, uid: string) {
+  const roles = await getMemberRoles(tenantId, uid);
+  if (!hasAnyRole(roles, ['owner', 'admin', 'office'])) {
+    throw Object.assign(new Error('You do not have permission to pay vendor bills.'), {
+      status: 403
+    });
+  }
+}
+
 function httpError(res: Response, err: any) {
   const status = typeof err?.status === 'number' ? err.status : 500;
   console.error('[stripe]', err);
@@ -176,12 +254,36 @@ async function refreshAccountStatus(tenantId: string, accountId: string, uid?: s
   const account = await stripe.accounts.retrieve(accountId);
   const existing = await loadIntegration(tenantId);
   const now = new Date().toISOString();
+  const treasuryCapability = String(
+    (account.capabilities as Record<string, string | null> | undefined)?.treasury || 'unrequested'
+  );
+  const kind = accountKindFromStripe(account);
+
+  let financialAccountId = existing?.financialAccountId || null;
+  let financialAccountStatus = existing?.financialAccountStatus || null;
+
+  if (treasuryCapability === 'active') {
+    try {
+      const fa = await ensureFinancialAccount(stripe, accountId, financialAccountId);
+      if (fa) {
+        financialAccountId = fa.id;
+        financialAccountStatus = fa.status;
+      }
+    } catch (err) {
+      console.warn('[stripe] ensure financial account failed', err);
+    }
+  }
+
   const doc: StripeIntegration = {
     provider: 'stripe',
     accountId,
     chargesEnabled: Boolean(account.charges_enabled),
     detailsSubmitted: Boolean(account.details_submitted),
     payoutsEnabled: Boolean(account.payouts_enabled),
+    accountKind: kind,
+    treasuryCapability,
+    financialAccountId,
+    financialAccountStatus,
     connectedAt: existing?.connectedAt || now,
     connectedByUserId: existing?.connectedByUserId || uid || 'system',
     updatedAt: now
@@ -217,6 +319,75 @@ async function markDocumentPaid(params: {
     },
     { merge: true }
   );
+}
+
+function mapOutboundPaymentStatus(
+  status: string
+): 'payment_pending' | 'paid' | 'unpaid' | null {
+  const s = status.toLowerCase();
+  if (s === 'posted') return 'paid';
+  if (s === 'failed' || s === 'canceled' || s === 'cancelled' || s === 'returned') {
+    return 'unpaid';
+  }
+  if (
+    s === 'processing' ||
+    s === 'awaiting_funds' ||
+    s === 'pending' ||
+    s === 'approved' ||
+    s === 'expected'
+  ) {
+    return 'payment_pending';
+  }
+  return null;
+}
+
+async function applyOutboundPaymentToBill(params: {
+  tenantId: string;
+  billId: string;
+  paymentId: string;
+  stripeStatus: string;
+  failureMessage?: string | null;
+}) {
+  const mapped = mapOutboundPaymentStatus(params.stripeStatus);
+  if (!mapped) return;
+
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    stripeOutboundPaymentId: params.paymentId,
+    stripeOutboundPaymentStatus: params.stripeStatus,
+    updatedAt: now
+  };
+
+  if (mapped === 'paid') {
+    patch.status = 'paid';
+    patch.paidAt = now;
+    patch.paymentMethod = 'ach';
+    patch.paymentReference = params.paymentId;
+    patch.stripePaymentError = null;
+  } else if (mapped === 'unpaid') {
+    patch.status = 'unpaid';
+    patch.paidAt = null;
+    patch.stripePaymentError =
+      params.failureMessage || `ACH payment ${params.stripeStatus}`;
+  } else {
+    patch.status = 'payment_pending';
+    patch.paymentMethod = 'ach';
+    patch.paymentReference = params.paymentId;
+    patch.stripePaymentError = null;
+  }
+
+  await getAdminDb()
+    .doc(`tenants/${params.tenantId}/vendorBills/${params.billId}`)
+    .set(patch, { merge: true });
+}
+
+async function findBillsByOutboundPayment(tenantId: string, paymentId: string) {
+  const snap = await getAdminDb()
+    .collection(`tenants/${tenantId}/vendorBills`)
+    .where('stripeOutboundPaymentId', '==', paymentId)
+    .limit(50)
+    .get();
+  return snap.docs;
 }
 
 function sessionMatchesDocument(
@@ -430,6 +601,48 @@ export function registerStripeWebhookRoute(app: Express) {
           }
         }
 
+        if (
+          event.type === 'treasury.outbound_payment.posted' ||
+          event.type === 'treasury.outbound_payment.failed' ||
+          event.type === 'treasury.outbound_payment.canceled' ||
+          event.type === 'treasury.outbound_payment.returned'
+        ) {
+          const payment = event.data.object as Stripe.Treasury.OutboundPayment;
+          const tenantId = String(payment.metadata?.tenantId || '');
+          const billIds = String(payment.metadata?.billIds || '')
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean);
+          const returnedReason = payment.returned_details?.code
+            ? String(payment.returned_details.code)
+            : '';
+          const failMsg =
+            payment.status === 'failed'
+              ? 'ACH payment failed'
+              : payment.status === 'returned'
+                ? returnedReason || 'ACH payment returned'
+                : payment.status === 'canceled'
+                  ? 'ACH payment canceled'
+                  : null;
+          const targets =
+            billIds.length > 0
+              ? billIds.map((id) => ({ id }))
+              : tenantId
+                ? await findBillsByOutboundPayment(tenantId, payment.id)
+                : [];
+          if (tenantId) {
+            for (const doc of targets) {
+              await applyOutboundPaymentToBill({
+                tenantId,
+                billId: doc.id,
+                paymentId: payment.id,
+                stripeStatus: String(payment.status || ''),
+                failureMessage: failMsg
+              });
+            }
+          }
+        }
+
         res.json({ received: true });
       } catch (err: any) {
         console.error('[stripe] webhook handler failed', err);
@@ -476,8 +689,34 @@ export function registerStripeRoutes(app: Express) {
         detailsSubmitted: Boolean(integration?.detailsSubmitted),
         payoutsEnabled: Boolean(integration?.payoutsEnabled),
         connectedAt: integration?.connectedAt || null,
+        accountKind: integration?.accountKind || null,
+        treasuryCapability: integration?.treasuryCapability || 'unrequested',
+        financialAccountId: integration?.financialAccountId || null,
+        financialAccountStatus: integration?.financialAccountStatus || null,
+        treasuryReady:
+          integration?.treasuryCapability === 'active' &&
+          Boolean(integration?.financialAccountId),
         configured: isStripeConfigured() && isFirebaseAdminConfigured(),
         testMode: isStripeConfigured() && requireStripeSecret().startsWith('sk_test_')
+      });
+    })
+  );
+
+  /** Lightweight flag for Purchasing ACH — office can pay bills but not manage Connect. */
+  app.get('/api/stripe/treasury-ready', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.query.tenantId || '');
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertCanPayVendorBills(tenantId, uid);
+      const integration = await loadIntegration(tenantId);
+      res.json({
+        treasuryReady:
+          integration?.treasuryCapability === 'active' &&
+          Boolean(integration?.financialAccountId),
+        connected: Boolean(integration?.accountId)
       });
     })
   );
@@ -550,18 +789,14 @@ export function registerStripeRoutes(app: Express) {
           return;
         }
 
-        // Live: Express + Account Links (nurseries complete real KYC on Stripe).
+        // Live: Custom + Account Links (platform-managed; required for Treasury).
         // Do not prefill business_profile.url with the platform origin — Stripe
         // crawls that URL for verification, and bot-blocking CDNs often 403 it.
         const account = await stripe.accounts.create({
-          type: 'express',
+          type: 'custom',
           country: 'US',
           email: email || undefined,
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-            us_bank_account_ach_payments: { requested: true }
-          },
+          capabilities: { ...CONNECT_CAPABILITIES },
           business_profile: {
             name: tenantName,
             product_description: `${tenantName} nursery wholesale and plant orders`
@@ -608,6 +843,79 @@ export function registerStripeRoutes(app: Express) {
       }
       await integrationRef(tenantId).delete();
       res.json({ success: true });
+    })
+  );
+
+  /**
+   * Request Treasury + create FinancialAccount on an existing connected account.
+   * Express accounts cannot use Treasury — reconnect creates a platform-managed account.
+   */
+  app.post('/api/stripe/enable-treasury', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertAdminOrOwner(tenantId, uid);
+      if (!isFirebaseAdminConfigured()) {
+        throw Object.assign(new Error('Firebase Admin is not configured on the server.'), {
+          status: 503
+        });
+      }
+
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.accountId) {
+        throw Object.assign(new Error('Connect Stripe for this nursery first.'), { status: 400 });
+      }
+
+      const stripe = getStripe();
+      const account = await stripe.accounts.retrieve(integration.accountId);
+      const kind = accountKindFromStripe(account);
+      if (kind === 'express') {
+        throw Object.assign(
+          new Error(
+            'This nursery uses an Express Stripe account, which cannot use Treasury (vendor ACH). Disconnect Stripe in Team, then Connect again to create a platform-managed account with Treasury.'
+          ),
+          { status: 400 }
+        );
+      }
+
+      try {
+        await stripe.accounts.update(integration.accountId, {
+          capabilities: {
+            treasury: { requested: true },
+            us_bank_account_ach_payments: { requested: true }
+          }
+        });
+      } catch (err: any) {
+        throw Object.assign(
+          new Error(err?.message || 'Could not request Treasury on this Stripe account.'),
+          { status: 400 }
+        );
+      }
+
+      const refreshed = await refreshAccountStatus(tenantId, integration.accountId, uid);
+      let onboardingUrl: string | null = null;
+      if (refreshed.treasuryCapability !== 'active') {
+        const link = await stripe.accountLinks.create({
+          account: integration.accountId,
+          refresh_url: `${appOrigin()}/?stripe=refresh`,
+          return_url: `${appOrigin()}/?stripe=return`,
+          type: 'account_onboarding'
+        });
+        onboardingUrl = link.url;
+      }
+
+      res.json({
+        accountId: refreshed.accountId,
+        treasuryCapability: refreshed.treasuryCapability,
+        financialAccountId: refreshed.financialAccountId || null,
+        financialAccountStatus: refreshed.financialAccountStatus || null,
+        treasuryReady:
+          refreshed.treasuryCapability === 'active' && Boolean(refreshed.financialAccountId),
+        onboardingUrl
+      });
     })
   );
 
@@ -829,6 +1137,309 @@ export function registerStripeRoutes(app: Express) {
         alreadyPaid: false,
         sessionId: session.id,
         amountTotal: session.amount_total
+      });
+    })
+  );
+
+  app.post('/api/stripe/pay-bill', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '').trim();
+      const singleBillId = String(req.body?.billId || '').trim();
+      const billIdsRaw = Array.isArray(req.body?.billIds) ? req.body.billIds : [];
+      const billIds = [
+        ...new Set(
+          [singleBillId, ...billIdsRaw.map((id: unknown) => String(id || '').trim())].filter(
+            Boolean
+          )
+        )
+      ];
+
+      if (!tenantId || billIds.length === 0) {
+        res.status(400).json({ error: 'tenantId and billId(s) are required.' });
+        return;
+      }
+      await assertCanPayVendorBills(tenantId, uid);
+
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.accountId) {
+        throw Object.assign(new Error('Connect Stripe for this nursery in Team settings first.'), {
+          status: 400
+        });
+      }
+      if (integration.treasuryCapability !== 'active' || !integration.financialAccountId) {
+        throw Object.assign(
+          new Error(
+            'Stripe Treasury is not ready. In Team → Stripe, enable vendor ACH (Treasury) and finish onboarding.'
+          ),
+          { status: 400 }
+        );
+      }
+
+      type BillRow = {
+        id: string;
+        status?: string;
+        vendorId?: string;
+        vendorName?: string;
+        billNumber?: string;
+        grandTotal?: number;
+        stripeOutboundPaymentId?: string;
+        checkbookPaymentId?: string;
+      };
+
+      const bills: BillRow[] = [];
+      for (const billId of billIds) {
+        const billSnap = await getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`).get();
+        if (!billSnap.exists) {
+          throw Object.assign(new Error(`Vendor bill not found (${billId}).`), { status: 404 });
+        }
+        bills.push({ id: billId, ...(billSnap.data() as Omit<BillRow, 'id'>) });
+      }
+
+      for (const bill of bills) {
+        if (bill.status === 'paid') {
+          throw Object.assign(
+            new Error(`Bill ${bill.billNumber || bill.id} is already marked paid.`),
+            { status: 400 }
+          );
+        }
+        if (
+          bill.status === 'payment_pending' &&
+          (bill.stripeOutboundPaymentId || bill.checkbookPaymentId)
+        ) {
+          throw Object.assign(
+            new Error(
+              `Bill ${bill.billNumber || bill.id} already has an ACH payment in progress. Refresh status instead.`
+            ),
+            { status: 400 }
+          );
+        }
+      }
+
+      const vendorIds = [
+        ...new Set(bills.map((b) => String(b.vendorId || '').trim()).filter(Boolean))
+      ];
+      if (vendorIds.length !== 1) {
+        throw Object.assign(new Error('All selected bills must be for the same vendor.'), {
+          status: 400
+        });
+      }
+
+      const amount = bills.reduce((sum, bill) => {
+        const n = Number(bill.grandTotal || 0);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw Object.assign(new Error('Combined bill total must be greater than zero.'), {
+          status: 400
+        });
+      }
+      const amountCents = Math.round(amount * 100);
+      if (amountCents < 1) {
+        throw Object.assign(new Error('Payment amount is too small.'), { status: 400 });
+      }
+
+      const vendorId = vendorIds[0];
+      const vendorSnap = await getAdminDb().doc(`tenants/${tenantId}/vendors/${vendorId}`).get();
+      if (!vendorSnap.exists) {
+        throw Object.assign(new Error('Vendor not found.'), { status: 404 });
+      }
+      const vendor = vendorSnap.data() as {
+        name?: string;
+        bankRoutingNumber?: string;
+        bankAccountNumber?: string;
+        bankAccountLast4?: string;
+        bankAccountHolderName?: string;
+        bankAccountType?: string;
+        contactName?: string;
+      };
+
+      const routing = String(vendor.bankRoutingNumber || '').replace(/\D/g, '');
+      const accountNumber = String(vendor.bankAccountNumber || '').replace(/\s/g, '');
+      if (routing.length !== 9 || accountNumber.length < 4) {
+        throw Object.assign(
+          new Error(
+            'Add the vendor’s bank routing and account numbers in Purchasing → Vendors before paying via ACH.'
+          ),
+          { status: 400 }
+        );
+      }
+
+      const vendorName = String(vendor.name || bills[0]?.vendorName || 'Vendor');
+      const holderName = String(
+        vendor.bankAccountHolderName || vendor.contactName || vendorName
+      ).trim();
+      const accountType =
+        String(vendor.bankAccountType || 'checking').toLowerCase() === 'savings'
+          ? 'savings'
+          : 'checking';
+      const last4 =
+        String(vendor.bankAccountLast4 || '').replace(/\D/g, '').slice(-4) ||
+        accountNumber.replace(/\D/g, '').slice(-4);
+
+      const billNumbers = bills
+        .map((b) => String(b.billNumber || b.id).trim())
+        .filter(Boolean)
+        .slice(0, 6);
+      const description =
+        bills.length === 1
+          ? `Bill ${billNumbers[0] || bills[0].id}`.slice(0, 500)
+          : `Bills ${billNumbers.join(', ')}${
+              bills.length > billNumbers.length ? '…' : ''
+            }`.slice(0, 500);
+
+      const stripe = getStripe();
+      const opts = { stripeAccount: integration.accountId };
+
+      let outbound: Stripe.Treasury.OutboundPayment;
+      try {
+        outbound = await stripe.treasury.outboundPayments.create(
+          {
+            financial_account: integration.financialAccountId,
+            amount: amountCents,
+            currency: 'usd',
+            description,
+            statement_descriptor: 'VENDORACH',
+            destination_payment_method_data: {
+              type: 'us_bank_account',
+              us_bank_account: {
+                routing_number: routing,
+                account_number: accountNumber,
+                account_holder_type: 'company',
+                account_type: accountType
+              },
+              billing_details: {
+                name: holderName.slice(0, 200)
+              }
+            },
+            destination_payment_method_options: {
+              us_bank_account: {
+                network: 'ach'
+              }
+            },
+            end_user_details: {
+              present: true,
+              ip_address: clientIp(req)
+            },
+            metadata: {
+              tenantId,
+              billIds: billIds.join(',').slice(0, 450),
+              nurseryos: '1'
+            }
+          },
+          opts
+        );
+      } catch (err: any) {
+        const msg = String(err?.message || 'Stripe ACH payment failed.');
+        throw Object.assign(
+          new Error(
+            /insufficient|balance|funds/i.test(msg)
+              ? `${msg} Fund this nursery’s Stripe Financial Account (Treasury) before paying vendors.`
+              : msg
+          ),
+          { status: 400 }
+        );
+      }
+
+      const now = new Date().toISOString();
+      const batch = getAdminDb().batch();
+      for (const bill of bills) {
+        batch.set(
+          getAdminDb().doc(`tenants/${tenantId}/vendorBills/${bill.id}`),
+          {
+            status: 'payment_pending',
+            paymentMethod: 'ach',
+            paymentReference: outbound.id,
+            stripeOutboundPaymentId: outbound.id,
+            stripeOutboundPaymentStatus: outbound.status || 'processing',
+            stripeAchLast4: last4 || null,
+            stripePaymentError: null,
+            checkbookPaymentError: null,
+            updatedAt: now
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+
+      // If Stripe already posted (rare/fast sandbox), apply immediately
+      if (outbound.status === 'posted') {
+        for (const bill of bills) {
+          await applyOutboundPaymentToBill({
+            tenantId,
+            billId: bill.id,
+            paymentId: outbound.id,
+            stripeStatus: 'posted'
+          });
+        }
+      }
+
+      res.json({
+        paymentId: outbound.id,
+        status: outbound.status,
+        amount: amountCents / 100,
+        billIds,
+        billCount: bills.length,
+        vendorName,
+        last4: last4 || null,
+        provider: 'stripe'
+      });
+    })
+  );
+
+  app.post('/api/stripe/refresh-bill', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '').trim();
+      const billId = String(req.body?.billId || '').trim();
+      if (!tenantId || !billId) {
+        res.status(400).json({ error: 'tenantId and billId are required.' });
+        return;
+      }
+      await assertCanPayVendorBills(tenantId, uid);
+
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.accountId) {
+        throw Object.assign(new Error('Stripe is not connected for this nursery.'), {
+          status: 400
+        });
+      }
+
+      const billRef = getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`);
+      const billSnap = await billRef.get();
+      if (!billSnap.exists) {
+        throw Object.assign(new Error('Vendor bill not found.'), { status: 404 });
+      }
+      const bill = billSnap.data() as {
+        stripeOutboundPaymentId?: string;
+      };
+      const paymentId = String(bill.stripeOutboundPaymentId || '').trim();
+      if (!paymentId) {
+        throw Object.assign(new Error('This bill has no Stripe ACH payment to refresh.'), {
+          status: 400
+        });
+      }
+
+      const stripe = getStripe();
+      const payment = await stripe.treasury.outboundPayments.retrieve(paymentId, {
+        stripeAccount: integration.accountId
+      });
+
+      await applyOutboundPaymentToBill({
+        tenantId,
+        billId,
+        paymentId: payment.id,
+        stripeStatus: String(payment.status || ''),
+        failureMessage:
+          payment.status === 'failed'
+            ? 'ACH payment failed'
+            : payment.status === 'returned'
+              ? String(payment.returned_details?.code || 'ACH payment returned')
+              : null
+      });
+
+      res.json({
+        paymentId: payment.id,
+        status: payment.status,
+        provider: 'stripe'
       });
     })
   );

@@ -1138,12 +1138,32 @@ const extra = {
       'Send {{amount}} ACH payment to {{vendor}} at {{email}}? They will get a Checkbook email to deposit to their bank.',
     achPayConfirmMulti:
       'Send one ACH payment of {{amount}} for {{n}} bills to {{vendor}} at {{email}}? They get one Checkbook deposit email.',
+    achPayConfirmStripe:
+      'Send {{amount}} ACH from your Stripe Financial Account to {{vendor}} (••••{{last4}})?',
+    achPayConfirmStripeMulti:
+      'Send one ACH of {{amount}} for {{n}} bills to {{vendor}} (••••{{last4}}) from Stripe Treasury?',
     achPaymentSent: 'ACH payment sent. Vendor email: {{email}}',
     achPaymentSentMulti: 'One ACH payment sent for {{n}} bills. Vendor email: {{email}}',
+    achPaymentSentStripe: 'ACH payment submitted via Stripe to ••••{{last4}}.',
+    achPaymentSentStripeMulti:
+      'One ACH payment submitted via Stripe for {{n}} bills to ••••{{last4}}.',
     achStatusRefreshed: 'Payment status: {{status}}',
     achPending: 'ACH sent — waiting for {{recipient}} to deposit',
     achProcessing: 'ACH processing for {{recipient}}',
-    selectSameVendor: 'Selected bills must be for the same vendor.'
+    achProcessingStripe: 'ACH processing to vendor bank ••••{{last4}}',
+    achNeedsBank:
+      'Add this vendor’s routing and account numbers in Vendors before paying via Stripe ACH.',
+    selectSameVendor: 'Selected bills must be for the same vendor.',
+    vendorBankSection: 'ACH bank details',
+    vendorBankHint:
+      'Used for Stripe Treasury vendor pay. Account number is stored for ACH only and shown as last 4 after save.',
+    bankAccountHolder: 'Account holder name',
+    bankRouting: 'Routing number (9 digits)',
+    bankAccount: 'Account number',
+    bankAccountKeep: 'Account number (leave blank to keep ••••{{last4}})',
+    bankChecking: 'Checking',
+    bankSavings: 'Savings',
+    vendorBankOnFile: 'ACH on file · ••••{{last4}}'
   },
   vendor: {
     aiRead: 'AI read:',
@@ -1494,7 +1514,7 @@ const extra = {
     addQbEnvFirst: 'Add QuickBooks and Firebase Admin env vars on the server first',
     stripe: 'Stripe Connect',
     stripeIntro:
-      "Connect this nursery's Stripe account so customers can pay invoices by card. Funds go to the nursery (merchant of record). Owner/admin only.",
+      "Connect this nursery's Stripe account so customers can pay invoices by card, and (with Treasury) pay vendors by ACH. Funds go to the nursery. Owner/admin only.",
     stripeSandboxEinHint:
       'Sandbox: Connect skips Stripe’s hosted SSN form (it rejects test IDs). NurseryOS creates a verified test account instantly — click Connect Stripe / Continue onboarding and you should see Ready to collect payments.',
     stripeSandboxReady: 'Sandbox Stripe connected — ready to collect test payments.',
@@ -1507,9 +1527,18 @@ const extra = {
     addStripeEnvFirst: 'Add Stripe and Firebase Admin env vars on the server first',
     disconnectStripe: 'Disconnect Stripe from this nursery?',
     stripeDisconnected: 'Stripe disconnected.',
+    enableTreasury: 'Enable vendor ACH (Treasury)',
+    treasuryReady: 'Treasury ready — vendor ACH financial account is set up.',
+    treasuryPending:
+      'Treasury requested — finish Stripe onboarding if prompted, then refresh. Financial account may take a minute.',
+    treasuryNotEnabled:
+      'Vendor ACH (Treasury) is not enabled yet. Click Enable vendor ACH after Connect is ready.',
+    treasuryNeedsReconnect:
+      'This Express Stripe account cannot use Treasury. Disconnect, then Connect again to enable vendor ACH.',
+    treasuryEnableFailed: 'Could not enable Stripe Treasury.',
     checkbook: 'Vendor ACH Bill Pay (Checkbook)',
     checkbookIntro:
-      'Connect your Checkbook account to pay vendor bills by ACH from Purchasing. For live payments use Production keys from Checkbook Settings → Developer (with Production selected) and a verified bank. Owner/admin only.',
+      'Optional fallback if Stripe Treasury is not enabled. Prefer Team → Stripe → Enable vendor ACH. Checkbook still works for email-link ACH. Owner/admin only.',
     checkbookConnectedStatus: 'Connected ({{env}}) · key …{{last4}}',
     checkbookWebhookHint:
       'In Checkbook Developer settings, set webhook URL to:',

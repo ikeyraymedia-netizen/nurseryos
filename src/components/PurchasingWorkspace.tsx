@@ -65,6 +65,11 @@ import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { BillEditModal } from './BillEditModal';
 import { payVendorBillAch, refreshVendorBillPayment } from '../lib/checkbook';
+import {
+  fetchStripeTreasuryReady,
+  payVendorBillStripeAch,
+  refreshVendorBillStripePayment
+} from '../lib/stripe';
 import { BankFeedPanel } from './BankFeedPanel';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills' | 'feed';
@@ -198,8 +203,13 @@ export function PurchasingWorkspace({
   const [vendorAddress, setVendorAddress] = useState('');
   const [vendorTerms, setVendorTerms] = useState('');
   const [vendorTermsIsCustom, setVendorTermsIsCustom] = useState(false);
+  const [vendorBankRouting, setVendorBankRouting] = useState('');
+  const [vendorBankAccount, setVendorBankAccount] = useState('');
+  const [vendorBankHolder, setVendorBankHolder] = useState('');
+  const [vendorBankType, setVendorBankType] = useState<'checking' | 'savings'>('checking');
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const [stripeTreasuryReady, setStripeTreasuryReady] = useState(false);
 
   // PO form
   const [showPoForm, setShowPoForm] = useState(false);
@@ -235,6 +245,24 @@ export function PurchasingWorkspace({
       unsubB();
     };
   }, []);
+
+  useEffect(() => {
+    if (!permissions.canPayVendorBills) {
+      setStripeTreasuryReady(false);
+      return;
+    }
+    let cancelled = false;
+    void fetchStripeTreasuryReady(tenantId)
+      .then((ready) => {
+        if (!cancelled) setStripeTreasuryReady(ready);
+      })
+      .catch(() => {
+        if (!cancelled) setStripeTreasuryReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, permissions.canPayVendorBills]);
 
   const q = search.toLowerCase().trim();
 
@@ -405,7 +433,18 @@ export function PurchasingWorkspace({
     setVendorAddress('');
     setVendorTerms('');
     setVendorTermsIsCustom(false);
+    setVendorBankRouting('');
+    setVendorBankAccount('');
+    setVendorBankHolder('');
+    setVendorBankType('checking');
     setEditingVendorId(null);
+  }
+
+  function loadVendorBankFields(v: Vendor) {
+    setVendorBankRouting(v.bankRoutingNumber || '');
+    setVendorBankAccount('');
+    setVendorBankHolder(v.bankAccountHolderName || '');
+    setVendorBankType(v.bankAccountType === 'savings' ? 'savings' : 'checking');
   }
 
   async function handleSaveVendor(e: FormEvent) {
@@ -414,6 +453,18 @@ export function PurchasingWorkspace({
     const name = vendorName.trim();
     if (!name) return;
     await run(async () => {
+      const routing = vendorBankRouting.replace(/\D/g, '');
+      const accountDigits = vendorBankAccount.replace(/\s/g, '');
+      const bankPatch: Partial<Vendor> = {
+        bankRoutingNumber: routing || undefined,
+        bankAccountHolderName: vendorBankHolder.trim() || undefined,
+        bankAccountType: vendorBankType
+      };
+      if (accountDigits) {
+        bankPatch.bankAccountNumber = accountDigits;
+        bankPatch.bankAccountLast4 = accountDigits.replace(/\D/g, '').slice(-4);
+      }
+
       if (editingVendorId) {
         const existing = vendors.find((v) => v.id === editingVendorId);
         if (!existing) return;
@@ -424,7 +475,16 @@ export function PurchasingWorkspace({
           phone: vendorPhone.trim() || undefined,
           contactName: vendorContact.trim() || undefined,
           billingAddress: vendorAddress.trim() || undefined,
-          paymentTerms: vendorTerms.trim() || undefined
+          paymentTerms: vendorTerms.trim() || undefined,
+          ...bankPatch,
+          // Keep prior account number when user leaves the field blank
+          bankAccountNumber: accountDigits
+            ? accountDigits
+            : existing.bankAccountNumber,
+          bankAccountLast4: accountDigits
+            ? accountDigits.replace(/\D/g, '').slice(-4)
+            : existing.bankAccountLast4,
+          bankRoutingNumber: routing || existing.bankRoutingNumber
         });
       } else {
         await addVendor({
@@ -433,7 +493,8 @@ export function PurchasingWorkspace({
           phone: vendorPhone.trim() || undefined,
           contactName: vendorContact.trim() || undefined,
           billingAddress: vendorAddress.trim() || undefined,
-          paymentTerms: vendorTerms.trim() || undefined
+          paymentTerms: vendorTerms.trim() || undefined,
+          ...bankPatch
         });
       }
       resetVendorForm();
@@ -753,8 +814,49 @@ export function PurchasingWorkspace({
     }
     const first = targetBills[0];
     const vendor = vendors.find((v) => v.id === first.vendorId);
-    let recipientEmail = vendor?.contactEmail?.trim() || '';
     const amount = money(targetBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0));
+
+    if (stripeTreasuryReady) {
+      const hasBank =
+        Boolean(vendor?.bankRoutingNumber?.replace(/\D/g, '').length === 9) &&
+        Boolean(vendor?.bankAccountNumber || vendor?.bankAccountLast4);
+      if (!hasBank) {
+        setError(t('purchasing.achNeedsBank'));
+        return;
+      }
+      const last4 = vendor?.bankAccountLast4 || '****';
+      const ok = window.confirm(
+        targetBills.length > 1
+          ? t('purchasing.achPayConfirmStripeMulti', {
+              amount,
+              n: targetBills.length,
+              vendor: first.vendorName,
+              last4
+            })
+          : t('purchasing.achPayConfirmStripe', {
+              amount,
+              vendor: first.vendorName,
+              last4
+            })
+      );
+      if (!ok) return;
+      await payVendorBillStripeAch({
+        tenantId,
+        billIds: targetBills.map((b) => b.id)
+      });
+      setSelectedBillIds([]);
+      setStatus(
+        targetBills.length > 1
+          ? t('purchasing.achPaymentSentStripeMulti', {
+              n: targetBills.length,
+              last4
+            })
+          : t('purchasing.achPaymentSentStripe', { last4 })
+      );
+      return;
+    }
+
+    let recipientEmail = vendor?.contactEmail?.trim() || '';
     if (!recipientEmail) {
       const entered = window.prompt(t('purchasing.achRecipientPrompt'), '');
       if (!entered?.trim()) return;
@@ -789,6 +891,30 @@ export function PurchasingWorkspace({
             email: recipientEmail
           })
         : t('purchasing.achPaymentSent', { email: recipientEmail })
+    );
+  }
+
+  async function refreshBillAch(bill: VendorBill) {
+    if (bill.stripeOutboundPaymentId) {
+      const result = await refreshVendorBillStripePayment({
+        tenantId,
+        billId: bill.id
+      });
+      setStatus(
+        t('purchasing.achStatusRefreshed', {
+          status: result.status || 'unknown'
+        })
+      );
+      return;
+    }
+    const result = await refreshVendorBillPayment({
+      tenantId,
+      billId: bill.id
+    });
+    setStatus(
+      t('purchasing.achStatusRefreshed', {
+        status: result.status || 'unknown'
+      })
     );
   }
 
@@ -887,17 +1013,27 @@ export function PurchasingWorkspace({
             )}
             {bill.status === 'payment_pending' && (
               <p className="text-[11px] font-bold text-sky-800 mt-1">
-                {String(bill.checkbookPaymentStatus || '').toUpperCase() === 'IN_PROCESS'
-                  ? t('purchasing.achProcessing', {
-                      recipient: bill.checkbookRecipient || bill.vendorName
+                {bill.stripeOutboundPaymentId
+                  ? t('purchasing.achProcessingStripe', {
+                      last4: bill.stripeAchLast4 || '****'
                     })
-                  : t('purchasing.achPending', {
-                      recipient: bill.checkbookRecipient || bill.vendorName
-                    })}
-                {bill.checkbookPaymentStatus
-                  ? ` · Checkbook: ${bill.checkbookPaymentStatus}`
-                  : ''}
-                {bill.checkbookPaymentError ? ` · ${bill.checkbookPaymentError}` : ''}
+                  : String(bill.checkbookPaymentStatus || '').toUpperCase() === 'IN_PROCESS'
+                    ? t('purchasing.achProcessing', {
+                        recipient: bill.checkbookRecipient || bill.vendorName
+                      })
+                    : t('purchasing.achPending', {
+                        recipient: bill.checkbookRecipient || bill.vendorName
+                      })}
+                {bill.stripeOutboundPaymentStatus
+                  ? ` · Stripe: ${bill.stripeOutboundPaymentStatus}`
+                  : bill.checkbookPaymentStatus
+                    ? ` · Checkbook: ${bill.checkbookPaymentStatus}`
+                    : ''}
+                {bill.stripePaymentError
+                  ? ` · ${bill.stripePaymentError}`
+                  : bill.checkbookPaymentError
+                    ? ` · ${bill.checkbookPaymentError}`
+                    : ''}
               </p>
             )}
             {bill.items?.length > 0 && (
@@ -971,15 +1107,7 @@ export function PurchasingWorkspace({
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
-                    const result = await refreshVendorBillPayment({
-                      tenantId,
-                      billId: bill.id
-                    });
-                    setStatus(
-                      t('purchasing.achStatusRefreshed', {
-                        status: result.status || 'unknown'
-                      })
-                    );
+                    await refreshBillAch(bill);
                   })
                 }
                 className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-900"
@@ -1192,6 +1320,13 @@ export function PurchasingWorkspace({
                     {t('purchasing.terms', { terms: selectedVendor.paymentTerms })}
                   </p>
                 )}
+                {selectedVendor.bankAccountLast4 && (
+                  <p className="text-[11px] text-ink-700 mt-1">
+                    {t('purchasing.vendorBankOnFile', {
+                      last4: selectedVendor.bankAccountLast4
+                    })}
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap gap-2 shrink-0">
                 {permissions.canEditVendors && (
@@ -1205,6 +1340,7 @@ export function PurchasingWorkspace({
                       setVendorContact(selectedVendor.contactName || '');
                       setVendorAddress(selectedVendor.billingAddress || '');
                       loadVendorTerms(selectedVendor.paymentTerms);
+                      loadVendorBankFields(selectedVendor);
                       setSelectedVendorId(null);
                     }}
                     className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-800"
@@ -1421,6 +1557,57 @@ export function PurchasingWorkspace({
                       />
                     )}
                   </label>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 space-y-2">
+                    <p className="text-[11px] font-bold uppercase text-slate-600">
+                      {t('purchasing.vendorBankSection')}
+                    </p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      {t('purchasing.vendorBankHint')}
+                    </p>
+                    <input
+                      value={vendorBankHolder}
+                      onChange={(e) => setVendorBankHolder(e.target.value)}
+                      placeholder={t('purchasing.bankAccountHolder')}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    />
+                    <input
+                      value={vendorBankRouting}
+                      onChange={(e) => setVendorBankRouting(e.target.value)}
+                      placeholder={t('purchasing.bankRouting')}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
+                    />
+                    <input
+                      value={vendorBankAccount}
+                      onChange={(e) => setVendorBankAccount(e.target.value)}
+                      placeholder={
+                        editingVendorId &&
+                        vendors.find((v) => v.id === editingVendorId)?.bankAccountLast4
+                          ? t('purchasing.bankAccountKeep', {
+                              last4:
+                                vendors.find((v) => v.id === editingVendorId)
+                                  ?.bankAccountLast4 || ''
+                            })
+                          : t('purchasing.bankAccount')
+                      }
+                      inputMode="numeric"
+                      autoComplete="off"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
+                    />
+                    <select
+                      value={vendorBankType}
+                      onChange={(e) =>
+                        setVendorBankType(
+                          e.target.value === 'savings' ? 'savings' : 'checking'
+                        )
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                    >
+                      <option value="checking">{t('purchasing.bankChecking')}</option>
+                      <option value="savings">{t('purchasing.bankSavings')}</option>
+                    </select>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="submit"
@@ -1506,6 +1693,7 @@ export function PurchasingWorkspace({
                                   setVendorContact(v.contactName || '');
                                   setVendorAddress(v.billingAddress || '');
                                   loadVendorTerms(v.paymentTerms);
+                                  loadVendorBankFields(v);
                                 }}
                                 className="text-[10px] font-bold text-ink-700 px-2 py-1 rounded-lg hover:bg-ink-50"
                               >

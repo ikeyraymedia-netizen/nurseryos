@@ -325,6 +325,13 @@ export interface Vendor {
   notes?: string;
   /** Bank/card merchant strings that map to this vendor (learned from feed tagging). */
   merchantAliases?: string[];
+  /** ACH destination for Stripe Treasury vendor pay (owner/admin only). */
+  bankRoutingNumber?: string;
+  /** Full account number — required to send ACH; never shown in full after save. */
+  bankAccountNumber?: string;
+  bankAccountLast4?: string;
+  bankAccountHolderName?: string;
+  bankAccountType?: 'checking' | 'savings';
   createdAt: string;
   updatedAt: string;
 }
@@ -421,6 +428,12 @@ export interface VendorBill {
   checkbookRecipient?: string | null;
   checkbookDepositOption?: string | null;
   checkbookPaymentError?: string | null;
+  /** Stripe Treasury OutboundPayment id when paid via ACH bill pay. */
+  stripeOutboundPaymentId?: string | null;
+  stripeOutboundPaymentStatus?: string | null;
+  stripePaymentError?: string | null;
+  /** Last4 of vendor bank used for this ACH (display). */
+  stripeAchLast4?: string | null;
   createdAt: string;
   updatedAt: string;
 }

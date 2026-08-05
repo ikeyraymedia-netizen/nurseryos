@@ -26,6 +26,7 @@ import {
 } from '../lib/quickbooks';
 import {
   disconnectStripe,
+  enableStripeTreasury,
   fetchStripeStatus,
   startStripeConnect,
   StripeStatus
@@ -337,6 +338,36 @@ export function TeamManager({
       await refreshStripe();
     } catch (err: any) {
       setStripeError(err?.message || t('teamExtra.stripeDisconnectFailed'));
+    } finally {
+      setStripeBusy(false);
+    }
+  }
+
+  async function handleEnableTreasury() {
+    setStripeBusy(true);
+    setStripeError(null);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await enableStripeTreasury(tenant.id);
+      void logAuditEvent({
+        action: 'stripe.treasury_enable_started',
+        summary: result.treasuryReady
+          ? 'Stripe Treasury financial account ready'
+          : 'Started Stripe Treasury onboarding'
+      });
+      if (result.onboardingUrl) {
+        window.location.href = result.onboardingUrl;
+        return;
+      }
+      setMessage(
+        result.treasuryReady
+          ? t('teamExtra.treasuryReady')
+          : t('teamExtra.treasuryPending')
+      );
+      await refreshStripe();
+    } catch (err: any) {
+      setStripeError(err?.message || t('teamExtra.treasuryEnableFailed'));
     } finally {
       setStripeBusy(false);
     }
@@ -859,6 +890,15 @@ export function TeamManager({
                       {stripeStatus.accountId}
                     </p>
                   )}
+                  <p className="text-[11px] text-violet-950/80 leading-relaxed">
+                    {stripeStatus.treasuryReady
+                      ? t('teamExtra.treasuryReady')
+                      : stripeStatus.accountKind === 'express'
+                        ? t('teamExtra.treasuryNeedsReconnect')
+                        : stripeStatus.treasuryCapability === 'active'
+                          ? t('teamExtra.treasuryPending')
+                          : t('teamExtra.treasuryNotEnabled')}
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {!stripeStatus.chargesEnabled && (
                       <button
@@ -869,6 +909,19 @@ export function TeamManager({
                       >
                         <Link2 className="h-3.5 w-3.5" />
                         {stripeBusy ? 'Opening Stripe…' : 'Continue onboarding'}
+                      </button>
+                    )}
+                    {!stripeStatus.treasuryReady && stripeStatus.accountKind !== 'express' && (
+                      <button
+                        type="button"
+                        disabled={stripeBusy || busy}
+                        onClick={() => void handleEnableTreasury()}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold disabled:opacity-50"
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                        {stripeBusy
+                          ? t('teamExtra.openingStripe')
+                          : t('teamExtra.enableTreasury')}
                       </button>
                     )}
                     <button

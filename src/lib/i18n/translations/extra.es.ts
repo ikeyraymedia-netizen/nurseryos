@@ -1152,12 +1152,32 @@ const extra = {
       '¿Enviar pago ACH de {{amount}} a {{vendor}} a {{email}}? Recibirán un correo de Checkbook para depositar en su banco.',
     achPayConfirmMulti:
       '¿Enviar un pago ACH de {{amount}} por {{n}} facturas a {{vendor}} a {{email}}? Reciben un solo correo de depósito de Checkbook.',
+    achPayConfirmStripe:
+      '¿Enviar ACH de {{amount}} desde su cuenta financiera Stripe a {{vendor}} (••••{{last4}})?',
+    achPayConfirmStripeMulti:
+      '¿Enviar un ACH de {{amount}} por {{n}} facturas a {{vendor}} (••••{{last4}}) vía Stripe Treasury?',
     achPaymentSent: 'Pago ACH enviado. Correo del proveedor: {{email}}',
     achPaymentSentMulti: 'Un pago ACH enviado por {{n}} facturas. Correo: {{email}}',
+    achPaymentSentStripe: 'Pago ACH enviado vía Stripe a ••••{{last4}}.',
+    achPaymentSentStripeMulti:
+      'Un pago ACH enviado vía Stripe por {{n}} facturas a ••••{{last4}}.',
     achStatusRefreshed: 'Estado del pago: {{status}}',
     achPending: 'ACH enviado — esperando depósito de {{recipient}}',
     achProcessing: 'ACH en proceso para {{recipient}}',
-    selectSameVendor: 'Las facturas seleccionadas deben ser del mismo proveedor.'
+    achProcessingStripe: 'ACH en proceso al banco del proveedor ••••{{last4}}',
+    achNeedsBank:
+      'Agregue el routing y número de cuenta del proveedor en Proveedores antes de pagar por ACH de Stripe.',
+    selectSameVendor: 'Las facturas seleccionadas deben ser del mismo proveedor.',
+    vendorBankSection: 'Datos bancarios ACH',
+    vendorBankHint:
+      'Para pagos a proveedores con Stripe Treasury. El número de cuenta se guarda solo para ACH y se muestra como últimos 4 dígitos.',
+    bankAccountHolder: 'Nombre del titular',
+    bankRouting: 'Routing (9 dígitos)',
+    bankAccount: 'Número de cuenta',
+    bankAccountKeep: 'Número de cuenta (dejar vacío para mantener ••••{{last4}})',
+    bankChecking: 'Cheques',
+    bankSavings: 'Ahorros',
+    vendorBankOnFile: 'ACH registrado · ••••{{last4}}'
   },
   vendor: {
     aiRead: 'IA leyó:',
@@ -1510,7 +1530,7 @@ const extra = {
     addQbEnvFirst: 'Agregue variables de QuickBooks y Firebase Admin en el servidor primero',
     stripe: 'Stripe Connect',
     stripeIntro:
-      'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta. Los fondos van al vivero. Solo dueño/admin.',
+      'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta y (con Treasury) paguen proveedores por ACH. Los fondos van al vivero. Solo dueño/admin.',
     stripeSandboxEinHint:
       'Sandbox: Connect omite el formulario SSN de Stripe (rechaza IDs de prueba). NurseryOS crea una cuenta de prueba verificada al instante — pulse Conectar / Continuar y debería ver Listo para cobrar.',
     stripeSandboxReady: 'Stripe sandbox conectado — listo para cobros de prueba.',
@@ -1523,9 +1543,18 @@ const extra = {
     addStripeEnvFirst: 'Agregue variables de Stripe y Firebase Admin en el servidor primero',
     disconnectStripe: '¿Desconectar Stripe de este vivero?',
     stripeDisconnected: 'Stripe desconectado.',
+    enableTreasury: 'Activar ACH a proveedores (Treasury)',
+    treasuryReady: 'Treasury listo — cuenta financiera ACH configurada.',
+    treasuryPending:
+      'Treasury solicitado — complete el onboarding de Stripe si se pide, luego actualice. La cuenta financiera puede tardar un minuto.',
+    treasuryNotEnabled:
+      'ACH a proveedores (Treasury) aún no está activo. Pulse Activar ACH después de conectar Stripe.',
+    treasuryNeedsReconnect:
+      'Esta cuenta Express de Stripe no puede usar Treasury. Desconecte y vuelva a conectar para activar ACH a proveedores.',
+    treasuryEnableFailed: 'No se pudo activar Stripe Treasury.',
     checkbook: 'Pago ACH a proveedores (Checkbook)',
     checkbookIntro:
-      'Conecte su cuenta Checkbook para pagar facturas de proveedores por ACH desde Compras. Para pagos reales use claves de Producción en Checkbook Configuración → Desarrollador (con Producción seleccionado) y un banco verificado. Solo dueño/admin.',
+      'Respaldo opcional si Stripe Treasury no está activo. Prefiera Equipo → Stripe → Activar ACH. Checkbook sigue funcionando con enlace por correo. Solo dueño/admin.',
     checkbookConnectedStatus: 'Conectado ({{env}}) · clave …{{last4}}',
     checkbookWebhookHint:
       'En la configuración de desarrollador de Checkbook, establezca la URL del webhook a:',

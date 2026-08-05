@@ -60,7 +60,7 @@ async function retrievePlatformAccount(stripe: Stripe): Promise<{
   return {
     id: account.id,
     name,
-    livemode: Boolean(account.livemode),
+    livemode: !requireStripeSecret().startsWith('sk_test_'),
     country: account.country || null
   };
 }

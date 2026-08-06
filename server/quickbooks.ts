@@ -227,7 +227,9 @@ async function qboRequest<T>(
     // (which field is bad) is in Detail — surface both so errors are diagnosable.
     const message = fault?.Message ? String(fault.Message) : '';
     const detail = fault?.Detail ? String(fault.Detail) : '';
-    const combined = [message, detail].filter(Boolean).join(' — ');
+    const code = fault?.code != null ? `code ${fault.code}` : '';
+    const element = fault?.element ? `field ${fault.element}` : '';
+    const combined = [message, detail, code, element].filter(Boolean).join(' — ');
     const errMessage =
       combined || data?.error || `QuickBooks API error (${res.status})`;
     throw new Error(String(errMessage));
@@ -432,20 +434,38 @@ async function findOrCreateVendor(
     // Fall through to create
   }
 
-  const created = await qboRequest<any>(tenantId, 'POST', '/vendor?minorversion=65', {
+  const vendorPayload: Record<string, unknown> = {
     DisplayName: displayName,
-    CompanyName: displayName,
-    PrimaryEmailAddr: vendor.contactEmail
-      ? { Address: String(vendor.contactEmail).slice(0, 100) }
-      : undefined,
-    PrimaryPhone: vendor.phone ? { FreeFormNumber: String(vendor.phone).slice(0, 30) } : undefined,
-    BillAddr: vendor.billingAddress
-      ? { Line1: sanitizeQbString(vendor.billingAddress, 500) }
-      : undefined
-  });
+    CompanyName: displayName
+  };
+  if (vendor.contactEmail) {
+    vendorPayload.PrimaryEmailAddr = { Address: String(vendor.contactEmail).slice(0, 100) };
+  }
+  if (vendor.phone) {
+    vendorPayload.PrimaryPhone = { FreeFormNumber: String(vendor.phone).slice(0, 30) };
+  }
+  if (vendor.billingAddress) {
+    vendorPayload.BillAddr = { Line1: sanitizeQbString(vendor.billingAddress, 500) };
+  }
+  const created = await qboRequest<any>(
+    tenantId,
+    'POST',
+    '/vendor?minorversion=65',
+    vendorPayload
+  );
   const id = created?.Vendor?.Id;
   if (!id) throw new Error('QuickBooks did not return a vendor id.');
   return { id: String(id), displayName };
+}
+
+function toQboDate(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const raw = String(value).trim();
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
 }
 
 function mapVendorBillToQboBill(params: {
@@ -464,25 +484,27 @@ function mapVendorBillToQboBill(params: {
     const qty = Number(item.quantity ?? item.qty) || 0;
     const unitCost = Number(item.unitCost ?? item.cost ?? item.unitPrice) || 0;
     const amount = Math.round(qty * unitCost * 100) / 100;
-    if (!plantName && amount === 0) continue;
+    // Account-based expense lines need a positive Amount; qty/unit belong in Description only.
+    if (!(amount > 0)) continue;
 
     const category = sanitizeQbString(item.category || '', 100);
-    const descParts = [plantName, containerSize ? `(${containerSize})` : '', category ? `· ${category}` : '']
+    const descParts = [plantName, containerSize ? `(${containerSize})` : '', category ? `- ${category}` : '']
       .filter(Boolean)
       .join(' ');
+    const description = sanitizeQbString(
+      qty > 0
+        ? `${descParts || `Line ${index + 1}`} - ${qty} @ $${unitCost.toFixed(2)}`
+        : descParts || `Line ${index + 1}`,
+      4000
+    );
 
     lines.push({
       DetailType: 'AccountBasedExpenseLineDetail',
       Amount: amount,
-      Description: descParts || `Line ${index + 1}`,
+      Description: description,
+      // Do NOT send Qty/UnitPrice here — QBO rejects them on AccountBasedExpenseLineDetail.
       AccountBasedExpenseLineDetail: {
-        AccountRef: { value: expenseAccountId },
-        ...(qty > 0
-          ? {
-              Qty: qty,
-              UnitPrice: unitCost
-            }
-          : {})
+        AccountRef: { value: expenseAccountId }
       }
     });
   }
@@ -501,7 +523,7 @@ function mapVendorBillToQboBill(params: {
 
   if (lines.length === 0) {
     const total = Number(bill.grandTotal) || Number(bill.subtotal) || 0;
-    if (total <= 0) {
+    if (!(total > 0)) {
       throw Object.assign(
         new Error('This bill has no line items or total to push to QuickBooks.'),
         { status: 400 }
@@ -526,14 +548,16 @@ function mapVendorBillToQboBill(params: {
     bill.poNumber ? `PO ${bill.poNumber}` : null,
     bill.notes ? String(bill.notes) : null
   ].filter(Boolean);
+  const txnDate = toQboDate(bill.billDate) || new Date().toISOString().slice(0, 10);
+  const dueDate = toQboDate(bill.dueDate);
 
   return {
     VendorRef: { value: vendorRefId },
-    TxnDate: String(bill.billDate || new Date().toISOString()).slice(0, 10),
-    ...(bill.dueDate ? { DueDate: String(bill.dueDate).slice(0, 10) } : {}),
+    TxnDate: txnDate,
+    ...(dueDate ? { DueDate: dueDate } : {}),
     ...(docNumber ? { DocNumber: docNumber } : {}),
     ...(noteParts.length
-      ? { PrivateNote: sanitizeQbString(noteParts.join(' · '), 4000) }
+      ? { PrivateNote: sanitizeQbString(noteParts.join(' - '), 4000) }
       : {}),
     Line: lines
   };

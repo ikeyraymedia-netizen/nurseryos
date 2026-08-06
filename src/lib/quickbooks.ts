@@ -128,6 +128,41 @@ export async function pushPaymentToQuickbooks(params: {
   };
 }
 
+/** Push a vendor bill to QuickBooks Online as an AP Bill. */
+export async function pushVendorBillToQuickbooks(params: {
+  tenantId: string;
+  billId: string;
+}): Promise<{
+  qboBillId: string;
+  qboDocNumber?: string | null;
+  vendorName?: string | null;
+  totalAmt?: number | null;
+  environment?: string | null;
+  companyName?: string | null;
+  openUrl?: string | null;
+  alreadySynced?: boolean;
+}> {
+  const res = await fetch('/api/quickbooks/push-bill', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to push bill to QuickBooks.');
+  }
+  return {
+    qboBillId: String((data as any).qboBillId || ''),
+    qboDocNumber: (data as any).qboDocNumber ? String((data as any).qboDocNumber) : null,
+    vendorName: (data as any).vendorName ? String((data as any).vendorName) : null,
+    totalAmt: (data as any).totalAmt != null ? Number((data as any).totalAmt) : null,
+    environment: (data as any).environment ? String((data as any).environment) : null,
+    companyName: (data as any).companyName ? String((data as any).companyName) : null,
+    openUrl: (data as any).openUrl ? String((data as any).openUrl) : null,
+    alreadySynced: Boolean((data as any).alreadySynced)
+  };
+}
+
 export async function fetchRecentQuickbooksInvoices(tenantId: string): Promise<{
   environment: string;
   companyName: string | null;

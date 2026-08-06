@@ -1155,6 +1155,12 @@ const extra = {
       'Enable Stripe Treasury for this nursery in Team → Stripe before paying vendor bills by ACH. Or use Mark paid for offline ACH/check.',
     achRefreshNeedsStripe: 'This bill has no Stripe ACH payment to refresh.',
     selectSameVendor: 'Selected bills must be for the same vendor.',
+    pushToQb: 'Push to QuickBooks',
+    openInQb: 'Open in QuickBooks',
+    pushBillToQbHint: 'Create this vendor bill in the connected QuickBooks company (AP)',
+    qbBillPushed: 'Bill pushed to {{where}} · {{doc}}',
+    qbBillAlreadySynced: 'Already in QuickBooks · {{doc}}',
+    qbSynced: 'Synced to QuickBooks · {{doc}}',
     vendorBankSection: 'ACH bank details',
     vendorBankHint:
       'Used for Stripe Treasury vendor pay. Account number is stored for ACH only and shown as last 4 after save.',
@@ -1499,7 +1505,7 @@ const extra = {
     moduleOff: ' · off',
     qbo: 'QuickBooks Online',
     qboIntro:
-      'Connect this nursery to push saved invoices/estimates into QuickBooks, and sync payments (Stripe or Mark paid) as Receive Payment so AR closes. Owner/admin only.',
+      'Connect this nursery to push invoices/estimates and vendor bills into the same QuickBooks company. Payments on invoices sync as Receive Payment. Owner/admin only.',
     connectQbo: 'Connect QuickBooks',
     openingQbo: 'Opening QuickBooks…',
     connected: 'Connected',

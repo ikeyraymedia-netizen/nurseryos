@@ -82,7 +82,7 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
   {
     id: 'quickbooks',
     label: 'QuickBooks',
-    description: 'Connect QuickBooks Online and push saved invoices/estimates from the invoice screen.',
+    description: 'Connect QuickBooks Online to push invoices/estimates and vendor bills from NurseryOS.',
     group: 'addon'
   },
   {
@@ -223,7 +223,10 @@ export function applyModuleGates(
     canEditCost: permissions.canEditCost && profit,
     canManageStripe: permissions.canManageStripe && payments,
     canCollectPayments: permissions.canCollectPayments && payments && invoicing,
-    canUseQuickbooks: permissions.canUseQuickbooks && quickbooks && invoicing,
+    canUseQuickbooks:
+      permissions.canUseQuickbooks &&
+      quickbooks &&
+      (invoicing || purchasing),
     canViewPurchasing: permissions.canViewPurchasing && purchasing,
     canEditVendors: permissions.canEditVendors && purchasing,
     canEditPurchaseOrders: permissions.canEditPurchaseOrders && purchasing,

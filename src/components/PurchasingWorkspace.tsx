@@ -5,6 +5,7 @@ import {
   ClipboardList,
   CreditCard,
   FileText,
+  Link2,
   Mail,
   PackagePlus,
   Pencil,
@@ -69,6 +70,8 @@ import {
   payVendorBillStripeAch,
   refreshVendorBillStripePayment
 } from '../lib/stripe';
+import { pushVendorBillToQuickbooks } from '../lib/quickbooks';
+import { logAuditEvent } from '../lib/audit';
 import { BankFeedPanel } from './BankFeedPanel';
 
 type PurchasingView = 'vendors' | 'orders' | 'bills' | 'feed';
@@ -965,6 +968,13 @@ export function PurchasingWorkspace({
                 {bill.paidAt ? ` · ${new Date(bill.paidAt).toLocaleDateString()}` : ''}
               </p>
             )}
+            {bill.qboBillId && (
+              <p className="text-[11px] font-bold text-sky-800 mt-1">
+                {t('purchasing.qbSynced', {
+                  doc: bill.qboDocNumber || bill.qboBillId
+                })}
+              </p>
+            )}
             {bill.status === 'payment_pending' && (
               <p className="text-[11px] font-bold text-sky-800 mt-1">
                 {bill.stripeOutboundPaymentId
@@ -1055,6 +1065,55 @@ export function PurchasingWorkspace({
                 className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-900"
               >
                 {t('purchasing.refreshAchStatus')}
+              </button>
+            )}
+            {permissions.canUseQuickbooks && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (bill.qboBillId && bill.qboOpenUrl) {
+                    window.open(bill.qboOpenUrl, '_blank', 'noopener,noreferrer');
+                    return;
+                  }
+                  void run(async () => {
+                    const result = await pushVendorBillToQuickbooks({
+                      tenantId,
+                      billId: bill.id
+                    });
+                    void logAuditEvent({
+                      action: 'quickbooks.bill_pushed',
+                      summary: `Pushed bill ${bill.billNumber} to QuickBooks (${result.qboBillId})`,
+                      meta: {
+                        billId: bill.id,
+                        qboBillId: result.qboBillId,
+                        qboDocNumber: result.qboDocNumber,
+                        companyName: result.companyName,
+                        environment: result.environment
+                      }
+                    });
+                    const where =
+                      result.environment === 'sandbox'
+                        ? 'SANDBOX QuickBooks'
+                        : 'QuickBooks';
+                    const docBit = result.qboDocNumber
+                      ? `Doc #${result.qboDocNumber}`
+                      : `Id ${result.qboBillId}`;
+                    setStatus(
+                      result.alreadySynced
+                        ? t('purchasing.qbBillAlreadySynced', { doc: docBit })
+                        : t('purchasing.qbBillPushed', { where, doc: docBit })
+                    );
+                    if (result.openUrl) {
+                      window.open(result.openUrl, '_blank', 'noopener,noreferrer');
+                    }
+                  });
+                }}
+                className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-900"
+                title={t('purchasing.pushBillToQbHint')}
+              >
+                <Link2 className="h-3 w-3" />
+                {bill.qboBillId ? t('purchasing.openInQb') : t('purchasing.pushToQb')}
               </button>
             )}
             {bill.status !== 'paid' && bill.status !== 'payment_pending' && (

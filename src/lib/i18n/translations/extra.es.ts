@@ -1169,6 +1169,12 @@ const extra = {
       'Active Stripe Treasury para este vivero en Equipo → Stripe antes de pagar facturas de proveedores por ACH. O use Marcar pagado para ACH/cheque fuera de la app.',
     achRefreshNeedsStripe: 'Esta factura no tiene un pago ACH de Stripe para actualizar.',
     selectSameVendor: 'Las facturas seleccionadas deben ser del mismo proveedor.',
+    pushToQb: 'Enviar a QuickBooks',
+    openInQb: 'Abrir en QuickBooks',
+    pushBillToQbHint: 'Crear esta factura de proveedor en la compañía QuickBooks conectada (CXP)',
+    qbBillPushed: 'Factura enviada a {{where}} · {{doc}}',
+    qbBillAlreadySynced: 'Ya está en QuickBooks · {{doc}}',
+    qbSynced: 'Sincronizado con QuickBooks · {{doc}}',
     vendorBankSection: 'Datos bancarios ACH',
     vendorBankHint:
       'Para pagos a proveedores con Stripe Treasury. El número de cuenta se guarda solo para ACH y se muestra como últimos 4 dígitos.',
@@ -1515,7 +1521,7 @@ const extra = {
     moduleOff: ' · apagado',
     qbo: 'QuickBooks Online',
     qboIntro:
-      'Conecte este vivero para enviar facturas/presupuestos a QuickBooks y sincronizar pagos (Stripe o Marcar pagado) como Receive Payment para cerrar la CXC. Solo dueño/admin.',
+      'Conecte este vivero para enviar facturas/presupuestos y facturas de proveedores a la misma compañía QuickBooks. Los pagos de facturas se sincronizan como Receive Payment. Solo dueño/admin.',
     connectQbo: 'Conectar QuickBooks',
     openingQbo: 'Abriendo QuickBooks…',
     connected: 'Conectado',

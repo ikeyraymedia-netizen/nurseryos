@@ -337,6 +337,8 @@ export interface Vendor {
   bankAccountLast4?: string;
   bankAccountHolderName?: string;
   bankAccountType?: 'checking' | 'savings';
+  /** QuickBooks Online Vendor id after AP sync. */
+  qboVendorId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -439,6 +441,13 @@ export interface VendorBill {
   stripePaymentError?: string | null;
   /** Last4 of vendor bank used for this ACH (display). */
   stripeAchLast4?: string | null;
+  /** QuickBooks Online Bill id after AP sync. */
+  qboBillId?: string | null;
+  qboDocNumber?: string | null;
+  qboVendorId?: string | null;
+  qboOpenUrl?: string | null;
+  qboSyncedAt?: string | null;
+  qboSyncedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

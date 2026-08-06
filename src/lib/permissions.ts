@@ -42,9 +42,9 @@ export interface AppPermissions {
   canEditPurchaseOrders: boolean;
   canReceivePurchases: boolean;
   canManageVendorBills: boolean;
-  /** Connect Checkbook for ACH bill pay (owner/admin; gated by billPay module). */
+  /** Manage vendor ACH bill-pay settings (owner/admin; gated by billPay module). */
   canManageBillPay: boolean;
-  /** Initiate ACH bill payments via Checkbook (gated by billPay module). */
+  /** Initiate ACH bill payments via Stripe Treasury (gated by billPay module). */
   canPayVendorBills: boolean;
 }
 

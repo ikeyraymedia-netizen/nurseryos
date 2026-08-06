@@ -1738,7 +1738,6 @@ export function registerStripeRoutes(app: Express) {
             stripeOutboundPaymentStatus: outbound.status || 'processing',
             stripeAchLast4: last4 || null,
             stripePaymentError: null,
-            checkbookPaymentError: null,
             updatedAt: now
           },
           { merge: true }

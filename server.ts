@@ -9,10 +9,6 @@ import {
   registerStripeWebhookRoute,
   isStripeConfigured
 } from './server/stripe';
-import {
-  registerCheckbookRoutes,
-  registerCheckbookWebhookRoute
-} from './server/checkbook';
 import { registerEmailRoutes } from './server/email';
 import { registerPlatformRoutes } from './server/platform';
 import { registerPublicAvailabilityRoutes } from './server/publicAvailability';
@@ -31,9 +27,8 @@ dotenv.config();
 
 const app = express();
 
-// Stripe / Checkbook webhooks need the raw body for signature verification — before JSON parser.
+// Stripe webhooks need the raw body for signature verification — before JSON parser.
 registerStripeWebhookRoute(app);
-registerCheckbookWebhookRoute(app);
 
 // Increase payload limit to handle base64 PDFs and images
 app.use(express.json({ limit: '50mb' }));
@@ -43,7 +38,6 @@ const PORT = Number(process.env.PORT) || 3000;
 
 registerQuickbooksRoutes(app);
 registerStripeRoutes(app);
-registerCheckbookRoutes(app);
 registerEmailRoutes(app);
 registerPlatformRoutes(app);
 registerPublicAvailabilityRoutes(app);
@@ -905,8 +899,7 @@ app.get('/api/config-status', (req, res) => {
   res.json({
     hasGeminiKey: !!process.env.GEMINI_API_KEY,
     hasQuickbooks: isQuickbooksConfigured(),
-    hasStripe: isStripeConfigured(),
-    checkbookConnectVersion: 4
+    hasStripe: isStripeConfigured()
   });
 });
 

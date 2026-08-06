@@ -1153,26 +1153,21 @@ const extra = {
     selectBillsToPay: 'Seleccione facturas sin pagar para pagar juntas',
     clearSelection: 'Borrar',
     refreshAchStatus: 'Actualizar estado ACH',
-    achRecipientPrompt: 'Correo del proveedor para el enlace de depósito ACH:',
-    achPayConfirm:
-      '¿Enviar pago ACH de {{amount}} a {{vendor}} a {{email}}? Recibirán un correo de Checkbook para depositar en su banco.',
-    achPayConfirmMulti:
-      '¿Enviar un pago ACH de {{amount}} por {{n}} facturas a {{vendor}} a {{email}}? Reciben un solo correo de depósito de Checkbook.',
     achPayConfirmStripe:
       '¿Enviar ACH de {{amount}} desde su cuenta financiera Stripe a {{vendor}} (••••{{last4}})?',
     achPayConfirmStripeMulti:
       '¿Enviar un ACH de {{amount}} por {{n}} facturas a {{vendor}} (••••{{last4}}) vía Stripe Treasury?',
-    achPaymentSent: 'Pago ACH enviado. Correo del proveedor: {{email}}',
-    achPaymentSentMulti: 'Un pago ACH enviado por {{n}} facturas. Correo: {{email}}',
     achPaymentSentStripe: 'Pago ACH enviado vía Stripe a ••••{{last4}}.',
     achPaymentSentStripeMulti:
       'Un pago ACH enviado vía Stripe por {{n}} facturas a ••••{{last4}}.',
     achStatusRefreshed: 'Estado del pago: {{status}}',
-    achPending: 'ACH enviado — esperando depósito de {{recipient}}',
-    achProcessing: 'ACH en proceso para {{recipient}}',
     achProcessingStripe: 'ACH en proceso al banco del proveedor ••••{{last4}}',
+    achPendingLegacy: 'Pago ACH pendiente',
     achNeedsBank:
       'Agregue el routing y número de cuenta del proveedor en Proveedores antes de pagar por ACH de Stripe.',
+    achNeedsTreasury:
+      'Active Stripe Treasury para este vivero en Equipo → Stripe antes de pagar facturas de proveedores por ACH. O use Marcar pagado para ACH/cheque fuera de la app.',
+    achRefreshNeedsStripe: 'Esta factura no tiene un pago ACH de Stripe para actualizar.',
     selectSameVendor: 'Las facturas seleccionadas deben ser del mismo proveedor.',
     vendorBankSection: 'Datos bancarios ACH',
     vendorBankHint:
@@ -1571,24 +1566,6 @@ const extra = {
       'El Account ID del Dashboard debe coincidir con {{id}}. Luego copie la Secret key de ESE sandbox a Railway y redespliegue.',
     stripePlatformKey: 'Clave de plataforma en uso: {{name}} · {{id}} · {{key}}',
     treasuryActivateLink: 'Abrir activación de Stripe Treasury →',
-    checkbook: 'Pago ACH a proveedores (Checkbook)',
-    checkbookIntro:
-      'Respaldo opcional si Stripe Treasury no está activo. Prefiera Equipo → Stripe → Activar ACH. Checkbook sigue funcionando con enlace por correo. Solo dueño/admin.',
-    checkbookConnectedStatus: 'Conectado ({{env}}) · clave …{{last4}}',
-    checkbookWebhookHint:
-      'En la configuración de desarrollador de Checkbook, establezca la URL del webhook a:',
-    checkbookEnvironment: 'Entorno',
-    checkbookPublishable: 'Clave pública',
-    checkbookSecret: 'Clave secreta',
-    checkbookWebhookKey: 'Clave de firma del webhook (opcional, recomendada)',
-    connectCheckbook: 'Conectar Checkbook',
-    checkbookKeysRequired: 'Se requieren las claves pública y secreta.',
-    checkbookConnected: 'Checkbook conectado para pago de facturas.',
-    checkbookConnectFailed: 'No se pudo conectar Checkbook.',
-    disconnectCheckbook: '¿Desconectar Checkbook de este vivero?',
-    checkbookDisconnected: 'Checkbook desconectado.',
-    checkbookDisconnectFailed: 'No se pudo desconectar Checkbook.',
-    loadCheckbookFailed: 'No se pudo cargar el estado de Checkbook.',
     outboundEmail: 'Correo saliente',
     emailIntro:
       'Las facturas se envían por correo de NurseryOS (Resend). Configure el nombre y correo de respuesta de este vivero. Solo dueño/admin.',

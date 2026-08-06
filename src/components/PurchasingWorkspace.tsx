@@ -64,7 +64,6 @@ import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { BillEditModal } from './BillEditModal';
-import { payVendorBillAch, refreshVendorBillPayment } from '../lib/checkbook';
 import {
   fetchStripeTreasuryReady,
   payVendorBillStripeAch,
@@ -812,102 +811,57 @@ export function PurchasingWorkspace({
       setError(t('purchasing.selectSameVendor'));
       return;
     }
+    if (!stripeTreasuryReady) {
+      setError(t('purchasing.achNeedsTreasury'));
+      return;
+    }
     const first = targetBills[0];
     const vendor = vendors.find((v) => v.id === first.vendorId);
     const amount = money(targetBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0));
-
-    if (stripeTreasuryReady) {
-      const hasBank =
-        Boolean(vendor?.bankRoutingNumber?.replace(/\D/g, '').length === 9) &&
-        Boolean(vendor?.bankAccountNumber || vendor?.bankAccountLast4);
-      if (!hasBank) {
-        setError(t('purchasing.achNeedsBank'));
-        return;
-      }
-      const last4 = vendor?.bankAccountLast4 || '****';
-      const ok = window.confirm(
-        targetBills.length > 1
-          ? t('purchasing.achPayConfirmStripeMulti', {
-              amount,
-              n: targetBills.length,
-              vendor: first.vendorName,
-              last4
-            })
-          : t('purchasing.achPayConfirmStripe', {
-              amount,
-              vendor: first.vendorName,
-              last4
-            })
-      );
-      if (!ok) return;
-      await payVendorBillStripeAch({
-        tenantId,
-        billIds: targetBills.map((b) => b.id)
-      });
-      setSelectedBillIds([]);
-      setStatus(
-        targetBills.length > 1
-          ? t('purchasing.achPaymentSentStripeMulti', {
-              n: targetBills.length,
-              last4
-            })
-          : t('purchasing.achPaymentSentStripe', { last4 })
-      );
+    const hasBank =
+      Boolean(vendor?.bankRoutingNumber?.replace(/\D/g, '').length === 9) &&
+      Boolean(vendor?.bankAccountNumber || vendor?.bankAccountLast4);
+    if (!hasBank) {
+      setError(t('purchasing.achNeedsBank'));
       return;
     }
-
-    let recipientEmail = vendor?.contactEmail?.trim() || '';
-    if (!recipientEmail) {
-      const entered = window.prompt(t('purchasing.achRecipientPrompt'), '');
-      if (!entered?.trim()) return;
-      recipientEmail = entered.trim();
-    } else {
-      const ok = window.confirm(
-        targetBills.length > 1
-          ? t('purchasing.achPayConfirmMulti', {
-              amount,
-              n: targetBills.length,
-              vendor: first.vendorName,
-              email: recipientEmail
-            })
-          : t('purchasing.achPayConfirm', {
-              amount,
-              vendor: first.vendorName,
-              email: recipientEmail
-            })
-      );
-      if (!ok) return;
-    }
-    await payVendorBillAch({
+    const last4 = vendor?.bankAccountLast4 || '****';
+    const ok = window.confirm(
+      targetBills.length > 1
+        ? t('purchasing.achPayConfirmStripeMulti', {
+            amount,
+            n: targetBills.length,
+            vendor: first.vendorName,
+            last4
+          })
+        : t('purchasing.achPayConfirmStripe', {
+            amount,
+            vendor: first.vendorName,
+            last4
+          })
+    );
+    if (!ok) return;
+    await payVendorBillStripeAch({
       tenantId,
-      billIds: targetBills.map((b) => b.id),
-      recipientEmail
+      billIds: targetBills.map((b) => b.id)
     });
     setSelectedBillIds([]);
     setStatus(
       targetBills.length > 1
-        ? t('purchasing.achPaymentSentMulti', {
+        ? t('purchasing.achPaymentSentStripeMulti', {
             n: targetBills.length,
-            email: recipientEmail
+            last4
           })
-        : t('purchasing.achPaymentSent', { email: recipientEmail })
+        : t('purchasing.achPaymentSentStripe', { last4 })
     );
   }
 
   async function refreshBillAch(bill: VendorBill) {
-    if (bill.stripeOutboundPaymentId) {
-      const result = await refreshVendorBillStripePayment({
-        tenantId,
-        billId: bill.id
-      });
-      setStatus(
-        t('purchasing.achStatusRefreshed', {
-          status: result.status || 'unknown'
-        })
-      );
+    if (!bill.stripeOutboundPaymentId) {
+      setError(t('purchasing.achRefreshNeedsStripe'));
       return;
     }
-    const result = await refreshVendorBillPayment({
+    const result = await refreshVendorBillStripePayment({
       tenantId,
       billId: bill.id
     });
@@ -1017,23 +971,11 @@ export function PurchasingWorkspace({
                   ? t('purchasing.achProcessingStripe', {
                       last4: bill.stripeAchLast4 || '****'
                     })
-                  : String(bill.checkbookPaymentStatus || '').toUpperCase() === 'IN_PROCESS'
-                    ? t('purchasing.achProcessing', {
-                        recipient: bill.checkbookRecipient || bill.vendorName
-                      })
-                    : t('purchasing.achPending', {
-                        recipient: bill.checkbookRecipient || bill.vendorName
-                      })}
+                  : t('purchasing.achPendingLegacy')}
                 {bill.stripeOutboundPaymentStatus
                   ? ` · Stripe: ${bill.stripeOutboundPaymentStatus}`
-                  : bill.checkbookPaymentStatus
-                    ? ` · Checkbook: ${bill.checkbookPaymentStatus}`
-                    : ''}
-                {bill.stripePaymentError
-                  ? ` · ${bill.stripePaymentError}`
-                  : bill.checkbookPaymentError
-                    ? ` · ${bill.checkbookPaymentError}`
-                    : ''}
+                  : ''}
+                {bill.stripePaymentError ? ` · ${bill.stripePaymentError}` : ''}
               </p>
             )}
             {bill.items?.length > 0 && (

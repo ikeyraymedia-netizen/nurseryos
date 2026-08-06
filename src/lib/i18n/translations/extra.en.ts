@@ -1139,26 +1139,21 @@ const extra = {
     selectBillsToPay: 'Select unpaid bills to pay together',
     clearSelection: 'Clear',
     refreshAchStatus: 'Refresh ACH status',
-    achRecipientPrompt: 'Vendor email for ACH deposit link:',
-    achPayConfirm:
-      'Send {{amount}} ACH payment to {{vendor}} at {{email}}? They will get a Checkbook email to deposit to their bank.',
-    achPayConfirmMulti:
-      'Send one ACH payment of {{amount}} for {{n}} bills to {{vendor}} at {{email}}? They get one Checkbook deposit email.',
     achPayConfirmStripe:
       'Send {{amount}} ACH from your Stripe Financial Account to {{vendor}} (••••{{last4}})?',
     achPayConfirmStripeMulti:
       'Send one ACH of {{amount}} for {{n}} bills to {{vendor}} (••••{{last4}}) from Stripe Treasury?',
-    achPaymentSent: 'ACH payment sent. Vendor email: {{email}}',
-    achPaymentSentMulti: 'One ACH payment sent for {{n}} bills. Vendor email: {{email}}',
     achPaymentSentStripe: 'ACH payment submitted via Stripe to ••••{{last4}}.',
     achPaymentSentStripeMulti:
       'One ACH payment submitted via Stripe for {{n}} bills to ••••{{last4}}.',
     achStatusRefreshed: 'Payment status: {{status}}',
-    achPending: 'ACH sent — waiting for {{recipient}} to deposit',
-    achProcessing: 'ACH processing for {{recipient}}',
     achProcessingStripe: 'ACH processing to vendor bank ••••{{last4}}',
+    achPendingLegacy: 'ACH payment pending',
     achNeedsBank:
       'Add this vendor’s routing and account numbers in Vendors before paying via Stripe ACH.',
+    achNeedsTreasury:
+      'Enable Stripe Treasury for this nursery in Team → Stripe before paying vendor bills by ACH. Or use Mark paid for offline ACH/check.',
+    achRefreshNeedsStripe: 'This bill has no Stripe ACH payment to refresh.',
     selectSameVendor: 'Selected bills must be for the same vendor.',
     vendorBankSection: 'ACH bank details',
     vendorBankHint:
@@ -1555,24 +1550,6 @@ const extra = {
       'Dashboard Account ID must match {{id}}. Then copy THAT sandbox’s Secret key into Railway and redeploy.',
     stripePlatformKey: 'Platform key in use: {{name}} · {{id}} · {{key}}',
     treasuryActivateLink: 'Open Stripe Treasury activate page →',
-    checkbook: 'Vendor ACH Bill Pay (Checkbook)',
-    checkbookIntro:
-      'Optional fallback if Stripe Treasury is not enabled. Prefer Team → Stripe → Enable vendor ACH. Checkbook still works for email-link ACH. Owner/admin only.',
-    checkbookConnectedStatus: 'Connected ({{env}}) · key …{{last4}}',
-    checkbookWebhookHint:
-      'In Checkbook Developer settings, set webhook URL to:',
-    checkbookEnvironment: 'Environment',
-    checkbookPublishable: 'Publishable key',
-    checkbookSecret: 'Secret key',
-    checkbookWebhookKey: 'Webhook signing key (optional, recommended)',
-    connectCheckbook: 'Connect Checkbook',
-    checkbookKeysRequired: 'Publishable and secret keys are required.',
-    checkbookConnected: 'Checkbook connected for vendor bill pay.',
-    checkbookConnectFailed: 'Could not connect Checkbook.',
-    disconnectCheckbook: 'Disconnect Checkbook from this nursery?',
-    checkbookDisconnected: 'Checkbook disconnected.',
-    checkbookDisconnectFailed: 'Could not disconnect Checkbook.',
-    loadCheckbookFailed: 'Could not load Checkbook status.',
     outboundEmail: 'Outbound email',
     emailIntro:
       "Invoices are sent through NurseryOS email (Resend). Set this nursery's display name and reply-to address so customers can answer the nursery, not the platform. Owner/admin only.",

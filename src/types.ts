@@ -426,7 +426,7 @@ export interface VendorBill {
   paymentMethod?: PaymentMethod;
   /** Check number or ACH/Wire/CC confirmation / reference. */
   paymentReference?: string;
-  /** Checkbook digital payment id when paid via ACH bill pay. */
+  /** Legacy ACH provider fields (kept for old Firestore docs; no longer written). */
   checkbookPaymentId?: string | null;
   checkbookPaymentStatus?: string | null;
   checkbookPaymentNumber?: number | null;

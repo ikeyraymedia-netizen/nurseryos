@@ -95,7 +95,7 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     id: 'billPay',
     label: 'Vendor ACH Bill Pay',
     description:
-      'Pay vendor bills online via Checkbook (ACH deposit link emailed to the vendor). Requires Purchasing.',
+      'Pay vendor bills by ACH via Stripe Treasury from Purchasing. Requires Purchasing and Stripe Connect with Treasury.',
     group: 'addon'
   }
 ];

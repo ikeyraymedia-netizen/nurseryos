@@ -46,7 +46,7 @@ const en = {
     bilingualBadge: 'English · Español',
     bilingualBody:
       'Built for bilingual nurseries — switch the whole app to Spanish so yard crews and office staff can work in the language they prefer.',
-    headline: 'Run your nursery from the yard, the office, or the road.',
+    headline: 'Run your nursery from the yard, the office, the road, or home.',
     subhead:
       'NurseryOS keeps inventory, trucks, invoices, and purchasing in one place — on any phone, tablet, or computer. No app store. Just sign in.',
     phone: 'Phone',

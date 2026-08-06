@@ -47,7 +47,7 @@ const es: TranslationDict = {
     bilingualBadge: 'English · Español',
     bilingualBody:
       'Hecho para viveros bilingües — cambie toda la app al español para que el patio y la oficina trabajen en el idioma que prefieran.',
-    headline: 'Maneje su vivero desde el patio, la oficina o el camino.',
+    headline: 'Maneje su vivero desde el patio, la oficina, el camino o casa.',
     subhead:
       'NurseryOS reúne inventario, camiones, facturas y compras en un solo lugar — en cualquier teléfono, tableta u computadora. Sin app store. Solo inicie sesión.',
     phone: 'Teléfono',

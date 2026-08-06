@@ -1520,7 +1520,7 @@ const extra = {
     moduleOff: ' · apagado',
     qbo: 'QuickBooks Online',
     qboIntro:
-      'Conecte este vivero para enviar facturas y presupuestos guardados a QuickBooks. Solo dueño/admin.',
+      'Conecte este vivero para enviar facturas/presupuestos a QuickBooks y sincronizar pagos (Stripe o Marcar pagado) como Receive Payment para cerrar la CXC. Solo dueño/admin.',
     connectQbo: 'Conectar QuickBooks',
     openingQbo: 'Abriendo QuickBooks…',
     connected: 'Conectado',

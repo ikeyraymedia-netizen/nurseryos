@@ -921,6 +921,12 @@ const extra = {
       'Enlace de pago listo para el cliente — no lo abra usted mismo a menos que vaya a pagar.',
     pushQb: 'Enviar a QuickBooks',
     pushingQb: 'Enviando a QuickBooks…',
+    syncPaymentToQb: 'Sincronizar pago a QuickBooks',
+    qbPaymentSynced: 'Pago sincronizado a QuickBooks (Receive Payment).',
+    qbPaymentAlreadySynced: 'El pago ya está registrado en QuickBooks.',
+    qbPaymentNeedsInvoicePush:
+      'Envíe primero la factura a QuickBooks, luego sincronice el pago.',
+    qbPaymentSyncFailed: 'No se pudo sincronizar el pago a QuickBooks.',
     invoicePaidBtn: 'Factura pagada',
     saveFirst: 'Guarde en el cliente primero',
     alreadyPaidTitle: 'Esta factura ya está pagada',

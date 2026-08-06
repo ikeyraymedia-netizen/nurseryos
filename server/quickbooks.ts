@@ -478,6 +478,155 @@ async function fetchCompanyName(tenantId: string, realmId: string): Promise<stri
   }
 }
 
+/**
+ * Create a QBO Payment (Receive Payment) for a NurseryOS invoice that is paid
+ * and was previously pushed (`qboInvoiceId`). Safe to call multiple times.
+ */
+export async function syncPaidInvoicePaymentToQbo(
+  tenantId: string,
+  documentId: string,
+  opts?: { uid?: string }
+): Promise<{
+  synced: boolean;
+  skipped?: boolean;
+  reason?: string;
+  qboPaymentId?: string;
+}> {
+  if (!isFirebaseAdminConfigured()) {
+    return { synced: false, skipped: true, reason: 'firebase_admin' };
+  }
+
+  let integration: QbIntegration | null = null;
+  try {
+    integration = await loadIntegration(tenantId);
+  } catch {
+    return { synced: false, skipped: true, reason: 'not_connected' };
+  }
+  if (!integration?.realmId) {
+    return { synced: false, skipped: true, reason: 'not_connected' };
+  }
+
+  const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+  const snap = await docRef.get();
+  if (!snap.exists) {
+    return { synced: false, skipped: true, reason: 'missing_document' };
+  }
+  const doc = snap.data() || {};
+  if (doc.type !== 'invoice') {
+    return { synced: false, skipped: true, reason: 'not_invoice' };
+  }
+  if (String(doc.paymentStatus || '') !== 'paid') {
+    return { synced: false, skipped: true, reason: 'not_paid' };
+  }
+  if (doc.qboPaymentId) {
+    return {
+      synced: true,
+      skipped: true,
+      reason: 'already_synced',
+      qboPaymentId: String(doc.qboPaymentId)
+    };
+  }
+
+  const qboInvoiceId = String(doc.qboInvoiceId || '').trim();
+  if (!qboInvoiceId) {
+    return { synced: false, skipped: true, reason: 'invoice_not_pushed' };
+  }
+
+  const invRes = await qboRequest<any>(
+    tenantId,
+    'GET',
+    `/invoice/${qboInvoiceId}?minorversion=65`
+  );
+  const invoice = invRes?.Invoice;
+  if (!invoice?.Id) {
+    throw Object.assign(new Error('QuickBooks invoice not found for payment sync.'), {
+      status: 404
+    });
+  }
+  const customerId = String(invoice.CustomerRef?.value || '').trim();
+  if (!customerId) {
+    throw Object.assign(new Error('QuickBooks invoice is missing a customer.'), { status: 400 });
+  }
+
+  let amount =
+    typeof doc.stripePaidAmountCents === 'number' && Number.isFinite(doc.stripePaidAmountCents)
+      ? Math.round(Number(doc.stripePaidAmountCents)) / 100
+      : Number(doc.grandTotal) || 0;
+
+  const balance = invoice.Balance != null ? Number(invoice.Balance) : null;
+  if (balance != null && Number.isFinite(balance)) {
+    if (balance <= 0.009) {
+      const now = new Date().toISOString();
+      await docRef.set(
+        {
+          qboPaymentSyncedAt: now,
+          qboPaymentNote: 'Invoice already paid in QuickBooks',
+          updatedAt: now
+        },
+        { merge: true }
+      );
+      return { synced: true, skipped: true, reason: 'already_paid_in_qbo' };
+    }
+    if (amount > balance + 0.01) {
+      amount = balance;
+    }
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { synced: false, skipped: true, reason: 'invalid_amount' };
+  }
+
+  const rounded = Math.round(amount * 100) / 100;
+  const txnDate = String(doc.paidAt || new Date().toISOString()).slice(0, 10);
+  const method = String(doc.paymentMethod || 'payment');
+  const refNum = String(
+    doc.paymentReference || doc.stripePaymentIntentId || doc.documentNumber || ''
+  )
+    .trim()
+    .slice(0, 21);
+  const privateNote = `NurseryOS · ${method}${
+    doc.stripePaymentIntentId ? ` · ${doc.stripePaymentIntentId}` : ''
+  }`.slice(0, 4000);
+
+  const created = await qboRequest<any>(tenantId, 'POST', '/payment?minorversion=65', {
+    TotalAmt: rounded,
+    CustomerRef: { value: customerId },
+    TxnDate: txnDate,
+    ...(refNum ? { PaymentRefNum: refNum } : {}),
+    PrivateNote: privateNote,
+    Line: [
+      {
+        Amount: rounded,
+        LinkedTxn: [
+          {
+            TxnId: qboInvoiceId,
+            TxnType: 'Invoice'
+          }
+        ]
+      }
+    ]
+  });
+
+  const paymentId = created?.Payment?.Id ? String(created.Payment.Id) : null;
+  if (!paymentId) {
+    throw new Error('QuickBooks did not return a payment id.');
+  }
+
+  const now = new Date().toISOString();
+  await docRef.set(
+    {
+      qboPaymentId: paymentId,
+      qboPaymentSyncedAt: now,
+      qboPaymentSyncedByUserId: opts?.uid || 'system',
+      qboPaymentNote: null,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  return { synced: true, qboPaymentId: paymentId };
+}
+
 async function findOrCreateCustomer(
   tenantId: string,
   doc: Record<string, any>
@@ -930,6 +1079,58 @@ export function registerQuickbooksRoutes(app: Express) {
         verified,
         openUrl,
         sandboxUrl: env === 'sandbox' ? `${qbAppBase('sandbox')}/app/invoices` : null
+      });
+    })
+  );
+
+  /**
+   * Create a QuickBooks Receive Payment against a previously pushed invoice.
+   * Used after Stripe collect or Mark paid in NurseryOS.
+   */
+  app.post('/api/quickbooks/push-payment', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const documentId = String(req.body?.documentId || '');
+      if (!tenantId || !documentId) {
+        res.status(400).json({ error: 'tenantId and documentId are required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+
+      const result = await syncPaidInvoicePaymentToQbo(tenantId, documentId, { uid });
+      if (!result.synced && result.reason === 'invoice_not_pushed') {
+        res.status(400).json({
+          error:
+            'Push this invoice to QuickBooks first, then sync the payment (or collect via Stripe after pushing).',
+          reason: result.reason
+        });
+        return;
+      }
+      if (!result.synced && result.reason === 'not_paid') {
+        res.status(400).json({
+          error: 'Mark the invoice paid (or collect via Stripe) before syncing payment to QuickBooks.',
+          reason: result.reason
+        });
+        return;
+      }
+      if (!result.synced && result.reason === 'not_connected') {
+        res.status(400).json({
+          error: 'Connect QuickBooks in Team settings first.',
+          reason: result.reason
+        });
+        return;
+      }
+      if (!result.synced && !result.skipped) {
+        res.status(400).json({
+          error: 'Could not sync payment to QuickBooks.',
+          reason: result.reason || null
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        ...result
       });
     })
   );

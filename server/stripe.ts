@@ -474,6 +474,21 @@ async function markDocumentPaid(params: {
     },
     { merge: true }
   );
+
+  // Best-effort: close the matching QBO invoice if it was pushed earlier.
+  try {
+    const { syncPaidInvoicePaymentToQbo } = await import('./quickbooks');
+    const result = await syncPaidInvoicePaymentToQbo(params.tenantId, params.documentId, {
+      uid: 'stripe'
+    });
+    if (result.synced && !result.skipped) {
+      console.log('[stripe] QBO payment synced', params.documentId, result.qboPaymentId);
+    } else if (result.reason && result.reason !== 'not_connected' && result.reason !== 'invoice_not_pushed') {
+      console.log('[stripe] QBO payment sync skipped', params.documentId, result.reason);
+    }
+  } catch (err) {
+    console.warn('[stripe] QBO payment sync failed', params.documentId, err);
+  }
 }
 
 function mapOutboundPaymentStatus(

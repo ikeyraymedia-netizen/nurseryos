@@ -910,6 +910,12 @@ const extra = {
     payLinkReadyCustomer: 'Pay link ready for customer — do not open it yourself unless you intend to pay.',
     pushQb: 'Push to QuickBooks',
     pushingQb: 'Pushing to QuickBooks…',
+    syncPaymentToQb: 'Sync payment to QuickBooks',
+    qbPaymentSynced: 'Payment synced to QuickBooks (Receive Payment).',
+    qbPaymentAlreadySynced: 'Payment already recorded in QuickBooks.',
+    qbPaymentNeedsInvoicePush:
+      'Push the invoice to QuickBooks first, then sync the payment.',
+    qbPaymentSyncFailed: 'Could not sync payment to QuickBooks.',
     invoicePaidBtn: 'Invoice paid',
     saveFirst: 'Save to customer first',
     alreadyPaidTitle: 'This invoice is already paid',
@@ -1498,7 +1504,7 @@ const extra = {
     moduleOff: ' · off',
     qbo: 'QuickBooks Online',
     qboIntro:
-      'Connect this nursery to push saved invoices and estimates into QuickBooks. Owner/admin only.',
+      'Connect this nursery to push saved invoices/estimates into QuickBooks, and sync payments (Stripe or Mark paid) as Receive Payment so AR closes. Owner/admin only.',
     connectQbo: 'Connect QuickBooks',
     openingQbo: 'Opening QuickBooks…',
     connected: 'Connected',
@@ -1514,7 +1520,7 @@ const extra = {
     addQbEnvFirst: 'Add QuickBooks and Firebase Admin env vars on the server first',
     stripe: 'Stripe Connect',
     stripeIntro:
-      "Connect this nursery's Stripe account so customers can pay invoices by card, and (with Treasury) pay vendors by ACH. Funds go to the nursery. Owner/admin only.",
+      "Connect this nursery's Stripe account so customers can pay invoices by card. Optional — many nurseries collect ACH in QuickBooks and Mark paid here. Owner/admin only.",
     stripeSandboxEinHint:
       'Sandbox: Connect skips Stripe’s hosted SSN form (it rejects test IDs). NurseryOS creates a verified test account instantly — click Connect Stripe / Continue onboarding and you should see Ready to collect payments.',
     stripeSandboxReady: 'Sandbox Stripe connected — ready to collect test payments.',

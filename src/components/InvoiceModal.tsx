@@ -56,7 +56,7 @@ import {
   FreightAllocationMethod,
   FreightShare
 } from '../lib/freightAllocation';
-import { pushDocumentToQuickbooks } from '../lib/quickbooks';
+import { pushDocumentToQuickbooks, pushPaymentToQuickbooks } from '../lib/quickbooks';
 import { sendInvoiceEmail } from '../lib/email';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
@@ -1246,6 +1246,41 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
+  const syncPaymentToQuickbooksIfPossible = async (
+    documentId: string,
+    opts?: { quiet?: boolean }
+  ): Promise<string | null> => {
+    if (!tenantId || !canUseQuickbooks || documentType !== 'invoice') return null;
+    try {
+      const result = await pushPaymentToQuickbooks({ tenantId, documentId });
+      if (result.synced && result.qboPaymentId && !result.skipped) {
+        setLiveDocument((prev) =>
+          prev
+            ? {
+                ...prev,
+                qboPaymentId: result.qboPaymentId || prev.qboPaymentId,
+                qboPaymentSyncedAt: new Date().toISOString()
+              }
+            : prev
+        );
+        setQbPushMessage(t('invoice.qbPaymentSynced'));
+        return t('invoice.qbPaymentSynced');
+      }
+      if (result.reason === 'invoice_not_pushed') {
+        return opts?.quiet ? null : t('invoice.qbPaymentNeedsInvoicePush');
+      }
+      if (result.reason === 'already_synced' || result.reason === 'already_paid_in_qbo') {
+        return t('invoice.qbPaymentAlreadySynced');
+      }
+      return null;
+    } catch (err: any) {
+      if (!opts?.quiet) {
+        console.warn('[invoice] QBO payment sync', err?.message || err);
+      }
+      return opts?.quiet ? null : err?.message || t('invoice.qbPaymentSyncFailed');
+    }
+  };
+
   const handlePushToQuickbooks = async () => {
     if (!tenantId) {
       alert(t('invoice.nurseryContextMissing'));
@@ -1291,13 +1326,31 @@ Thank you for choosing ${nurseryName}!
         result.linePreview && result.linePreview.length
           ? `\nPlants: ${result.linePreview.join('; ')}`
           : '';
+      setLiveDocument((prev) =>
+        prev
+          ? {
+              ...prev,
+              qboInvoiceId: result.qboInvoiceId,
+              qboSyncedAt: new Date().toISOString()
+            }
+          : prev
+      );
       setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
+
+      let paymentBit = '';
+      if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
+        const payMsg = await syncPaymentToQuickbooksIfPossible(savedDocumentId, {
+          quiet: true
+        });
+        if (payMsg) paymentBit = `\n\n${payMsg}`;
+      }
+
       if (result.openUrl) {
         window.open(result.openUrl, '_blank', 'noopener,noreferrer');
       }
       alert(
         `Invoice pushed to ${where}${companyBit}.\n\n` +
-          `${docBit}${customerBit}${totalBit}${linesBit}${previewBit}\n\n` +
+          `${docBit}${customerBit}${totalBit}${linesBit}${previewBit}${paymentBit}\n\n` +
           (result.openUrl
             ? `Opening the connected sandbox company now.\nIf the tab looks wrong, use Team → Show recent QBO invoices.`
             : t('invoice.qbLiveHint'))
@@ -1377,8 +1430,15 @@ Thank you for choosing ${nurseryName}!
       });
       if (result.paid) {
         setLocalMarkedPaid(true);
+        const qbMsg = await syncPaymentToQuickbooksIfPossible(savedDocumentId, {
+          quiet: true
+        });
         if (!opts?.silent) {
-          alert(t('invoice.paymentConfirmed'));
+          alert(
+            qbMsg
+              ? `${t('invoice.paymentConfirmed')}\n\n${qbMsg}`
+              : t('invoice.paymentConfirmed')
+          );
         }
       } else if (!opts?.silent) {
         alert(
@@ -1774,6 +1834,8 @@ Thank you for choosing ${nurseryName}!
                   reference: payment.reference || null
                 }
               });
+              const qbMsg = await syncPaymentToQuickbooksIfPossible(paymentDocument.id);
+              if (qbMsg) setQbPushMessage(qbMsg);
             } catch (err: any) {
               alert(err?.message || t('invoice.markPaidFailed'));
             } finally {
@@ -2510,11 +2572,39 @@ Thank you for choosing ${nurseryName}!
                     {isPushingQb
                       ? t('invoice.pushingQb')
                       : qbPushMessage ||
-                        existingDocument?.qboInvoiceId ||
-                        'Push to QuickBooks'}
+                        (paymentDocument?.qboPaymentId || liveDocument?.qboPaymentId
+                          ? t('invoice.qbPaymentSynced')
+                          : existingDocument?.qboInvoiceId || liveDocument?.qboInvoiceId
+                            ? t('invoice.pushQb')
+                            : t('invoice.pushQb'))}
                   </span>
                 </button>
               )}
+              {tenantId &&
+                canUseQuickbooks &&
+                isPaid &&
+                (paymentDocument?.qboInvoiceId || liveDocument?.qboInvoiceId) &&
+                !(paymentDocument?.qboPaymentId || liveDocument?.qboPaymentId) && (
+                  <button
+                    type="button"
+                    disabled={isPushingQb || !savedDocumentId}
+                    onClick={() =>
+                      void (async () => {
+                        if (!savedDocumentId) return;
+                        setIsPushingQb(true);
+                        try {
+                          const msg = await syncPaymentToQuickbooksIfPossible(savedDocumentId);
+                          if (msg) alert(msg);
+                        } finally {
+                          setIsPushingQb(false);
+                        }
+                      })()
+                    }
+                    className="w-full py-2 px-4 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 rounded-xl text-xs font-bold transition-all"
+                  >
+                    {t('invoice.syncPaymentToQb')}
+                  </button>
+                )}
             </div>
             
             <button

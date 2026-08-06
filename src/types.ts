@@ -206,6 +206,11 @@ export interface CustomerDocument {
   qboDocType?: CustomerDocumentType;
   qboSyncedAt?: string;
   qboSyncedByUserId?: string;
+  /** QuickBooks Receive Payment id after payment sync. */
+  qboPaymentId?: string;
+  qboPaymentSyncedAt?: string;
+  qboPaymentSyncedByUserId?: string;
+  qboPaymentNote?: string | null;
   /** Stripe Connect payment collection status for this invoice. */
   paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed';
   paidAt?: string;

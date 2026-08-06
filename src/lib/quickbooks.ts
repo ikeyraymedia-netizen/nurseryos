@@ -101,6 +101,33 @@ export async function pushDocumentToQuickbooks(params: {
   };
 }
 
+/** Sync a paid NurseryOS invoice as a QuickBooks Receive Payment. */
+export async function pushPaymentToQuickbooks(params: {
+  tenantId: string;
+  documentId: string;
+}): Promise<{
+  synced: boolean;
+  skipped?: boolean;
+  reason?: string | null;
+  qboPaymentId?: string | null;
+}> {
+  const res = await fetch('/api/quickbooks/push-payment', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to sync payment to QuickBooks.');
+  }
+  return {
+    synced: Boolean((data as any)?.synced),
+    skipped: Boolean((data as any)?.skipped),
+    reason: (data as any)?.reason ? String((data as any).reason) : null,
+    qboPaymentId: (data as any)?.qboPaymentId ? String((data as any).qboPaymentId) : null
+  };
+}
+
 export async function fetchRecentQuickbooksInvoices(tenantId: string): Promise<{
   environment: string;
   companyName: string | null;

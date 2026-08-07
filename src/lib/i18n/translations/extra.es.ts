@@ -898,6 +898,11 @@ const extra = {
     possibleSubsPlaceholder: 'ej. Boj, Yaupon enano, Acebo',
     markUnavailable: 'No disponible',
     notAvailable: 'No disponible',
+    photoLink: 'Enlace de foto',
+    photoLinkHint: 'Agrega un enlace Ver foto en el PDF y el correo desde inventario.',
+    photoLinkNoPhoto:
+      'No hay foto de inventario para esta planta/tamaño. Agregue una foto en Inventario primero.',
+    viewPhoto: 'Ver foto',
     quotedVendor: 'Proveedor',
     quotedVendorPlaceholder: 'De quién cotizó esta planta',
     internalOnly: 'solo interno',

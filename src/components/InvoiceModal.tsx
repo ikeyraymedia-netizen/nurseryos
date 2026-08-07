@@ -6,7 +6,8 @@ import {
   Customer,
   CustomerDocumentType,
   CustomerDocument,
-  FreightAllocation
+  FreightAllocation,
+  InventoryPlant
 } from '../types';
 import {
   imageSrcToDataUrl,
@@ -34,7 +35,8 @@ import {
   Link2,
   TrendingUp,
   Plus,
-  Trash2
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { updateCustomerOrder } from '../lib/db';
 import {
@@ -49,6 +51,8 @@ import {
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
+import { subscribeToInventory } from '../lib/inventory';
+import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
 import {
@@ -65,6 +69,21 @@ import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import jsPDF from 'jspdf';
 import { useT } from '../lib/i18n';
 import { dueDateFromPaymentTerms } from '../lib/dates';
+
+function isHttpUrl(url: unknown): url is string {
+  return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
+}
+
+function resolveInventoryPhotoUrl(
+  plantName: string,
+  containerSize: string,
+  plants: InventoryPlant[]
+): string | null {
+  if (!plantName.trim() || plants.length === 0) return null;
+  const matches = findMatchingInventoryPlants(plants, plantName, containerSize);
+  const withPhoto = matches.find((p) => isHttpUrl(p.photoUrl));
+  return withPhoto?.photoUrl?.trim() || null;
+}
 
 interface InvoiceModalProps {
   isOpen: boolean;
@@ -152,6 +171,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [itemSubstitutes, setItemSubstitutes] = useState<Record<string, string>>({});
   // Store editable item costs (internal profit tracking only)
   const [itemCosts, setItemCosts] = useState<Record<string, number>>({});
+  /** Inventory plants — used to resolve estimate photo links. */
+  const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
 
   // Database saving status
   const [isSaving, setIsSaving] = useState(false);
@@ -298,6 +319,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           notes: item.notes,
           substitutes: item.substitutes,
           unavailable: item.unavailable,
+          includePhotoLink: item.includePhotoLink,
+          photoUrl: item.photoUrl,
           vendor: item.vendor
         }));
       }
@@ -509,7 +532,38 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   const updateDraftLine = (id: string, patch: Partial<PlantOrderItem>) => {
     setCreditLines((prev) =>
-      prev.map((line) => (line.id === id ? { ...line, ...patch } : line))
+      prev.map((line) => {
+        if (line.id !== id) return line;
+        const next = { ...line, ...patch };
+        if (
+          next.includePhotoLink &&
+          ('plantName' in patch || 'containerSize' in patch || patch.includePhotoLink === true)
+        ) {
+          const resolved = resolveInventoryPhotoUrl(
+            next.plantName,
+            next.containerSize,
+            inventoryPlants
+          );
+          if (resolved) next.photoUrl = resolved;
+        }
+        if (patch.includePhotoLink === false) {
+          next.photoUrl = null;
+        }
+        return next;
+      })
+    );
+  };
+
+  const linePhotoUrl = (item: PlantOrderItem): string | null => {
+    if (!item.includePhotoLink) return null;
+    if (isHttpUrl(item.photoUrl)) return item.photoUrl.trim();
+    return resolveInventoryPhotoUrl(item.plantName, item.containerSize, inventoryPlants);
+  };
+
+  const inventoryHasPhoto = (item: PlantOrderItem): boolean => {
+    if (isHttpUrl(item.photoUrl)) return true;
+    return Boolean(
+      resolveInventoryPhotoUrl(item.plantName, item.containerSize, inventoryPlants)
     );
   };
 
@@ -591,12 +645,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const unavailableHtml = unavailable
         ? `<div style="margin-top:4px;font-size:11px;color:#b91c1c;font-weight:bold;">${t('invoice.notAvailable')}</div>`
         : '';
+      const photo = linePhotoUrl(item);
+      const photoHtml = photo
+        ? `<div style="margin-top:4px;font-size:11px;"><a href="${photo}" style="color:#0e7490;font-weight:bold;text-decoration:underline;" target="_blank" rel="noopener noreferrer">${t('invoice.viewPhoto')}</a></div>`
+        : '';
       const nameStyle = unavailable
         ? 'padding: 10px 0; font-weight: bold; color: #94a3b8; font-family: sans-serif; text-decoration: line-through;'
         : 'padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;';
       return `
         <tr style="border-bottom: 1px solid #e2e8f0;${unavailable ? ' background-color: #f8fafc;' : ''}">
-          <td style="${nameStyle}">${item.plantName}${unavailableHtml}${noteHtml}${subsHtml}</td>
+          <td style="${nameStyle}">${item.plantName}${unavailableHtml}${photoHtml}${noteHtml}${subsHtml}</td>
           <td style="padding: 10px 0; text-align: center; color: ${muted || '#64748b'}; font-family: sans-serif;">${item.containerSize}</td>
           <td style="padding: 10px 0; text-align: center; font-weight: bold; color: ${muted || '#0f172a'}; font-family: sans-serif;">${qty}</td>
           <td style="padding: 10px 0; text-align: right; color: ${muted || '#0e7490'}; font-family: sans-serif;">${unavailable ? '—' : `$${price.toFixed(2)}`}</td>
@@ -741,6 +799,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const line = `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: ${priceLabel} | Total: ${totalLabel}`;
       const extras = [
         unavailable ? `  ${t('invoice.notAvailable')}` : '',
+        (() => {
+          const photo = linePhotoUrl(item);
+          return photo ? `  ${t('invoice.viewPhoto')}: ${photo}` : '';
+        })(),
         note ? `  Note: ${note}` : '',
         subs ? `  Possible subs: ${subs}` : ''
       ]
@@ -922,6 +984,14 @@ Thank you for choosing ${nurseryName}!
   }, [isOpen, tenantId]);
 
   useEffect(() => {
+    if (!isOpen || !tenantId) {
+      setInventoryPlants([]);
+      return;
+    }
+    return subscribeToInventory(setInventoryPlants);
+  }, [isOpen, tenantId]);
+
+  useEffect(() => {
     if (!isOpen || !tenantId || !canCollectPayments) {
       setStripePaymentsReady(false);
       return;
@@ -1073,6 +1143,11 @@ Thank you for choosing ${nurseryName}!
         unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
         substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined,
         unavailable: isEstimate ? Boolean(item.unavailable) : undefined,
+        includePhotoLink: isEstimate ? Boolean(item.includePhotoLink) || undefined : undefined,
+        photoUrl:
+          isEstimate && item.includePhotoLink
+            ? linePhotoUrl(item) || item.photoUrl || null
+            : undefined,
         vendor:
           isEstimate
             ? String(item.vendor || '').trim() || undefined
@@ -1129,6 +1204,11 @@ Thank you for choosing ${nurseryName}!
         notes: item.notes,
         substitutes: item.substitutes,
         unavailable: isEstimate ? Boolean(item.unavailable) || undefined : undefined,
+        includePhotoLink: isEstimate ? Boolean(item.includePhotoLink) || undefined : undefined,
+        photoUrl:
+          isEstimate && item.includePhotoLink
+            ? item.photoUrl || null
+            : undefined,
         vendor: isEstimate ? item.vendor : undefined
       }));
 
@@ -1634,11 +1714,13 @@ Thank you for choosing ${nurseryName}!
         const total = unavailable ? 0 : qty * price;
         const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
         const note = String(item.notes || '').trim();
+        const photo = linePhotoUrl(item);
 
         const nameLines = pdf.splitTextToSize(item.plantName || '—', xSize - xPlant - 10);
         const unavailableLines = unavailable
           ? pdf.splitTextToSize(t('invoice.notAvailable'), xSize - xPlant - 10)
           : [];
+        const photoLabel = photo ? t('invoice.viewPhoto') : '';
         const noteLines = note
           ? pdf.splitTextToSize(`${t('invoice.notePrefix')} ${note}`, xSize - xPlant - 10)
           : [];
@@ -1649,6 +1731,7 @@ Thank you for choosing ${nurseryName}!
         const textBlockHeight =
           Math.max(9, nameLines.length * linePitch) +
           (unavailableLines.length ? unavailableLines.length * 10 + 2 : 0) +
+          (photo ? 12 : 0) +
           (noteLines.length ? noteLines.length * 10 + 2 : 0) +
           (subLines.length ? subLines.length * 10 + 2 : 0);
         // Space for text + padding under glyphs + rule + gap before next baseline
@@ -1676,6 +1759,17 @@ Thank you for choosing ${nurseryName}!
             pdf.text(l, xPlant, belowName + i * 10);
           });
           belowName += unavailableLines.length * 10 + 2;
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+        }
+        if (photo && photoLabel) {
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(14, 116, 144);
+          pdf.textWithLink(photoLabel, xPlant, belowName, { url: photo });
+          const linkW = pdf.getTextWidth(photoLabel);
+          pdf.link(xPlant, belowName - 7, Math.max(linkW, 28), 10, { url: photo });
+          belowName += 12;
           pdf.setFont('helvetica', 'normal');
           pdf.setFontSize(9);
         }
@@ -2924,6 +3018,21 @@ Thank you for choosing ${nurseryName}!
                                 {t('invoice.notAvailable')}
                               </span>
                             )}
+                            {(() => {
+                              const photo = linePhotoUrl(item);
+                              if (!photo) return null;
+                              return (
+                                <a
+                                  href={photo}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold text-ink-700 hover:underline"
+                                >
+                                  <ImageIcon className="h-3 w-3" />
+                                  {t('invoice.viewPhoto')}
+                                </a>
+                              );
+                            })()}
                             {item.notes && (
                               <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5">
                                 Note: {item.notes}
@@ -2932,21 +3041,62 @@ Thank you for choosing ${nurseryName}!
                             {documentType === 'estimate' ? (
                               <>
                               {canEditLines && (
-                                <label className="mt-1.5 inline-flex items-center gap-1.5 print:hidden cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={unavailable}
-                                    onChange={(e) =>
-                                      updateDraftLine(item.id, {
-                                        unavailable: e.target.checked
-                                      })
+                                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 print:hidden">
+                                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={unavailable}
+                                      onChange={(e) =>
+                                        updateDraftLine(item.id, {
+                                          unavailable: e.target.checked
+                                        })
+                                      }
+                                      className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                    />
+                                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                      {t('invoice.markUnavailable')}
+                                    </span>
+                                  </label>
+                                  <label
+                                    className={`inline-flex items-center gap-1.5 ${
+                                      inventoryHasPhoto(item) || item.includePhotoLink
+                                        ? 'cursor-pointer'
+                                        : 'opacity-50 cursor-not-allowed'
+                                    }`}
+                                    title={
+                                      inventoryHasPhoto(item) || item.includePhotoLink
+                                        ? t('invoice.photoLinkHint')
+                                        : t('invoice.photoLinkNoPhoto')
                                     }
-                                    className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                                  />
-                                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                    {t('invoice.markUnavailable')}
-                                  </span>
-                                </label>
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(item.includePhotoLink)}
+                                      disabled={
+                                        !item.includePhotoLink && !inventoryHasPhoto(item)
+                                      }
+                                      onChange={(e) => {
+                                        const on = e.target.checked;
+                                        const resolved = on
+                                          ? resolveInventoryPhotoUrl(
+                                              item.plantName,
+                                              item.containerSize,
+                                              inventoryPlants
+                                            ) || item.photoUrl || null
+                                          : null;
+                                        updateDraftLine(item.id, {
+                                          includePhotoLink: on,
+                                          photoUrl: resolved
+                                        });
+                                      }}
+                                      className="rounded border-slate-300 text-ink-600 focus:ring-ink-500"
+                                    />
+                                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 inline-flex items-center gap-1">
+                                      <ImageIcon className="h-3 w-3" />
+                                      {t('invoice.photoLink')}
+                                    </span>
+                                  </label>
+                                </div>
                               )}
                               <label className="block mt-1.5">
                                 <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">

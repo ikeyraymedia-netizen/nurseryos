@@ -888,6 +888,11 @@ const extra = {
     possibleSubsPlaceholder: 'e.g. Boxwood, Dwarf Yaupon, Holly',
     markUnavailable: 'Not available',
     notAvailable: 'Not available',
+    photoLink: 'Photo link',
+    photoLinkHint: 'Adds a View photo link on the PDF and email from inventory.',
+    photoLinkNoPhoto:
+      'No matching inventory photo for this plant/size. Add a photo in Inventory first.',
+    viewPhoto: 'View photo',
     quotedVendor: 'Vendor',
     quotedVendorPlaceholder: 'Who you quoted this plant from',
     internalOnly: 'internal only',

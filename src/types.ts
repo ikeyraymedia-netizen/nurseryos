@@ -88,6 +88,10 @@ export interface PlantOrderItem {
   substitutes?: string;
   /** Estimate-only: plant cannot be supplied; shown grayed / not in totals. */
   unavailable?: boolean;
+  /** Estimate-only: include a clickable inventory photo link for the customer. */
+  includePhotoLink?: boolean;
+  /** Snapshot of inventory photo URL when includePhotoLink is on. */
+  photoUrl?: string | null;
   isAddition?: boolean; // Tag for items added to an existing order
   /** ISO timestamp when this line was added to an existing order (for activity alerts) */
   addedAt?: string;
@@ -172,6 +176,10 @@ export interface CustomerDocumentLineItem {
   substitutes?: string;
   /** Estimate-only: plant cannot be supplied; shown grayed / not in totals. */
   unavailable?: boolean;
+  /** Estimate-only: include a clickable inventory photo link for the customer. */
+  includePhotoLink?: boolean;
+  /** Snapshot of inventory photo URL when includePhotoLink is on. */
+  photoUrl?: string | null;
   /** Quoted source vendor — estimates/internal only; never on customer PDF/email. */
   vendor?: string;
 }

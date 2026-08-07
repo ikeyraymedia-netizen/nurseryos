@@ -896,6 +896,8 @@ const extra = {
       'Este crédito se aplica a la factura referenciada y puede usarse en compras futuras o saldos pendientes.',
     possibleSubs: 'Sustitutos posibles',
     possibleSubsPlaceholder: 'ej. Boj, Yaupon enano, Acebo',
+    markUnavailable: 'No disponible',
+    notAvailable: 'No disponible',
     quotedVendor: 'Proveedor',
     quotedVendorPlaceholder: 'De quién cotizó esta planta',
     internalOnly: 'solo interno',

@@ -297,6 +297,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           unitCost: item.unitCost,
           notes: item.notes,
           substitutes: item.substitutes,
+          unavailable: item.unavailable,
           vendor: item.vendor
         }));
       }
@@ -533,8 +534,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
   };
 
-  // Calculate Order Totals
+  // Calculate Order Totals (unavailable estimate lines stay visible but do not count)
   const subtotal = workingItems.reduce((sum, item) => {
+    if (item.unavailable) return sum;
     const qty = getItemQty(item);
     const price = itemPrices[item.id] ?? 0;
     return sum + qty * price;
@@ -561,6 +563,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Internal cost/profit (never shown to the customer)
   const totalCost = workingItems.reduce((sum, item) => {
+    if (item.unavailable) return sum;
     const qty = getItemQty(item);
     const cost = itemCosts[item.id] ?? 0;
     return sum + qty * cost;
@@ -574,7 +577,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const itemsRows = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
-      const total = qty * price;
+      const unavailable = Boolean(item.unavailable);
+      const total = unavailable ? 0 : qty * price;
+      const muted = unavailable ? '#94a3b8' : undefined;
       const note = String(item.notes || '').trim();
       const noteHtml = note
         ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">${t('invoice.notePrefix')} ${note}</div>`
@@ -583,13 +588,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const subsHtml = subs
         ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">Possible subs: ${subs}</div>`
         : '';
+      const unavailableHtml = unavailable
+        ? `<div style="margin-top:4px;font-size:11px;color:#b91c1c;font-weight:bold;">${t('invoice.notAvailable')}</div>`
+        : '';
+      const nameStyle = unavailable
+        ? 'padding: 10px 0; font-weight: bold; color: #94a3b8; font-family: sans-serif; text-decoration: line-through;'
+        : 'padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;';
       return `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px 0; font-weight: bold; color: #0f172a; font-family: sans-serif;">${item.plantName}${noteHtml}${subsHtml}</td>
-          <td style="padding: 10px 0; text-align: center; color: #64748b; font-family: sans-serif;">${item.containerSize}</td>
-          <td style="padding: 10px 0; text-align: center; font-weight: bold; color: #0f172a; font-family: sans-serif;">${qty}</td>
-          <td style="padding: 10px 0; text-align: right; color: #0e7490; font-family: sans-serif;">$${price.toFixed(2)}</td>
-          <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #0f172a; font-family: sans-serif;">$${total.toFixed(2)}</td>
+        <tr style="border-bottom: 1px solid #e2e8f0;${unavailable ? ' background-color: #f8fafc;' : ''}">
+          <td style="${nameStyle}">${item.plantName}${unavailableHtml}${noteHtml}${subsHtml}</td>
+          <td style="padding: 10px 0; text-align: center; color: ${muted || '#64748b'}; font-family: sans-serif;">${item.containerSize}</td>
+          <td style="padding: 10px 0; text-align: center; font-weight: bold; color: ${muted || '#0f172a'}; font-family: sans-serif;">${qty}</td>
+          <td style="padding: 10px 0; text-align: right; color: ${muted || '#0e7490'}; font-family: sans-serif;">${unavailable ? '—' : `$${price.toFixed(2)}`}</td>
+          <td style="padding: 10px 0; text-align: right; font-weight: bold; color: ${muted || '#0f172a'}; font-family: sans-serif;">${unavailable ? '—' : `$${total.toFixed(2)}`}</td>
         </tr>
       `;
     }).join('');
@@ -721,11 +732,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const itemsText = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
-      const total = qty * price;
+      const unavailable = Boolean(item.unavailable);
+      const total = unavailable ? 0 : qty * price;
       const note = String(item.notes || '').trim();
       const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
-      const line = `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: $${price.toFixed(2).padEnd(6)} | Total: $${total.toFixed(2)}`;
+      const priceLabel = unavailable ? '—' : `$${price.toFixed(2).padEnd(6)}`;
+      const totalLabel = unavailable ? '—' : `$${total.toFixed(2)}`;
+      const line = `${item.plantName.padEnd(30)} | ${item.containerSize.padEnd(8)} | Qty: ${String(qty).padEnd(4)} | Price: ${priceLabel} | Total: ${totalLabel}`;
       const extras = [
+        unavailable ? `  ${t('invoice.notAvailable')}` : '',
         note ? `  Note: ${note}` : '',
         subs ? `  Possible subs: ${subs}` : ''
       ]
@@ -1057,6 +1072,7 @@ Thank you for choosing ${nurseryName}!
             : getDefaultPriceForSize(item.containerSize),
         unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
         substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined,
+        unavailable: isEstimate ? Boolean(item.unavailable) : undefined,
         vendor:
           isEstimate
             ? String(item.vendor || '').trim() || undefined
@@ -1112,6 +1128,7 @@ Thank you for choosing ${nurseryName}!
         unitCost: item.unitCost,
         notes: item.notes,
         substitutes: item.substitutes,
+        unavailable: isEstimate ? Boolean(item.unavailable) || undefined : undefined,
         vendor: isEstimate ? item.vendor : undefined
       }));
 
@@ -1613,11 +1630,15 @@ Thank you for choosing ${nurseryName}!
           itemPrices[item.id] !== undefined
             ? itemPrices[item.id]
             : getDefaultPriceForSize(item.containerSize);
-        const total = qty * price;
+        const unavailable = Boolean(item.unavailable);
+        const total = unavailable ? 0 : qty * price;
         const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
         const note = String(item.notes || '').trim();
 
         const nameLines = pdf.splitTextToSize(item.plantName || '—', xSize - xPlant - 10);
+        const unavailableLines = unavailable
+          ? pdf.splitTextToSize(t('invoice.notAvailable'), xSize - xPlant - 10)
+          : [];
         const noteLines = note
           ? pdf.splitTextToSize(`${t('invoice.notePrefix')} ${note}`, xSize - xPlant - 10)
           : [];
@@ -1627,6 +1648,7 @@ Thank you for choosing ${nurseryName}!
         const linePitch = 11;
         const textBlockHeight =
           Math.max(9, nameLines.length * linePitch) +
+          (unavailableLines.length ? unavailableLines.length * 10 + 2 : 0) +
           (noteLines.length ? noteLines.length * 10 + 2 : 0) +
           (subLines.length ? subLines.length * 10 + 2 : 0);
         // Space for text + padding under glyphs + rule + gap before next baseline
@@ -1640,11 +1662,23 @@ Thank you for choosing ${nurseryName}!
         }
 
         const baseline = y;
-        pdf.setTextColor(20, 20, 20);
+        const ink = unavailable ? [148, 163, 184] as const : [20, 20, 20] as const;
+        pdf.setTextColor(ink[0], ink[1], ink[2]);
         nameLines.forEach((l: string, i: number) => {
           pdf.text(l, xPlant, baseline + i * linePitch);
         });
         let belowName = baseline + nameLines.length * linePitch + 1;
+        if (unavailableLines.length) {
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(185, 28, 28);
+          unavailableLines.forEach((l: string, i: number) => {
+            pdf.text(l, xPlant, belowName + i * 10);
+          });
+          belowName += unavailableLines.length * 10 + 2;
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+        }
         if (noteLines.length) {
           pdf.setFontSize(8);
           pdf.setTextColor(100, 100, 100);
@@ -1662,13 +1696,12 @@ Thank you for choosing ${nurseryName}!
           });
           pdf.setFontSize(9);
         }
-        pdf.setTextColor(90, 90, 90);
+        pdf.setTextColor(ink[0], ink[1], ink[2]);
         pdf.text(String(item.containerSize || ''), xSize, baseline);
-        pdf.setTextColor(20, 20, 20);
         pdf.text(String(qty), xQty, baseline, { align: 'right' });
-        pdf.text(money(price), xPrice, baseline, { align: 'right' });
+        pdf.text(unavailable ? '—' : money(price), xPrice, baseline, { align: 'right' });
         pdf.setFont('helvetica', 'bold');
-        pdf.text(money(total), xTotal, baseline, { align: 'right' });
+        pdf.text(unavailable ? '—' : money(total), xTotal, baseline, { align: 'right' });
         pdf.setFont('helvetica', 'normal');
 
         y = baseline + textBlockHeight + 4;
@@ -2262,11 +2295,15 @@ Thank you for choosing ${nurseryName}!
                         ? itemPrices[item.id]
                         : getDefaultPriceForSize(item.containerSize);
                     const cost = itemCosts[item.id] ?? 0;
-                    const lineProfit = (price - cost) * qty;
+                    const lineProfit = item.unavailable ? 0 : (price - cost) * qty;
                     return (
-                      <div key={item.id} className="flex items-center gap-1.5 text-[10px]">
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-1.5 text-[10px]${item.unavailable ? ' opacity-40' : ''}`}
+                      >
                         <span className="flex-1 truncate font-semibold text-gray-700" title={item.plantName}>
                           {item.plantName}
+                          {item.unavailable ? ` (${t('invoice.notAvailable')})` : ''}
                         </span>
                         <div className="inline-flex items-center">
                           <span className="text-[9px] text-slate-400 font-mono font-bold mr-0.5">$</span>
@@ -2821,13 +2858,18 @@ Thank you for choosing ${nurseryName}!
                     {workingItems.map((item) => {
                       const qty = getItemQty(item);
                       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
-                      const total = qty * price;
+                      const unavailable = Boolean(item.unavailable);
+                      const total = unavailable ? 0 : qty * price;
                       const subs = itemSubstitutes[item.id] ?? item.substitutes ?? '';
 
                       return (
                         <tr
                           key={item.id}
-                          className="border-b border-gray-200 text-xs font-medium text-gray-800"
+                          className={`border-b border-gray-200 text-xs font-medium ${
+                            unavailable
+                              ? 'bg-slate-50 text-slate-400'
+                              : 'text-gray-800'
+                          }`}
                         >
                           <td className="py-3">
                             {canEditLines ? (
@@ -2838,10 +2880,27 @@ Thank you for choosing ${nurseryName}!
                                   updateDraftLine(item.id, { plantName: e.target.value })
                                 }
                                 placeholder={t('invoice.plantVarietyName')}
-                                className="w-full font-black text-gray-950 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
+                                className={`w-full font-black bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                  unavailable
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-gray-950'
+                                }`}
                               />
                             ) : (
-                              <span className="font-black text-gray-950">{item.plantName}</span>
+                              <span
+                                className={`font-black ${
+                                  unavailable
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-gray-950'
+                                }`}
+                              >
+                                {item.plantName}
+                              </span>
+                            )}
+                            {unavailable && (
+                              <span className="block text-[10px] font-bold uppercase tracking-wide text-rose-600 mt-0.5 no-underline">
+                                {t('invoice.notAvailable')}
+                              </span>
                             )}
                             {item.notes && (
                               <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5">
@@ -2850,6 +2909,23 @@ Thank you for choosing ${nurseryName}!
                             )}
                             {documentType === 'estimate' ? (
                               <>
+                              {canEditLines && (
+                                <label className="mt-1.5 inline-flex items-center gap-1.5 print:hidden cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={unavailable}
+                                    onChange={(e) =>
+                                      updateDraftLine(item.id, {
+                                        unavailable: e.target.checked
+                                      })
+                                    }
+                                    className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                  />
+                                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                    {t('invoice.markUnavailable')}
+                                  </span>
+                                </label>
+                              )}
                               <label className="block mt-1.5">
                                 <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                                   {t('invoice.possibleSubs')}
@@ -2892,7 +2968,7 @@ Thank you for choosing ${nurseryName}!
                               </span>
                             ) : null}
                           </td>
-                          <td className="py-3 text-center font-mono font-bold text-gray-500">
+                          <td className={`py-3 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-500'}`}>
                             {canEditLines ? (
                               <input
                                 type="text"
@@ -2901,13 +2977,15 @@ Thank you for choosing ${nurseryName}!
                                   updateDraftLine(item.id, { containerSize: e.target.value })
                                 }
                                 placeholder={t('invoice.potSize')}
-                                className="w-24 mx-auto text-center font-mono font-bold text-gray-700 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
+                                className={`w-24 mx-auto text-center font-mono font-bold bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                  unavailable ? 'text-slate-400' : 'text-gray-700'
+                                }`}
                               />
                             ) : (
                               item.containerSize
                             )}
                           </td>
-                          <td className="py-3 text-center font-mono font-bold text-gray-900">
+                          <td className={`py-3 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-900'}`}>
                             {canEditLines ? (
                               <input
                                 type="number"
@@ -2919,7 +2997,9 @@ Thank you for choosing ${nurseryName}!
                                     quantity: Math.max(0, Number(e.target.value) || 0)
                                   })
                                 }
-                                className="w-16 mx-auto text-center font-mono font-bold text-gray-900 bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none"
+                                className={`w-16 mx-auto text-center font-mono font-bold bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                  unavailable ? 'text-slate-400' : 'text-gray-900'
+                                }`}
                               />
                             ) : (
                               qty
@@ -2927,7 +3007,7 @@ Thank you for choosing ${nurseryName}!
                           </td>
                           <td className="py-3 text-right">
                             {/* Inline editable price */}
-                            <div className="inline-flex items-center justify-end">
+                            <div className={`inline-flex items-center justify-end ${unavailable ? 'opacity-40' : ''}`}>
                               <span className="price-input-prefix text-[10px] text-slate-400 font-mono font-bold mr-0.5">$</span>
                               <input
                                 type="number"
@@ -2939,8 +3019,8 @@ Thank you for choosing ${nurseryName}!
                               />
                             </div>
                           </td>
-                          <td className="py-3 text-right font-mono font-black text-gray-950">
-                            ${total.toFixed(2)}
+                          <td className={`py-3 text-right font-mono font-black ${unavailable ? 'text-slate-400' : 'text-gray-950'}`}>
+                            {unavailable ? '—' : `$${total.toFixed(2)}`}
                           </td>
                           {canEditLines && (
                             <td className="py-3 text-right print:hidden">

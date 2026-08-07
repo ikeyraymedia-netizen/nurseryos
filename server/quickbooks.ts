@@ -899,6 +899,7 @@ async function mapDocToInvoice(
   const lines = [];
   for (let index = 0; index < rawItems.length; index += 1) {
     const item = rawItems[index] || {};
+    if (item.unavailable) continue;
     const plantName = String(item.plantName || item.name || '').trim();
     const containerSize = String(item.containerSize || item.size || '').trim();
     const qty = Number(item.quantity ?? item.qty) || 0;

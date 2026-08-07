@@ -86,6 +86,8 @@ export interface PlantOrderItem {
   notes?: string;
   /** Possible substitute plant material (shown on estimates). Free text, e.g. "Boxwood, Holly". */
   substitutes?: string;
+  /** Estimate-only: plant cannot be supplied; shown grayed / not in totals. */
+  unavailable?: boolean;
   isAddition?: boolean; // Tag for items added to an existing order
   /** ISO timestamp when this line was added to an existing order (for activity alerts) */
   addedAt?: string;
@@ -168,6 +170,8 @@ export interface CustomerDocumentLineItem {
   notes?: string;
   /** Possible substitute plant material — mainly for estimates. */
   substitutes?: string;
+  /** Estimate-only: plant cannot be supplied; shown grayed / not in totals. */
+  unavailable?: boolean;
   /** Quoted source vendor — estimates/internal only; never on customer PDF/email. */
   vendor?: string;
 }

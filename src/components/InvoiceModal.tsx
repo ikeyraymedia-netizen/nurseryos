@@ -53,7 +53,6 @@ import { getDefaultPriceForSize } from '../lib/pricing';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
 import { subscribeToInventory } from '../lib/inventory';
-import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
 import { uploadEstimateLinePhoto } from '../lib/estimatePhotos';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
@@ -74,17 +73,6 @@ import { dueDateFromPaymentTerms } from '../lib/dates';
 
 function isHttpUrl(url: unknown): url is string {
   return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
-}
-
-function resolveInventoryPhotoUrl(
-  plantName: string,
-  containerSize: string,
-  plants: InventoryPlant[]
-): string | null {
-  if (!plantName.trim() || plants.length === 0) return null;
-  const matches = findMatchingInventoryPlants(plants, plantName, containerSize);
-  const withPhoto = matches.find((p) => isHttpUrl(p.photoUrl));
-  return withPhoto?.photoUrl?.trim() || null;
 }
 
 interface InvoiceModalProps {
@@ -539,15 +527,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       prev.map((line) => {
         if (line.id !== id) return line;
         const next = { ...line, ...patch };
-        // Only auto-fill from inventory when turning the link on and no photo chosen yet.
-        if (patch.includePhotoLink === true && !isHttpUrl(next.photoUrl)) {
-          const resolved = resolveInventoryPhotoUrl(
-            next.plantName,
-            next.containerSize,
-            inventoryPlants
-          );
-          if (resolved) next.photoUrl = resolved;
-        }
         if (patch.includePhotoLink === false) {
           next.photoUrl = null;
         }
@@ -556,27 +535,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
   };
 
+  /** Explicit photo only — never auto-matched from inventory. */
   const linePhotoUrl = (item: PlantOrderItem): string | null => {
     if (!item.includePhotoLink) return null;
-    if (isHttpUrl(item.photoUrl)) return item.photoUrl.trim();
-    return resolveInventoryPhotoUrl(item.plantName, item.containerSize, inventoryPlants);
+    return isHttpUrl(item.photoUrl) ? item.photoUrl.trim() : null;
   };
 
   const plantsWithPhotos = inventoryPlants
     .filter((p) => isHttpUrl(p.photoUrl))
     .slice()
     .sort((a, b) => a.plantName.localeCompare(b.plantName));
-
-  const inventoryPhotoOptionsForLine = (item: PlantOrderItem): InventoryPlant[] => {
-    const matches = findMatchingInventoryPlants(
-      plantsWithPhotos,
-      item.plantName,
-      item.containerSize
-    );
-    const matchIds = new Set(matches.map((p) => p.id));
-    const rest = plantsWithPhotos.filter((p) => !matchIds.has(p.id));
-    return [...matches, ...rest];
-  };
 
   async function handleEstimatePhotoUpload(item: PlantOrderItem, file: File) {
     if (!tenantId) {
@@ -1178,7 +1146,9 @@ Thank you for choosing ${nurseryName}!
         includePhotoLink: isEstimate ? Boolean(item.includePhotoLink) || undefined : undefined,
         photoUrl:
           isEstimate && item.includePhotoLink
-            ? linePhotoUrl(item) || item.photoUrl || null
+            ? isHttpUrl(item.photoUrl)
+              ? item.photoUrl.trim()
+              : null
             : undefined,
         vendor:
           isEstimate
@@ -3177,7 +3147,7 @@ Thank you for choosing ${nurseryName}!
                                               ? t('invoice.chooseInventoryPhotoPlaceholder')
                                               : t('invoice.noInventoryPhotos')}
                                           </option>
-                                          {inventoryPhotoOptionsForLine(item).map((plant) => (
+                                          {plantsWithPhotos.map((plant) => (
                                             <option key={plant.id} value={plant.id}>
                                               {plant.plantName}
                                               {plant.containerSize

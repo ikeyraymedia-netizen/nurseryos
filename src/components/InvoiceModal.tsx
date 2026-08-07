@@ -2287,7 +2287,7 @@ Thank you for choosing ${nurseryName}!
                     Internal only
                   </span>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {workingItems.map((item) => {
                     const qty = getItemQty(item);
                     const price =
@@ -2296,34 +2296,56 @@ Thank you for choosing ${nurseryName}!
                         : getDefaultPriceForSize(item.containerSize);
                     const cost = itemCosts[item.id] ?? 0;
                     const lineProfit = item.unavailable ? 0 : (price - cost) * qty;
+                    const sizeLabel = String(item.containerSize || '').trim();
                     return (
                       <div
                         key={item.id}
-                        className={`flex items-center gap-1.5 text-[10px]${item.unavailable ? ' opacity-40' : ''}`}
+                        className={`rounded-lg border border-indigo-100 bg-white/70 px-2 py-1.5 space-y-1${item.unavailable ? ' opacity-40' : ''}`}
                       >
-                        <span className="flex-1 truncate font-semibold text-gray-700" title={item.plantName}>
-                          {item.plantName}
-                          {item.unavailable ? ` (${t('invoice.notAvailable')})` : ''}
-                        </span>
-                        <div className="inline-flex items-center">
-                          <span className="text-[9px] text-slate-400 font-mono font-bold mr-0.5">$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={cost || ''}
-                            placeholder={t('invoice.costPlaceholder')}
-                            onChange={(e) => handleCostChange(item.id, Number(e.target.value))}
-                            className="w-14 font-mono font-bold text-right text-indigo-800 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded"
-                          />
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-gray-800 leading-snug break-words">
+                            {item.plantName || '—'}
+                            {item.unavailable ? (
+                              <span className="ml-1 text-[9px] font-bold uppercase text-rose-600">
+                                ({t('invoice.notAvailable')})
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="text-[10px] font-mono font-bold text-slate-500 mt-0.5">
+                            {sizeLabel ? sizeLabel : t('invoice.potSize')}
+                            <span className="text-slate-300 mx-1">·</span>
+                            Qty {qty}
+                            <span className="text-slate-300 mx-1">·</span>
+                            ${price.toFixed(2)} ea
+                          </p>
                         </div>
-                        <span
-                          className={`w-16 text-right font-mono font-bold ${
-                            lineProfit >= 0 ? 'text-ink-700' : 'text-rose-600'
-                          }`}
-                        >
-                          ${lineProfit.toFixed(2)}
-                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-indigo-500">
+                            Cost
+                          </span>
+                          <div className="inline-flex items-center gap-1.5">
+                            <div className="inline-flex items-center">
+                              <span className="text-[9px] text-slate-400 font-mono font-bold mr-0.5">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={cost || ''}
+                                placeholder={t('invoice.costPlaceholder')}
+                                onChange={(e) => handleCostChange(item.id, Number(e.target.value))}
+                                className="w-16 font-mono font-bold text-right text-indigo-800 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded"
+                              />
+                            </div>
+                            <span
+                              className={`min-w-[3.5rem] text-right font-mono font-bold text-[10px] ${
+                                lineProfit >= 0 ? 'text-ink-700' : 'text-rose-600'
+                              }`}
+                              title="Line profit"
+                            >
+                              ${lineProfit.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

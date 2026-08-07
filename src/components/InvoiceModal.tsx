@@ -36,7 +36,8 @@ import {
   TrendingUp,
   Plus,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Upload
 } from 'lucide-react';
 import { updateCustomerOrder } from '../lib/db';
 import {
@@ -53,6 +54,7 @@ import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
 import { subscribeToInventory } from '../lib/inventory';
 import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
+import { uploadEstimateLinePhoto } from '../lib/estimatePhotos';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
 import {
@@ -173,6 +175,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [itemCosts, setItemCosts] = useState<Record<string, number>>({});
   /** Inventory plants — used to resolve estimate photo links. */
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
+  const [photoUploadBusyId, setPhotoUploadBusyId] = useState<string | null>(null);
+  const [photoPickError, setPhotoPickError] = useState<string | null>(null);
 
   // Database saving status
   const [isSaving, setIsSaving] = useState(false);
@@ -535,10 +539,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       prev.map((line) => {
         if (line.id !== id) return line;
         const next = { ...line, ...patch };
-        if (
-          next.includePhotoLink &&
-          ('plantName' in patch || 'containerSize' in patch || patch.includePhotoLink === true)
-        ) {
+        // Only auto-fill from inventory when turning the link on and no photo chosen yet.
+        if (patch.includePhotoLink === true && !isHttpUrl(next.photoUrl)) {
           const resolved = resolveInventoryPhotoUrl(
             next.plantName,
             next.containerSize,
@@ -560,12 +562,42 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return resolveInventoryPhotoUrl(item.plantName, item.containerSize, inventoryPlants);
   };
 
-  const inventoryHasPhoto = (item: PlantOrderItem): boolean => {
-    if (isHttpUrl(item.photoUrl)) return true;
-    return Boolean(
-      resolveInventoryPhotoUrl(item.plantName, item.containerSize, inventoryPlants)
+  const plantsWithPhotos = inventoryPlants
+    .filter((p) => isHttpUrl(p.photoUrl))
+    .slice()
+    .sort((a, b) => a.plantName.localeCompare(b.plantName));
+
+  const inventoryPhotoOptionsForLine = (item: PlantOrderItem): InventoryPlant[] => {
+    const matches = findMatchingInventoryPlants(
+      plantsWithPhotos,
+      item.plantName,
+      item.containerSize
     );
+    const matchIds = new Set(matches.map((p) => p.id));
+    const rest = plantsWithPhotos.filter((p) => !matchIds.has(p.id));
+    return [...matches, ...rest];
   };
+
+  async function handleEstimatePhotoUpload(item: PlantOrderItem, file: File) {
+    if (!tenantId) {
+      setPhotoPickError(t('invoice.photoUploadNeedTenant'));
+      return;
+    }
+    setPhotoPickError(null);
+    setPhotoUploadBusyId(item.id);
+    try {
+      const { photoUrl } = await uploadEstimateLinePhoto({
+        tenantId,
+        lineId: item.id,
+        file
+      });
+      updateDraftLine(item.id, { includePhotoLink: true, photoUrl });
+    } catch (err: any) {
+      setPhotoPickError(err?.message || t('invoice.photoUploadFailed'));
+    } finally {
+      setPhotoUploadBusyId(null);
+    }
+  }
 
   const addDraftLine = () => {
     const id = `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -3041,61 +3073,142 @@ Thank you for choosing ${nurseryName}!
                             {documentType === 'estimate' ? (
                               <>
                               {canEditLines && (
-                                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 print:hidden">
-                                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={unavailable}
-                                      onChange={(e) =>
-                                        updateDraftLine(item.id, {
-                                          unavailable: e.target.checked
-                                        })
-                                      }
-                                      className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                                    />
-                                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                      {t('invoice.markUnavailable')}
-                                    </span>
-                                  </label>
-                                  <label
-                                    className={`inline-flex items-center gap-1.5 ${
-                                      inventoryHasPhoto(item) || item.includePhotoLink
-                                        ? 'cursor-pointer'
-                                        : 'opacity-50 cursor-not-allowed'
-                                    }`}
-                                    title={
-                                      inventoryHasPhoto(item) || item.includePhotoLink
-                                        ? t('invoice.photoLinkHint')
-                                        : t('invoice.photoLinkNoPhoto')
-                                    }
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(item.includePhotoLink)}
-                                      disabled={
-                                        !item.includePhotoLink && !inventoryHasPhoto(item)
-                                      }
-                                      onChange={(e) => {
-                                        const on = e.target.checked;
-                                        const resolved = on
-                                          ? resolveInventoryPhotoUrl(
-                                              item.plantName,
-                                              item.containerSize,
-                                              inventoryPlants
-                                            ) || item.photoUrl || null
-                                          : null;
-                                        updateDraftLine(item.id, {
-                                          includePhotoLink: on,
-                                          photoUrl: resolved
-                                        });
-                                      }}
-                                      className="rounded border-slate-300 text-ink-600 focus:ring-ink-500"
-                                    />
-                                    <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 inline-flex items-center gap-1">
-                                      <ImageIcon className="h-3 w-3" />
-                                      {t('invoice.photoLink')}
-                                    </span>
-                                  </label>
+                                <div className="mt-1.5 space-y-1.5 print:hidden">
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={unavailable}
+                                        onChange={(e) =>
+                                          updateDraftLine(item.id, {
+                                            unavailable: e.target.checked
+                                          })
+                                        }
+                                        className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                      />
+                                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                        {t('invoice.markUnavailable')}
+                                      </span>
+                                    </label>
+                                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(item.includePhotoLink)}
+                                        onChange={(e) => {
+                                          const on = e.target.checked;
+                                          updateDraftLine(item.id, {
+                                            includePhotoLink: on,
+                                            ...(on ? {} : { photoUrl: null })
+                                          });
+                                        }}
+                                        className="rounded border-slate-300 text-ink-600 focus:ring-ink-500"
+                                      />
+                                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 inline-flex items-center gap-1">
+                                        <ImageIcon className="h-3 w-3" />
+                                        {t('invoice.photoLink')}
+                                      </span>
+                                    </label>
+                                  </div>
+                                  {item.includePhotoLink && (
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2 space-y-2 max-w-md">
+                                      {(() => {
+                                        const photo = linePhotoUrl(item);
+                                        return photo ? (
+                                          <div className="flex items-center gap-2">
+                                            <a
+                                              href={photo}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="shrink-0"
+                                            >
+                                              <img
+                                                src={photo}
+                                                alt=""
+                                                className="h-14 w-14 rounded-lg object-cover border border-slate-200"
+                                              />
+                                            </a>
+                                            <div className="min-w-0 flex-1">
+                                              <p className="text-[10px] font-bold text-ink-800">
+                                                {t('invoice.viewPhoto')}
+                                              </p>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  updateDraftLine(item.id, {
+                                                    photoUrl: null
+                                                  })
+                                                }
+                                                className="text-[10px] font-semibold text-rose-600 hover:underline"
+                                              >
+                                                {t('invoice.clearPhoto')}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <p className="text-[10px] text-slate-500">
+                                            {t('invoice.photoPickOrUpload')}
+                                          </p>
+                                        );
+                                      })()}
+                                      <label className="block">
+                                        <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                          {t('invoice.chooseInventoryPhoto')}
+                                        </span>
+                                        <select
+                                          value={
+                                            plantsWithPhotos.find(
+                                              (p) => p.photoUrl === item.photoUrl
+                                            )?.id || ''
+                                          }
+                                          onChange={(e) => {
+                                            const plant = plantsWithPhotos.find(
+                                              (p) => p.id === e.target.value
+                                            );
+                                            if (!plant?.photoUrl) return;
+                                            updateDraftLine(item.id, {
+                                              includePhotoLink: true,
+                                              photoUrl: plant.photoUrl
+                                            });
+                                          }}
+                                          className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-ink-600"
+                                        >
+                                          <option value="">
+                                            {plantsWithPhotos.length
+                                              ? t('invoice.chooseInventoryPhotoPlaceholder')
+                                              : t('invoice.noInventoryPhotos')}
+                                          </option>
+                                          {inventoryPhotoOptionsForLine(item).map((plant) => (
+                                            <option key={plant.id} value={plant.id}>
+                                              {plant.plantName}
+                                              {plant.containerSize
+                                                ? ` · ${plant.containerSize}`
+                                                : ''}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label className="inline-flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-ink-700 hover:text-ink-900">
+                                        <Upload className="h-3.5 w-3.5" />
+                                        {photoUploadBusyId === item.id
+                                          ? t('invoice.photoUploading')
+                                          : t('invoice.uploadPhoto')}
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          disabled={photoUploadBusyId === item.id}
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (file) void handleEstimatePhotoUpload(item, file);
+                                          }}
+                                        />
+                                      </label>
+                                      {photoPickError && (
+                                        <p className="text-[10px] text-rose-600">{photoPickError}</p>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               <label className="block mt-1.5">

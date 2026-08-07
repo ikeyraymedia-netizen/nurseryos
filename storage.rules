@@ -17,6 +17,15 @@ service firebase.storage {
       allow delete: if signedIn();
     }
 
+    // Estimate line photos — public read so customers can open View photo without login.
+    match /tenants/{tenantId}/estimatePhotos/{lineId}/{fileName} {
+      allow read: if true;
+      allow create, update: if signedIn()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn();
+    }
+
     // Scanned vendor invoices (image or PDF) — signed-in read/write.
     match /tenants/{tenantId}/vendorBills/{billId}/{fileName} {
       allow read: if signedIn();

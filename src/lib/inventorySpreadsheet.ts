@@ -174,12 +174,28 @@ function mapTableToInventory(table: string[][]): SpreadsheetInventoryItem[] {
     ['location', 'bed', 'block', 'bay', 'zone', 'aisle', 'house', 'yard']
   ]);
   const notesIdx = pickColumn(headers, [['notes', 'note', 'comment', 'remarks', 'memo']]);
+  const priceIdx = pickColumn(headers, [
+    [
+      'list price',
+      'unit price',
+      'sales price',
+      'wholesale price',
+      'wholesale',
+      'unit cost',
+      'cost',
+      'price each',
+      'each',
+      'price'
+    ]
+  ]);
 
   const out: SpreadsheetInventoryItem[] = [];
   for (const row of table.slice(headerRowIdx + 1)) {
     const plantName = String(row[nameIdx] || '').trim();
     if (!plantName) continue;
     if (normalizeHeaderCell(plantName) === headers[nameIdx]) continue;
+
+    const listPrice = priceIdx >= 0 ? parsePriceNumber(String(row[priceIdx] ?? '')) : null;
 
     const entry: SpreadsheetInventoryItem = {
       plantName,
@@ -188,6 +204,7 @@ function mapTableToInventory(table: string[][]): SpreadsheetInventoryItem[] {
       chemicals: [],
       fertilizers: [],
       cutBackAt: null,
+      listPrice,
       notes: notesIdx >= 0 ? String(row[notesIdx] || '').trim() : ''
     };
     if (locationIdx >= 0 && String(row[locationIdx] || '').trim()) {

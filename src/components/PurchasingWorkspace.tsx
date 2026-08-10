@@ -15,7 +15,8 @@ import {
   Search,
   Trash2,
   Upload,
-  X
+  X,
+  Trees
 } from 'lucide-react';
 import {
   PurchaseOrder,
@@ -73,8 +74,9 @@ import {
 import { pushVendorBillToQuickbooks } from '../lib/quickbooks';
 import { logAuditEvent } from '../lib/audit';
 import { BankFeedPanel } from './BankFeedPanel';
+import { SourcingPanel } from './SourcingPanel';
 
-type PurchasingView = 'vendors' | 'orders' | 'bills' | 'feed';
+type PurchasingView = 'vendors' | 'orders' | 'bills' | 'feed' | 'sourcing';
 
 const VENDOR_TERM_PRESETS = [
   'COD',
@@ -1168,6 +1170,7 @@ export function PurchasingWorkspace({
               ['orders', t('purchasing.pos'), ClipboardList],
               ['vendors', t('purchasing.vendors'), Building2],
               ['bills', t('purchasing.bills'), Receipt],
+              ['sourcing', t('purchasing.sourcingTab'), Trees],
               ['feed', t('purchasing.feedTab'), CreditCard]
             ] as const
           ).map(([id, label, Icon]) => (
@@ -1205,7 +1208,9 @@ export function PurchasingWorkspace({
                   ? t('purchasing.searchPos')
                   : view === 'feed'
                     ? t('purchasing.searchFeed')
-                    : t('purchasing.searchBills')
+                    : view === 'sourcing'
+                      ? t('purchasing.searchSourcing')
+                      : t('purchasing.searchBills')
           }
           className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm"
         />
@@ -1226,6 +1231,16 @@ export function PurchasingWorkspace({
         <BankFeedPanel
           vendors={vendors}
           bills={bills}
+          permissions={permissions}
+          search={search}
+          onStatus={setStatus}
+          onError={(msg) => setError(msg || null)}
+        />
+      )}
+
+      {view === 'sourcing' && (
+        <SourcingPanel
+          vendors={vendors}
           permissions={permissions}
           search={search}
           onStatus={setStatus}

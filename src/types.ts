@@ -464,6 +464,25 @@ export interface VendorBill {
   updatedAt: string;
 }
 
+/** One plant/size row from a vendor availability / price list upload (Sourcing). */
+export interface VendorAvailabilityLine {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  plantName: string;
+  containerSize: string;
+  quantityAvailable: number;
+  listPrice?: number | null;
+  location?: string;
+  category?: string;
+  notes?: string;
+  sourceFileName?: string;
+  importBatchId: string;
+  importedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Bank or credit-card line imported from CSV for expense tagging. */
 export type BankFeedStatus = 'unreviewed' | 'tagged' | 'ignored';
 

@@ -22,6 +22,7 @@ import {
   parseOrderTextLocally,
   localParseLooksIncomplete
 } from './server/orderTextParse';
+import { chunkPdfText, extractPdfText } from './server/pdfTextExtract';
 
 dotenv.config();
 
@@ -122,12 +123,14 @@ function isSkippableModelError(error: any): boolean {
 }
 
 const PARSE_MODELS = [
+  // Stable aliases first — more reliable across API key / region rollouts
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
-  'gemini-3.1-flash-lite',
-  // Legacy fallbacks for older API keys
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite'
+  'gemini-3.1-flash-lite'
 ] as const;
 
 function normalizeOrderMimeType(mimeType: string | undefined, fileName?: string): string {
@@ -191,7 +194,48 @@ function getOrderParseSchema() {
   };
 }
 
-function getInventoryParseSchema() {
+function getInventoryParseSchema(isVendorAvailability = false) {
+  const itemProperties = isVendorAvailability
+    ? {
+        plantName: { type: Type.STRING },
+        containerSize: { type: Type.STRING },
+        quantityAvailable: { type: Type.INTEGER },
+        listPrice: {
+          type: Type.NUMBER,
+          description: 'Wholesale / list price if shown, else omit'
+        },
+        location: { type: Type.STRING },
+        category: { type: Type.STRING },
+        notes: { type: Type.STRING }
+      }
+    : {
+        plantName: { type: Type.STRING },
+        containerSize: { type: Type.STRING },
+        quantityAvailable: { type: Type.INTEGER },
+        listPrice: {
+          type: Type.NUMBER,
+          description: 'Wholesale / list price if shown on the sheet, else omit'
+        },
+        plantedDate: { type: Type.STRING },
+        readyDate: { type: Type.STRING },
+        location: { type: Type.STRING },
+        category: { type: Type.STRING },
+        notes: { type: Type.STRING },
+        cutBackAt: { type: Type.STRING },
+        recentChemicals: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              chemicalName: { type: Type.STRING },
+              appliedAt: { type: Type.STRING },
+              notes: { type: Type.STRING }
+            },
+            required: ['chemicalName']
+          }
+        }
+      };
+
   return {
     responseMimeType: 'application/json' as const,
     responseSchema: {
@@ -202,33 +246,7 @@ function getInventoryParseSchema() {
           description: 'Inventory plants extracted from the uploaded file',
           items: {
             type: Type.OBJECT,
-            properties: {
-              plantName: { type: Type.STRING },
-              containerSize: { type: Type.STRING },
-              quantityAvailable: { type: Type.INTEGER },
-              listPrice: {
-                type: Type.NUMBER,
-                description: 'Wholesale / list price if shown on the sheet, else omit'
-              },
-              plantedDate: { type: Type.STRING },
-              readyDate: { type: Type.STRING },
-              location: { type: Type.STRING },
-              category: { type: Type.STRING },
-              notes: { type: Type.STRING },
-              cutBackAt: { type: Type.STRING },
-              recentChemicals: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    chemicalName: { type: Type.STRING },
-                    appliedAt: { type: Type.STRING },
-                    notes: { type: Type.STRING }
-                  },
-                  required: ['chemicalName']
-                }
-              }
-            },
+            properties: itemProperties,
             required: ['plantName', 'containerSize', 'quantityAvailable']
           }
         }
@@ -236,6 +254,45 @@ function getInventoryParseSchema() {
       required: ['items']
     }
   };
+}
+
+function parseInventoryItemsJson(responseText: string): any[] {
+  const trimmed = String(responseText || '').trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
+  } catch {
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(trimmed.slice(start, end + 1));
+        return Array.isArray(parsed?.items) ? parsed.items : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+}
+
+function mergeInventoryItems(chunks: any[][]): any[] {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const items of chunks) {
+    for (const item of items) {
+      const plantName = String(item?.plantName || '').trim();
+      if (!plantName) continue;
+      const size = String(item?.containerSize || item?.size || 'Other').trim() || 'Other';
+      const price = item?.listPrice ?? item?.unitPrice ?? item?.price ?? '';
+      const key = `${plantName.toLowerCase()}|${size.toLowerCase()}|${price}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
 }
 
 async function generateOrderParseResponse(
@@ -329,34 +386,48 @@ async function parseOrderWithFallback(
 async function generateInventoryParseResponse(
   ai: GoogleGenAI,
   model: string,
-  mimeType: string,
-  cleanBase64: string,
-  prompt: string
+  prompt: string,
+  options: {
+    mimeType?: string;
+    cleanBase64?: string;
+    sourceText?: string;
+    isVendorAvailability?: boolean;
+    timeoutMs?: number;
+  }
 ) {
-  return withTimeout(
-    ai.models.generateContent({
-      model,
-      contents: [
+  const contents = options.sourceText
+    ? [`${prompt}\n\n--- DOCUMENT TEXT ---\n${options.sourceText}`]
+    : [
         {
           inlineData: {
-            mimeType,
-            data: cleanBase64
+            mimeType: options.mimeType || 'application/pdf',
+            data: options.cleanBase64 || ''
           }
         },
         prompt
-      ],
-      config: getInventoryParseSchema()
+      ];
+
+  return withTimeout(
+    ai.models.generateContent({
+      model,
+      contents,
+      config: getInventoryParseSchema(Boolean(options.isVendorAvailability))
     }),
     `Inventory parse (${model})`,
-    INVENTORY_GEMINI_TIMEOUT_MS
+    options.timeoutMs ?? INVENTORY_GEMINI_TIMEOUT_MS
   );
 }
 
 async function parseInventoryWithFallback(
   ai: GoogleGenAI,
-  mimeType: string,
-  cleanBase64: string,
-  prompt: string
+  prompt: string,
+  options: {
+    mimeType?: string;
+    cleanBase64?: string;
+    sourceText?: string;
+    isVendorAvailability?: boolean;
+    timeoutMs?: number;
+  }
 ) {
   let lastError: any = null;
   const maxAttemptsPerModel = 2;
@@ -365,7 +436,7 @@ async function parseInventoryWithFallback(
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
       try {
         console.log(`Parsing inventory with ${model} (attempt ${attempt}/${maxAttemptsPerModel})...`);
-        const response = await generateInventoryParseResponse(ai, model, mimeType, cleanBase64, prompt);
+        const response = await generateInventoryParseResponse(ai, model, prompt, options);
         console.log(`Inventory parsed successfully with ${model}`);
         return response;
       } catch (err: any) {
@@ -400,6 +471,33 @@ async function parseInventoryWithFallback(
   }
 
   throw lastError || new Error('All Gemini models failed to parse inventory.');
+}
+
+async function parseInventoryTextChunks(
+  ai: GoogleGenAI,
+  prompt: string,
+  fullText: string,
+  isVendorAvailability: boolean
+): Promise<any[]> {
+  const chunks = chunkPdfText(fullText);
+  console.log(`PDF text extract: ${fullText.length} chars → ${chunks.length} chunk(s)`);
+  const parsedChunks: any[][] = [];
+  for (let i = 0; i < chunks.length; i += 1) {
+    const chunkPrompt =
+      chunks.length === 1
+        ? prompt
+        : `${prompt}\n\nThis is part ${i + 1} of ${chunks.length} of the same list. Extract every plant row in THIS part only.`;
+    const response = await parseInventoryWithFallback(ai, chunkPrompt, {
+      sourceText: chunks[i],
+      isVendorAvailability,
+      // Text chunks are much faster than raw PDF vision
+      timeoutMs: 90_000
+    });
+    const items = parseInventoryItemsJson(response.text || '');
+    console.log(`Chunk ${i + 1}/${chunks.length}: ${items.length} items`);
+    parsedChunks.push(items);
+  }
+  return mergeInventoryItems(parsedChunks);
 }
 
 // API endpoint to parse the order
@@ -618,14 +716,39 @@ Extract a clean plant inventory list where each item includes:
 
 Return strict JSON matching schema. Do not include narrative text.`;
 
-    const response = await parseInventoryWithFallback(ai, mimeType, cleanBase64, prompt);
-    const responseText = response.text;
-    if (!responseText) {
-      throw new Error('Gemini model returned empty response.');
+    const normalizedMime = normalizeOrderMimeType(mimeType, fileName);
+    let items: any[] = [];
+
+    // Prefer extracted PDF text + chunked Gemini calls. Raw multi-page PDF vision
+    // often times out or returns empty items on wholesale availability books.
+    if (normalizedMime === 'application/pdf') {
+      const pdfBuffer = Buffer.from(cleanBase64, 'base64');
+      try {
+        const { text, totalPages } = await extractPdfText(pdfBuffer);
+        console.log(
+          `PDF text extract for ${fileName || 'upload'}: pages=${totalPages}, chars=${text.length}`
+        );
+        if (text.length >= 80) {
+          items = await parseInventoryTextChunks(ai, prompt, text, isVendorAvailability);
+        }
+      } catch (extractErr: any) {
+        console.warn('PDF text extraction failed, falling back to vision:', extractErr?.message || extractErr);
+      }
     }
 
-    const parsedData = JSON.parse(responseText);
-    const items = Array.isArray(parsedData?.items) ? parsedData.items : [];
+    if (items.length === 0) {
+      const response = await parseInventoryWithFallback(ai, prompt, {
+        mimeType: normalizedMime,
+        cleanBase64,
+        isVendorAvailability
+      });
+      const responseText = response.text;
+      if (!responseText) {
+        throw new Error('Gemini model returned empty response.');
+      }
+      items = parseInventoryItemsJson(responseText);
+    }
+
     if (items.length === 0) {
       res.status(400).json({
         error: isVendorAvailability

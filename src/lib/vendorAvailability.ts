@@ -228,7 +228,16 @@ async function parseAvailabilityPdf(
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({} as any));
+    const contentType = response.headers.get('content-type') || '';
+    const rawBody = await response.text().catch(() => '');
+    let errorData: any = {};
+    if (contentType.includes('application/json') || rawBody.trim().startsWith('{')) {
+      try {
+        errorData = JSON.parse(rawBody);
+      } catch {
+        errorData = {};
+      }
+    }
     const detail =
       typeof errorData?.details === 'string'
         ? errorData.details
@@ -236,9 +245,22 @@ async function parseAvailabilityPdf(
           ? String(errorData.details.message)
           : '';
     const message = [errorData?.error, detail].filter(Boolean).join(' — ');
+    if (message) throw new Error(message);
+    if (response.status === 413) {
+      throw new Error('PDF is too large for the server. Try a shorter page range, or use CSV/Excel.');
+    }
+    if (response.status === 502 || response.status === 504) {
+      throw new Error(
+        'PDF analysis timed out on the server. Try fewer pages, or export the list as CSV/Excel.'
+      );
+    }
+    if (rawBody.trim().startsWith('<!DOCTYPE') || rawBody.trim().startsWith('<html')) {
+      throw new Error(
+        `Could not reach the PDF parser (HTTP ${response.status}). Refresh and try again, or use CSV/Excel.`
+      );
+    }
     throw new Error(
-      message ||
-        `Could not read plants from that PDF (HTTP ${response.status}). Try CSV/Excel, or a clearer PDF.`
+      `Could not read plants from that PDF (HTTP ${response.status}). Try CSV/Excel, or a clearer PDF.`
     );
   }
 
@@ -246,7 +268,9 @@ async function parseAvailabilityPdf(
   const rawItems = Array.isArray(result?.items) ? result.items : [];
   const rows = mapAiItemsToSpreadsheetRows(rawItems);
   if (rows.length === 0) {
-    throw new Error('No plants detected in that PDF.');
+    throw new Error(
+      'No plants detected in that PDF. If it is a scanned image-only PDF, try exporting as CSV/Excel from the grower site.'
+    );
   }
   return rows;
 }

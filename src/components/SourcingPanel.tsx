@@ -32,6 +32,7 @@ export function SourcingPanel({
   const [lines, setLines] = useState<VendorAvailabilityLine[]>([]);
   const [uploadVendorId, setUploadVendorId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [filterVendorId, setFilterVendorId] = useState('');
 
   useEffect(() => {
@@ -81,13 +82,15 @@ export function SourcingPanel({
       return;
     }
     setBusy(true);
+    setUploadStatus('');
     onError(null);
     onStatus(null);
     try {
-      const rows = await parseVendorAvailabilityFile(file);
+      const rows = await parseVendorAvailabilityFile(file, setUploadStatus);
       if (rows.length === 0) {
         throw new Error(t('purchasing.sourcingNoRows'));
       }
+      setUploadStatus(t('purchasing.sourcingSaving', { count: String(rows.length) }));
       const result = await replaceVendorAvailabilityFromUpload({
         vendorId: vendor.id,
         vendorName: vendor.name,
@@ -114,6 +117,7 @@ export function SourcingPanel({
       onError(err?.message || t('purchasing.sourcingUploadFailed'));
     } finally {
       setBusy(false);
+      setUploadStatus('');
     }
   }
 
@@ -176,7 +180,7 @@ export function SourcingPanel({
               {busy ? t('purchasing.sourcingUploading') : t('purchasing.sourcingUpload')}
               <input
                 type="file"
-                accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                accept=".csv,.txt,.xlsx,.xls,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="hidden"
                 disabled={busy || !uploadVendorId}
                 onChange={(e) => {
@@ -189,6 +193,9 @@ export function SourcingPanel({
           </div>
         ) : (
           <p className="text-xs text-slate-500">{t('purchasing.sourcingReadOnly')}</p>
+        )}
+        {uploadStatus && (
+          <p className="text-[11px] font-semibold text-ink-700">{uploadStatus}</p>
         )}
 
         {vendorStats.length > 0 && (

@@ -98,25 +98,176 @@ async function deleteLinesForVendor(tenantId: string, vendorId: string): Promise
   return deleted;
 }
 
-/** Parse CSV or Excel vendor availability / price lists (same formats as inventory import). */
-export async function parseVendorAvailabilityFile(
-  file: File
-): Promise<SpreadsheetInventoryItem[]> {
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.csv') || name.endsWith('.txt') || file.type.includes('csv')) {
-    const text = await file.text();
-    return parseInventoryCsvText(text);
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const PDF_PARSE_TIMEOUT_MS = 360_000;
+
+function inferAvailabilityMimeType(file: File): string {
+  if (file.type) return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'csv':
+    case 'txt':
+      return 'text/csv';
+    case 'xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case 'xls':
+      return 'application/vnd.ms-excel';
+    default:
+      return 'application/octet-stream';
   }
-  if (
+}
+
+function isSpreadsheetAvailabilityFile(file: File, mimeType: string): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith('.csv') ||
+    name.endsWith('.txt') ||
+    name.endsWith('.tsv') ||
     name.endsWith('.xlsx') ||
     name.endsWith('.xls') ||
-    file.type.includes('sheet') ||
-    file.type.includes('excel')
-  ) {
+    mimeType === 'text/csv' ||
+    mimeType === 'text/plain' ||
+    mimeType === 'text/tab-separated-values' ||
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimeType.includes('sheet') ||
+    mimeType.includes('excel') ||
+    mimeType.includes('csv')
+  );
+}
+
+function isPdfAvailabilityFile(file: File, mimeType: string): boolean {
+  return file.name.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf';
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function mapAiItemsToSpreadsheetRows(rawItems: any[]): SpreadsheetInventoryItem[] {
+  return rawItems
+    .map((item) => {
+      const plantName = String(item?.plantName || '').trim();
+      if (!plantName) return null;
+      const listPriceRaw = item?.listPrice ?? item?.unitPrice ?? item?.price;
+      const listPrice =
+        listPriceRaw == null || listPriceRaw === ''
+          ? null
+          : Number(listPriceRaw);
+      return {
+        plantName,
+        containerSize: String(item?.containerSize || item?.size || 'Other').trim() || 'Other',
+        quantityAvailable: Number(item?.quantityAvailable ?? item?.quantity ?? 0) || 0,
+        location: item?.location ? String(item.location) : undefined,
+        category: item?.category ? String(item.category) : undefined,
+        listPrice: Number.isFinite(listPrice as number) ? (listPrice as number) : null,
+        notes: item?.notes ? String(item.notes) : '',
+        chemicals: [] as [],
+        fertilizers: [] as [],
+        cutBackAt: null
+      } satisfies SpreadsheetInventoryItem;
+    })
+    .filter(Boolean) as SpreadsheetInventoryItem[];
+}
+
+async function parseAvailabilityPdf(
+  file: File,
+  onStatus?: (message: string) => void
+): Promise<SpreadsheetInventoryItem[]> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error('PDF is too large. Keep files under 20 MB.');
+  }
+  onStatus?.('Reading PDF…');
+  const base64Data = await fileToDataUrl(file);
+  onStatus?.('Analyzing PDF with AI (large lists may take a few minutes)…');
+
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      '/api/parse-inventory',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64Data,
+          mimeType: 'application/pdf',
+          fileName: file.name
+        })
+      },
+      PDF_PARSE_TIMEOUT_MS
+    );
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'PDF analysis timed out. Try again, or export the list as CSV/Excel.'
+      );
+    }
+    throw err;
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.error ||
+        (typeof errorData.details === 'string' ? errorData.details : null) ||
+        'Could not read plants from that PDF.'
+    );
+  }
+
+  const result = await response.json();
+  const rawItems = Array.isArray(result?.items) ? result.items : [];
+  const rows = mapAiItemsToSpreadsheetRows(rawItems);
+  if (rows.length === 0) {
+    throw new Error('No plants detected in that PDF.');
+  }
+  return rows;
+}
+
+/** Parse CSV, Excel, or PDF vendor availability / price lists. */
+export async function parseVendorAvailabilityFile(
+  file: File,
+  onStatus?: (message: string) => void
+): Promise<SpreadsheetInventoryItem[]> {
+  const mimeType = inferAvailabilityMimeType(file);
+  const name = file.name.toLowerCase();
+
+  if (isSpreadsheetAvailabilityFile(file, mimeType)) {
+    if (name.endsWith('.csv') || name.endsWith('.txt') || name.endsWith('.tsv') || mimeType.includes('csv') || mimeType.includes('tab-separated') || mimeType === 'text/plain') {
+      onStatus?.('Reading CSV…');
+      const text = await file.text();
+      return parseInventoryCsvText(text);
+    }
+    onStatus?.('Reading Excel…');
     const buf = await file.arrayBuffer();
     return parseInventorySpreadsheetArrayBuffer(buf, file.name);
   }
-  throw new Error('Use a CSV or Excel (.xlsx) availability file.');
+
+  if (isPdfAvailabilityFile(file, mimeType)) {
+    return parseAvailabilityPdf(file, onStatus);
+  }
+
+  throw new Error('Use a CSV, Excel (.xlsx/.xls), or PDF availability file.');
 }
 
 /**

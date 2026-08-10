@@ -212,7 +212,8 @@ async function parseAvailabilityPdf(
         body: JSON.stringify({
           base64Data,
           mimeType: 'application/pdf',
-          fileName: file.name
+          fileName: file.name,
+          purpose: 'vendor-availability'
         })
       },
       PDF_PARSE_TIMEOUT_MS
@@ -227,11 +228,17 @@ async function parseAvailabilityPdf(
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+    const errorData = await response.json().catch(() => ({} as any));
+    const detail =
+      typeof errorData?.details === 'string'
+        ? errorData.details
+        : errorData?.details?.message
+          ? String(errorData.details.message)
+          : '';
+    const message = [errorData?.error, detail].filter(Boolean).join(' — ');
     throw new Error(
-      errorData.error ||
-        (typeof errorData.details === 'string' ? errorData.details : null) ||
-        'Could not read plants from that PDF.'
+      message ||
+        `Could not read plants from that PDF (HTTP ${response.status}). Try CSV/Excel, or a clearer PDF.`
     );
   }
 

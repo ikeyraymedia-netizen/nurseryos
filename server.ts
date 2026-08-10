@@ -122,11 +122,12 @@ function isSkippableModelError(error: any): boolean {
 }
 
 const PARSE_MODELS = [
-  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
   'gemini-3.5-flash',
-  // Legacy fallbacks for older API keys that still have 2.5 access
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash'
+  'gemini-3.1-flash-lite',
+  // Legacy fallbacks for older API keys
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite'
 ] as const;
 
 function normalizeOrderMimeType(mimeType: string | undefined, fileName?: string): string {
@@ -205,9 +206,14 @@ function getInventoryParseSchema() {
               plantName: { type: Type.STRING },
               containerSize: { type: Type.STRING },
               quantityAvailable: { type: Type.INTEGER },
+              listPrice: {
+                type: Type.NUMBER,
+                description: 'Wholesale / list price if shown on the sheet, else omit'
+              },
               plantedDate: { type: Type.STRING },
               readyDate: { type: Type.STRING },
               location: { type: Type.STRING },
+              category: { type: Type.STRING },
               notes: { type: Type.STRING },
               cutBackAt: { type: Type.STRING },
               recentChemicals: {
@@ -353,7 +359,7 @@ async function parseInventoryWithFallback(
   prompt: string
 ) {
   let lastError: any = null;
-  const maxAttemptsPerModel = 1;
+  const maxAttemptsPerModel = 2;
 
   for (const model of PARSE_MODELS) {
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
@@ -557,13 +563,14 @@ Return your response in structured JSON format matching the schema provided.`;
 // API endpoint to parse inventory files (PDF/image via AI; CSV/Excel parsed locally)
 app.post('/api/parse-inventory', async (req, res) => {
   try {
-    const { base64Data, mimeType, fileName } = req.body;
+    const { base64Data, mimeType, fileName, purpose } = req.body;
     if (!base64Data || !mimeType) {
       res.status(400).json({ error: 'Missing base64Data or mimeType.' });
       return;
     }
 
     const cleanBase64 = String(base64Data).replace(/^data:.*?;base64,/, '');
+    const isVendorAvailability = String(purpose || '') === 'vendor-availability';
 
     // Spreadsheets are not supported by Gemini mime types — parse them directly.
     if (isSpreadsheetInventoryUpload(String(mimeType), fileName)) {
@@ -581,17 +588,33 @@ app.post('/api/parse-inventory', async (req, res) => {
     }
 
     const ai = getAiClient();
-    const prompt = `Analyze this nursery inventory source file (${fileName || 'inventory file'}).
+    const prompt = isVendorAvailability
+      ? `Analyze this wholesale nursery vendor availability / price list PDF (${fileName || 'vendor list'}).
+This is a GROWER availability or price sheet used for sourcing plants — not our own inventory log.
+
+Extract every plant/tree/shrub line you can find. For each item include:
+1) plantName (variety / botanical / common name as printed)
+2) containerSize (standardized if possible: #1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other). If the sheet is a price matrix with size columns, create one item per plant+size that has a price or qty.
+3) quantityAvailable (integer; use printed qty if present, otherwise 0)
+4) listPrice (number — wholesale/list price if shown; omit if unknown)
+5) category (Trees, Shrubs, etc. if section headers are present)
+6) location (if present)
+7) notes (caliper, height, comments)
+
+Return strict JSON matching schema with an items array. Do not include narrative text. Prefer extracting many rows over skipping rows.`
+      : `Analyze this nursery inventory source file (${fileName || 'inventory file'}).
 Extract a clean plant inventory list where each item includes:
 1) plantName
 2) containerSize (standardized if possible: #1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other)
 3) quantityAvailable (integer, default 0 if unknown)
-4) plantedDate (YYYY-MM-DD if shown, otherwise omit)
-5) readyDate (YYYY-MM-DD if shown, otherwise omit)
-6) location (if present)
-7) notes (if relevant)
-8) cutBackAt date if clearly mentioned, otherwise omit
-9) recentChemicals array if sprays are listed (chemicalName, appliedAt if available, notes if available)
+4) listPrice (number if a price is shown, otherwise omit)
+5) plantedDate (YYYY-MM-DD if shown, otherwise omit)
+6) readyDate (YYYY-MM-DD if shown, otherwise omit)
+7) location (if present)
+8) category (if section headers are present)
+9) notes (if relevant)
+10) cutBackAt date if clearly mentioned, otherwise omit
+11) recentChemicals array if sprays are listed (chemicalName, appliedAt if available, notes if available)
 
 Return strict JSON matching schema. Do not include narrative text.`;
 
@@ -603,6 +626,14 @@ Return strict JSON matching schema. Do not include narrative text.`;
 
     const parsedData = JSON.parse(responseText);
     const items = Array.isArray(parsedData?.items) ? parsedData.items : [];
+    if (items.length === 0) {
+      res.status(400).json({
+        error: isVendorAvailability
+          ? 'No plants found in that PDF. Try a clearer PDF, or export the list as CSV/Excel.'
+          : 'No plants found in that file. Try CSV/Excel, or a clearer PDF/photo.'
+      });
+      return;
+    }
     res.json({ items });
   } catch (error: any) {
     console.error('Error parsing inventory with Gemini:', error);
@@ -622,9 +653,17 @@ Return strict JSON matching schema. Do not include narrative text.`;
       });
       return;
     }
+    if (statusCode === 404) {
+      res.status(502).json({
+        error:
+          'AI model is unavailable right now. Try again in a moment, or upload CSV/Excel instead of PDF.',
+        details: error.message || error
+      });
+      return;
+    }
     res.status(500).json({
       error: 'Failed to process inventory file.',
-      details: error.message || error
+      details: error.message || String(error)
     });
   }
 });

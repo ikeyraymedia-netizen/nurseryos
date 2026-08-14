@@ -264,7 +264,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       let textX = margin;
       if (logoSrc) {
         try {
-          const logo = await imageSrcToDataUrl(logoSrc);
+          const logo = await Promise.race([
+            imageSrcToDataUrl(logoSrc),
+            new Promise<never>((_, reject) => {
+              window.setTimeout(() => reject(new Error('logo timeout')), 4000);
+            })
+          ]);
           const logoSize = 52;
           pdf.addImage(logo.dataUrl, logo.format, margin, headerTop, logoSize, logoSize);
           textX = margin + logoSize + 12;
@@ -513,6 +518,22 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <X className="h-4 w-4" />
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isGeneratingPdf}
+            className="md:hidden w-full py-3 px-4 bg-ink-800 hover:bg-ink-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center space-x-2"
+          >
+            <Printer className="h-4 w-4" />
+            <span>
+              {isGeneratingPdf
+                ? t('bol.generating')
+                : selectedBOLType === 'consolidated'
+                  ? t('bol.downloadConsolidated')
+                  : t('bol.downloadOrder')}
+            </span>
+          </button>
 
           <div className="space-y-4 text-xs">
             {/* Blind BOL — hide customer name on printed document */}

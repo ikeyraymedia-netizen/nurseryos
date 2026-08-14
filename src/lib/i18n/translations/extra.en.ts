@@ -1340,7 +1340,10 @@ const extra = {
     share: 'Share',
     savePdf: 'Save PDF',
     download: 'Download',
-    done: 'Done'
+    done: 'Done',
+    openPdf: 'Open PDF',
+    phoneHint:
+      'On iPhone the preview is often blank. Tap Share to save or send, or Open PDF to view it.'
   },
   upload: {
     addOrder: 'Add Order',

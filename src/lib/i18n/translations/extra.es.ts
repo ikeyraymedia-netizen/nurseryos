@@ -1355,7 +1355,10 @@ const extra = {
     share: 'Compartir',
     savePdf: 'Guardar PDF',
     download: 'Descargar',
-    done: 'Listo'
+    done: 'Listo',
+    openPdf: 'Abrir PDF',
+    phoneHint:
+      'En iPhone la vista previa suele salir en blanco. Toque Compartir para guardar o enviar, o Abrir PDF para verlo.'
   },
   upload: {
     addOrder: 'Agregar pedido',

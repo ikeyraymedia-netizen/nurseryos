@@ -671,7 +671,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             : ''
         }
         <h1 style="color: #0e7490; margin-bottom: 2px; font-size: 24px; font-weight: 800; text-transform: uppercase; font-family: Arial, sans-serif;">${nurseryName}</h1>
-        <p style="font-size: 11px; color: #0e7490; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">{t('invoice.wholesaleNursery')}</p>
+        <p style="font-size: 11px; color: #0e7490; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">${t('invoice.wholesaleNursery')}</p>
         
         <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
           <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumber}</h2>
@@ -692,7 +692,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         <div style="margin-bottom: 25px; font-size: 13px; font-family: Arial, sans-serif;">
-          <h3 style="color: #0e7490; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">{t('invoice.billToCustomer')}</h3>
+          <h3 style="color: #0e7490; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">${t('invoice.billToCustomer')}</h3>
           <p style="margin: 0; font-weight: bold; font-size: 14px; color: #0f172a;">${billToName}</p>
           <p style="margin: 5px 0 0 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${billToAddress}</p>
         </div>

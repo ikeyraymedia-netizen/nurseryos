@@ -135,7 +135,10 @@ const es: TranslationDict = {
     shippedToday: 'Enviados hoy',
     noneShippedToday: 'Ninguno enviado hoy',
     ordersCount: '{{count}} pedidos',
-    shippedCount: '{{count}} enviados'
+    shippedCount: '{{count}} enviados',
+    refresh: 'Actualizar',
+    refreshing: 'Actualizando…',
+    refreshHint: 'Recargar NurseryOS (use después de actualizaciones en la app de inicio)'
   },
   nav: {
     orders: 'Pedidos',

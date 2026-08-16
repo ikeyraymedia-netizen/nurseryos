@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, CheckCircle2, LogOut, CloudUpload } from 'lucide-react';
+import { Clock, CheckCircle2, LogOut, CloudUpload, RefreshCw } from 'lucide-react';
 import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
@@ -18,6 +18,27 @@ interface HeaderProps {
   onManagePackages?: () => void;
   onBackToSeller?: () => void;
   onSelectOrder?: (orderId: string) => void;
+}
+
+async function hardReloadApp(): Promise<void> {
+  // Home-screen / standalone web apps often keep a stale shell; clear what we can, then reload.
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((reg) => reg.unregister()));
+    }
+  } catch {
+    // ignore
+  }
+  window.location.reload();
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   const fallbackReason = getFallbackReason();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   async function handleSyncToCloud() {
     setSyncing(true);
@@ -52,6 +74,16 @@ export const Header: React.FC<HeaderProps> = ({
     } catch (err: any) {
       setSyncError(err?.message || 'Could not sync to cloud.');
       setSyncing(false);
+    }
+  }
+
+  async function handleRefresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await hardReloadApp();
+    } catch {
+      setRefreshing(false);
     }
   }
 
@@ -130,6 +162,16 @@ export const Header: React.FC<HeaderProps> = ({
                 {t('header.packages')}
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+              className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20 disabled:opacity-60"
+              title={t('header.refreshHint')}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? t('header.refreshing') : t('header.refresh')}
+            </button>
             {onSignOut && (
               <button
                 type="button"

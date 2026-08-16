@@ -129,7 +129,10 @@ const en = {
     shippedToday: 'Shipped today',
     noneShippedToday: 'None shipped today',
     ordersCount: '{{count}} orders',
-    shippedCount: '{{count}} shipped'
+    shippedCount: '{{count}} shipped',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing…',
+    refreshHint: 'Reload NurseryOS (use after updates on the home-screen app)'
   },
   nav: {
     orders: 'Orders',

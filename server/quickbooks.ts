@@ -991,7 +991,176 @@ async function mapDocToInvoice(
     CustomerRef: { value: customerRefId },
     Line: lines,
     CustomField: customField,
-    CustomerMemo: memo ? { value: memo } : undefined
+    CustomerMemo: memo ? { value: memo } : undefined,
+    // Hosted pay link (invoiceLink) needs BillEmail + online payment flags.
+    ...(doc.type === 'invoice' && doc.customerEmail
+      ? { BillEmail: { Address: String(doc.customerEmail).slice(0, 100) } }
+      : {}),
+    ...(doc.type === 'invoice'
+      ? {
+          AllowOnlineCreditCardPayment: true,
+          AllowOnlineACHPayment: true,
+          AllowOnlinePayment: true
+        }
+      : {})
+  };
+}
+
+/** Fetch QBO hosted invoice pay URL when Payments is enabled for the company. */
+async function fetchQboInvoiceLink(
+  tenantId: string,
+  qboInvoiceId: string
+): Promise<string | null> {
+  try {
+    const check = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/invoice/${encodeURIComponent(qboInvoiceId)}?minorversion=65&include=invoiceLink`
+    );
+    const link = check?.Invoice?.InvoiceLink || check?.Invoice?.invoiceLink;
+    return link ? String(link).trim() : null;
+  } catch (err: any) {
+    console.warn('[quickbooks] invoiceLink fetch failed:', err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * Push NurseryOS invoice/estimate to QBO (shared by push-invoice + ensure-pay-link).
+ */
+async function pushDocumentToQboInternal(
+  tenantId: string,
+  documentId: string,
+  uid: string
+): Promise<{
+  qboInvoiceId: string;
+  qboDocType: string;
+  qboDocNumber: string | null;
+  qboInvoiceLink: string | null;
+  qboOpenUrl: string | null;
+  customerName: string | null;
+  totalAmt: number | null;
+  lineCount: number | null;
+  linePreview: string[];
+  environment: QbEnvironment;
+  companyName: string | null;
+  verified: boolean;
+}> {
+  const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+  const snap = await docRef.get();
+  if (!snap.exists) {
+    throw Object.assign(new Error('Invoice/estimate document not found.'), { status: 404 });
+  }
+  const doc = snap.data() || {};
+  if (doc.type !== 'invoice' && doc.type !== 'estimate') {
+    throw Object.assign(new Error('Only invoices and estimates can be synced.'), { status: 400 });
+  }
+
+  const customer = await findOrCreateCustomer(tenantId, doc);
+  const incomeAccountId = await getIncomeAccountId(tenantId);
+  const payload = await mapDocToInvoice(tenantId, doc, customer.id, incomeAccountId);
+  const endpoint = doc.type === 'estimate' ? '/estimate' : '/invoice';
+  const attemptCreate = (body: any) =>
+    qboRequest<any>(tenantId, 'POST', `${endpoint}?minorversion=65`, body);
+
+  let created: any;
+  try {
+    created = await attemptCreate(payload);
+  } catch (err) {
+    if (payload && payload.CustomField) {
+      const withoutCustomField = { ...payload };
+      delete withoutCustomField.CustomField;
+      console.warn(
+        '[quickbooks] push with CustomField failed, retrying without it',
+        (err as any)?.message
+      );
+      created = await attemptCreate(withoutCustomField);
+    } else {
+      throw err;
+    }
+  }
+  const entity = doc.type === 'estimate' ? created?.Estimate : created?.Invoice;
+  const qboId = entity?.Id ? String(entity.Id) : null;
+  if (!qboId) {
+    throw new Error('QuickBooks did not return a document id.');
+  }
+
+  const integration = await loadIntegration(tenantId);
+  const env = integration?.environment || qbEnv();
+  const companyName = integration?.realmId
+    ? await fetchCompanyName(tenantId, integration.realmId)
+    : null;
+
+  let verifiedCustomer = customer.displayName;
+  let totalAmt: number | null = null;
+  let lineCount = 0;
+  let linePreview: string[] = [];
+  let verified = false;
+  let qboInvoiceLink: string | null = null;
+  try {
+    const checkPath =
+      doc.type === 'estimate'
+        ? `/estimate/${qboId}?minorversion=65`
+        : `/invoice/${qboId}?minorversion=65&include=invoiceLink`;
+    const check = await qboRequest<any>(tenantId, 'GET', checkPath);
+    const checked = doc.type === 'estimate' ? check?.Estimate : check?.Invoice;
+    verified = Boolean(checked?.Id);
+    if (checked?.CustomerRef?.name) verifiedCustomer = String(checked.CustomerRef.name);
+    if (checked?.TotalAmt != null) totalAmt = Number(checked.TotalAmt);
+    const checkedLines = Array.isArray(checked?.Line) ? checked.Line : [];
+    lineCount = checkedLines.filter((l: any) => l?.DetailType === 'SalesItemLineDetail').length;
+    linePreview = checkedLines
+      .filter((l: any) => l?.DetailType === 'SalesItemLineDetail')
+      .slice(0, 5)
+      .map((l: any) => String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line'));
+    if (doc.type === 'invoice') {
+      const link = checked?.InvoiceLink || checked?.invoiceLink;
+      if (link) qboInvoiceLink = String(link).trim();
+    }
+  } catch {
+    verified = false;
+  }
+
+  if (!qboInvoiceLink && doc.type === 'invoice') {
+    qboInvoiceLink = await fetchQboInvoiceLink(tenantId, qboId);
+  }
+
+  if (verified && lineCount === 0) {
+    throw new Error(
+      'QuickBooks created an invoice with no plant lines. Re-save the NurseryOS invoice (with prices), then push again.'
+    );
+  }
+
+  const openUrl = qbTxnOpenUrl(env, doc.type, qboId, integration?.realmId);
+  const now = new Date().toISOString();
+
+  await docRef.set(
+    {
+      qboInvoiceId: qboId,
+      qboDocType: doc.type,
+      qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
+      qboOpenUrl: openUrl,
+      qboInvoiceLink: qboInvoiceLink || null,
+      qboSyncedAt: now,
+      qboSyncedByUserId: uid,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  return {
+    qboInvoiceId: qboId,
+    qboDocType: String(doc.type),
+    qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
+    qboInvoiceLink,
+    qboOpenUrl: openUrl,
+    customerName: verifiedCustomer,
+    totalAmt,
+    lineCount,
+    linePreview,
+    environment: env,
+    companyName,
+    verified
   };
 }
 
@@ -1179,126 +1348,174 @@ export function registerQuickbooksRoutes(app: Express) {
       }
       await assertCanPushInvoice(tenantId, uid);
 
-      const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
-      const snap = await docRef.get();
-      if (!snap.exists) {
-        res.status(404).json({ error: 'Invoice/estimate document not found.' });
-        return;
-      }
-      const doc = snap.data() || {};
-      if (doc.type !== 'invoice' && doc.type !== 'estimate') {
-        res.status(400).json({ error: 'Only invoices and estimates can be synced.' });
-        return;
-      }
-
-      const customer = await findOrCreateCustomer(tenantId, doc);
-      const incomeAccountId = await getIncomeAccountId(tenantId);
-      const payload = await mapDocToInvoice(tenantId, doc, customer.id, incomeAccountId);
-      const endpoint = doc.type === 'estimate' ? '/estimate' : '/invoice';
-      const attemptCreate = (body: any) =>
-        qboRequest<any>(tenantId, 'POST', `${endpoint}?minorversion=65`, body);
-
-      let created: any;
-      try {
-        created = await attemptCreate(payload);
-      } catch (err) {
-        // The P.O. # custom field is best-effort. Some companies reject a
-        // CustomField payload (the field isn't enabled on invoices, or the
-        // DefinitionId doesn't line up), which would otherwise fail the whole
-        // sync. Retry once without it — the P.O. # still lands in the memo.
-        if (payload && payload.CustomField) {
-          const withoutCustomField = { ...payload };
-          delete withoutCustomField.CustomField;
-          console.warn(
-            '[quickbooks] push with CustomField failed, retrying without it',
-            (err as any)?.message
-          );
-          created = await attemptCreate(withoutCustomField);
-        } else {
-          throw err;
-        }
-      }
-      const entity = doc.type === 'estimate' ? created?.Estimate : created?.Invoice;
-      const qboId = entity?.Id ? String(entity.Id) : null;
-      if (!qboId) {
-        throw new Error('QuickBooks did not return a document id.');
-      }
-
-      const integration = await loadIntegration(tenantId);
-      const env = integration?.environment || qbEnv();
-      const companyName = integration?.realmId
-        ? await fetchCompanyName(tenantId, integration.realmId)
-        : null;
-
-      let verifiedCustomer = customer.displayName;
-      let totalAmt: number | null = null;
-      let lineCount = 0;
-      let linePreview: string[] = [];
-      let verified = false;
-      try {
-        const checkPath =
-          doc.type === 'estimate'
-            ? `/estimate/${qboId}?minorversion=65`
-            : `/invoice/${qboId}?minorversion=65`;
-        const check = await qboRequest<any>(tenantId, 'GET', checkPath);
-        const checked = doc.type === 'estimate' ? check?.Estimate : check?.Invoice;
-        verified = Boolean(checked?.Id);
-        if (checked?.CustomerRef?.name) verifiedCustomer = String(checked.CustomerRef.name);
-        if (checked?.TotalAmt != null) totalAmt = Number(checked.TotalAmt);
-        const checkedLines = Array.isArray(checked?.Line) ? checked.Line : [];
-        lineCount = checkedLines.filter((l: any) => l?.DetailType === 'SalesItemLineDetail').length;
-        linePreview = checkedLines
-          .filter((l: any) => l?.DetailType === 'SalesItemLineDetail')
-          .slice(0, 5)
-          .map((l: any) =>
-            String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line')
-          );
-      } catch {
-        verified = false;
-      }
-
-      if (verified && lineCount === 0) {
-        throw new Error(
-          'QuickBooks created an invoice with no plant lines. Re-save the NurseryOS invoice (with prices), then push again.'
-        );
-      }
-
-      const openUrl = qbTxnOpenUrl(env, doc.type, qboId, integration?.realmId);
-
-      await docRef.set(
-        {
-          qboInvoiceId: qboId,
-          qboDocType: doc.type,
-          qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
-          qboOpenUrl: openUrl,
-          qboSyncedAt: new Date().toISOString(),
-          qboSyncedByUserId: uid,
-          updatedAt: new Date().toISOString()
-        },
-        { merge: true }
-      );
+      const result = await pushDocumentToQboInternal(tenantId, documentId, uid);
 
       res.json({
         success: true,
-        qboInvoiceId: qboId,
-        qboDocType: doc.type,
-        qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
-        customerName: verifiedCustomer,
-        totalAmt,
-        lineCount,
-        linePreview,
-        environment: env,
-        companyName,
-        verified,
-        openUrl,
-        sandboxUrl: env === 'sandbox' ? `${qbAppBase('sandbox')}/app/invoices` : null
+        qboInvoiceId: result.qboInvoiceId,
+        qboDocType: result.qboDocType,
+        qboDocNumber: result.qboDocNumber,
+        qboInvoiceLink: result.qboInvoiceLink,
+        customerName: result.customerName,
+        totalAmt: result.totalAmt,
+        lineCount: result.lineCount,
+        linePreview: result.linePreview,
+        environment: result.environment,
+        companyName: result.companyName,
+        verified: result.verified,
+        openUrl: result.qboOpenUrl,
+        sandboxUrl:
+          result.environment === 'sandbox' ? `${qbAppBase('sandbox')}/app/invoices` : null
+      });
+    })
+  );
+
+  /**
+   * Ensure invoice is in QBO and return the hosted pay link (Intuit invoiceLink).
+   * Creates/pushes the invoice when needed. Stays in NurseryOS except the customer pay tab.
+   */
+  app.post('/api/quickbooks/ensure-pay-link', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const documentId = String(req.body?.documentId || '');
+      if (!tenantId || !documentId) {
+        res.status(400).json({ error: 'tenantId and documentId are required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+
+      const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+      const snap = await docRef.get();
+      if (!snap.exists) {
+        res.status(404).json({ error: 'Invoice document not found.' });
+        return;
+      }
+      const doc = snap.data() || {};
+      if (doc.type !== 'invoice') {
+        res.status(400).json({ error: 'Pay links are only available for invoices.' });
+        return;
+      }
+
+      let qboInvoiceId = String(doc.qboInvoiceId || '').trim();
+      let qboInvoiceLink = doc.qboInvoiceLink ? String(doc.qboInvoiceLink).trim() : '';
+
+      if (!qboInvoiceId) {
+        const pushed = await pushDocumentToQboInternal(tenantId, documentId, uid);
+        qboInvoiceId = pushed.qboInvoiceId;
+        qboInvoiceLink = pushed.qboInvoiceLink || '';
+      } else if (!qboInvoiceLink) {
+        qboInvoiceLink = (await fetchQboInvoiceLink(tenantId, qboInvoiceId)) || '';
+        if (qboInvoiceLink) {
+          await docRef.set(
+            { qboInvoiceLink, updatedAt: new Date().toISOString() },
+            { merge: true }
+          );
+        }
+      }
+
+      if (!qboInvoiceLink) {
+        res.status(400).json({
+          error:
+            'QuickBooks did not return a pay link. In QuickBooks: turn on Payments (card/ACH), make sure the customer has an email on the invoice, then try again. Sandbox often cannot generate pay links.'
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        url: qboInvoiceLink,
+        qboInvoiceId,
+        qboInvoiceLink
+      });
+    })
+  );
+
+  /**
+   * Pull payment status from QBO into NurseryOS (Balance === 0 → mark paid).
+   */
+  app.post('/api/quickbooks/refresh-payment-status', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const documentId = String(req.body?.documentId || '');
+      if (!tenantId || !documentId) {
+        res.status(400).json({ error: 'tenantId and documentId are required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+
+      const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+      const snap = await docRef.get();
+      if (!snap.exists) {
+        res.status(404).json({ error: 'Invoice document not found.' });
+        return;
+      }
+      const doc = snap.data() || {};
+      if (doc.type !== 'invoice') {
+        res.status(400).json({ error: 'Only invoices have payment status.' });
+        return;
+      }
+
+      let qboInvoiceId = String(doc.qboInvoiceId || '').trim();
+      if (!qboInvoiceId) {
+        res.status(400).json({
+          error: 'Push this invoice to QuickBooks first (or create a QBO pay link).',
+          paid: false
+        });
+        return;
+      }
+
+      const invRes = await qboRequest<any>(
+        tenantId,
+        'GET',
+        `/invoice/${encodeURIComponent(qboInvoiceId)}?minorversion=65&include=invoiceLink`
+      );
+      const invoice = invRes?.Invoice;
+      if (!invoice?.Id) {
+        res.status(404).json({ error: 'QuickBooks invoice not found.', paid: false });
+        return;
+      }
+
+      const balance = Number(invoice.Balance);
+      const totalAmt = Number(invoice.TotalAmt);
+      const paidInQbo =
+        (Number.isFinite(balance) && balance <= 0.009) ||
+        (Number.isFinite(totalAmt) && totalAmt > 0 && Number.isFinite(balance) && balance <= 0.009);
+
+      const link = invoice.InvoiceLink || invoice.invoiceLink;
+      const qboInvoiceLink = link ? String(link).trim() : doc.qboInvoiceLink || null;
+      const now = new Date().toISOString();
+
+      if (paidInQbo && String(doc.paymentStatus || '') !== 'paid') {
+        await docRef.set(
+          {
+            paymentStatus: 'paid',
+            paidAt: now,
+            paymentMethod: 'quickbooks',
+            qboInvoiceLink: qboInvoiceLink || null,
+            updatedAt: now
+          },
+          { merge: true }
+        );
+      } else if (qboInvoiceLink && qboInvoiceLink !== doc.qboInvoiceLink) {
+        await docRef.set(
+          { qboInvoiceLink, updatedAt: now },
+          { merge: true }
+        );
+      }
+
+      res.json({
+        paid: paidInQbo || String(doc.paymentStatus || '') === 'paid',
+        balance: Number.isFinite(balance) ? balance : null,
+        totalAmt: Number.isFinite(totalAmt) ? totalAmt : null,
+        qboInvoiceLink: qboInvoiceLink || null,
+        paymentStatus: paidInQbo ? 'paid' : String(doc.paymentStatus || 'unpaid')
       });
     })
   );
 
   /**
    * Create a QuickBooks Receive Payment against a previously pushed invoice.
-   * Used after Stripe collect or Mark paid in NurseryOS.
+   * Used after Mark paid in NurseryOS (or legacy Stripe collect).
    */
   app.post('/api/quickbooks/push-payment', (req, res) =>
     withAuth(req, res, async (uid) => {
@@ -1314,14 +1531,14 @@ export function registerQuickbooksRoutes(app: Express) {
       if (!result.synced && result.reason === 'invoice_not_pushed') {
         res.status(400).json({
           error:
-            'Push this invoice to QuickBooks first, then sync the payment (or collect via Stripe after pushing).',
+            'Push this invoice to QuickBooks first, then sync the payment (or collect via QBO pay link).',
           reason: result.reason
         });
         return;
       }
       if (!result.synced && result.reason === 'not_paid') {
         res.status(400).json({
-          error: 'Mark the invoice paid (or collect via Stripe) before syncing payment to QuickBooks.',
+          error: 'Mark the invoice paid (or wait for QBO payment) before syncing payment to QuickBooks.',
           reason: result.reason
         });
         return;

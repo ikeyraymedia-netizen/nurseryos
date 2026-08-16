@@ -61,7 +61,7 @@ import {
   FreightAllocationMethod,
   FreightShare
 } from '../lib/freightAllocation';
-import { pushDocumentToQuickbooks, pushPaymentToQuickbooks } from '../lib/quickbooks';
+import { pushDocumentToQuickbooks, pushPaymentToQuickbooks, ensureQboPayLink, refreshQboPaymentStatus } from '../lib/quickbooks';
 import { sendInvoiceEmail } from '../lib/email';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
@@ -175,7 +175,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
   const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
   const [payLinkUrl, setPayLinkUrl] = useState<string | null>(
-    existingDocument?.stripeCheckoutUrl || null
+    existingDocument?.qboInvoiceLink || existingDocument?.stripeCheckoutUrl || null
   );
   const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
   /** Optimistic paid flag after Refresh payment status / confirm. */
@@ -451,6 +451,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   }, [isOpen, existingDocument, order?.id, initialDocumentType]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    if (canUseQuickbooks && documentType === 'invoice') {
+      setIncludePayLinkInEmail(true);
+    }
+  }, [isOpen, canUseQuickbooks, documentType]);
+
+  useEffect(() => {
     if (!isOpen || !savedDocumentId) {
       setLiveDocument(null);
       return;
@@ -458,7 +465,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return subscribeToDocument(savedDocumentId, (doc) => {
       setLiveDocument(doc);
       if (doc?.paymentStatus === 'paid') setLocalMarkedPaid(true);
-      if (doc?.stripeCheckoutUrl) setPayLinkUrl(doc.stripeCheckoutUrl);
+      if (doc?.qboInvoiceLink) setPayLinkUrl(doc.qboInvoiceLink);
+      else if (doc?.stripeCheckoutUrl) setPayLinkUrl(doc.stripeCheckoutUrl);
     });
   }, [isOpen, savedDocumentId]);
 
@@ -612,8 +620,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const balanceDue = isPaid ? 0 : grandTotal;
   const activePayLinkUrl =
     !isPaid && documentType === 'invoice'
-      ? payLinkUrl || paymentDocument?.stripeCheckoutUrl || null
+      ? payLinkUrl ||
+        paymentDocument?.qboInvoiceLink ||
+        paymentDocument?.stripeCheckoutUrl ||
+        null
       : null;
+  /** Prefer QuickBooks for customer pay links; Stripe stays available only when QBO is off. */
+  const useQboPayLinks = Boolean(canUseQuickbooks);
+  const useStripePayLinks = Boolean(canCollectPayments && stripePaymentsReady && !useQboPayLinks);
 
   // Internal cost/profit (never shown to the customer)
   const totalCost = workingItems.reduce((sum, item) => {
@@ -874,11 +888,10 @@ Thank you for choosing ${nurseryName}!
     setEmailErrorMessage('');
 
     try {
-      // Stripe pay links are optional — never block sending the invoice email.
+      // Pay links are optional — never block sending the invoice email.
       let payUrl: string | null = null;
       if (
-        stripePaymentsReady &&
-        canCollectPayments &&
+        (useQboPayLinks || useStripePayLinks) &&
         documentType === 'invoice' &&
         !isPaid &&
         includePayLinkInEmail &&
@@ -888,7 +901,7 @@ Thank you for choosing ${nurseryName}!
         try {
           payUrl = await ensurePayLink();
         } catch (payErr) {
-          console.warn('Invoice email continuing without Stripe pay link:', payErr);
+          console.warn('Invoice email continuing without pay link:', payErr);
         }
       }
       const emailHtml = generateEmailHTML(payUrl);
@@ -1430,10 +1443,15 @@ Thank you for choosing ${nurseryName}!
           ? {
               ...prev,
               qboInvoiceId: result.qboInvoiceId,
+              qboInvoiceLink: result.qboInvoiceLink || prev.qboInvoiceLink,
               qboSyncedAt: new Date().toISOString()
             }
           : prev
       );
+      if (result.qboInvoiceLink) {
+        setPayLinkUrl(result.qboInvoiceLink);
+        setPayLinkMessage(t('invoice.payLinkReady'));
+      }
       setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
 
       let paymentBit = '';
@@ -1444,14 +1462,12 @@ Thank you for choosing ${nurseryName}!
         if (payMsg) paymentBit = `\n\n${payMsg}`;
       }
 
-      if (result.openUrl) {
-        window.open(result.openUrl, '_blank', 'noopener,noreferrer');
-      }
+      // Stay in NurseryOS — do not auto-open the QuickBooks website.
       alert(
         `Invoice pushed to ${where}${companyBit}.\n\n` +
           `${docBit}${customerBit}${totalBit}${linesBit}${previewBit}${paymentBit}\n\n` +
-          (result.openUrl
-            ? `Opening the connected sandbox company now.\nIf the tab looks wrong, use Team → Show recent QBO invoices.`
+          (result.qboInvoiceLink
+            ? t('invoice.pushQbStayHint')
             : t('invoice.qbLiveHint'))
       );
     } catch (err: any) {
@@ -1462,10 +1478,40 @@ Thank you for choosing ${nurseryName}!
   };
 
   const ensurePayLink = async (): Promise<string> => {
-    if (activePayLinkUrl) return activePayLinkUrl;
+    if (activePayLinkUrl && useQboPayLinks && paymentDocument?.qboInvoiceLink) {
+      return activePayLinkUrl;
+    }
+    if (activePayLinkUrl && useStripePayLinks && paymentDocument?.stripeCheckoutUrl) {
+      return activePayLinkUrl;
+    }
     if (!tenantId || !savedDocumentId) {
       throw new Error(t('invoice.saveInvoiceFirst'));
     }
+
+    if (useQboPayLinks) {
+      const result = await ensureQboPayLink({
+        tenantId,
+        documentId: savedDocumentId
+      });
+      setPayLinkUrl(result.url);
+      setPayLinkMessage(t('invoice.payLinkReady'));
+      setLiveDocument((prev) =>
+        prev
+          ? {
+              ...prev,
+              qboInvoiceId: result.qboInvoiceId || prev.qboInvoiceId,
+              qboInvoiceLink: result.url
+            }
+          : prev
+      );
+      await logAuditEvent({
+        action: 'quickbooks.pay_link_created',
+        summary: `Created QuickBooks pay link for invoice ${invoiceNumber}`,
+        meta: { documentId: savedDocumentId, qboInvoiceId: result.qboInvoiceId }
+      });
+      return result.url;
+    }
+
     const result = await createInvoiceCheckout({
       tenantId,
       documentId: savedDocumentId
@@ -1502,9 +1548,7 @@ Thank you for choosing ${nurseryName}!
       const url = await ensurePayLink();
       try {
         await navigator.clipboard.writeText(url);
-        alert(
-          t('invoice.payLinkCopied')
-        );
+        alert(useQboPayLinks ? t('invoice.qbPayLinkCopied') : t('invoice.payLinkCopied'));
       } catch {
         alert(t('invoice.payLinkReadyAlert', { url }));
       }
@@ -1522,6 +1566,25 @@ Thank you for choosing ${nurseryName}!
     }
     setIsRefreshingPayment(true);
     try {
+      if (useQboPayLinks || paymentDocument?.qboInvoiceId) {
+        const result = await refreshQboPaymentStatus({
+          tenantId,
+          documentId: savedDocumentId
+        });
+        if (result.qboInvoiceLink) setPayLinkUrl(result.qboInvoiceLink);
+        if (result.paid) {
+          setLocalMarkedPaid(true);
+          if (!opts?.silent) alert(t('invoice.paymentConfirmed'));
+        } else if (!opts?.silent) {
+          const bal =
+            result.balance != null && Number.isFinite(result.balance)
+              ? result.balance.toFixed(2)
+              : '—';
+          alert(t('invoice.qbUnpaidBalance', { balance: bal }));
+        }
+        return;
+      }
+
       const result = await confirmInvoicePayment({
         tenantId,
         documentId: savedDocumentId,
@@ -2589,20 +2652,19 @@ Thank you for choosing ${nurseryName}!
                   )}
 
                   {tenantId &&
-                    canCollectPayments &&
-                    stripePaymentsReady &&
+                    (useQboPayLinks || useStripePayLinks) &&
                     documentType === 'invoice' &&
                     !isPaid && (
-                    <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/70 p-2.5 cursor-pointer">
+                    <label className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50/70 p-2.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={includePayLinkInEmail}
                         onChange={(e) => setIncludePayLinkInEmail(e.target.checked)}
-                        className="mt-0.5 h-3.5 w-3.5 accent-violet-700"
+                        className="mt-0.5 h-3.5 w-3.5 accent-sky-700"
                       />
-                      <span className="text-[10px] font-bold text-violet-900 leading-relaxed">
+                      <span className="text-[10px] font-bold text-sky-900 leading-relaxed">
                         {t('invoice.includePay')}
-                        <span className="block font-medium text-violet-700">
+                        <span className="block font-medium text-sky-700">
                           {t('invoice.includePayHint')}
                         </span>
                       </span>
@@ -2666,25 +2728,36 @@ Thank you for choosing ${nurseryName}!
               </button>
             )}
 
-            {tenantId && canCollectPayments && stripePaymentsReady && documentType === 'invoice' && !isPaid && (
+            {tenantId &&
+              documentType === 'invoice' &&
+              !isPaid &&
+              (useQboPayLinks || useStripePayLinks || Boolean(paymentDocument?.qboInvoiceId)) && (
               <button
                 type="button"
                 onClick={() => void handleRefreshPaymentStatus()}
                 disabled={isRefreshingPayment || !savedDocumentId}
-                className="w-full py-2.5 px-4 bg-white hover:bg-violet-50 text-violet-800 border border-violet-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+                className="w-full py-2.5 px-4 bg-white hover:bg-sky-50 text-sky-800 border border-sky-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
-                <span>{isRefreshingPayment ? t('invoice.checkingStripe') : t('invoice.refreshPayment')}</span>
+                <span>
+                  {isRefreshingPayment
+                    ? useQboPayLinks || paymentDocument?.qboInvoiceId
+                      ? t('invoice.checkingQbPayment')
+                      : t('invoice.checkingStripe')
+                    : t('invoice.refreshPayment')}
+                </span>
               </button>
             )}
 
             <div className="border-t border-gray-200 pt-3 space-y-2">
-              {tenantId && canCollectPayments && stripePaymentsReady && documentType === 'invoice' && (
+              {tenantId &&
+                (useQboPayLinks || useStripePayLinks) &&
+                documentType === 'invoice' && (
                 <button
                   type="button"
                   onClick={() => void handleCreatePayLink()}
                   disabled={isCreatingPayLink || !savedDocumentId || isPaid}
-                  className="w-full py-2.5 px-4 bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                  className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                   title={
                     isPaid
                       ? t('invoice.alreadyPaidTitle')
@@ -2705,8 +2778,8 @@ Thank you for choosing ${nurseryName}!
               )}
 
               {activePayLinkUrl && !isPaid && (
-                <p className="text-[10px] text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
-                  Pay link ready for customer — do not open it yourself unless you intend to pay.
+                <p className="text-[10px] text-sky-800 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
+                  {t('invoice.payLinkReadyCustomer')}
                 </p>
               )}
 
@@ -2715,7 +2788,7 @@ Thank you for choosing ${nurseryName}!
                   type="button"
                   onClick={() => void handlePushToQuickbooks()}
                   disabled={isPushingQb || !savedDocumentId}
-                  className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                  className="w-full py-2.5 px-4 bg-white hover:bg-sky-50 text-sky-900 border border-sky-200 disabled:opacity-50 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                   title={
                     savedDocumentId
                       ? t('invoice.saveFirstQb')
@@ -2726,12 +2799,7 @@ Thank you for choosing ${nurseryName}!
                   <span>
                     {isPushingQb
                       ? t('invoice.pushingQb')
-                      : qbPushMessage ||
-                        (paymentDocument?.qboPaymentId || liveDocument?.qboPaymentId
-                          ? t('invoice.qbPaymentSynced')
-                          : existingDocument?.qboInvoiceId || liveDocument?.qboInvoiceId
-                            ? t('invoice.pushQb')
-                            : t('invoice.pushQb'))}
+                      : qbPushMessage || t('invoice.pushQb')}
                   </span>
                 </button>
               )}

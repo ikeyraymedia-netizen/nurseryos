@@ -124,7 +124,7 @@ export async function updateCustomerDocument(document: CustomerDocument): Promis
 export async function markCustomerInvoicePaid(
   document: CustomerDocument,
   payment: {
-    method: Exclude<CustomerDocument['paymentMethod'], 'stripe' | undefined>;
+    method: Exclude<CustomerDocument['paymentMethod'], 'stripe' | 'quickbooks' | undefined>;
     reference?: string;
   }
 ): Promise<void> {

@@ -833,6 +833,7 @@ const extra = {
     downloadPrint: 'Descargar e imprimir {{docLabel}}',
     refreshPayment: 'Actualizar estado de pago',
     checkingStripe: 'Verificando Stripe…',
+    checkingQbPayment: 'Verificando QuickBooks…',
     distributeFreight: '¿Distribuir flete del camión?',
     splitEven: 'Dividir equitativamente',
     splitPct: 'Dividir por % de camión usado',
@@ -928,12 +929,18 @@ const extra = {
     emailPlaceholder: 'ej. comprador@mayorista.com',
     emailSentBody: 'Se envió al cliente una versión HTML formateada de este {{docLabel}}.',
     includePayHint:
-      'Crea el enlace de pago Stripe automáticamente y lo incluye en la factura por correo.',
-    createPayLink: 'Crear y copiar enlace de pago',
-    creatingPayLink: 'Creando enlace de pago…',
-    payLinkReady: 'Enlace de pago listo',
+      'Envía la factura a QuickBooks (si hace falta) e incluye el enlace de pago de QuickBooks en el correo.',
+    createPayLink: 'Copiar enlace de pago de QuickBooks',
+    creatingPayLink: 'Obteniendo enlace de QuickBooks…',
+    payLinkReady: 'Enlace de pago de QuickBooks listo',
     payLinkReadyCustomer:
-      'Enlace de pago listo para el cliente — no lo abra usted mismo a menos que vaya a pagar.',
+      'Enlace de QuickBooks listo — no lo abra usted mismo a menos que vaya a pagar. Quédese en NurseryOS y actualice el pago después.',
+    qbPayLinkCopied:
+      'Enlace de QuickBooks copiado. Péguelo en un mensaje o correo — no lo abra usted mismo a menos que vaya a pagar.',
+    qbUnpaidBalance:
+      'QuickBooks aún muestra un saldo de ${{balance}}. Pida al cliente que termine de pagar y actualice de nuevo.',
+    pushQbStayHint:
+      'Sincronizado con QuickBooks. Use Copiar enlace de pago o Incluir botón en el correo — quédese en NurseryOS.',
     pushQb: 'Enviar a QuickBooks',
     pushingQb: 'Enviando a QuickBooks…',
     syncPaymentToQb: 'Sincronizar pago a QuickBooks',
@@ -1319,6 +1326,7 @@ const extra = {
     wire: 'Transferencia',
     cc: 'Tarjeta de crédito',
     stripe: 'En línea (Stripe)',
+    quickbooks: 'Pagos de QuickBooks',
     checkNumber: 'Número de cheque',
     checkNumberPlaceholder: 'ej. 4521',
     checkNumberRequired: 'Ingrese el número de cheque.',

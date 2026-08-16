@@ -918,11 +918,19 @@ const extra = {
     emailPlaceholder: 'e.g. buyer@wholesale.com',
     emailSentBody: 'The customer was emailed a formatted HTML version of this {{docLabel}}.',
     includePayHint:
-      'Creates the Stripe pay link automatically and puts it inside the emailed invoice.',
-    createPayLink: 'Create & copy pay link',
-    creatingPayLink: 'Creating pay link…',
-    payLinkReady: 'Pay link ready',
-    payLinkReadyCustomer: 'Pay link ready for customer — do not open it yourself unless you intend to pay.',
+      'Pushes the invoice to QuickBooks (if needed) and puts the QuickBooks pay link in the email.',
+    createPayLink: 'Copy QuickBooks pay link',
+    creatingPayLink: 'Getting QuickBooks pay link…',
+    payLinkReady: 'QuickBooks pay link ready',
+    payLinkReadyCustomer:
+      'QuickBooks pay link ready — do not open it yourself unless you intend to pay. Stay in NurseryOS and refresh payment after they pay.',
+    checkingQbPayment: 'Checking QuickBooks…',
+    qbPayLinkCopied:
+      'QuickBooks pay link copied. Paste it into a text or email — do not open it yourself unless you intend to pay.',
+    qbUnpaidBalance:
+      'QuickBooks still shows a balance of ${{balance}}. Ask the customer to finish paying, then refresh again.',
+    pushQbStayHint:
+      'Synced to QuickBooks. Use Copy pay link or Include pay button in email — stay in NurseryOS.',
     pushQb: 'Push to QuickBooks',
     pushingQb: 'Pushing to QuickBooks…',
     syncPaymentToQb: 'Sync payment to QuickBooks',
@@ -1304,6 +1312,7 @@ const extra = {
     wire: 'Wire',
     cc: 'Credit card',
     stripe: 'Online (Stripe)',
+    quickbooks: 'QuickBooks Payments',
     checkNumber: 'Check number',
     checkNumberPlaceholder: 'e.g. 4521',
     checkNumberRequired: 'Enter the check number.',

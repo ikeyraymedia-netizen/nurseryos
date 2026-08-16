@@ -68,6 +68,7 @@ export async function pushDocumentToQuickbooks(params: {
   qboInvoiceId: string;
   qboDocType: string;
   qboDocNumber?: string | null;
+  qboInvoiceLink?: string | null;
   customerName?: string | null;
   totalAmt?: number | null;
   lineCount?: number | null;
@@ -89,6 +90,7 @@ export async function pushDocumentToQuickbooks(params: {
     qboInvoiceId: String(data.qboInvoiceId),
     qboDocType: String(data.qboDocType || 'invoice'),
     qboDocNumber: data.qboDocNumber ? String(data.qboDocNumber) : null,
+    qboInvoiceLink: data.qboInvoiceLink ? String(data.qboInvoiceLink) : null,
     customerName: data.customerName ? String(data.customerName) : null,
     totalAmt: data.totalAmt != null ? Number(data.totalAmt) : null,
     lineCount: data.lineCount != null ? Number(data.lineCount) : null,
@@ -98,6 +100,59 @@ export async function pushDocumentToQuickbooks(params: {
     openUrl: data.openUrl ? String(data.openUrl) : null,
     sandboxUrl: data.sandboxUrl ? String(data.sandboxUrl) : null,
     verified: Boolean(data.verified)
+  };
+}
+
+/** Push invoice if needed and return the Intuit hosted pay URL. */
+export async function ensureQboPayLink(params: {
+  tenantId: string;
+  documentId: string;
+}): Promise<{ url: string; qboInvoiceId: string }> {
+  const res = await fetch('/api/quickbooks/ensure-pay-link', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to get QuickBooks pay link.');
+  }
+  const url = String((data as any)?.url || '').trim();
+  if (!url) throw new Error('QuickBooks did not return a pay link URL.');
+  return {
+    url,
+    qboInvoiceId: String((data as any)?.qboInvoiceId || '')
+  };
+}
+
+/** Check QBO invoice balance and mark NurseryOS paid when Balance is 0. */
+export async function refreshQboPaymentStatus(params: {
+  tenantId: string;
+  documentId: string;
+}): Promise<{
+  paid: boolean;
+  balance?: number | null;
+  qboInvoiceLink?: string | null;
+  paymentStatus?: string;
+}> {
+  const res = await fetch('/api/quickbooks/refresh-payment-status', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to refresh QuickBooks payment status.');
+  }
+  return {
+    paid: Boolean((data as any)?.paid),
+    balance: (data as any)?.balance != null ? Number((data as any).balance) : null,
+    qboInvoiceLink: (data as any)?.qboInvoiceLink
+      ? String((data as any).qboInvoiceLink)
+      : null,
+    paymentStatus: (data as any)?.paymentStatus
+      ? String((data as any).paymentStatus)
+      : undefined
   };
 }
 

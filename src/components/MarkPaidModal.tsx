@@ -3,7 +3,7 @@ import { CheckCircle2, X } from 'lucide-react';
 import { PaymentMethod } from '../types';
 import { useT } from '../lib/i18n';
 
-export type ManualPaymentMethod = Exclude<PaymentMethod, 'stripe'>;
+export type ManualPaymentMethod = Exclude<PaymentMethod, 'stripe' | 'quickbooks'>;
 
 const METHODS: ManualPaymentMethod[] = ['check', 'ach', 'wire', 'cc'];
 

@@ -162,7 +162,7 @@ export interface Customer {
 export type CustomerDocumentType = 'estimate' | 'invoice' | 'credit_memo';
 
 /** How a customer invoice or vendor bill was paid (offline / recorded). */
-export type PaymentMethod = 'check' | 'ach' | 'wire' | 'cc' | 'stripe';
+export type PaymentMethod = 'check' | 'ach' | 'wire' | 'cc' | 'stripe' | 'quickbooks';
 
 export interface CustomerDocumentLineItem {
   id: string;
@@ -218,6 +218,11 @@ export interface CustomerDocument {
   qboDocType?: CustomerDocumentType;
   qboSyncedAt?: string;
   qboSyncedByUserId?: string;
+  /** Hosted Intuit pay URL for this invoice (when QBO Payments is enabled). */
+  qboInvoiceLink?: string;
+  /** Deep link to open the txn in the QuickBooks UI. */
+  qboOpenUrl?: string;
+  qboDocNumber?: string;
   /** QuickBooks Receive Payment id after payment sync. */
   qboPaymentId?: string;
   qboPaymentSyncedAt?: string;

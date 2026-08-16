@@ -1018,11 +1018,41 @@ async function fetchQboInvoiceLink(
       `/invoice/${encodeURIComponent(qboInvoiceId)}?minorversion=65&include=invoiceLink`
     );
     const link = check?.Invoice?.InvoiceLink || check?.Invoice?.invoiceLink;
-    return link ? String(link).trim() : null;
+    return sanitizeCustomerPayLink(link ? String(link).trim() : null);
   } catch (err: any) {
     console.warn('[quickbooks] invoiceLink fetch failed:', err?.message || err);
     return null;
   }
+}
+
+/**
+ * Sandbox InvoiceLinks 404 / redirect to Intuit "comingSoon" pages.
+ * Never put those in customer emails.
+ */
+function sanitizeCustomerPayLink(link: string | null | undefined): string | null {
+  const url = String(link || '').trim();
+  if (!url) return null;
+  const lower = url.toLowerCase();
+  if (
+    lower.includes('developer.intuit.com') ||
+    lower.includes('comingssoon') ||
+    lower.includes('comingsoon') ||
+    lower.includes('/comingSoon') ||
+    qbEnv() === 'sandbox'
+  ) {
+    return null;
+  }
+  if (!/^https:\/\//i.test(url)) return null;
+  return url;
+}
+
+function sandboxPayLinkError(): Error {
+  return Object.assign(
+    new Error(
+      'QuickBooks pay links do not work in Sandbox (customers get a 404). In Railway set QUICKBOOKS_ENVIRONMENT=production, reconnect QuickBooks in Team to your live company, turn on Payments, then create a new pay link.'
+    ),
+    { status: 400 }
+  );
 }
 
 /**
@@ -1115,7 +1145,7 @@ async function pushDocumentToQboInternal(
       .map((l: any) => String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line'));
     if (doc.type === 'invoice') {
       const link = checked?.InvoiceLink || checked?.invoiceLink;
-      if (link) qboInvoiceLink = String(link).trim();
+      if (link) qboInvoiceLink = sanitizeCustomerPayLink(String(link).trim());
     }
   } catch {
     verified = false;
@@ -1397,14 +1427,20 @@ export function registerQuickbooksRoutes(app: Express) {
       }
 
       let qboInvoiceId = String(doc.qboInvoiceId || '').trim();
-      let qboInvoiceLink = doc.qboInvoiceLink ? String(doc.qboInvoiceLink).trim() : '';
+      let qboInvoiceLink = sanitizeCustomerPayLink(
+        doc.qboInvoiceLink ? String(doc.qboInvoiceLink).trim() : ''
+      );
+
+      if (qbEnv() === 'sandbox') {
+        throw sandboxPayLinkError();
+      }
 
       if (!qboInvoiceId) {
         const pushed = await pushDocumentToQboInternal(tenantId, documentId, uid);
         qboInvoiceId = pushed.qboInvoiceId;
-        qboInvoiceLink = pushed.qboInvoiceLink || '';
+        qboInvoiceLink = pushed.qboInvoiceLink || null;
       } else if (!qboInvoiceLink) {
-        qboInvoiceLink = (await fetchQboInvoiceLink(tenantId, qboInvoiceId)) || '';
+        qboInvoiceLink = await fetchQboInvoiceLink(tenantId, qboInvoiceId);
         if (qboInvoiceLink) {
           await docRef.set(
             { qboInvoiceLink, updatedAt: new Date().toISOString() },
@@ -1416,7 +1452,7 @@ export function registerQuickbooksRoutes(app: Express) {
       if (!qboInvoiceLink) {
         res.status(400).json({
           error:
-            'QuickBooks did not return a pay link. In QuickBooks: turn on Payments (card/ACH), make sure the customer has an email on the invoice, then try again. Sandbox often cannot generate pay links.'
+            'QuickBooks did not return a working pay link. In your live QuickBooks company: turn on Payments (card/ACH), make sure the customer email is on the invoice, push again, then copy the pay link.'
         });
         return;
       }

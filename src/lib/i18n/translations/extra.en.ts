@@ -1550,6 +1550,10 @@ const extra = {
     workspaceLegacy: ' This nursery is on a legacy plan (all standard modules).',
     workspaceNotActivatedYet: ' This nursery is not activated yet.',
     moduleOff: ' · off',
+    containerWeights: 'Container weights',
+    containerWeightsHint:
+      'Default pounds per pot size used for truck load estimates. Rarely needs changing.',
+    editWeights: 'Edit weights',
     qbo: 'QuickBooks Online',
     qboIntro:
       'Connect this nursery to push invoices/estimates and vendor bills into the same QuickBooks company. Payments on invoices sync as Receive Payment. Owner/admin only.',

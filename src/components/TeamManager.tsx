@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
 import {
   createTeamInvite,
@@ -48,6 +48,8 @@ interface TeamManagerProps {
   onUpdateLocale: (locale: AppLocale) => Promise<void>;
   onClose: () => void;
   onMemberUpdated?: (member: TenantMember) => void;
+  /** Optional — opens container weight defaults (owner/admin). */
+  onOpenWeights?: () => void;
 }
 
 const ASSIGNABLE = getAssignableRoles();
@@ -58,7 +60,8 @@ export function TeamManager({
   locale,
   onUpdateLocale,
   onClose,
-  onMemberUpdated
+  onMemberUpdated,
+  onOpenWeights
 }: TeamManagerProps) {
   const t = useT();
   const { roleLabel } = useRoleLabel();
@@ -664,6 +667,23 @@ export function TeamManager({
               <option value="es">{t('language.spanish')}</option>
             </select>
           </div>
+
+          {onOpenWeights && (
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+              <p className="text-xs font-bold uppercase text-slate-500">{t('teamExtra.containerWeights')}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5 mb-2 leading-relaxed">
+                {t('teamExtra.containerWeightsHint')}
+              </p>
+              <button
+                type="button"
+                onClick={onOpenWeights}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-700"
+              >
+                <Weight className="h-3.5 w-3.5 text-slate-500" />
+                {t('teamExtra.editWeights')}
+              </button>
+            </div>
+          )}
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-bold uppercase text-gray-500 mb-1">{t('teamExtra.workspacePackage')}</p>

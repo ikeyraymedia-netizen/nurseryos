@@ -1566,6 +1566,10 @@ const extra = {
     workspaceLegacy: ' Este vivero está en un plan heredado (todos los módulos estándar).',
     workspaceNotActivatedYet: ' Este vivero aún no está activado.',
     moduleOff: ' · apagado',
+    containerWeights: 'Pesos de contenedores',
+    containerWeightsHint:
+      'Libras por tamaño de maceta para estimar el peso del camión. Casi no hace falta cambiarlas.',
+    editWeights: 'Editar pesos',
     qbo: 'QuickBooks Online',
     qboIntro:
       'Conecte este vivero para enviar facturas/presupuestos y facturas de proveedores a la misma compañía QuickBooks. Los pagos de facturas se sincronizan como Receive Payment. Solo dueño/admin.',

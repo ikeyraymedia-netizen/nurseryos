@@ -824,6 +824,20 @@ function NurseryApp({
             onUpdateLocale={onUpdateLocale}
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
+            onOpenWeights={
+              permissions.canEditWeights
+                ? () => {
+                    setShowTeamManager(false);
+                    setShowWeightsEditor(true);
+                  }
+                : undefined
+            }
+          />
+        )}
+        {showWeightsEditor && (
+          <WeightsEditor
+            containerWeights={containerWeights}
+            onClose={() => setShowWeightsEditor(false)}
           />
         )}
       </div>
@@ -919,6 +933,20 @@ function NurseryApp({
             onUpdateLocale={onUpdateLocale}
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
+            onOpenWeights={
+              permissions.canEditWeights
+                ? () => {
+                    setShowTeamManager(false);
+                    setShowWeightsEditor(true);
+                  }
+                : undefined
+            }
+          />
+        )}
+        {showWeightsEditor && (
+          <WeightsEditor
+            containerWeights={containerWeights}
+            onClose={() => setShowWeightsEditor(false)}
           />
         )}
       </InventoryMatchProvider>
@@ -939,7 +967,6 @@ function NurseryApp({
         member={memberState}
         onSignOut={onSignOut}
         onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
-        onManageWeights={permissions.canEditWeights ? () => setShowWeightsEditor(true) : undefined}
         onManagePackages={undefined}
         onBackToSeller={onBackToSeller}
         onSelectOrder={(id) => {
@@ -1318,6 +1345,14 @@ function NurseryApp({
           onUpdateLocale={onUpdateLocale}
           onClose={() => setShowTeamManager(false)}
           onMemberUpdated={setMemberState}
+          onOpenWeights={
+            permissions.canEditWeights
+              ? () => {
+                  setShowTeamManager(false);
+                  setShowWeightsEditor(true);
+                }
+              : undefined
+          }
         />
       )}
 

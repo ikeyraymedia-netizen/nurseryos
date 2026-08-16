@@ -14,7 +14,6 @@ interface HeaderProps {
   member?: Pick<TenantMember, 'role' | 'roles'> | null;
   onSignOut?: () => Promise<void> | void;
   onManageTeam?: () => void;
-  onManageWeights?: () => void;
   onManagePackages?: () => void;
   onBackToSeller?: () => void;
   onSelectOrder?: (orderId: string) => void;
@@ -49,7 +48,6 @@ export const Header: React.FC<HeaderProps> = ({
   member,
   onSignOut,
   onManageTeam,
-  onManageWeights,
   onManagePackages,
   onBackToSeller,
   onSelectOrder
@@ -88,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
   }
 
   return (
-    <header className="bg-ink-950 text-white shadow-md border-b border-ink-900">
+    <header className="bg-ink-950 text-white shadow-md border-b border-ink-900 pt-[env(safe-area-inset-top)]">
       <style>{`
         .no-scrollbar::-webkit-scrollbar {
           display: none;
@@ -99,90 +97,85 @@ export const Header: React.FC<HeaderProps> = ({
         }
       `}</style>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 md:gap-4">
           
-          {/* Brand Logo & Name */}
-          <div className="flex items-center space-x-3">
-            <BrandLogo variant="icon" size="md" showText={false} nurseryName={nurseryName} />
-            <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-black tracking-tight font-sans text-ink-50 uppercase">
-                  {nurseryName}
-                </h1>
-                {fallbackActive && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono animate-pulse">
-                    {t('header.localActive')}
-                  </span>
-                )}
+          {/* Brand + actions — wrap so Refresh/Sign out are never clipped on phones */}
+          <div className="flex flex-col gap-2.5 min-w-0 w-full md:w-auto">
+            <div className="flex items-center gap-3 min-w-0">
+              <BrandLogo variant="icon" size="md" showText={false} nurseryName={nurseryName} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl font-black tracking-tight font-sans text-ink-50 uppercase truncate">
+                    {nurseryName}
+                  </h1>
+                  {fallbackActive && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono animate-pulse">
+                      {t('header.localActive')}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-ink-300 font-mono uppercase tracking-widest font-bold truncate">
+                  {t('header.workspace')}
+                  {(member || role) && (
+                    <span className="text-ink-500 font-normal">
+                      {' '}
+                      | {member ? rolesLabel(getMemberRoles(member)) : rolesLabel([role as MemberRole])}
+                    </span>
+                  )}
+                </p>
               </div>
-              <p className="text-xs text-ink-300 font-mono uppercase tracking-widest font-bold">
-                {t('header.workspace')}
-                {(member || role) && (
-                  <span className="text-ink-500 font-normal">
-                    {' '}
-                    | {member ? rolesLabel(getMemberRoles(member)) : rolesLabel([role as MemberRole])}
-                  </span>
-                )}
-              </p>
             </div>
-            {onManageWeights && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {onManageTeam && (
+                <button
+                  type="button"
+                  onClick={onManageTeam}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
+                >
+                  {t('header.team')}
+                </button>
+              )}
+              {onBackToSeller && (
+                <button
+                  type="button"
+                  onClick={onBackToSeller}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
+                >
+                  {t('header.sellerHome')}
+                </button>
+              )}
+              {onManagePackages && (
+                <button
+                  type="button"
+                  onClick={onManagePackages}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
+                >
+                  {t('header.packages')}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={onManageWeights}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
+                onClick={() => void handleRefresh()}
+                disabled={refreshing}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20 disabled:opacity-60"
+                title={t('header.refreshHint')}
               >
-                {t('header.weights')}
+                <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? t('header.refreshing') : t('header.refresh')}
               </button>
-            )}
-            {onManageTeam && (
-              <button
-                type="button"
-                onClick={onManageTeam}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
-              >
-                {t('header.team')}
-              </button>
-            )}
-            {onBackToSeller && (
-              <button
-                type="button"
-                onClick={onBackToSeller}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
-              >
-                {t('header.sellerHome')}
-              </button>
-            )}
-            {onManagePackages && (
-              <button
-                type="button"
-                onClick={onManagePackages}
-                className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/25"
-              >
-                {t('header.packages')}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={refreshing}
-              className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20 disabled:opacity-60"
-              title={t('header.refreshHint')}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? t('header.refreshing') : t('header.refresh')}
-            </button>
-            {onSignOut && (
-              <button
-                type="button"
-                onClick={() => onSignOut()}
-                className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
-                title={userEmail || t('common.signOut')}
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                {t('common.signOut')}
-              </button>
-            )}
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={() => onSignOut()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
+                  title={userEmail || t('common.signOut')}
+                >
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
+                  {t('common.signOut')}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Quick Metrics & Sliders */}

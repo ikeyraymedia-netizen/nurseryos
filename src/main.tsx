@@ -1,16 +1,24 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { LegalPage, readLegalPageFromPath } from './components/LegalPages';
 import { PublicAvailabilityPage, readPublicAvailabilitySlugFromPath } from './components/PublicAvailabilityPage';
 import { bootstrapWorkspaceUrl } from './lib/workspaceUrl';
 import './index.css';
 
 bootstrapWorkspaceUrl();
 
-const publicSlug = readPublicAvailabilitySlugFromPath();
+const legalKind = readLegalPageFromPath();
+const publicSlug = legalKind ? null : readPublicAvailabilitySlugFromPath();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {publicSlug ? <PublicAvailabilityPage slug={publicSlug} /> : <App />}
+    {legalKind ? (
+      <LegalPage kind={legalKind} />
+    ) : publicSlug ? (
+      <PublicAvailabilityPage slug={publicSlug} />
+    ) : (
+      <App />
+    )}
   </StrictMode>,
 );

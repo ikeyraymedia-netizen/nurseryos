@@ -252,23 +252,38 @@ function isQboMissingError(err: any): boolean {
   );
 }
 
-async function getQboSalesTxn(
+async function getQboTxn(
   tenantId: string,
-  docType: 'invoice' | 'estimate',
+  docType: 'invoice' | 'estimate' | 'bill',
   qboId: string
 ): Promise<any | null> {
   const path =
     docType === 'estimate'
       ? `/estimate/${encodeURIComponent(qboId)}?minorversion=65`
-      : `/invoice/${encodeURIComponent(qboId)}?minorversion=65&include=invoiceLink`;
+      : docType === 'bill'
+        ? `/bill/${encodeURIComponent(qboId)}?minorversion=65`
+        : `/invoice/${encodeURIComponent(qboId)}?minorversion=65&include=invoiceLink`;
   try {
     const check = await qboRequest<any>(tenantId, 'GET', path);
-    const entity = docType === 'estimate' ? check?.Estimate : check?.Invoice;
+    const entity =
+      docType === 'estimate'
+        ? check?.Estimate
+        : docType === 'bill'
+          ? check?.Bill
+          : check?.Invoice;
     return entity?.Id ? entity : null;
   } catch (err) {
     if (isQboMissingError(err)) return null;
     throw err;
   }
+}
+
+async function getQboSalesTxn(
+  tenantId: string,
+  docType: 'invoice' | 'estimate',
+  qboId: string
+): Promise<any | null> {
+  return getQboTxn(tenantId, docType, qboId);
 }
 
 function qbAppBase(env?: QbEnvironment): string {
@@ -1710,19 +1725,28 @@ export function registerQuickbooksRoutes(app: Express) {
         return;
       }
       const bill = billSnap.data() || {};
-      if (bill.qboBillId) {
-        const integration = await loadIntegration(tenantId);
-        const env = integration?.environment || qbEnv();
-        res.json({
-          success: true,
-          alreadySynced: true,
-          qboBillId: String(bill.qboBillId),
-          qboDocNumber: bill.qboDocNumber ? String(bill.qboDocNumber) : null,
-          openUrl:
-            bill.qboOpenUrl ||
-            qbTxnOpenUrl(env, 'bill', String(bill.qboBillId), integration?.realmId)
-        });
-        return;
+      const existingId = String(bill.qboBillId || '').trim();
+      if (existingId) {
+        const stillThere = await getQboTxn(tenantId, 'bill', existingId);
+        if (stillThere) {
+          const integration = await loadIntegration(tenantId);
+          const env = integration?.environment || qbEnv();
+          res.json({
+            success: true,
+            alreadySynced: true,
+            qboBillId: existingId,
+            qboDocNumber: stillThere.DocNumber
+              ? String(stillThere.DocNumber)
+              : bill.qboDocNumber
+                ? String(bill.qboDocNumber)
+                : null,
+            openUrl:
+              bill.qboOpenUrl ||
+              qbTxnOpenUrl(env, 'bill', existingId, integration?.realmId)
+          });
+          return;
+        }
+        console.warn(`[quickbooks] stored QBO bill ${existingId} is gone; creating a new one`);
       }
 
       const vendorId = String(bill.vendorId || '').trim();

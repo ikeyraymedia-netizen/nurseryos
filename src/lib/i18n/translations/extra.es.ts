@@ -928,6 +928,10 @@ const extra = {
     costPlaceholder: 'costo',
     emailPlaceholder: 'ej. comprador@mayorista.com',
     emailSentBody: 'Se envió al cliente una versión HTML formateada de este {{docLabel}}.',
+    emailAlsoSyncedQb: 'También se sincronizó este documento con QuickBooks.',
+    emailAlreadyInQb: 'Ya está en QuickBooks.',
+    emailQbSaveFirst: 'Guarde el documento primero para sincronizarlo con QuickBooks al enviar el correo.',
+    emailQbSyncFailed: 'Correo enviado, pero falló la sincronización con QuickBooks: {{error}}',
     includePayHint:
       'Envía la factura a QuickBooks (si hace falta) e incluye el enlace de pago de QuickBooks en el correo.',
     createPayLink: 'Copiar enlace de pago de QuickBooks',

@@ -206,6 +206,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
+  const [emailQbNote, setEmailQbNote] = useState<string | null>(null);
   const [showEmailPanel, setShowEmailPanel] = useState(false);
   /** Only include a Stripe pay button when Stripe is actually connected. */
   const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
@@ -886,8 +887,12 @@ Thank you for choosing ${nurseryName}!
     setIsSendingEmail(true);
     setEmailSentStatus('idle');
     setEmailErrorMessage('');
+    setEmailQbNote(null);
 
     try {
+      const qbNote = await syncToQuickbooksOnEmail();
+      if (qbNote) setEmailQbNote(qbNote);
+
       // Pay links are optional — never block sending the invoice email.
       let payUrl: string | null = null;
       if (
@@ -961,6 +966,9 @@ Thank you for choosing ${nurseryName}!
       setEmailErrorMessage(t('invoice.emailFirstRequired'));
       return;
     }
+    void syncToQuickbooksOnEmail().then((note) => {
+      if (note) setEmailQbNote(note);
+    });
     const textBody = generateEmailText();
     const mailtoUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(textBody)}`;
     window.open(mailtoUrl, '_blank');
@@ -1393,6 +1401,73 @@ Thank you for choosing ${nurseryName}!
     }
   };
 
+  const applyQboPushResult = async (result: Awaited<ReturnType<typeof pushDocumentToQuickbooks>>) => {
+    await logAuditEvent({
+      action: 'quickbooks.document_pushed',
+      summary: `Pushed ${documentType} ${invoiceNumber} to QuickBooks (${result.qboInvoiceId})`,
+      meta: {
+        documentId: savedDocumentId,
+        qboInvoiceId: result.qboInvoiceId,
+        qboDocType: result.qboDocType,
+        qboDocNumber: result.qboDocNumber,
+        companyName: result.companyName,
+        environment: result.environment
+      }
+    });
+    const where =
+      result.environment === 'sandbox'
+        ? 'SANDBOX QuickBooks'
+        : 'QuickBooks';
+    const companyBit = result.companyName ? ` · ${result.companyName}` : '';
+    const docBit = result.qboDocNumber
+      ? `Doc #${result.qboDocNumber}`
+      : `Id ${result.qboInvoiceId}`;
+    setLiveDocument((prev) =>
+      prev
+        ? {
+            ...prev,
+            qboInvoiceId: result.qboInvoiceId,
+            qboInvoiceLink: result.qboInvoiceLink || prev.qboInvoiceLink,
+            qboSyncedAt: new Date().toISOString()
+          }
+        : prev
+    );
+    if (result.qboInvoiceLink) {
+      setPayLinkUrl(result.qboInvoiceLink);
+      setPayLinkMessage(t('invoice.payLinkReady'));
+    }
+    setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
+    return { where, companyBit, docBit };
+  };
+
+  /** Push invoice/estimate to QBO if QuickBooks is on and the document is saved. Never throws. */
+  const syncToQuickbooksOnEmail = async (): Promise<string | null> => {
+    if (!canUseQuickbooks) return null;
+    if (documentType !== 'invoice' && documentType !== 'estimate') return null;
+    if (!tenantId || !savedDocumentId) {
+      return t('invoice.emailQbSaveFirst');
+    }
+    if (paymentDocument?.qboInvoiceId) {
+      return t('invoice.emailAlreadyInQb');
+    }
+    try {
+      const result = await pushDocumentToQuickbooks({
+        tenantId,
+        documentId: savedDocumentId
+      });
+      await applyQboPushResult(result);
+      if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
+        await syncPaymentToQuickbooksIfPossible(savedDocumentId, { quiet: true });
+      }
+      return t('invoice.emailAlsoSyncedQb');
+    } catch (err: any) {
+      console.warn('[invoice] QBO sync on email', err?.message || err);
+      return t('invoice.emailQbSyncFailed', {
+        error: err?.message || t('invoice.pushQbFailed')
+      });
+    }
+  };
+
   const handlePushToQuickbooks = async () => {
     if (!tenantId) {
       alert(t('invoice.nurseryContextMissing'));
@@ -1409,26 +1484,7 @@ Thank you for choosing ${nurseryName}!
         tenantId,
         documentId: savedDocumentId
       });
-      await logAuditEvent({
-        action: 'quickbooks.document_pushed',
-        summary: `Pushed ${documentType} ${invoiceNumber} to QuickBooks (${result.qboInvoiceId})`,
-        meta: {
-          documentId: savedDocumentId,
-          qboInvoiceId: result.qboInvoiceId,
-          qboDocType: result.qboDocType,
-          qboDocNumber: result.qboDocNumber,
-          companyName: result.companyName,
-          environment: result.environment
-        }
-      });
-      const where =
-        result.environment === 'sandbox'
-          ? 'SANDBOX QuickBooks'
-          : 'QuickBooks';
-      const companyBit = result.companyName ? ` · ${result.companyName}` : '';
-      const docBit = result.qboDocNumber
-        ? `Doc #${result.qboDocNumber}`
-        : `Id ${result.qboInvoiceId}`;
+      const { where, companyBit, docBit } = await applyQboPushResult(result);
       const customerBit = result.customerName ? ` · customer “${result.customerName}”` : '';
       const totalBit =
         result.totalAmt != null ? ` · $${Number(result.totalAmt).toFixed(2)}` : '';
@@ -1438,21 +1494,6 @@ Thank you for choosing ${nurseryName}!
         result.linePreview && result.linePreview.length
           ? `\nPlants: ${result.linePreview.join('; ')}`
           : '';
-      setLiveDocument((prev) =>
-        prev
-          ? {
-              ...prev,
-              qboInvoiceId: result.qboInvoiceId,
-              qboInvoiceLink: result.qboInvoiceLink || prev.qboInvoiceLink,
-              qboSyncedAt: new Date().toISOString()
-            }
-          : prev
-      );
-      if (result.qboInvoiceLink) {
-        setPayLinkUrl(result.qboInvoiceLink);
-        setPayLinkMessage(t('invoice.payLinkReady'));
-      }
-      setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
 
       let paymentBit = '';
       if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
@@ -2618,6 +2659,9 @@ Thank you for choosing ${nurseryName}!
                     <div className="p-3 bg-ink-50 border border-ink-200 text-ink-800 rounded-xl text-[10px] leading-normal font-medium">
                       <p className="font-bold flex items-center mb-0.5 text-ink-900"><Check className="h-3.5 w-3.5 mr-1 text-ink-700" /> {docLabel} Sent Successfully!</p>
                       <p className="text-[9px] text-ink-700">The customer was emailed a formatted HTML version of this {docLabel.toLowerCase()}.</p>
+                      {emailQbNote && (
+                        <p className="text-[9px] text-ink-700 mt-1">{emailQbNote}</p>
+                      )}
                     </div>
                   )}
 

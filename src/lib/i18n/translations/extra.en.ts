@@ -917,6 +917,10 @@ const extra = {
     costPlaceholder: 'cost',
     emailPlaceholder: 'e.g. buyer@wholesale.com',
     emailSentBody: 'The customer was emailed a formatted HTML version of this {{docLabel}}.',
+    emailAlsoSyncedQb: 'Also synced this document to QuickBooks.',
+    emailAlreadyInQb: 'Already in QuickBooks.',
+    emailQbSaveFirst: 'Save the document first to sync it to QuickBooks on email.',
+    emailQbSyncFailed: 'Email sent, but QuickBooks sync failed: {{error}}',
     includePayHint:
       'Pushes the invoice to QuickBooks (if needed) and puts the QuickBooks pay link in the email.',
     createPayLink: 'Copy QuickBooks pay link',

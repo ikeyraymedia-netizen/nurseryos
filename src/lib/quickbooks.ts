@@ -240,3 +240,35 @@ export async function fetchRecentQuickbooksInvoices(tenantId: string): Promise<{
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
+
+export async function deleteLinkedQuickbooksDocument(params: {
+  tenantId: string;
+  documentId: string;
+}): Promise<{ skipped?: boolean; deleted?: boolean; voided?: boolean; alreadyGone?: boolean }> {
+  const res = await fetch('/api/quickbooks/delete-document', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to delete this document in QuickBooks.');
+  }
+  return data as any;
+}
+
+export async function deleteLinkedQuickbooksBill(params: {
+  tenantId: string;
+  billId: string;
+}): Promise<{ skipped?: boolean; deleted?: boolean; voided?: boolean; alreadyGone?: boolean }> {
+  const res = await fetch('/api/quickbooks/delete-bill', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to delete this bill in QuickBooks.');
+  }
+  return data as any;
+}

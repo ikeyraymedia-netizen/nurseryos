@@ -415,6 +415,9 @@ const extra = {
     customersSubtitle: 'Search customers, then open one to view details.',
     noDocsHint:
       'No documents yet. Create a credit memo here, or an estimate/invoice from an order.',
+    deleteDocConfirm:
+      'Delete {{doc}}? If it was synced to QuickBooks, it will be deleted (or voided) there too.',
+    deleteDocFailed: 'Failed to delete this document.',
     customerNameRequired: 'Customer name *',
     pointOfContactPlaceholder: 'Point of contact',
     custom: 'Custom',
@@ -1134,7 +1137,8 @@ const extra = {
     needVendorPermission: 'You need permission to create vendors.',
     pickSavedVendor: 'Pick a saved vendor, or create a new one.',
     deletePoConfirm: 'Delete {{poNumber}}?',
-    deleteBillConfirm: 'Delete {{billNumber}}?',
+    deleteBillConfirm:
+      'Delete {{billNumber}}? If it was synced to QuickBooks, it will be deleted (or voided) there too.',
     receiveTitle: 'Receive {{poNumber}}',
     receiveHint: 'Enter qty received now. Inventory is updated only for these amounts.',
     receivedProgress: 'Received {{received}}/{{ordered}} · remaining {{remaining}}',

@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { CustomerDocument, CustomerDocumentType } from '../types';
+import { deleteLinkedQuickbooksDocument } from './quickbooks';
 
 let activeTenantId: string | null = null;
 
@@ -146,6 +147,7 @@ export async function markCustomerInvoicePaid(
 
 export async function deleteCustomerDocument(documentId: string): Promise<void> {
   const tenantId = requireTenantId();
+  await deleteLinkedQuickbooksDocument({ tenantId, documentId });
   await deleteDoc(documentDoc(tenantId, documentId));
 }
 

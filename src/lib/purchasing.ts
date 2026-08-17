@@ -23,6 +23,7 @@ import {
   updateInventoryPlant
 } from './inventory';
 import { findMatchingInventoryPlants } from './inventoryMatch';
+import { deleteLinkedQuickbooksBill } from './quickbooks';
 
 let activeTenantId: string | null = null;
 
@@ -426,6 +427,7 @@ export async function markVendorBillPaid(
 
 export async function deleteVendorBill(billId: string): Promise<void> {
   const tenantId = requireTenantId();
+  await deleteLinkedQuickbooksBill({ tenantId, billId });
   await deleteDoc(vendorBillDoc(tenantId, billId));
 }
 

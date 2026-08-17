@@ -286,6 +286,51 @@ async function getQboSalesTxn(
   return getQboTxn(tenantId, docType, qboId);
 }
 
+async function deleteQboTxn(
+  tenantId: string,
+  docType: 'invoice' | 'estimate' | 'bill',
+  qboId: string
+): Promise<{ deleted: boolean; voided?: boolean; alreadyGone?: boolean }> {
+  const existing = await getQboTxn(tenantId, docType, qboId);
+  if (!existing) return { deleted: false, alreadyGone: true };
+
+  const path =
+    docType === 'estimate' ? '/estimate' : docType === 'bill' ? '/bill' : '/invoice';
+  const body = {
+    Id: String(existing.Id),
+    SyncToken: String(existing.SyncToken ?? '0')
+  };
+
+  try {
+    await qboRequest<any>(
+      tenantId,
+      'POST',
+      `${path}?operation=delete&minorversion=65`,
+      body
+    );
+    return { deleted: true };
+  } catch (err) {
+    if (isQboMissingError(err)) return { deleted: false, alreadyGone: true };
+    if (docType === 'estimate') throw err;
+    try {
+      const latest = (await getQboTxn(tenantId, docType, qboId)) || existing;
+      await qboRequest<any>(
+        tenantId,
+        'POST',
+        `${path}?operation=void&minorversion=65`,
+        {
+          Id: String(latest.Id),
+          SyncToken: String(latest.SyncToken ?? body.SyncToken)
+        }
+      );
+      return { deleted: false, voided: true };
+    } catch (voidErr) {
+      if (isQboMissingError(voidErr)) return { deleted: false, alreadyGone: true };
+      throw err;
+    }
+  }
+}
+
 function qbAppBase(env?: QbEnvironment): string {
   return (env || qbEnv()) === 'production'
     ? 'https://app.qbo.intuit.com'
@@ -1859,6 +1904,71 @@ export function registerQuickbooksRoutes(app: Express) {
         realmId: integration.realmId,
         invoices
       });
+    })
+  );
+
+  app.post('/api/quickbooks/delete-document', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const documentId = String(req.body?.documentId || '');
+      if (!tenantId || !documentId) {
+        res.status(400).json({ error: 'tenantId and documentId are required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.realmId) {
+        res.json({ skipped: true, reason: 'not_connected' });
+        return;
+      }
+
+      const snap = await getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`).get();
+      if (!snap.exists) {
+        res.json({ skipped: true, reason: 'not_found' });
+        return;
+      }
+      const doc = snap.data() || {};
+      const qboId = String(doc.qboInvoiceId || '').trim();
+      if (!qboId) {
+        res.json({ skipped: true, reason: 'not_synced' });
+        return;
+      }
+      const docType = doc.type === 'estimate' ? 'estimate' : 'invoice';
+      const result = await deleteQboTxn(tenantId, docType, qboId);
+      res.json({ success: true, ...result });
+    })
+  );
+
+  app.post('/api/quickbooks/delete-bill', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const billId = String(req.body?.billId || '');
+      if (!tenantId || !billId) {
+        res.status(400).json({ error: 'tenantId and billId are required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.realmId) {
+        res.json({ skipped: true, reason: 'not_connected' });
+        return;
+      }
+
+      const snap = await getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`).get();
+      if (!snap.exists) {
+        res.json({ skipped: true, reason: 'not_found' });
+        return;
+      }
+      const bill = snap.data() || {};
+      const qboId = String(bill.qboBillId || '').trim();
+      if (!qboId) {
+        res.json({ skipped: true, reason: 'not_synced' });
+        return;
+      }
+      const result = await deleteQboTxn(tenantId, 'bill', qboId);
+      res.json({ success: true, ...result });
     })
   );
 }

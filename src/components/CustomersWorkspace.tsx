@@ -23,10 +23,11 @@ import {
 } from '../types';
 import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, updateCustomer } from '../lib/customers';
 import {
-  listAllDocuments,
-  subscribeToCustomerDocuments,
-  subscribeToDocuments,
-  updateCustomerDocument
+    listAllDocuments,
+    subscribeToCustomerDocuments,
+    subscribeToDocuments,
+    updateCustomerDocument,
+    deleteCustomerDocument
 } from '../lib/documents';
 import { addCustomerOrder } from '../lib/db';
 import { logAuditEvent } from '../lib/audit';
@@ -725,6 +726,23 @@ export function CustomersWorkspace({
     }, 0);
   }
 
+  async function handleDeleteSavedDocument(doc: CustomerDocument) {
+    if (!permissions.canViewInvoices) return;
+    const ok = window.confirm(
+      t('customers.deleteDocConfirm', { doc: doc.documentNumber })
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await deleteCustomerDocument(doc.id);
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : t('customers.deleteDocFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleConvertEstimateToOrder(doc: CustomerDocument) {
     if (!permissions.canUploadOrders || !selectedCustomer) return;
     if (doc.type !== 'estimate') return;
@@ -1238,6 +1256,16 @@ export function CustomersWorkspace({
                             {t('customers.openDoc', { type: docTypeLabel(doc.type) })}
                           </button>
                         )}
+                        {permissions.canViewInvoices && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleDeleteSavedDocument(doc)}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 hover:text-rose-800 disabled:opacity-50"
+                          >
+                            {t('common.delete')}
+                          </button>
+                        )}
                         {permissions.canUploadOrders && doc.type === 'estimate' && !doc.orderId && (
                           <button
                             type="button"
@@ -1521,6 +1549,16 @@ export function CustomersWorkspace({
                           >
                             <DollarSign className="h-3.5 w-3.5" />
                             {t('customers.openInvoice')}
+                          </button>
+                        )}
+                        {permissions.canViewInvoices && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleDeleteSavedDocument(doc)}
+                            className="mt-2 ml-3 inline-flex items-center gap-1 text-xs font-bold text-rose-700 hover:text-rose-800 disabled:opacity-50"
+                          >
+                            {t('common.delete')}
                           </button>
                         )}
                       </div>

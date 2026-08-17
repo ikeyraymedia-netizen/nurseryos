@@ -419,6 +419,9 @@ const extra = {
     customersSubtitle: 'Busque clientes, luego abra uno para ver detalles.',
     noDocsHint:
       'Aún no hay documentos. Cree una nota de crédito aquí, o un presupuesto/factura desde un pedido.',
+    deleteDocConfirm:
+      '¿Eliminar {{doc}}? Si estaba sincronizado con QuickBooks, también se eliminará (o anulará) allí.',
+    deleteDocFailed: 'No se pudo eliminar este documento.',
     customerNameRequired: 'Nombre del cliente *',
     pointOfContactPlaceholder: 'Persona de contacto',
     custom: 'Personalizado',
@@ -1147,7 +1150,8 @@ const extra = {
     needVendorPermission: 'Necesita permiso para crear proveedores.',
     pickSavedVendor: 'Seleccione un proveedor guardado o cree uno nuevo.',
     deletePoConfirm: '¿Eliminar {{poNumber}}?',
-    deleteBillConfirm: '¿Eliminar {{billNumber}}?',
+    deleteBillConfirm:
+      '¿Eliminar {{billNumber}}? Si estaba sincronizada con QuickBooks, también se eliminará (o anulará) allí.',
     receiveTitle: 'Recibir {{poNumber}}',
     receiveHint: 'Ingrese la cantidad recibida ahora. El inventario se actualiza solo por estos montos.',
     receivedProgress: 'Recibido {{received}}/{{ordered}} · restante {{remaining}}',

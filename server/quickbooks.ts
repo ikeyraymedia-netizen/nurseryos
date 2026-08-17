@@ -232,9 +232,43 @@ async function qboRequest<T>(
     const combined = [message, detail, code, element].filter(Boolean).join(' — ');
     const errMessage =
       combined || data?.error || `QuickBooks API error (${res.status})`;
-    throw new Error(String(errMessage));
+    const err: any = new Error(String(errMessage));
+    err.status = res.status;
+    if (fault?.code != null) err.qboCode = String(fault.code);
+    throw err;
   }
   return data as T;
+}
+
+function isQboMissingError(err: any): boolean {
+  const code = String(err?.qboCode || '');
+  const msg = String(err?.message || '').toLowerCase();
+  return (
+    err?.status === 404 ||
+    code === '610' ||
+    code === '2500' ||
+    msg.includes('object not found') ||
+    msg.includes('does not exist')
+  );
+}
+
+async function getQboSalesTxn(
+  tenantId: string,
+  docType: 'invoice' | 'estimate',
+  qboId: string
+): Promise<any | null> {
+  const path =
+    docType === 'estimate'
+      ? `/estimate/${encodeURIComponent(qboId)}?minorversion=65`
+      : `/invoice/${encodeURIComponent(qboId)}?minorversion=65&include=invoiceLink`;
+  try {
+    const check = await qboRequest<any>(tenantId, 'GET', path);
+    const entity = docType === 'estimate' ? check?.Estimate : check?.Invoice;
+    return entity?.Id ? entity : null;
+  } catch (err) {
+    if (isQboMissingError(err)) return null;
+    throw err;
+  }
 }
 
 function qbAppBase(env?: QbEnvironment): string {
@@ -1075,6 +1109,7 @@ async function pushDocumentToQboInternal(
   environment: QbEnvironment;
   companyName: string | null;
   verified: boolean;
+  reused: boolean;
 }> {
   const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
   const snap = await docRef.get();
@@ -1084,6 +1119,47 @@ async function pushDocumentToQboInternal(
   const doc = snap.data() || {};
   if (doc.type !== 'invoice' && doc.type !== 'estimate') {
     throw Object.assign(new Error('Only invoices and estimates can be synced.'), { status: 400 });
+  }
+
+  const integrationEarly = await loadIntegration(tenantId);
+  const envEarly = integrationEarly?.environment || qbEnv();
+  const existingId = String(doc.qboInvoiceId || '').trim();
+  if (existingId) {
+    const existing = await getQboSalesTxn(tenantId, doc.type, existingId);
+    if (existing) {
+      const companyName = integrationEarly?.realmId
+        ? await fetchCompanyName(tenantId, integrationEarly.realmId)
+        : null;
+      const openUrl = qbTxnOpenUrl(envEarly, doc.type, existingId, integrationEarly?.realmId);
+      const existingLines = Array.isArray(existing.Line) ? existing.Line : [];
+      const salesLines = existingLines.filter((l: any) => l?.DetailType === 'SalesItemLineDetail');
+      let qboInvoiceLink: string | null = null;
+      if (doc.type === 'invoice') {
+        const link = existing.InvoiceLink || existing.invoiceLink;
+        qboInvoiceLink = sanitizeCustomerPayLink(link ? String(link).trim() : null);
+        if (!qboInvoiceLink) qboInvoiceLink = await fetchQboInvoiceLink(tenantId, existingId);
+      }
+      return {
+        qboInvoiceId: existingId,
+        qboDocType: String(doc.type),
+        qboDocNumber: existing.DocNumber ? String(existing.DocNumber) : null,
+        qboInvoiceLink,
+        qboOpenUrl: openUrl,
+        customerName: existing.CustomerRef?.name ? String(existing.CustomerRef.name) : null,
+        totalAmt: existing.TotalAmt != null ? Number(existing.TotalAmt) : null,
+        lineCount: salesLines.length,
+        linePreview: salesLines
+          .slice(0, 5)
+          .map((l: any) => String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line')),
+        environment: envEarly,
+        companyName,
+        verified: true,
+        reused: true
+      };
+    }
+    console.warn(
+      `[quickbooks] stored QBO ${doc.type} ${existingId} is gone; creating a new one`
+    );
   }
 
   const customer = await findOrCreateCustomer(tenantId, doc);
@@ -1173,6 +1249,9 @@ async function pushDocumentToQboInternal(
       qboInvoiceLink: qboInvoiceLink || null,
       qboSyncedAt: now,
       qboSyncedByUserId: uid,
+      ...(existingId && existingId !== qboId
+        ? { qboPaymentId: null, qboPaymentSyncedAt: null, qboPaymentNote: null }
+        : {}),
       updatedAt: now
     },
     { merge: true }
@@ -1190,7 +1269,8 @@ async function pushDocumentToQboInternal(
     linePreview,
     environment: env,
     companyName,
-    verified
+    verified,
+    reused: false
   };
 }
 
@@ -1393,6 +1473,7 @@ export function registerQuickbooksRoutes(app: Express) {
         environment: result.environment,
         companyName: result.companyName,
         verified: result.verified,
+        reused: result.reused,
         openUrl: result.qboOpenUrl,
         sandboxUrl:
           result.environment === 'sandbox' ? `${qbAppBase('sandbox')}/app/invoices` : null
@@ -1433,6 +1514,14 @@ export function registerQuickbooksRoutes(app: Express) {
 
       if (qbEnv() === 'sandbox') {
         throw sandboxPayLinkError();
+      }
+
+      if (qboInvoiceId) {
+        const stillThere = await getQboSalesTxn(tenantId, 'invoice', qboInvoiceId);
+        if (!stillThere) {
+          qboInvoiceId = '';
+          qboInvoiceLink = null;
+        }
       }
 
       if (!qboInvoiceId) {

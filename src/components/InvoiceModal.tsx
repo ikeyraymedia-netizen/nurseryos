@@ -1447,9 +1447,6 @@ Thank you for choosing ${nurseryName}!
     if (!tenantId || !savedDocumentId) {
       return t('invoice.emailQbSaveFirst');
     }
-    if (paymentDocument?.qboInvoiceId) {
-      return t('invoice.emailAlreadyInQb');
-    }
     try {
       const result = await pushDocumentToQuickbooks({
         tenantId,
@@ -1459,7 +1456,7 @@ Thank you for choosing ${nurseryName}!
       if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
         await syncPaymentToQuickbooksIfPossible(savedDocumentId, { quiet: true });
       }
-      return t('invoice.emailAlsoSyncedQb');
+      return result.reused ? t('invoice.emailAlreadyInQb') : t('invoice.emailAlsoSyncedQb');
     } catch (err: any) {
       console.warn('[invoice] QBO sync on email', err?.message || err);
       return t('invoice.emailQbSyncFailed', {

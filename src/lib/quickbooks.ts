@@ -78,6 +78,7 @@ export async function pushDocumentToQuickbooks(params: {
   openUrl?: string | null;
   sandboxUrl?: string | null;
   verified?: boolean;
+  reused?: boolean;
 }> {
   const res = await fetch('/api/quickbooks/push-invoice', {
     method: 'POST',
@@ -99,7 +100,8 @@ export async function pushDocumentToQuickbooks(params: {
     companyName: data.companyName ? String(data.companyName) : null,
     openUrl: data.openUrl ? String(data.openUrl) : null,
     sandboxUrl: data.sandboxUrl ? String(data.sandboxUrl) : null,
-    verified: Boolean(data.verified)
+    verified: Boolean(data.verified),
+    reused: Boolean(data.reused)
   };
 }
 

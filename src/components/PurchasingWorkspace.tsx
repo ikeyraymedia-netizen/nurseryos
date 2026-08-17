@@ -56,6 +56,7 @@ import {
   purchaseCategoryLabel
 } from '../lib/purchaseCategories';
 import { sendTenantEmail } from '../lib/email';
+import { OutboundReplySelect } from './OutboundReplySelect';
 import {
   buildPurchaseOrderEmailHtml,
   buildPurchaseOrderEmailText,
@@ -198,6 +199,7 @@ export function PurchasingWorkspace({
   const [emailMessage, setEmailMessage] = useState('');
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [poReplyTo, setPoReplyTo] = useState('');
 
   // Vendor form
   const [vendorName, setVendorName] = useState('');
@@ -611,7 +613,8 @@ export function PurchasingWorkspace({
           order: emailingOrder,
           message: emailMessage
         }),
-        fromName: nurseryName
+        fromName: nurseryName,
+        fromEmail: poReplyTo || undefined
       });
       if (!result.success) {
         throw new Error(
@@ -705,6 +708,40 @@ export function PurchasingWorkspace({
     setBillLines([emptyBillLine()]);
   }
 
+  async function syncBillToQuickbooksOnSave(billId: string) {
+    if (!permissions.canUseQuickbooks) return;
+    try {
+      const result = await pushVendorBillToQuickbooks({ tenantId, billId });
+      void logAuditEvent({
+        action: 'quickbooks.bill_pushed',
+        summary: `Pushed bill ${billId} to QuickBooks (${result.qboBillId})`,
+        meta: {
+          billId,
+          qboBillId: result.qboBillId,
+          qboDocNumber: result.qboDocNumber,
+          companyName: result.companyName,
+          environment: result.environment,
+          alreadySynced: result.alreadySynced
+        }
+      });
+      const where =
+        result.environment === 'sandbox' ? 'SANDBOX QuickBooks' : 'QuickBooks';
+      const docBit = result.qboDocNumber
+        ? `Doc #${result.qboDocNumber}`
+        : `Id ${result.qboBillId}`;
+      setStatus(
+        result.alreadySynced
+          ? t('purchasing.qbBillAlreadySynced', { doc: docBit })
+          : t('purchasing.qbBillSavedAndPushed', { where, doc: docBit })
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : t('purchasing.pushToQb');
+      console.warn('[purchasing] QBO bill sync', message);
+      setStatus(t('purchasing.qbBillSaveSyncFailed', { error: message }));
+    }
+  }
+
   async function handleSaveBill(e: FormEvent) {
     e.preventDefault();
     if (!permissions.canManageVendorBills) return;
@@ -759,7 +796,7 @@ export function PurchasingWorkspace({
         dueDateFromPaymentTerms(billDate || todayKey(), vendor.paymentTerms) ||
         undefined;
 
-      await createVendorBill({
+      const billId = await createVendorBill({
         vendorId: vendor.id,
         vendorName: vendor.name,
         billDate: billDate || undefined,
@@ -769,6 +806,7 @@ export function PurchasingWorkspace({
         items
       });
       closeBillForm();
+      await syncBillToQuickbooksOnSave(billId);
     });
   }
 
@@ -793,6 +831,7 @@ export function PurchasingWorkspace({
         vendorName
       });
       setEditingBill(null);
+      await syncBillToQuickbooksOnSave(updated.id);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t('purchasing.somethingWentWrong');
@@ -1461,9 +1500,10 @@ export function PurchasingWorkspace({
                     tenantId={tenantId}
                     vendors={vendors}
                     permissions={permissions}
-                    onSaved={() => {
+                    onSaved={(billId) => {
                       setShowInvoiceScanner(false);
                       setView('bills');
+                      void syncBillToQuickbooksOnSave(billId);
                     }}
                   />
                 )}
@@ -1954,8 +1994,9 @@ export function PurchasingWorkspace({
                         disabled={busy}
                         onClick={() =>
                           void run(async () => {
-                            await createVendorBillFromPurchaseOrder(order);
+                            const billId = await createVendorBillFromPurchaseOrder(order);
                             setView('bills');
+                            await syncBillToQuickbooksOnSave(billId);
                           })
                         }
                         className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 text-ink-800"
@@ -2024,7 +2065,10 @@ export function PurchasingWorkspace({
               tenantId={tenantId}
               vendors={vendors}
               permissions={permissions}
-              onSaved={() => setShowInvoiceScanner(false)}
+              onSaved={(billId) => {
+                setShowInvoiceScanner(false);
+                void syncBillToQuickbooksOnSave(billId);
+              }}
             />
           )}
 
@@ -2348,6 +2392,12 @@ export function PurchasingWorkspace({
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 />
               </label>
+              <OutboundReplySelect
+                tenantId={tenantId}
+                value={poReplyTo}
+                onChange={(email) => setPoReplyTo(email)}
+                disabled={emailSending}
+              />
               <label className="block text-xs">
                 <span className="font-bold text-slate-600">{t('purchasing.subjectLabel')}</span>
                 <input

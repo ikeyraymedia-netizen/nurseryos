@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight, Plus } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
 import {
   createTeamInvite,
@@ -35,7 +35,9 @@ import {
 import {
   disconnectEmail,
   fetchEmailStatus,
+  identitiesFromStatus,
   saveEmailConfig,
+  EmailIdentity,
   EmailStatus
 } from '../lib/email';
 import { tenantHasModule } from '../lib/modules';
@@ -95,8 +97,11 @@ export function TeamManager({
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailFromEmail, setEmailFromEmail] = useState('');
-  const [emailFromName, setEmailFromName] = useState('');
+  const [emailIdentities, setEmailIdentities] = useState<EmailIdentity[]>([]);
+  const [emailDefaultId, setEmailDefaultId] = useState('');
+  const [newEmailLabel, setNewEmailLabel] = useState('');
+  const [newEmailFromName, setNewEmailFromName] = useState('');
+  const [newEmailAddress, setNewEmailAddress] = useState('');
   const paymentsEnabled = tenantHasModule(tenant, 'payments');
   const quickbooksEnabled = tenantHasModule(tenant, 'quickbooks');
 
@@ -104,8 +109,9 @@ export function TeamManager({
     try {
       const status = await fetchEmailStatus(tenant.id);
       setEmailStatus(status);
-      setEmailFromEmail(status.fromEmail || '');
-      setEmailFromName(status.fromName || tenant.name);
+      const rows = identitiesFromStatus(status);
+      setEmailIdentities(rows);
+      setEmailDefaultId(status.defaultIdentityId || rows[0]?.id || '');
       setEmailError(null);
     } catch (err: any) {
       setEmailStatus(null);
@@ -367,22 +373,68 @@ export function TeamManager({
     }
   }
 
+  function looksLikeEmail(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  function handleAddEmailIdentity() {
+    const fromEmail = newEmailAddress.trim().toLowerCase();
+    if (!looksLikeEmail(fromEmail)) {
+      setEmailError('Enter a valid reply-to email address.');
+      return;
+    }
+    if (emailIdentities.some((row) => row.fromEmail.toLowerCase() === fromEmail)) {
+      setEmailError('That reply-to address is already on the list.');
+      return;
+    }
+    const id = `email_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const fromName = newEmailFromName.trim() || tenant.name;
+    const label = newEmailLabel.trim() || fromName;
+    setEmailIdentities((prev) => [...prev, { id, label, fromName, fromEmail }]);
+    if (!emailDefaultId) setEmailDefaultId(id);
+    setNewEmailLabel('');
+    setNewEmailFromName('');
+    setNewEmailAddress('');
+    setEmailError(null);
+  }
+
   async function handleSaveEmail() {
     setEmailBusy(true);
     setEmailError(null);
     setMessage(null);
     try {
+      const identities = [...emailIdentities];
+      if (looksLikeEmail(newEmailAddress.trim())) {
+        const fromEmail = newEmailAddress.trim().toLowerCase();
+        if (!identities.some((row) => row.fromEmail.toLowerCase() === fromEmail)) {
+          identities.push({
+            id: `email_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+            label: newEmailLabel.trim() || newEmailFromName.trim() || tenant.name,
+            fromName: newEmailFromName.trim() || tenant.name,
+            fromEmail
+          });
+        }
+      }
+      const valid = identities.filter((row) => looksLikeEmail(row.fromEmail));
+      if (!valid.length) {
+        setEmailError('Add at least one valid reply-to email address.');
+        setEmailBusy(false);
+        return;
+      }
       const status = await saveEmailConfig({
         tenantId: tenant.id,
-        fromEmail: emailFromEmail.trim(),
-        fromName: emailFromName.trim() || tenant.name
+        identities: valid,
+        defaultIdentityId: emailDefaultId || valid[0].id
       });
       setEmailStatus(status);
+      const rows = identitiesFromStatus(status);
+      setEmailIdentities(rows);
+      setEmailDefaultId(status.defaultIdentityId || rows[0]?.id || '');
       void logAuditEvent({
         action: 'email.configured',
-        summary: `Configured outbound email reply-to ${status.fromEmail}`
+        summary: `Configured outbound email (${rows.length}) default ${status.fromEmail}`
       });
-      setMessage(`Customer replies will go to ${status.fromEmail}.`);
+      setMessage(`Customer replies will go to ${status.fromEmail} unless another address is chosen when sending.`);
     } catch (err: any) {
       setEmailError(err?.message || t('teamExtra.emailSaveFailed'));
     } finally {
@@ -398,6 +450,8 @@ export function TeamManager({
     try {
       await disconnectEmail(tenant.id);
       setEmailStatus(null);
+      setEmailIdentities([]);
+      setEmailDefaultId('');
       void logAuditEvent({
         action: 'email.disconnected',
         summary: 'Disconnected outbound email'
@@ -976,17 +1030,15 @@ export function TeamManager({
           <div className="rounded-xl border border-ink-100 bg-ink-50/40 px-3 py-3 space-y-2">
             <p className="text-xs font-bold uppercase text-ink-900 flex items-center gap-1.5">
               <Mail className="h-3.5 w-3.5" />
-              Outbound email
+              {t('teamExtra.outboundEmail')}
             </p>
             <p className="text-[11px] text-ink-950/80 leading-relaxed">
-              Invoices are sent through NurseryOS email (Resend). Set this nursery’s display name
-              and reply-to address so customers can answer the nursery, not the platform. Owner/admin
-              only.
+              {t('teamExtra.emailIntro')}
             </p>
-            {emailStatus?.configured ? (
+            {emailIdentities.length > 0 ? (
               <p className="text-xs font-semibold text-ink-800">
-                Reply-to {emailStatus.fromEmail}
-                {emailStatus.configuredAt
+                {t('teamExtra.emailAddresses', { n: emailIdentities.length })}
+                {emailStatus?.configuredAt
                   ? ` · saved ${new Date(emailStatus.configuredAt).toLocaleDateString()}`
                   : ''}
               </p>
@@ -995,35 +1047,123 @@ export function TeamManager({
             )}
             {emailStatus && emailStatus.platformReady === false && (
               <p className="text-[11px] text-amber-800 leading-relaxed">
-                Platform email is not ready yet — add <code>RESEND_API_KEY</code> in Railway.
+                {t('teamExtra.platformEmailNotReady')}
               </p>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-900/70">
-                From name
-                <input
-                  type="text"
-                  value={emailFromName}
-                  onChange={(e) => setEmailFromName(e.target.value)}
-                  placeholder={tenant.name}
-                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
-                />
-              </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-900/70">
-                Reply-to email
-                <input
-                  type="email"
-                  value={emailFromEmail}
-                  onChange={(e) => setEmailFromEmail(e.target.value)}
-                  placeholder="billing@yournursery.com"
-                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
-                />
-              </label>
+            <div className="space-y-2">
+              {emailIdentities.map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-lg border border-ink-100 bg-white px-2.5 py-2 space-y-1.5"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) =>
+                        setEmailIdentities((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, label: e.target.value } : item
+                          )
+                        )
+                      }
+                      placeholder={t('teamExtra.emailLabelPlaceholder')}
+                      className="w-full px-2 py-1.5 rounded-lg border border-ink-200 text-xs font-semibold text-slate-800"
+                    />
+                    <input
+                      type="text"
+                      value={row.fromName}
+                      onChange={(e) =>
+                        setEmailIdentities((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, fromName: e.target.value } : item
+                          )
+                        )
+                      }
+                      placeholder={tenant.name}
+                      className="w-full px-2 py-1.5 rounded-lg border border-ink-200 text-xs font-semibold text-slate-800"
+                    />
+                    <input
+                      type="email"
+                      value={row.fromEmail}
+                      onChange={(e) =>
+                        setEmailIdentities((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, fromEmail: e.target.value } : item
+                          )
+                        )
+                      }
+                      placeholder="billing@yournursery.com"
+                      className="w-full px-2 py-1.5 rounded-lg border border-ink-200 text-xs font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {emailDefaultId === row.id ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-ink-100 text-ink-800 px-2 py-0.5 rounded-full">
+                        {t('teamExtra.defaultReplyTo')}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEmailDefaultId(row.id)}
+                        className="text-[10px] font-bold uppercase tracking-wide text-ink-700 hover:underline"
+                      >
+                        {t('teamExtra.setDefaultReplyTo')}
+                      </button>
+                    )}
+                    {emailIdentities.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = emailIdentities.filter((item) => item.id !== row.id);
+                          setEmailIdentities(next);
+                          if (emailDefaultId === row.id) setEmailDefaultId(next[0]?.id || '');
+                        }}
+                        className="text-[10px] font-bold uppercase tracking-wide text-rose-700 hover:underline ml-auto"
+                      >
+                        {t('teamExtra.removeReplyTo')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={newEmailLabel}
+                onChange={(e) => setNewEmailLabel(e.target.value)}
+                placeholder={t('teamExtra.emailLabelPlaceholder')}
+                className="w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
+              />
+              <input
+                type="text"
+                value={newEmailFromName}
+                onChange={(e) => setNewEmailFromName(e.target.value)}
+                placeholder={t('teamExtra.fromName')}
+                className="w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
+              />
+              <input
+                type="email"
+                value={newEmailAddress}
+                onChange={(e) => setNewEmailAddress(e.target.value)}
+                placeholder="billing@yournursery.com"
+                className="w-full px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-xs font-semibold text-slate-800"
+              />
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={emailBusy || busy || !emailFromEmail.trim()}
+                disabled={emailBusy || busy || !newEmailAddress.trim()}
+                onClick={handleAddEmailIdentity}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-ink-200 bg-white text-ink-800 text-xs font-bold disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t('teamExtra.addReplyTo')}
+              </button>
+              <button
+                type="button"
+                disabled={emailBusy || busy || (emailIdentities.length === 0 && !newEmailAddress.trim())}
                 onClick={() => void handleSaveEmail()}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink-800 text-white text-xs font-bold disabled:opacity-50"
               >

@@ -34,6 +34,7 @@ import { exportNurseryBackup } from '../lib/backup';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
 import { sendTenantEmail } from '../lib/email';
+import { OutboundReplySelect } from './OutboundReplySelect';
 import {
   buildCustomerStatementEmailHtml,
   buildCustomerStatementEmailText,
@@ -176,6 +177,7 @@ export function CustomersWorkspace({
   const [statementEmailMessage, setStatementEmailMessage] = useState('');
   const [statementEmailSending, setStatementEmailSending] = useState(false);
   const [statementEmailStatus, setStatementEmailStatus] = useState<string | null>(null);
+  const [statementReplyTo, setStatementReplyTo] = useState('');
 
   const invoicePeriodLabels = useMemo(
     (): Array<[InvoicePeriod, string]> => [
@@ -366,7 +368,8 @@ export function CustomersWorkspace({
           statement: customerStatement,
           message: statementEmailMessage
         }),
-        fromName: nurseryName
+        fromName: nurseryName,
+        fromEmail: statementReplyTo || undefined
       });
       if (!result.success) {
         throw new Error(
@@ -899,6 +902,14 @@ export function CustomersWorkspace({
                       disabled={statementEmailSending}
                       required
                     />
+                    {tenantId ? (
+                      <OutboundReplySelect
+                        tenantId={tenantId}
+                        value={statementReplyTo}
+                        onChange={(email) => setStatementReplyTo(email)}
+                        disabled={statementEmailSending}
+                      />
+                    ) : null}
                     <input
                       type="text"
                       value={statementEmailSubject}

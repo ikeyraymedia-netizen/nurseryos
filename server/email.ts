@@ -8,10 +8,19 @@ import {
 } from './firebaseAdmin';
 import { createAccessRequestDoc } from './platform';
 
-interface EmailIntegration {
-  /** reply-to / customer-facing nursery contact email */
+interface EmailIdentity {
+  id: string;
+  label: string;
   fromName: string;
   fromEmail: string;
+}
+
+interface EmailIntegration {
+  /** reply-to / customer-facing nursery contact email (default identity) */
+  fromName: string;
+  fromEmail: string;
+  identities?: EmailIdentity[];
+  defaultIdentityId?: string;
   configuredAt: string;
   configuredByUserId: string;
   updatedAt: string;
@@ -90,6 +99,59 @@ function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function newIdentityId(): string {
+  return `email_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function sanitizeIdentity(raw: any): EmailIdentity | null {
+  const fromEmail = String(raw?.fromEmail || '').trim().toLowerCase();
+  if (!looksLikeEmail(fromEmail)) return null;
+  const fromName = String(raw?.fromName || '').trim() || fromEmail.split('@')[0] || 'Nursery';
+  const label = String(raw?.label || '').trim() || fromName;
+  const id = String(raw?.id || '').trim() || newIdentityId();
+  return { id, label: label.slice(0, 80), fromName: fromName.slice(0, 120), fromEmail };
+}
+
+function identitiesFromDoc(doc: EmailIntegration | null): EmailIdentity[] {
+  if (!doc) return [];
+  const fromList = Array.isArray(doc.identities)
+    ? doc.identities.map(sanitizeIdentity).filter((row): row is EmailIdentity => Boolean(row))
+    : [];
+  if (fromList.length) {
+    const seen = new Set<string>();
+    return fromList.filter((row) => {
+      if (seen.has(row.fromEmail)) return false;
+      seen.add(row.fromEmail);
+      return true;
+    });
+  }
+  if (doc.fromEmail && looksLikeEmail(doc.fromEmail)) {
+    return [
+      {
+        id: 'primary',
+        label: doc.fromName || 'Default',
+        fromName: doc.fromName || doc.fromEmail.split('@')[0] || 'Nursery',
+        fromEmail: doc.fromEmail.trim().toLowerCase()
+      }
+    ];
+  }
+  return [];
+}
+
+function pickIdentity(
+  identities: EmailIdentity[],
+  defaultId: string | undefined,
+  requestedEmail?: string
+): EmailIdentity | null {
+  if (!identities.length) return null;
+  const requested = String(requestedEmail || '').trim().toLowerCase();
+  if (requested) {
+    const match = identities.find((row) => row.fromEmail === requested);
+    if (match) return match;
+  }
+  return identities.find((row) => row.id === defaultId) || identities[0];
+}
+
 function isResendConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim());
 }
@@ -161,9 +223,11 @@ export async function sendTenantInvoiceEmail(params: {
   text?: string;
   html?: string;
   fromNameOverride?: string;
+  fromEmailOverride?: string;
 }): Promise<{ messageId: string; fromEmail: string; fromName: string }> {
   const integration = await loadIntegration(params.tenantId);
-  if (!integration?.fromEmail) {
+  const identities = identitiesFromDoc(integration);
+  if (!identities.length) {
     throw Object.assign(
       new Error(
         'This nursery has not configured outbound email yet. Open Team → Outbound email and add the nursery’s reply-to address.'
@@ -172,8 +236,27 @@ export async function sendTenantInvoiceEmail(params: {
     );
   }
 
-  const fromName = (params.fromNameOverride || integration.fromName || '').trim() || 'Nursery';
-  const replyTo = integration.fromEmail.trim();
+  const requested = String(params.fromEmailOverride || '').trim().toLowerCase();
+  if (requested && !identities.some((row) => row.fromEmail === requested)) {
+    throw Object.assign(
+      new Error('That reply-to address is not in this nursery’s outbound email list.'),
+      { status: 400 }
+    );
+  }
+
+  const chosen = pickIdentity(identities, integration?.defaultIdentityId, requested);
+  if (!chosen) {
+    throw Object.assign(
+      new Error(
+        'This nursery has not configured outbound email yet. Open Team → Outbound email and add the nursery’s reply-to address.'
+      ),
+      { status: 400, code: 'TENANT_SMTP_NOT_CONFIGURED' }
+    );
+  }
+
+  const fromName =
+    (params.fromNameOverride || chosen.fromName || integration?.fromName || '').trim() || 'Nursery';
+  const replyTo = chosen.fromEmail;
 
   const messageId = await sendViaResend({
     fromName,
@@ -201,11 +284,16 @@ export function registerEmailRoutes(app: Express) {
       }
       await assertCanSendInvoice(tenantId, uid);
       const integration = await loadIntegration(tenantId);
+      const identities = identitiesFromDoc(integration);
+      const defaultId = integration?.defaultIdentityId;
+      const primary = pickIdentity(identities, defaultId);
       res.json({
-        configured: Boolean(integration?.fromEmail),
+        configured: identities.length > 0,
         platformReady: isResendConfigured(),
-        fromEmail: integration?.fromEmail || null,
-        fromName: integration?.fromName || null,
+        fromEmail: primary?.fromEmail || integration?.fromEmail || null,
+        fromName: primary?.fromName || integration?.fromName || null,
+        identities,
+        defaultIdentityId: primary?.id || null,
         configuredAt: integration?.configuredAt || null
       });
     })
@@ -216,6 +304,9 @@ export function registerEmailRoutes(app: Express) {
       const tenantId = String(req.body?.tenantId || '');
       const fromEmail = String(req.body?.fromEmail || '').trim();
       const fromName = String(req.body?.fromName || '').trim();
+      const requestedIdentities = Array.isArray(req.body?.identities) ? req.body.identities : null;
+      const requestedDefaultId =
+        typeof req.body?.defaultIdentityId === 'string' ? req.body.defaultIdentityId.trim() : '';
 
       if (!tenantId) {
         res.status(400).json({ error: 'tenantId is required.' });
@@ -223,17 +314,37 @@ export function registerEmailRoutes(app: Express) {
       }
       await assertAdminOrOwner(tenantId, uid);
 
-      if (!looksLikeEmail(fromEmail)) {
-        res.status(400).json({ error: 'Enter a valid reply-to email address.' });
+      let identities: EmailIdentity[] = [];
+      if (requestedIdentities) {
+        identities = requestedIdentities
+          .map(sanitizeIdentity)
+          .filter((row): row is EmailIdentity => Boolean(row));
+      } else if (looksLikeEmail(fromEmail)) {
+        identities = [
+          {
+            id: 'primary',
+            label: fromName || 'Default',
+            fromName: fromName || fromEmail.split('@')[0] || 'Nursery',
+            fromEmail: fromEmail.toLowerCase()
+          }
+        ];
+      }
+
+      if (!identities.length) {
+        res.status(400).json({ error: 'Enter at least one valid reply-to email address.' });
         return;
       }
 
       const existing = await loadIntegration(tenantId);
       const now = new Date().toISOString();
+      const primary =
+        identities.find((row) => row.id === requestedDefaultId) || identities[0];
       const payload: EmailIntegration = {
         provider: 'resend',
-        fromName: fromName || fromEmail.split('@')[0] || 'Nursery',
-        fromEmail,
+        fromName: primary.fromName,
+        fromEmail: primary.fromEmail,
+        identities,
+        defaultIdentityId: primary.id,
         configuredAt: existing?.configuredAt || now,
         configuredByUserId: existing?.configuredByUserId || uid,
         updatedAt: now
@@ -245,6 +356,8 @@ export function registerEmailRoutes(app: Express) {
         platformReady: isResendConfigured(),
         fromEmail: payload.fromEmail,
         fromName: payload.fromName,
+        identities,
+        defaultIdentityId: payload.defaultIdentityId,
         configuredAt: payload.configuredAt
       });
     })
@@ -272,6 +385,8 @@ export function registerEmailRoutes(app: Express) {
       const html = typeof req.body?.html === 'string' ? req.body.html : undefined;
       const fromNameOverride =
         typeof req.body?.fromName === 'string' ? req.body.fromName.trim() : undefined;
+      const fromEmailOverride =
+        typeof req.body?.fromEmail === 'string' ? req.body.fromEmail.trim() : undefined;
 
       if (!tenantId) {
         res.status(400).json({ error: 'tenantId is required.' });
@@ -290,7 +405,8 @@ export function registerEmailRoutes(app: Express) {
           subject,
           text,
           html,
-          fromNameOverride
+          fromNameOverride,
+          fromEmailOverride
         });
         res.json({
           success: true,

@@ -23,14 +23,48 @@ async function readApiError(res: Response): Promise<string> {
   return `Request failed (${res.status})`;
 }
 
+export interface EmailIdentity {
+  id: string;
+  label: string;
+  fromName: string;
+  fromEmail: string;
+}
+
 export interface EmailStatus {
   configured: boolean;
   platformReady?: boolean;
   fromEmail: string | null;
   fromName: string | null;
+  identities?: EmailIdentity[];
+  defaultIdentityId?: string | null;
   smtpHost?: string | null;
   smtpUser?: string | null;
   configuredAt: string | null;
+}
+
+export function identitiesFromStatus(status: EmailStatus | null | undefined): EmailIdentity[] {
+  if (!status) return [];
+  if (Array.isArray(status.identities) && status.identities.length) {
+    return status.identities.filter((row) => row?.fromEmail);
+  }
+  if (status.fromEmail) {
+    return [
+      {
+        id: status.defaultIdentityId || 'primary',
+        label: status.fromName || 'Default',
+        fromName: status.fromName || '',
+        fromEmail: status.fromEmail
+      }
+    ];
+  }
+  return [];
+}
+
+export function defaultIdentityEmail(status: EmailStatus | null | undefined): string {
+  const rows = identitiesFromStatus(status);
+  if (!rows.length) return '';
+  const preferred = rows.find((row) => row.id === status?.defaultIdentityId);
+  return (preferred || rows[0]).fromEmail;
 }
 
 export async function fetchEmailStatus(tenantId: string): Promise<EmailStatus> {
@@ -43,8 +77,10 @@ export async function fetchEmailStatus(tenantId: string): Promise<EmailStatus> {
 
 export async function saveEmailConfig(params: {
   tenantId: string;
-  fromEmail: string;
+  fromEmail?: string;
   fromName?: string;
+  identities?: EmailIdentity[];
+  defaultIdentityId?: string;
 }): Promise<EmailStatus> {
   const res = await fetch('/api/email/config', {
     method: 'POST',
@@ -71,6 +107,7 @@ export async function sendInvoiceEmail(params: {
   text: string;
   html: string;
   fromName?: string;
+  fromEmail?: string;
 }): Promise<{
   success: boolean;
   code?: string;

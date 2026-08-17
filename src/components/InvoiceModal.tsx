@@ -63,6 +63,7 @@ import {
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks, pushPaymentToQuickbooks, ensureQboPayLink, refreshQboPaymentStatus } from '../lib/quickbooks';
 import { sendInvoiceEmail } from '../lib/email';
+import { OutboundReplySelect } from './OutboundReplySelect';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -208,6 +209,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [emailQbNote, setEmailQbNote] = useState<string | null>(null);
   const [showEmailPanel, setShowEmailPanel] = useState(false);
+  const [selectedReplyTo, setSelectedReplyTo] = useState('');
   /** Only include a Stripe pay button when Stripe is actually connected. */
   const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
   const [stripePaymentsReady, setStripePaymentsReady] = useState(false);
@@ -918,7 +920,8 @@ Thank you for choosing ${nurseryName}!
         subject: emailSubject,
         text: emailText,
         html: emailHtml,
-        fromName: nurseryName
+        fromName: nurseryName,
+        fromEmail: selectedReplyTo || undefined
       });
 
       if (result.success) {
@@ -2632,6 +2635,15 @@ Thank you for choosing ${nurseryName}!
                       className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
                     />
                   </div>
+
+                  {tenantId ? (
+                    <OutboundReplySelect
+                      tenantId={tenantId}
+                      value={selectedReplyTo}
+                      onChange={(email) => setSelectedReplyTo(email)}
+                      disabled={isSendingEmail}
+                    />
+                  ) : null}
 
                   <div>
                     <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">

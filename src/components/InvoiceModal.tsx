@@ -1272,16 +1272,22 @@ Thank you for choosing ${nurseryName}!
           grandTotal: savedGrandTotal
         };
 
-        if (savedDocumentId) {
+      const alreadyInQbo = Boolean(
+        liveDocument?.qboInvoiceId ||
+          existingDocument?.qboInvoiceId ||
+          fetchedDocument?.qboInvoiceId
+      );
+      let persistedId = savedDocumentId;
+      if (persistedId) {
           await updateCustomerDocument({
-            id: savedDocumentId,
+            id: persistedId,
             ...docPayload,
             createdAt: existingDocument?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
         } else {
-          const newId = await addCustomerDocument(docPayload);
-          setSavedDocumentId(newId);
+          persistedId = await addCustomerDocument(docPayload);
+          setSavedDocumentId(persistedId);
         }
 
         if (freightShares && freightAllocation) {
@@ -1315,6 +1321,16 @@ Thank you for choosing ${nurseryName}!
                   siblingInvoice.salesTax +
                   share.amount
               });
+              if (canUseQuickbooks && tenantId && siblingInvoice.qboInvoiceId) {
+                try {
+                  await pushDocumentToQuickbooks({
+                    tenantId,
+                    documentId: siblingInvoice.id
+                  });
+                } catch (err: any) {
+                  console.warn('[invoice] QBO sibling freight update', err?.message || err);
+                }
+              }
             }
           }
           setFreightCharge(currentFreight);
@@ -1342,6 +1358,36 @@ Thank you for choosing ${nurseryName}!
           totalFreight: totalFreight ?? null
         }
       });
+
+      if (canUseQuickbooks && tenantId && persistedId && alreadyInQbo) {
+        try {
+          const result = await pushDocumentToQuickbooks({
+            tenantId,
+            documentId: persistedId
+          });
+          setLiveDocument((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  qboInvoiceId: result.qboInvoiceId,
+                  qboInvoiceLink: result.qboInvoiceLink || prev.qboInvoiceLink,
+                  qboSyncedAt: new Date().toISOString()
+                }
+              : prev
+          );
+          if (result.qboInvoiceLink) setPayLinkUrl(result.qboInvoiceLink);
+          setQbPushMessage(
+            result.updated ? t('invoice.qbSaveUpdated') : t('invoice.emailAlsoSyncedQb')
+          );
+        } catch (err: any) {
+          console.warn('[invoice] QBO update on save', err?.message || err);
+          setQbPushMessage(
+            t('invoice.qbSaveSyncFailed', {
+              error: err?.message || t('invoice.pushQbFailed')
+            })
+          );
+        }
+      }
 
       setSaveSuccess(true);
     } catch (err: any) {
@@ -1446,7 +1492,9 @@ Thank you for choosing ${nurseryName}!
   /** Push invoice/estimate to QBO if QuickBooks is on and the document is saved. Never throws. */
   const syncToQuickbooksOnEmail = async (): Promise<string | null> => {
     if (!canUseQuickbooks) return null;
-    if (documentType !== 'invoice' && documentType !== 'estimate') return null;
+    if (documentType !== 'invoice' && documentType !== 'estimate' && documentType !== 'credit_memo') {
+      return null;
+    }
     if (!tenantId || !savedDocumentId) {
       return t('invoice.emailQbSaveFirst');
     }
@@ -1459,7 +1507,11 @@ Thank you for choosing ${nurseryName}!
       if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
         await syncPaymentToQuickbooksIfPossible(savedDocumentId, { quiet: true });
       }
-      return result.reused ? t('invoice.emailAlreadyInQb') : t('invoice.emailAlsoSyncedQb');
+      return result.updated
+        ? t('invoice.emailUpdatedInQb')
+        : result.reused
+          ? t('invoice.emailAlreadyInQb')
+          : t('invoice.emailAlsoSyncedQb');
     } catch (err: any) {
       console.warn('[invoice] QBO sync on email', err?.message || err);
       return t('invoice.emailQbSyncFailed', {
@@ -1505,7 +1557,7 @@ Thank you for choosing ${nurseryName}!
 
       // Stay in NurseryOS — do not auto-open the QuickBooks website.
       alert(
-        `Invoice pushed to ${where}${companyBit}.\n\n` +
+        `${docLabel} ${result.updated ? 'updated in' : 'pushed to'} ${where}${companyBit}.\n\n` +
           `${docBit}${customerBit}${totalBit}${linesBit}${previewBit}${paymentBit}\n\n` +
           (result.qboInvoiceLink
             ? t('invoice.pushQbStayHint')

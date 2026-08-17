@@ -79,6 +79,7 @@ export async function pushDocumentToQuickbooks(params: {
   sandboxUrl?: string | null;
   verified?: boolean;
   reused?: boolean;
+  updated?: boolean;
 }> {
   const res = await fetch('/api/quickbooks/push-invoice', {
     method: 'POST',
@@ -101,7 +102,8 @@ export async function pushDocumentToQuickbooks(params: {
     openUrl: data.openUrl ? String(data.openUrl) : null,
     sandboxUrl: data.sandboxUrl ? String(data.sandboxUrl) : null,
     verified: Boolean(data.verified),
-    reused: Boolean(data.reused)
+    reused: Boolean(data.reused),
+    updated: Boolean(data.updated)
   };
 }
 
@@ -198,6 +200,7 @@ export async function pushVendorBillToQuickbooks(params: {
   companyName?: string | null;
   openUrl?: string | null;
   alreadySynced?: boolean;
+  updated?: boolean;
 }> {
   const res = await fetch('/api/quickbooks/push-bill', {
     method: 'POST',
@@ -216,7 +219,37 @@ export async function pushVendorBillToQuickbooks(params: {
     environment: (data as any).environment ? String((data as any).environment) : null,
     companyName: (data as any).companyName ? String((data as any).companyName) : null,
     openUrl: (data as any).openUrl ? String((data as any).openUrl) : null,
-    alreadySynced: Boolean((data as any).alreadySynced)
+    alreadySynced: Boolean((data as any).alreadySynced),
+    updated: Boolean((data as any).updated)
+  };
+}
+
+/** Sync a paid NurseryOS vendor bill as a QuickBooks Bill Payment. */
+export async function pushBillPaymentToQuickbooks(params: {
+  tenantId: string;
+  billId: string;
+}): Promise<{
+  synced: boolean;
+  skipped?: boolean;
+  reason?: string | null;
+  qboBillPaymentId?: string | null;
+}> {
+  const res = await fetch('/api/quickbooks/push-bill-payment', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to sync bill payment to QuickBooks.');
+  }
+  return {
+    synced: Boolean((data as any)?.synced),
+    skipped: Boolean((data as any)?.skipped),
+    reason: (data as any)?.reason ? String((data as any).reason) : null,
+    qboBillPaymentId: (data as any)?.qboBillPaymentId
+      ? String((data as any).qboBillPaymentId)
+      : null
   };
 }
 

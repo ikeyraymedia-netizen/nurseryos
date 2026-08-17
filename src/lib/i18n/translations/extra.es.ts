@@ -934,6 +934,7 @@ const extra = {
     replyToFixed: 'Las respuestas van a {{email}}.',
     emailSentBody: 'Se envió al cliente una versión HTML formateada de este {{docLabel}}.',
     emailAlsoSyncedQb: 'También se sincronizó este documento con QuickBooks.',
+    emailUpdatedInQb: 'Se actualizó este documento en QuickBooks.',
     emailAlreadyInQb: 'Ya está en QuickBooks.',
     emailQbSaveFirst: 'Guarde el documento primero para sincronizarlo con QuickBooks al enviar el correo.',
     emailQbSyncFailed: 'Correo enviado, pero falló la sincronización con QuickBooks: {{error}}',
@@ -958,6 +959,8 @@ const extra = {
     qbPaymentNeedsInvoicePush:
       'Envíe primero la factura a QuickBooks, luego sincronice el pago.',
     qbPaymentSyncFailed: 'No se pudo sincronizar el pago a QuickBooks.',
+    qbSaveUpdated: 'Guardado y actualizado en QuickBooks.',
+    qbSaveSyncFailed: 'Guardado, pero falló la actualización en QuickBooks: {{error}}',
     invoicePaidBtn: 'Factura pagada',
     saveFirst: 'Guarde en el cliente primero',
     alreadyPaidTitle: 'Esta factura ya está pagada',
@@ -1207,7 +1210,11 @@ const extra = {
     qbBillPushed: 'Factura enviada a {{where}} · {{doc}}',
     qbBillAlreadySynced: 'Ya está en QuickBooks · {{doc}}',
     qbBillSavedAndPushed: 'Guardada y sincronizada con {{where}} · {{doc}}',
+    qbBillUpdated: 'Actualizada en {{where}} · {{doc}}',
     qbBillSaveSyncFailed: 'Factura guardada, pero falló la sincronización con QuickBooks: {{error}}',
+    qbBillPaymentSynced: 'Marcada pagada y registrada como pago de factura en QuickBooks.',
+    qbBillPaymentAlreadySynced: 'El pago ya está registrado en QuickBooks.',
+    qbBillPaymentSyncFailed: 'Marcada pagada, pero falló el pago de factura en QuickBooks: {{error}}',
     qbSynced: 'Sincronizado con QuickBooks · {{doc}}',
     vendorBankSection: 'Datos bancarios ACH',
     vendorBankHint:

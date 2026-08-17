@@ -730,8 +730,8 @@ export function PurchasingWorkspace({
         ? `Doc #${result.qboDocNumber}`
         : `Id ${result.qboBillId}`;
       setStatus(
-        result.alreadySynced
-          ? t('purchasing.qbBillAlreadySynced', { doc: docBit })
+        result.updated
+          ? t('purchasing.qbBillUpdated', { where, doc: docBit })
           : t('purchasing.qbBillSavedAndPushed', { where, doc: docBit })
       );
     } catch (err: unknown) {
@@ -1141,8 +1141,8 @@ export function PurchasingWorkspace({
                       ? `Doc #${result.qboDocNumber}`
                       : `Id ${result.qboBillId}`;
                     setStatus(
-                      result.alreadySynced
-                        ? t('purchasing.qbBillAlreadySynced', { doc: docBit })
+                      result.updated
+                        ? t('purchasing.qbBillUpdated', { where, doc: docBit })
                         : t('purchasing.qbBillPushed', { where, doc: docBit })
                     );
                     if (result.openUrl) {
@@ -2472,8 +2472,22 @@ export function PurchasingWorkspace({
           onCancel={() => setMarkingPaidBill(null)}
           onConfirm={async (payment) => {
             await run(async () => {
-              await markVendorBillPaid(markingPaidBill, payment);
+              const payResult = await markVendorBillPaid(markingPaidBill, payment);
               setMarkingPaidBill(null);
+              if (payResult.qboPaymentError) {
+                setStatus(
+                  t('purchasing.qbBillPaymentSyncFailed', {
+                    error: payResult.qboPaymentError
+                  })
+                );
+              } else if (payResult.qboPaymentSynced && !payResult.qboPaymentSkipped) {
+                setStatus(t('purchasing.qbBillPaymentSynced'));
+              } else if (
+                payResult.qboPaymentReason === 'already_synced' ||
+                payResult.qboPaymentReason === 'already_paid_in_qbo'
+              ) {
+                setStatus(t('purchasing.qbBillPaymentAlreadySynced'));
+              }
             });
           }}
         />

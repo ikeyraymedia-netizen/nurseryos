@@ -465,6 +465,11 @@ export interface VendorBill {
   qboOpenUrl?: string | null;
   qboSyncedAt?: string | null;
   qboSyncedByUserId?: string | null;
+  /** QuickBooks BillPayment id after AP payment sync. */
+  qboBillPaymentId?: string | null;
+  qboBillPaymentSyncedAt?: string | null;
+  qboBillPaymentSyncedByUserId?: string | null;
+  qboBillPaymentNote?: string | null;
   createdAt: string;
   updatedAt: string;
 }

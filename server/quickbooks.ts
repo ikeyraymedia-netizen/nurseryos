@@ -252,25 +252,37 @@ function isQboMissingError(err: any): boolean {
   );
 }
 
+type QboTxnKind = 'invoice' | 'estimate' | 'credit_memo' | 'bill';
+
+function qboTxnSpec(kind: QboTxnKind): { path: string; entity: string; ui: string } {
+  switch (kind) {
+    case 'estimate':
+      return { path: 'estimate', entity: 'Estimate', ui: 'estimate' };
+    case 'credit_memo':
+      return { path: 'creditmemo', entity: 'CreditMemo', ui: 'creditmemo' };
+    case 'bill':
+      return { path: 'bill', entity: 'Bill', ui: 'bill' };
+    default:
+      return { path: 'invoice', entity: 'Invoice', ui: 'invoice' };
+  }
+}
+
+function salesDocKind(type: unknown): 'invoice' | 'estimate' | 'credit_memo' | null {
+  if (type === 'invoice' || type === 'estimate' || type === 'credit_memo') return type;
+  return null;
+}
+
 async function getQboTxn(
   tenantId: string,
-  docType: 'invoice' | 'estimate' | 'bill',
+  docType: QboTxnKind,
   qboId: string
 ): Promise<any | null> {
-  const path =
-    docType === 'estimate'
-      ? `/estimate/${encodeURIComponent(qboId)}?minorversion=65`
-      : docType === 'bill'
-        ? `/bill/${encodeURIComponent(qboId)}?minorversion=65`
-        : `/invoice/${encodeURIComponent(qboId)}?minorversion=65&include=invoiceLink`;
+  const spec = qboTxnSpec(docType);
+  const extra = docType === 'invoice' ? '&include=invoiceLink' : '';
+  const path = `/${spec.path}/${encodeURIComponent(qboId)}?minorversion=65${extra}`;
   try {
     const check = await qboRequest<any>(tenantId, 'GET', path);
-    const entity =
-      docType === 'estimate'
-        ? check?.Estimate
-        : docType === 'bill'
-          ? check?.Bill
-          : check?.Invoice;
+    const entity = check?.[spec.entity];
     return entity?.Id ? entity : null;
   } catch (err) {
     if (isQboMissingError(err)) return null;
@@ -280,7 +292,7 @@ async function getQboTxn(
 
 async function getQboSalesTxn(
   tenantId: string,
-  docType: 'invoice' | 'estimate',
+  docType: 'invoice' | 'estimate' | 'credit_memo',
   qboId: string
 ): Promise<any | null> {
   return getQboTxn(tenantId, docType, qboId);
@@ -288,14 +300,13 @@ async function getQboSalesTxn(
 
 async function deleteQboTxn(
   tenantId: string,
-  docType: 'invoice' | 'estimate' | 'bill',
+  docType: QboTxnKind,
   qboId: string
 ): Promise<{ deleted: boolean; voided?: boolean; alreadyGone?: boolean }> {
   const existing = await getQboTxn(tenantId, docType, qboId);
   if (!existing) return { deleted: false, alreadyGone: true };
 
-  const path =
-    docType === 'estimate' ? '/estimate' : docType === 'bill' ? '/bill' : '/invoice';
+  const spec = qboTxnSpec(docType);
   const body = {
     Id: String(existing.Id),
     SyncToken: String(existing.SyncToken ?? '0')
@@ -305,7 +316,7 @@ async function deleteQboTxn(
     await qboRequest<any>(
       tenantId,
       'POST',
-      `${path}?operation=delete&minorversion=65`,
+      `/${spec.path}?operation=delete&minorversion=65`,
       body
     );
     return { deleted: true };
@@ -317,7 +328,7 @@ async function deleteQboTxn(
       await qboRequest<any>(
         tenantId,
         'POST',
-        `${path}?operation=void&minorversion=65`,
+        `/${spec.path}?operation=void&minorversion=65`,
         {
           Id: String(latest.Id),
           SyncToken: String(latest.SyncToken ?? body.SyncToken)
@@ -339,12 +350,11 @@ function qbAppBase(env?: QbEnvironment): string {
 
 function qbTxnOpenUrl(
   env: QbEnvironment | undefined,
-  docType: 'invoice' | 'estimate' | 'bill',
+  docType: QboTxnKind,
   txnId: string,
   realmId?: string | null
 ): string {
-  const path =
-    docType === 'estimate' ? 'estimate' : docType === 'bill' ? 'bill' : 'invoice';
+  const path = qboTxnSpec(docType).ui;
   const base = qbAppBase(env);
   // Include company switch so the browser opens the connected realm, not whatever
   // company the user last viewed (otherwise txnId can show a totally different invoice).
@@ -784,6 +794,203 @@ async function fetchCompanyName(tenantId: string, realmId: string): Promise<stri
   }
 }
 
+async function fetchCompanyCountry(tenantId: string): Promise<string> {
+  try {
+    const integration = await loadIntegration(tenantId);
+    if (!integration?.realmId) return 'US';
+    const info = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/companyinfo/${integration.realmId}?minorversion=65`
+    );
+    return String(info?.CompanyInfo?.Country || 'US').toUpperCase();
+  } catch {
+    return 'US';
+  }
+}
+
+function taxRateFromCode(taxCode: any, rateById: Map<string, number>): number {
+  const details = taxCode?.SalesTaxRateList?.TaxRateDetail || [];
+  let sum = 0;
+  for (const detail of details) {
+    const id = String(detail?.TaxRateRef?.value || '');
+    if (!id) continue;
+    const value = rateById.get(id);
+    if (typeof value === 'number' && Number.isFinite(value)) sum += value;
+  }
+  return sum;
+}
+
+async function findMatchingSalesTax(
+  tenantId: string,
+  ratePercent: number
+): Promise<{ taxCodeId: string; taxRateId: string | null; percent: number } | null> {
+  try {
+    const [codesRes, ratesRes] = await Promise.all([
+      qboRequest<any>(
+        tenantId,
+        'GET',
+        `/query?query=${encodeURIComponent(
+          'SELECT * FROM TaxCode MAXRESULTS 100'
+        )}&minorversion=65`
+      ),
+      qboRequest<any>(
+        tenantId,
+        'GET',
+        `/query?query=${encodeURIComponent(
+          'SELECT * FROM TaxRate MAXRESULTS 100'
+        )}&minorversion=65`
+      )
+    ]);
+    const codes = codesRes?.QueryResponse?.TaxCode || [];
+    const rates = ratesRes?.QueryResponse?.TaxRate || [];
+    const rateById = new Map<string, number>();
+    for (const rate of rates) {
+      if (!rate?.Id) continue;
+      const value = Number(rate.RateValue);
+      if (Number.isFinite(value)) rateById.set(String(rate.Id), value);
+    }
+
+    const candidates = codes.filter((code: any) => {
+      if (!code?.Id) return false;
+      if (code.Active === false) return false;
+      const name = String(code.Name || '').toUpperCase();
+      if (name === 'NON' || name === 'EXEMPT') return false;
+      return Boolean(code.SalesTaxRateList?.TaxRateDetail?.length);
+    });
+    if (candidates.length === 0) return null;
+
+    let best: { taxCode: any; percent: number; distance: number } | null = null;
+    for (const code of candidates) {
+      const percent = taxRateFromCode(code, rateById);
+      const distance = Math.abs(percent - ratePercent);
+      if (!best || distance < best.distance) {
+        best = { taxCode: code, percent, distance };
+      }
+    }
+    if (!best) return null;
+    const taxRateId = String(
+      best.taxCode?.SalesTaxRateList?.TaxRateDetail?.[0]?.TaxRateRef?.value || ''
+    );
+    return {
+      taxCodeId: String(best.taxCode.Id),
+      taxRateId: taxRateId || null,
+      percent: best.percent || ratePercent
+    };
+  } catch (err) {
+    console.warn('[quickbooks] tax code lookup failed', (err as any)?.message || err);
+    return null;
+  }
+}
+
+function applyLineTaxCodes(
+  lines: any[],
+  params: { isUs: boolean; taxable: boolean; taxCodeId?: string | null }
+) {
+  for (const line of lines) {
+    if (line?.DetailType !== 'SalesItemLineDetail' || !line.SalesItemLineDetail) continue;
+    const isShipping = String(line.SalesItemLineDetail.ItemRef?.value || '') === 'SHIPPING_ITEM_ID';
+    if (params.isUs) {
+      line.SalesItemLineDetail.TaxCodeRef = {
+        value: params.taxable && !isShipping ? 'TAX' : 'NON'
+      };
+    } else if (params.taxCodeId) {
+      line.SalesItemLineDetail.TaxCodeRef = {
+        value: params.taxable && !isShipping ? params.taxCodeId : params.taxCodeId
+      };
+    }
+  }
+}
+
+async function applySalesTaxToPayload(
+  tenantId: string,
+  doc: Record<string, any>,
+  payload: Record<string, any>
+): Promise<void> {
+  const lines = Array.isArray(payload.Line) ? payload.Line : [];
+  const rate = Number(doc.taxRate) || 0;
+  const discount = Number(doc.discount) || 0;
+  const subtotal = Number(doc.subtotal) || 0;
+  const taxableAmount = Math.max(0, subtotal - Math.min(subtotal, discount));
+  const storedTax = Number(doc.salesTax);
+  const totalTax =
+    Number.isFinite(storedTax) && storedTax >= 0
+      ? Math.round(storedTax * 100) / 100
+      : Math.round(((taxableAmount * rate) / 100) * 100) / 100;
+  const country = await fetchCompanyCountry(tenantId);
+  const isUs = country === 'US' || country === 'USA';
+  const taxable = rate > 0 || totalTax > 0.009;
+  const match = taxable ? await findMatchingSalesTax(tenantId, rate || 0) : null;
+
+  applyLineTaxCodes(lines, {
+    isUs,
+    taxable,
+    taxCodeId: match?.taxCodeId || null
+  });
+
+  if (!taxable) return;
+
+  const txnTax: Record<string, any> = { TotalTax: totalTax };
+  if (match?.taxCodeId) {
+    txnTax.TxnTaxCodeRef = { value: match.taxCodeId };
+  }
+  if (match?.taxRateId) {
+    txnTax.TaxLine = [
+      {
+        Amount: totalTax,
+        DetailType: 'TaxLineDetail',
+        TaxLineDetail: {
+          TaxRateRef: { value: match.taxRateId },
+          PercentBased: true,
+          TaxPercent: match.percent || rate,
+          NetAmountTaxable: Math.round(taxableAmount * 100) / 100
+        }
+      }
+    ];
+  }
+  payload.TxnTaxDetail = txnTax;
+}
+
+async function getBankAccountId(tenantId: string): Promise<string | null> {
+  const queries = [
+    "SELECT * FROM Account WHERE AccountType = 'Bank' AND Active = true MAXRESULTS 20",
+    "SELECT * FROM Account WHERE AccountSubType = 'Checking' AND Active = true MAXRESULTS 10"
+  ];
+  for (const q of queries) {
+    try {
+      const accounts = await qboRequest<any>(
+        tenantId,
+        'GET',
+        `/query?query=${encodeURIComponent(q)}&minorversion=65`
+      );
+      const list = accounts?.QueryResponse?.Account || [];
+      const preferred =
+        list.find((a: any) => /check|operating|business|payroll/i.test(String(a.Name || ''))) ||
+        list[0];
+      if (preferred?.Id) return String(preferred.Id);
+    } catch {
+      // try next query
+    }
+  }
+  return null;
+}
+
+async function getCreditCardAccountId(tenantId: string): Promise<string | null> {
+  try {
+    const accounts = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/query?query=${encodeURIComponent(
+        "SELECT * FROM Account WHERE AccountType = 'Credit Card' AND Active = true MAXRESULTS 10"
+      )}&minorversion=65`
+    );
+    const list = accounts?.QueryResponse?.Account || [];
+    return list[0]?.Id ? String(list[0].Id) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Create a QBO Payment (Receive Payment) for a NurseryOS invoice that is paid
  * and was previously pushed (`qboInvoiceId`). Safe to call multiple times.
@@ -984,7 +1191,7 @@ async function mapDocToInvoice(
   if (rawItems.length === 0) {
     throw Object.assign(
       new Error(
-        'This invoice has no plant line items saved. Save the invoice to the customer again, then push.'
+        'This document has no plant line items saved. Save it to the customer again, then push.'
       ),
       { status: 400 }
     );
@@ -1020,7 +1227,7 @@ async function mapDocToInvoice(
   }
 
   const freight = Number(doc.freightCharge) || 0;
-  if (freight > 0) {
+  if (freight > 0 && doc.type !== 'credit_memo') {
     // SHIPPING_ITEM_ID maps to QBO's built-in Shipping field (not a product line),
     // when Company Settings → Sales → Shipping is enabled.
     lines.push({
@@ -1035,9 +1242,20 @@ async function mapDocToInvoice(
     });
   }
 
+  const discount = Number(doc.discount) || 0;
+  if (discount > 0 && doc.type !== 'credit_memo') {
+    lines.push({
+      DetailType: 'DiscountLineDetail',
+      Amount: Number(discount.toFixed(2)),
+      DiscountLineDetail: {
+        PercentBased: false
+      }
+    });
+  }
+
   if (lines.length === 0) {
     throw Object.assign(
-      new Error('No usable plant lines found on this invoice. Re-save it, then push again.'),
+      new Error('No usable plant lines found on this document. Re-save it, then push again.'),
       { status: 400 }
     );
   }
@@ -1066,10 +1284,12 @@ async function mapDocToInvoice(
     .filter(Boolean)
     .join(' | ');
 
+  const referencedInvoice = sanitizeQbString(doc.referencedInvoiceNumber, 21);
   const privateNote = sanitizeQbString(
     [
       doc.notes ? String(doc.notes) : '',
       poNumber ? `Customer PO #: ${poNumber}` : '',
+      referencedInvoice ? `Applies to invoice ${referencedInvoice}` : '',
       `NurseryOS ${doc.type || 'invoice'} ${doc.documentNumber || ''}`.trim()
     ]
       .filter(Boolean)
@@ -1077,10 +1297,10 @@ async function mapDocToInvoice(
     4000
   );
 
-  return {
+  const payload: Record<string, any> = {
     DocNumber: sanitizeQbString(doc.documentNumber, 21) || undefined,
     TxnDate: String(doc.documentDate || new Date().toISOString()).slice(0, 10),
-    DueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined,
+    DueDate: doc.type === 'credit_memo' ? undefined : doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined,
     PrivateNote: privateNote || undefined,
     CustomerRef: { value: customerRefId },
     Line: lines,
@@ -1098,6 +1318,9 @@ async function mapDocToInvoice(
         }
       : {})
   };
+
+  await applySalesTaxToPayload(tenantId, doc, payload);
+  return payload;
 }
 
 /** Fetch QBO hosted invoice pay URL when Payments is enabled for the company. */
@@ -1150,7 +1373,7 @@ function sandboxPayLinkError(): Error {
 }
 
 /**
- * Push NurseryOS invoice/estimate to QBO (shared by push-invoice + ensure-pay-link).
+ * Push NurseryOS invoice/estimate/credit memo to QBO (create or update).
  */
 async function pushDocumentToQboInternal(
   tenantId: string,
@@ -1170,83 +1393,66 @@ async function pushDocumentToQboInternal(
   companyName: string | null;
   verified: boolean;
   reused: boolean;
+  updated: boolean;
 }> {
   const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
   const snap = await docRef.get();
   if (!snap.exists) {
-    throw Object.assign(new Error('Invoice/estimate document not found.'), { status: 404 });
+    throw Object.assign(new Error('Document not found.'), { status: 404 });
   }
   const doc = snap.data() || {};
-  if (doc.type !== 'invoice' && doc.type !== 'estimate') {
-    throw Object.assign(new Error('Only invoices and estimates can be synced.'), { status: 400 });
-  }
-
-  const integrationEarly = await loadIntegration(tenantId);
-  const envEarly = integrationEarly?.environment || qbEnv();
-  const existingId = String(doc.qboInvoiceId || '').trim();
-  if (existingId) {
-    const existing = await getQboSalesTxn(tenantId, doc.type, existingId);
-    if (existing) {
-      const companyName = integrationEarly?.realmId
-        ? await fetchCompanyName(tenantId, integrationEarly.realmId)
-        : null;
-      const openUrl = qbTxnOpenUrl(envEarly, doc.type, existingId, integrationEarly?.realmId);
-      const existingLines = Array.isArray(existing.Line) ? existing.Line : [];
-      const salesLines = existingLines.filter((l: any) => l?.DetailType === 'SalesItemLineDetail');
-      let qboInvoiceLink: string | null = null;
-      if (doc.type === 'invoice') {
-        const link = existing.InvoiceLink || existing.invoiceLink;
-        qboInvoiceLink = sanitizeCustomerPayLink(link ? String(link).trim() : null);
-        if (!qboInvoiceLink) qboInvoiceLink = await fetchQboInvoiceLink(tenantId, existingId);
-      }
-      return {
-        qboInvoiceId: existingId,
-        qboDocType: String(doc.type),
-        qboDocNumber: existing.DocNumber ? String(existing.DocNumber) : null,
-        qboInvoiceLink,
-        qboOpenUrl: openUrl,
-        customerName: existing.CustomerRef?.name ? String(existing.CustomerRef.name) : null,
-        totalAmt: existing.TotalAmt != null ? Number(existing.TotalAmt) : null,
-        lineCount: salesLines.length,
-        linePreview: salesLines
-          .slice(0, 5)
-          .map((l: any) => String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line')),
-        environment: envEarly,
-        companyName,
-        verified: true,
-        reused: true
-      };
-    }
-    console.warn(
-      `[quickbooks] stored QBO ${doc.type} ${existingId} is gone; creating a new one`
+  const kind = salesDocKind(doc.type);
+  if (!kind) {
+    throw Object.assign(
+      new Error('Only invoices, estimates, and credit memos can be synced.'),
+      { status: 400 }
     );
+  }
+  const spec = qboTxnSpec(kind);
+
+  const existingId = String(doc.qboInvoiceId || '').trim();
+  let existing: any | null = null;
+  if (existingId) {
+    existing = await getQboSalesTxn(tenantId, kind, existingId);
+    if (!existing) {
+      console.warn(
+        `[quickbooks] stored QBO ${kind} ${existingId} is gone; creating a new one`
+      );
+    }
   }
 
   const customer = await findOrCreateCustomer(tenantId, doc);
   const incomeAccountId = await getIncomeAccountId(tenantId);
   const payload = await mapDocToInvoice(tenantId, doc, customer.id, incomeAccountId);
-  const endpoint = doc.type === 'estimate' ? '/estimate' : '/invoice';
-  const attemptCreate = (body: any) =>
-    qboRequest<any>(tenantId, 'POST', `${endpoint}?minorversion=65`, body);
+  const writeBody = existing
+    ? {
+        ...payload,
+        Id: String(existing.Id),
+        SyncToken: String(existing.SyncToken ?? '0'),
+        sparse: true
+      }
+    : payload;
+  const attemptWrite = (body: any) =>
+    qboRequest<any>(tenantId, 'POST', `/${spec.path}?minorversion=65`, body);
 
-  let created: any;
+  let written: any;
   try {
-    created = await attemptCreate(payload);
+    written = await attemptWrite(writeBody);
   } catch (err) {
-    if (payload && payload.CustomField) {
-      const withoutCustomField = { ...payload };
+    if (writeBody && writeBody.CustomField) {
+      const withoutCustomField = { ...writeBody };
       delete withoutCustomField.CustomField;
       console.warn(
         '[quickbooks] push with CustomField failed, retrying without it',
         (err as any)?.message
       );
-      created = await attemptCreate(withoutCustomField);
+      written = await attemptWrite(withoutCustomField);
     } else {
       throw err;
     }
   }
-  const entity = doc.type === 'estimate' ? created?.Estimate : created?.Invoice;
-  const qboId = entity?.Id ? String(entity.Id) : null;
+  const entity = written?.[spec.entity];
+  const qboId = entity?.Id ? String(entity.Id) : existing ? String(existing.Id) : null;
   if (!qboId) {
     throw new Error('QuickBooks did not return a document id.');
   }
@@ -1264,12 +1470,7 @@ async function pushDocumentToQboInternal(
   let verified = false;
   let qboInvoiceLink: string | null = null;
   try {
-    const checkPath =
-      doc.type === 'estimate'
-        ? `/estimate/${qboId}?minorversion=65`
-        : `/invoice/${qboId}?minorversion=65&include=invoiceLink`;
-    const check = await qboRequest<any>(tenantId, 'GET', checkPath);
-    const checked = doc.type === 'estimate' ? check?.Estimate : check?.Invoice;
+    const checked = await getQboSalesTxn(tenantId, kind, qboId);
     verified = Boolean(checked?.Id);
     if (checked?.CustomerRef?.name) verifiedCustomer = String(checked.CustomerRef.name);
     if (checked?.TotalAmt != null) totalAmt = Number(checked.TotalAmt);
@@ -1279,7 +1480,7 @@ async function pushDocumentToQboInternal(
       .filter((l: any) => l?.DetailType === 'SalesItemLineDetail')
       .slice(0, 5)
       .map((l: any) => String(l.SalesItemLineDetail?.ItemRef?.name || l.Description || 'Line'));
-    if (doc.type === 'invoice') {
+    if (kind === 'invoice') {
       const link = checked?.InvoiceLink || checked?.invoiceLink;
       if (link) qboInvoiceLink = sanitizeCustomerPayLink(String(link).trim());
     }
@@ -1287,24 +1488,29 @@ async function pushDocumentToQboInternal(
     verified = false;
   }
 
-  if (!qboInvoiceLink && doc.type === 'invoice') {
+  if (!qboInvoiceLink && kind === 'invoice') {
     qboInvoiceLink = await fetchQboInvoiceLink(tenantId, qboId);
   }
 
   if (verified && lineCount === 0) {
     throw new Error(
-      'QuickBooks created an invoice with no plant lines. Re-save the NurseryOS invoice (with prices), then push again.'
+      'QuickBooks saved this document with no plant lines. Re-save it in NurseryOS (with prices), then push again.'
     );
   }
 
-  const openUrl = qbTxnOpenUrl(env, doc.type, qboId, integration?.realmId);
+  const openUrl = qbTxnOpenUrl(env, kind, qboId, integration?.realmId);
   const now = new Date().toISOString();
+  const updated = Boolean(existing);
 
   await docRef.set(
     {
       qboInvoiceId: qboId,
-      qboDocType: doc.type,
-      qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
+      qboDocType: kind,
+      qboDocNumber: entity?.DocNumber
+        ? String(entity.DocNumber)
+        : existing?.DocNumber
+          ? String(existing.DocNumber)
+          : null,
       qboOpenUrl: openUrl,
       qboInvoiceLink: qboInvoiceLink || null,
       qboSyncedAt: now,
@@ -1319,8 +1525,12 @@ async function pushDocumentToQboInternal(
 
   return {
     qboInvoiceId: qboId,
-    qboDocType: String(doc.type),
-    qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
+    qboDocType: kind,
+    qboDocNumber: entity?.DocNumber
+      ? String(entity.DocNumber)
+      : existing?.DocNumber
+        ? String(existing.DocNumber)
+        : null,
     qboInvoiceLink,
     qboOpenUrl: openUrl,
     customerName: verifiedCustomer,
@@ -1330,7 +1540,8 @@ async function pushDocumentToQboInternal(
     environment: env,
     companyName,
     verified,
-    reused: false
+    reused: false,
+    updated
   };
 }
 
@@ -1362,6 +1573,304 @@ export function isQuickbooksConfigured(): boolean {
   } catch {
     return false;
   }
+}
+
+async function pushVendorBillToQboInternal(
+  tenantId: string,
+  billId: string,
+  uid: string
+): Promise<{
+  qboBillId: string;
+  qboDocNumber: string | null;
+  vendorName: string | null;
+  totalAmt: number | null;
+  environment: QbEnvironment;
+  companyName: string | null;
+  openUrl: string | null;
+  alreadySynced: boolean;
+  updated: boolean;
+}> {
+  const billRef = getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`);
+  const billSnap = await billRef.get();
+  if (!billSnap.exists) {
+    throw Object.assign(new Error('Vendor bill not found.'), { status: 404 });
+  }
+  const bill = billSnap.data() || {};
+  const existingId = String(bill.qboBillId || '').trim();
+  let existing: any | null = null;
+  if (existingId) {
+    existing = await getQboTxn(tenantId, 'bill', existingId);
+    if (!existing) {
+      console.warn(`[quickbooks] stored QBO bill ${existingId} is gone; creating a new one`);
+    }
+  }
+
+  const vendorId = String(bill.vendorId || '').trim();
+  let vendorData: Record<string, any> = {
+    name: bill.vendorName,
+    qboVendorId: null
+  };
+  if (vendorId) {
+    const vendorSnap = await getAdminDb().doc(`tenants/${tenantId}/vendors/${vendorId}`).get();
+    if (vendorSnap.exists) {
+      vendorData = { id: vendorId, ...(vendorSnap.data() || {}) };
+    }
+  }
+
+  const qbVendor = await findOrCreateVendor(tenantId, vendorData);
+  if (vendorId && String(vendorData.qboVendorId || '') !== qbVendor.id) {
+    await getAdminDb()
+      .doc(`tenants/${tenantId}/vendors/${vendorId}`)
+      .set(
+        {
+          qboVendorId: qbVendor.id,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+  }
+
+  const expenseAccountId = await getExpenseAccountId(tenantId);
+  const payload = mapVendorBillToQboBill({
+    bill,
+    vendorRefId: qbVendor.id,
+    expenseAccountId
+  });
+  const writeBody = existing
+    ? {
+        ...payload,
+        Id: String(existing.Id),
+        SyncToken: String(existing.SyncToken ?? '0'),
+        sparse: true
+      }
+    : payload;
+
+  const written = await qboRequest<any>(tenantId, 'POST', '/bill?minorversion=65', writeBody);
+  const entity = written?.Bill;
+  const qboId = entity?.Id ? String(entity.Id) : existing ? String(existing.Id) : null;
+  if (!qboId) {
+    throw new Error('QuickBooks did not return a bill id.');
+  }
+
+  const integration = await loadIntegration(tenantId);
+  const env = integration?.environment || qbEnv();
+  const companyName = integration?.realmId
+    ? await fetchCompanyName(tenantId, integration.realmId)
+    : null;
+  const openUrl = qbTxnOpenUrl(env, 'bill', qboId, integration?.realmId);
+  const now = new Date().toISOString();
+  const updated = Boolean(existing);
+
+  await billRef.set(
+    {
+      qboBillId: qboId,
+      qboDocNumber: entity?.DocNumber
+        ? String(entity.DocNumber)
+        : existing?.DocNumber
+          ? String(existing.DocNumber)
+          : null,
+      qboVendorId: qbVendor.id,
+      qboOpenUrl: openUrl,
+      qboSyncedAt: now,
+      qboSyncedByUserId: uid,
+      ...(existingId && existingId !== qboId
+        ? { qboBillPaymentId: null, qboBillPaymentSyncedAt: null, qboBillPaymentNote: null }
+        : {}),
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  return {
+    qboBillId: qboId,
+    qboDocNumber: entity?.DocNumber
+      ? String(entity.DocNumber)
+      : existing?.DocNumber
+        ? String(existing.DocNumber)
+        : null,
+    vendorName: qbVendor.displayName,
+    totalAmt: entity?.TotalAmt != null ? Number(entity.TotalAmt) : null,
+    environment: env,
+    companyName,
+    openUrl,
+    alreadySynced: false,
+    updated
+  };
+}
+
+/**
+ * Create a QBO BillPayment for a NurseryOS vendor bill that is paid.
+ */
+export async function syncPaidVendorBillPaymentToQbo(
+  tenantId: string,
+  billId: string,
+  opts?: { uid?: string }
+): Promise<{
+  synced: boolean;
+  skipped?: boolean;
+  reason?: string;
+  qboBillPaymentId?: string;
+}> {
+  if (!isFirebaseAdminConfigured()) {
+    return { synced: false, skipped: true, reason: 'firebase_admin' };
+  }
+
+  let integration: QbIntegration | null = null;
+  try {
+    integration = await loadIntegration(tenantId);
+  } catch {
+    return { synced: false, skipped: true, reason: 'not_connected' };
+  }
+  if (!integration?.realmId) {
+    return { synced: false, skipped: true, reason: 'not_connected' };
+  }
+
+  const billRef = getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`);
+  const snap = await billRef.get();
+  if (!snap.exists) {
+    return { synced: false, skipped: true, reason: 'missing_bill' };
+  }
+  let bill = snap.data() || {};
+  if (String(bill.status || '') !== 'paid') {
+    return { synced: false, skipped: true, reason: 'not_paid' };
+  }
+  if (bill.qboBillPaymentId) {
+    return {
+      synced: true,
+      skipped: true,
+      reason: 'already_synced',
+      qboBillPaymentId: String(bill.qboBillPaymentId)
+    };
+  }
+
+  let qboBillId = String(bill.qboBillId || '').trim();
+  if (qboBillId) {
+    const stillThere = await getQboTxn(tenantId, 'bill', qboBillId);
+    if (!stillThere) qboBillId = '';
+  }
+  if (!qboBillId) {
+    try {
+      const pushed = await pushVendorBillToQboInternal(
+        tenantId,
+        billId,
+        opts?.uid || 'system'
+      );
+      qboBillId = pushed.qboBillId;
+      const refreshed = await billRef.get();
+      bill = refreshed.data() || bill;
+    } catch (err) {
+      console.warn('[quickbooks] bill recreate before payment failed', (err as any)?.message || err);
+      return { synced: false, skipped: true, reason: 'bill_not_pushed' };
+    }
+  }
+
+  const qboBill = await getQboTxn(tenantId, 'bill', qboBillId);
+  if (!qboBill?.Id) {
+    return { synced: false, skipped: true, reason: 'bill_not_pushed' };
+  }
+  const vendorId = String(qboBill.VendorRef?.value || '').trim();
+  if (!vendorId) {
+    throw Object.assign(new Error('QuickBooks bill is missing a vendor.'), { status: 400 });
+  }
+
+  let amount = Number(bill.grandTotal) || Number(qboBill.TotalAmt) || 0;
+  const balance = qboBill.Balance != null ? Number(qboBill.Balance) : null;
+  if (balance != null && Number.isFinite(balance)) {
+    if (balance <= 0.009) {
+      const now = new Date().toISOString();
+      await billRef.set(
+        {
+          qboBillPaymentSyncedAt: now,
+          qboBillPaymentNote: 'Bill already paid in QuickBooks',
+          updatedAt: now
+        },
+        { merge: true }
+      );
+      return { synced: true, skipped: true, reason: 'already_paid_in_qbo' };
+    }
+    if (amount > balance + 0.01) amount = balance;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { synced: false, skipped: true, reason: 'invalid_amount' };
+  }
+
+  const method = String(bill.paymentMethod || 'payment').toLowerCase();
+  const useCard = method === 'cc' || method === 'card' || method === 'credit_card';
+  const cardAccountId = useCard ? await getCreditCardAccountId(tenantId) : null;
+  const bankAccountId = cardAccountId ? null : await getBankAccountId(tenantId);
+  if (!cardAccountId && !bankAccountId) {
+    throw Object.assign(
+      new Error(
+        'QuickBooks needs a Bank (or Credit Card) account to record a bill payment. Add one in the QuickBooks chart of accounts, then mark paid again.'
+      ),
+      { status: 400 }
+    );
+  }
+
+  const rounded = Math.round(amount * 100) / 100;
+  const txnDate = String(bill.paidAt || new Date().toISOString()).slice(0, 10);
+  const refNum = String(bill.paymentReference || bill.billNumber || '')
+    .trim()
+    .slice(0, 21);
+  const privateNote = `NurseryOS · ${method}${
+    bill.stripeOutboundPaymentId ? ` · ${bill.stripeOutboundPaymentId}` : ''
+  }`.slice(0, 4000);
+
+  const paymentBody: Record<string, any> = {
+    TotalAmt: rounded,
+    VendorRef: { value: vendorId },
+    TxnDate: txnDate,
+    PrivateNote: privateNote,
+    Line: [
+      {
+        Amount: rounded,
+        LinkedTxn: [
+          {
+            TxnId: qboBillId,
+            TxnType: 'Bill'
+          }
+        ]
+      }
+    ]
+  };
+  if (cardAccountId) {
+    paymentBody.PayType = 'CreditCard';
+    paymentBody.CreditCardPayment = {
+      CCAccountRef: { value: cardAccountId }
+    };
+  } else {
+    paymentBody.PayType = 'Check';
+    paymentBody.CheckPayment = {
+      BankAccountRef: { value: bankAccountId },
+      PrintStatus: 'NotSet'
+    };
+    if (refNum) paymentBody.DocNumber = refNum;
+  }
+
+  const created = await qboRequest<any>(
+    tenantId,
+    'POST',
+    '/billpayment?minorversion=65',
+    paymentBody
+  );
+  const paymentId = created?.BillPayment?.Id ? String(created.BillPayment.Id) : null;
+  if (!paymentId) {
+    throw new Error('QuickBooks did not return a bill payment id.');
+  }
+
+  const now = new Date().toISOString();
+  await billRef.set(
+    {
+      qboBillPaymentId: paymentId,
+      qboBillPaymentSyncedAt: now,
+      qboBillPaymentSyncedByUserId: opts?.uid || 'system',
+      qboBillPaymentNote: null,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  return { synced: true, qboBillPaymentId: paymentId };
 }
 
 export function registerQuickbooksRoutes(app: Express) {
@@ -1534,6 +2043,7 @@ export function registerQuickbooksRoutes(app: Express) {
         companyName: result.companyName,
         verified: result.verified,
         reused: result.reused,
+        updated: result.updated,
         openUrl: result.qboOpenUrl,
         sandboxUrl:
           result.environment === 'sandbox' ? `${qbAppBase('sandbox')}/app/invoices` : null
@@ -1763,106 +2273,69 @@ export function registerQuickbooksRoutes(app: Express) {
       }
       await assertCanPushInvoice(tenantId, uid);
 
-      const billRef = getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`);
-      const billSnap = await billRef.get();
-      if (!billSnap.exists) {
-        res.status(404).json({ error: 'Vendor bill not found.' });
+      const result = await pushVendorBillToQboInternal(tenantId, billId, uid);
+      res.json({
+        success: true,
+        alreadySynced: result.alreadySynced,
+        updated: result.updated,
+        qboBillId: result.qboBillId,
+        qboDocNumber: result.qboDocNumber,
+        vendorName: result.vendorName,
+        totalAmt: result.totalAmt,
+        environment: result.environment,
+        companyName: result.companyName,
+        openUrl: result.openUrl
+      });
+    })
+  );
+
+  /**
+   * Create a QuickBooks Bill Payment against a previously pushed vendor bill.
+   */
+  app.post('/api/quickbooks/push-bill-payment', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const billId = String(req.body?.billId || '');
+      if (!tenantId || !billId) {
+        res.status(400).json({ error: 'tenantId and billId are required.' });
         return;
       }
-      const bill = billSnap.data() || {};
-      const existingId = String(bill.qboBillId || '').trim();
-      if (existingId) {
-        const stillThere = await getQboTxn(tenantId, 'bill', existingId);
-        if (stillThere) {
-          const integration = await loadIntegration(tenantId);
-          const env = integration?.environment || qbEnv();
-          res.json({
-            success: true,
-            alreadySynced: true,
-            qboBillId: existingId,
-            qboDocNumber: stillThere.DocNumber
-              ? String(stillThere.DocNumber)
-              : bill.qboDocNumber
-                ? String(bill.qboDocNumber)
-                : null,
-            openUrl:
-              bill.qboOpenUrl ||
-              qbTxnOpenUrl(env, 'bill', existingId, integration?.realmId)
-          });
-          return;
-        }
-        console.warn(`[quickbooks] stored QBO bill ${existingId} is gone; creating a new one`);
+      await assertCanPushInvoice(tenantId, uid);
+
+      const result = await syncPaidVendorBillPaymentToQbo(tenantId, billId, { uid });
+      if (!result.synced && result.reason === 'bill_not_pushed') {
+        res.status(400).json({
+          error:
+            'Push this vendor bill to QuickBooks first, then mark it paid again to record the Bill Payment.',
+          reason: result.reason
+        });
+        return;
       }
-
-      const vendorId = String(bill.vendorId || '').trim();
-      let vendorData: Record<string, any> = {
-        name: bill.vendorName,
-        qboVendorId: null
-      };
-      if (vendorId) {
-        const vendorSnap = await getAdminDb().doc(`tenants/${tenantId}/vendors/${vendorId}`).get();
-        if (vendorSnap.exists) {
-          vendorData = { id: vendorId, ...(vendorSnap.data() || {}) };
-        }
+      if (!result.synced && result.reason === 'not_paid') {
+        res.status(400).json({
+          error: 'Mark the vendor bill paid before syncing the payment to QuickBooks.',
+          reason: result.reason
+        });
+        return;
       }
-
-      const qbVendor = await findOrCreateVendor(tenantId, vendorData);
-      if (vendorId && String(vendorData.qboVendorId || '') !== qbVendor.id) {
-        await getAdminDb()
-          .doc(`tenants/${tenantId}/vendors/${vendorId}`)
-          .set(
-            {
-              qboVendorId: qbVendor.id,
-              updatedAt: new Date().toISOString()
-            },
-            { merge: true }
-          );
+      if (!result.synced && result.reason === 'not_connected') {
+        res.status(400).json({
+          error: 'Connect QuickBooks in Team settings first.',
+          reason: result.reason
+        });
+        return;
       }
-
-      const expenseAccountId = await getExpenseAccountId(tenantId);
-      const payload = mapVendorBillToQboBill({
-        bill,
-        vendorRefId: qbVendor.id,
-        expenseAccountId
-      });
-
-      const created = await qboRequest<any>(tenantId, 'POST', '/bill?minorversion=65', payload);
-      const entity = created?.Bill;
-      const qboId = entity?.Id ? String(entity.Id) : null;
-      if (!qboId) {
-        throw new Error('QuickBooks did not return a bill id.');
+      if (!result.synced && !result.skipped) {
+        res.status(400).json({
+          error: 'Could not sync bill payment to QuickBooks.',
+          reason: result.reason || null
+        });
+        return;
       }
-
-      const integration = await loadIntegration(tenantId);
-      const env = integration?.environment || qbEnv();
-      const companyName = integration?.realmId
-        ? await fetchCompanyName(tenantId, integration.realmId)
-        : null;
-      const openUrl = qbTxnOpenUrl(env, 'bill', qboId, integration?.realmId);
-      const now = new Date().toISOString();
-
-      await billRef.set(
-        {
-          qboBillId: qboId,
-          qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
-          qboVendorId: qbVendor.id,
-          qboOpenUrl: openUrl,
-          qboSyncedAt: now,
-          qboSyncedByUserId: uid,
-          updatedAt: now
-        },
-        { merge: true }
-      );
 
       res.json({
         success: true,
-        qboBillId: qboId,
-        qboDocNumber: entity?.DocNumber ? String(entity.DocNumber) : null,
-        vendorName: qbVendor.displayName,
-        totalAmt: entity?.TotalAmt != null ? Number(entity.TotalAmt) : null,
-        environment: env,
-        companyName,
-        openUrl
+        ...result
       });
     })
   );
@@ -1934,7 +2407,7 @@ export function registerQuickbooksRoutes(app: Express) {
         res.json({ skipped: true, reason: 'not_synced' });
         return;
       }
-      const docType = doc.type === 'estimate' ? 'estimate' : 'invoice';
+      const docType = salesDocKind(doc.type) || 'invoice';
       const result = await deleteQboTxn(tenantId, docType, qboId);
       res.json({ success: true, ...result });
     })

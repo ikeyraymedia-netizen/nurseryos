@@ -23,7 +23,7 @@ import {
   updateInventoryPlant
 } from './inventory';
 import { findMatchingInventoryPlants } from './inventoryMatch';
-import { deleteLinkedQuickbooksBill } from './quickbooks';
+import { deleteLinkedQuickbooksBill, pushBillPaymentToQuickbooks } from './quickbooks';
 
 let activeTenantId: string | null = null;
 
@@ -415,7 +415,12 @@ export async function updateVendorBill(bill: VendorBill): Promise<void> {
 export async function markVendorBillPaid(
   bill: VendorBill,
   payment?: { method: Exclude<VendorBill['paymentMethod'], 'stripe' | undefined>; reference?: string }
-): Promise<void> {
+): Promise<{
+  qboPaymentSynced?: boolean;
+  qboPaymentSkipped?: boolean;
+  qboPaymentReason?: string | null;
+  qboPaymentError?: string | null;
+}> {
   await updateVendorBill({
     ...bill,
     status: 'paid',
@@ -423,6 +428,23 @@ export async function markVendorBillPaid(
     paymentMethod: payment?.method,
     paymentReference: payment?.reference?.trim() || undefined
   });
+
+  try {
+    const tenantId = requireTenantId();
+    const result = await pushBillPaymentToQuickbooks({ tenantId, billId: bill.id });
+    return {
+      qboPaymentSynced: result.synced,
+      qboPaymentSkipped: result.skipped,
+      qboPaymentReason: result.reason
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/not connected|Connect QuickBooks/i.test(message)) {
+      return { qboPaymentSkipped: true, qboPaymentReason: 'not_connected' };
+    }
+    console.warn('[purchasing] QBO bill payment sync', message);
+    return { qboPaymentError: message };
+  }
 }
 
 export async function deleteVendorBill(billId: string): Promise<void> {

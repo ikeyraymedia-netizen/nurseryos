@@ -923,6 +923,7 @@ const extra = {
     replyToFixed: 'Replies go to {{email}}.',
     emailSentBody: 'The customer was emailed a formatted HTML version of this {{docLabel}}.',
     emailAlsoSyncedQb: 'Also synced this document to QuickBooks.',
+    emailUpdatedInQb: 'Updated this document in QuickBooks.',
     emailAlreadyInQb: 'Already in QuickBooks.',
     emailQbSaveFirst: 'Save the document first to sync it to QuickBooks on email.',
     emailQbSyncFailed: 'Email sent, but QuickBooks sync failed: {{error}}',
@@ -948,6 +949,8 @@ const extra = {
     qbPaymentNeedsInvoicePush:
       'Push the invoice to QuickBooks first, then sync the payment.',
     qbPaymentSyncFailed: 'Could not sync payment to QuickBooks.',
+    qbSaveUpdated: 'Saved and updated in QuickBooks.',
+    qbSaveSyncFailed: 'Saved, but QuickBooks update failed: {{error}}',
     invoicePaidBtn: 'Invoice paid',
     saveFirst: 'Save to customer first',
     alreadyPaidTitle: 'This invoice is already paid',
@@ -1194,7 +1197,11 @@ const extra = {
     qbBillPushed: 'Bill pushed to {{where}} · {{doc}}',
     qbBillAlreadySynced: 'Already in QuickBooks · {{doc}}',
     qbBillSavedAndPushed: 'Saved and synced to {{where}} · {{doc}}',
+    qbBillUpdated: 'Updated in {{where}} · {{doc}}',
     qbBillSaveSyncFailed: 'Bill saved, but QuickBooks sync failed: {{error}}',
+    qbBillPaymentSynced: 'Marked paid and recorded as a QuickBooks Bill Payment.',
+    qbBillPaymentAlreadySynced: 'Payment already recorded in QuickBooks.',
+    qbBillPaymentSyncFailed: 'Marked paid, but QuickBooks bill payment failed: {{error}}',
     qbSynced: 'Synced to QuickBooks · {{doc}}',
     vendorBankSection: 'ACH bank details',
     vendorBankHint:

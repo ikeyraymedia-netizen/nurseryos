@@ -549,6 +549,26 @@ async function applyOutboundPaymentToBill(params: {
   await getAdminDb()
     .doc(`tenants/${params.tenantId}/vendorBills/${params.billId}`)
     .set(patch, { merge: true });
+
+  if (mapped === 'paid') {
+    try {
+      const { syncPaidVendorBillPaymentToQbo } = await import('./quickbooks');
+      const result = await syncPaidVendorBillPaymentToQbo(params.tenantId, params.billId, {
+        uid: 'stripe'
+      });
+      if (result.synced && !result.skipped) {
+        console.log('[stripe] QBO bill payment synced', params.billId, result.qboBillPaymentId);
+      } else if (
+        result.reason &&
+        result.reason !== 'not_connected' &&
+        result.reason !== 'bill_not_pushed'
+      ) {
+        console.log('[stripe] QBO bill payment sync skipped', params.billId, result.reason);
+      }
+    } catch (err) {
+      console.warn('[stripe] QBO bill payment sync failed', params.billId, err);
+    }
+  }
 }
 
 async function findBillsByOutboundPayment(tenantId: string, paymentId: string) {

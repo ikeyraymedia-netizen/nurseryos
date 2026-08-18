@@ -212,7 +212,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [emailQbNote, setEmailQbNote] = useState<string | null>(null);
-  const [showEmailPanel, setShowEmailPanel] = useState(true);
+  const [showEmailPanel, setShowEmailPanel] = useState(false);
   const [selectedReplyTo, setSelectedReplyTo] = useState('');
   /** Only include a Stripe pay button when Stripe is actually connected. */
   const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
@@ -409,7 +409,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
     setEmailSentStatus('idle');
     setEmailErrorMessage('');
-    setShowEmailPanel(true);
+    setShowEmailPanel(false);
     // Depend on identity keys only — live order/customer object updates (e.g. after save)
     // must not wipe savedDocumentId or the Stripe/QuickBooks buttons stay disabled.
     return () => {
@@ -2352,33 +2352,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               )}
             </div>
 
-            <div className="rounded-xl border-2 border-ink-300 bg-white p-3 space-y-3">
-              <p className="font-black uppercase tracking-wider text-[10px] text-ink-900">
-                {t('invoice.recipients')}
-              </p>
-              <div>
-                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                  {t('invoice.toEmail')}
-                </label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder={t('invoice.emailPlaceholder')}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
-                />
-                <p className="mt-1 text-[9px] text-slate-500 leading-relaxed">
-                  {t('invoice.toEmailHint')}
-                </p>
-              </div>
-              <EmailCcSection
-                value={ccEmails}
-                onChange={setCcEmails}
-                toEmail={customerEmail}
-                disabled={isSendingEmail}
-              />
-            </div>
-
             {/* Quantity Basis Toggle */}
             {!canEditLines && (
             <div>
@@ -2778,6 +2751,29 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
               {showEmailPanel && (
                 <div className="mt-3 p-3 bg-ink-50/45 border border-ink-100 rounded-2xl space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                      {t('invoice.toEmail')}
+                    </label>
+                    <input
+                      type="email"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder={t('invoice.emailPlaceholder')}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
+                    />
+                    <p className="mt-1 text-[9px] text-slate-500 leading-relaxed">
+                      {t('invoice.toEmailHint')}
+                    </p>
+                  </div>
+
+                  <EmailCcSection
+                    value={ccEmails}
+                    onChange={setCcEmails}
+                    toEmail={customerEmail}
+                    disabled={isSendingEmail}
+                  />
+
                   {tenantId ? (
                     <OutboundReplySelect
                       tenantId={tenantId}
@@ -3038,53 +3034,31 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         <div className="flex-1 bg-white p-6 md:p-10 flex flex-col min-h-0 print:p-0">
           
           {/* Action header inside modal (Hidden during print) */}
-          <div className="pb-4 mb-6 border-b border-gray-150 print:hidden space-y-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-black text-gray-900 flex items-center">
-                  <FileCheck className="h-5 w-5 mr-1.5 text-ink-700" />
-                  {docLabel} Preview
-                </h2>
-                <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                  Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
-                </p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handlePrint}
-                  className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
-                  title={t('invoice.downloadPdfTitle')}
-                >
-                  <Printer className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
-                  title={t('invoice.closeWindowTitle')}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+          <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
+            <div>
+              <h2 className="text-base font-black text-gray-900 flex items-center">
+                <FileCheck className="h-5 w-5 mr-1.5 text-ink-700" />
+                {docLabel} Preview
+              </h2>
+              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
+                Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
+              </p>
             </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                  {t('invoice.toEmail')}
-                </label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder={t('invoice.emailPlaceholder')}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-sm"
-                />
-              </div>
-              <EmailCcSection
-                value={ccEmails}
-                onChange={setCcEmails}
-                toEmail={customerEmail}
-                disabled={isSendingEmail}
-              />
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handlePrint}
+                className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
+                title={t('invoice.downloadPdfTitle')}
+              >
+                <Printer className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
+                title={t('invoice.closeWindowTitle')}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
 

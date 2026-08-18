@@ -215,7 +215,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [showEmailPanel, setShowEmailPanel] = useState(false);
   const [selectedReplyTo, setSelectedReplyTo] = useState('');
   /** Only include a Stripe pay button when Stripe is actually connected. */
-  const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
+  const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(true);
   const [stripePaymentsReady, setStripePaymentsReady] = useState(false);
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>(DEFAULT_VENDORS);
 
@@ -651,7 +651,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // HTML Email Layout Builder
   const generateEmailHTML = (payUrlOverride?: string | null): string => {
-    const payUrl = payUrlOverride ?? activePayLinkUrl;
+    const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
     const itemsRows = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
@@ -790,10 +790,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ? `
         <div style="margin-top: 28px; text-align: center; font-family: Arial, sans-serif;">
           <a href="${payUrl}" style="display: inline-block; background-color: #5b21b6; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 28px; border-radius: 10px;">
-            Pay Invoice Online — $${balanceDue.toFixed(2)}
+            ${t('invoice.payOnlineButton', { amount: balanceDue.toFixed(2) })}
           </a>
           <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
-            Secure checkout powered by Stripe. If the button does not work, open this link:<br/>
+            ${t(useQboPayLinks ? 'invoice.payOnlineSecureQb' : 'invoice.payOnlineSecure')}<br/>
             <a href="${payUrl}" style="color: #5b21b6; word-break: break-all;">${payUrl}</a>
           </p>
         </div>`
@@ -811,7 +811,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Plain Text Email Builder
   const generateEmailText = (payUrlOverride?: string | null): string => {
-    const payUrl = payUrlOverride ?? activePayLinkUrl;
+    const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
     const itemsText = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
@@ -912,27 +912,28 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     setEmailQbNote(null);
 
     try {
-      const qbNote = await syncToQuickbooksOnEmail();
-      if (qbNote) setEmailQbNote(qbNote);
+      const qbSync = await syncToQuickbooksOnEmail();
+      if (qbSync.note) setEmailQbNote(qbSync.note);
 
-      // Pay links are optional — never block sending the invoice email.
-      let payUrl: string | null = null;
-      if (
-        (useQboPayLinks || useStripePayLinks) &&
+      // Pay links are optional — never block sending. Use the URL returned here
+      // (not React state) so a just-synced QuickBooks invoiceLink makes it into HTML.
+      let emailPayUrl: string | null = qbSync.qboInvoiceLink || activePayLinkUrl;
+      const wantPayLink =
+        includePayLinkInEmail &&
         documentType === 'invoice' &&
         !isPaid &&
-        includePayLinkInEmail &&
-        tenantId &&
-        savedDocumentId
-      ) {
+        Boolean(useQboPayLinks || useStripePayLinks);
+      if (wantPayLink) {
         try {
-          payUrl = await ensurePayLink();
+          emailPayUrl = await ensurePayLink();
         } catch (payErr) {
           console.warn('Invoice email continuing without pay link:', payErr);
         }
+      } else {
+        emailPayUrl = null;
       }
-      const emailHtml = generateEmailHTML(payUrl);
-      const emailText = generateEmailText(payUrl);
+      const emailHtml = generateEmailHTML(emailPayUrl);
+      const emailText = generateEmailText(emailPayUrl);
       const pdfDoc = await buildDocumentPdf();
       const pdfAttachment = {
         filename: pdfDoc.fileName,
@@ -1019,8 +1020,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       setEmailErrorMessage(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
-    void syncToQuickbooksOnEmail().then((note) => {
-      if (note) setEmailQbNote(note);
+    void syncToQuickbooksOnEmail().then((qbSync) => {
+      if (qbSync.note) setEmailQbNote(qbSync.note);
     });
     const textBody = generateEmailText();
     window.open(
@@ -1550,13 +1551,16 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   };
 
   /** Push invoice/estimate to QBO if QuickBooks is on and the document is saved. Never throws. */
-  const syncToQuickbooksOnEmail = async (): Promise<string | null> => {
-    if (!canUseQuickbooks) return null;
+  const syncToQuickbooksOnEmail = async (): Promise<{
+    note: string | null;
+    qboInvoiceLink: string | null;
+  }> => {
+    if (!canUseQuickbooks) return { note: null, qboInvoiceLink: null };
     if (documentType !== 'invoice' && documentType !== 'estimate' && documentType !== 'credit_memo') {
-      return null;
+      return { note: null, qboInvoiceLink: null };
     }
     if (!tenantId || !savedDocumentId) {
-      return t('invoice.emailQbSaveFirst');
+      return { note: t('invoice.emailQbSaveFirst'), qboInvoiceLink: null };
     }
     try {
       const result = await pushDocumentToQuickbooks({
@@ -1567,16 +1571,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
         await syncPaymentToQuickbooksIfPossible(savedDocumentId, { quiet: true });
       }
-      return result.updated
-        ? t('invoice.emailUpdatedInQb')
-        : result.reused
-          ? t('invoice.emailAlreadyInQb')
-          : t('invoice.emailAlsoSyncedQb');
+      return {
+        note: result.updated
+          ? t('invoice.emailUpdatedInQb')
+          : result.reused
+            ? t('invoice.emailAlreadyInQb')
+            : t('invoice.emailAlsoSyncedQb'),
+        qboInvoiceLink: result.qboInvoiceLink || null
+      };
     } catch (err: any) {
       console.warn('[invoice] QBO sync on email', err?.message || err);
-      return t('invoice.emailQbSyncFailed', {
-        error: err?.message || t('invoice.pushQbFailed')
-      });
+      return {
+        note: t('invoice.emailQbSyncFailed', {
+          error: err?.message || t('invoice.pushQbFailed')
+        }),
+        qboInvoiceLink: null
+      };
     }
   };
 

@@ -1013,6 +1013,8 @@ const extra = {
     payOnlineButton: 'Pay Invoice Online — ${{amount}}',
     payOnlineSecure:
       'Secure checkout powered by Stripe. If the button does not work, open this link:',
+    payOnlineSecureQb:
+      'Pay securely through QuickBooks. If the button does not work, open this link:',
     thankYouChoosing: 'Thank you for choosing {{nurseryName}}!',
     estimateTotalLabel: 'Estimate Total',
     invoiceTotalLabel: 'Invoice Total',

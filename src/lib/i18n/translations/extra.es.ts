@@ -1024,6 +1024,8 @@ const extra = {
     payOnlineButton: 'Pagar factura en línea — ${{amount}}',
     payOnlineSecure:
       'Pago seguro con Stripe. Si el botón no funciona, abra este enlace:',
+    payOnlineSecureQb:
+      'Pague de forma segura a través de QuickBooks. Si el botón no funciona, abra este enlace:',
     thankYouChoosing: '¡Gracias por elegir {{nurseryName}}!',
     estimateTotalLabel: 'Total del presupuesto',
     invoiceTotalLabel: 'Total de factura',

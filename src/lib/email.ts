@@ -157,6 +157,17 @@ export function mailtoUrl(params: {
   return `mailto:${encodeURIComponent(params.to)}?${query}`;
 }
 
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 export async function sendInvoiceEmail(params: {
   tenantId: string;
   to: string;
@@ -166,6 +177,7 @@ export async function sendInvoiceEmail(params: {
   html: string;
   fromName?: string;
   fromEmail?: string;
+  pdfAttachment?: { filename: string; content: string };
 }): Promise<{
   success: boolean;
   code?: string;

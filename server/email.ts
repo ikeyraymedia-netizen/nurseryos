@@ -199,6 +199,28 @@ function platformFromAddress(): string {
   return configured || 'NurseryOS <onboarding@resend.dev>';
 }
 
+const MAX_PDF_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+
+function parsePdfAttachment(raw: unknown): { filename: string; content: string } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const filenameRaw = String((raw as { filename?: unknown }).filename || '').trim();
+  let content = String((raw as { content?: unknown }).content || '').replace(/\s/g, '');
+  const dataUrl = content.match(/^data:application\/pdf;base64,(.+)$/i);
+  if (dataUrl) content = dataUrl[1];
+  if (!content) return undefined;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
+    throw Object.assign(new Error('PDF attachment is not valid base64.'), { status: 400 });
+  }
+  const bytes = Math.floor((content.length * 3) / 4);
+  if (bytes > MAX_PDF_ATTACHMENT_BYTES) {
+    throw Object.assign(new Error('PDF attachment is too large to email.'), { status: 400 });
+  }
+  const safeName =
+    filenameRaw.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '').slice(0, 120) || 'document.pdf';
+  const filename = /\.pdf$/i.test(safeName) ? safeName : `${safeName}.pdf`;
+  return { filename, content };
+}
+
 async function sendViaResend(params: {
   fromName: string;
   replyTo: string;
@@ -207,6 +229,7 @@ async function sendViaResend(params: {
   subject: string;
   text?: string;
   html?: string;
+  attachments?: Array<{ filename: string; content: string }>;
 }): Promise<string> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
@@ -237,7 +260,16 @@ async function sendViaResend(params: {
       reply_to: params.replyTo,
       subject: params.subject,
       text: params.text,
-      html: params.html
+      html: params.html,
+      ...(params.attachments?.length
+        ? {
+            attachments: params.attachments.map((file) => ({
+              filename: file.filename,
+              content: file.content,
+              content_type: 'application/pdf'
+            }))
+          }
+        : {})
     })
   });
 
@@ -264,6 +296,7 @@ export async function sendTenantInvoiceEmail(params: {
   html?: string;
   fromNameOverride?: string;
   fromEmailOverride?: string;
+  pdfAttachment?: { filename?: string; content?: string };
 }): Promise<{ messageId: string; fromEmail: string; fromName: string; cc: string[] }> {
   const integration = await loadIntegration(params.tenantId);
   const identities = identitiesFromDoc(integration);
@@ -302,6 +335,7 @@ export async function sendTenantInvoiceEmail(params: {
     throw Object.assign(new Error('Enter a valid To email address.'), { status: 400 });
   }
   const cc = parseCcRecipients(params.cc, to);
+  const pdfAttachment = parsePdfAttachment(params.pdfAttachment);
 
   const messageId = await sendViaResend({
     fromName,
@@ -310,7 +344,8 @@ export async function sendTenantInvoiceEmail(params: {
     cc,
     subject: params.subject,
     text: params.text,
-    html: params.html
+    html: params.html,
+    attachments: pdfAttachment ? [pdfAttachment] : undefined
   });
 
   return {
@@ -435,6 +470,7 @@ export function registerEmailRoutes(app: Express) {
         typeof req.body?.fromName === 'string' ? req.body.fromName.trim() : undefined;
       const fromEmailOverride =
         typeof req.body?.fromEmail === 'string' ? req.body.fromEmail.trim() : undefined;
+      const pdfAttachment = req.body?.pdfAttachment;
 
       if (!tenantId) {
         res.status(400).json({ error: 'tenantId is required.' });
@@ -455,7 +491,8 @@ export function registerEmailRoutes(app: Express) {
           text,
           html,
           fromNameOverride,
-          fromEmailOverride
+          fromEmailOverride,
+          pdfAttachment
         });
         res.json({
           success: true,

@@ -62,7 +62,7 @@ import {
   FreightShare
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks, pushPaymentToQuickbooks, ensureQboPayLink, refreshQboPaymentStatus } from '../lib/quickbooks';
-import { looksLikeEmail, mailtoUrl, MAX_CC_RECIPIENTS, parseCcEmails, sendInvoiceEmail } from '../lib/email';
+import { blobToBase64, looksLikeEmail, mailtoUrl, MAX_CC_RECIPIENTS, parseCcEmails, sendInvoiceEmail } from '../lib/email';
 import { OutboundReplySelect } from './OutboundReplySelect';
 import { EmailCcSection } from './EmailCcSection';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
@@ -801,6 +801,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         }
 
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
+          <p style="margin: 0 0 8px 0; color: #475569;">${t('invoice.emailPdfAttached', { docLabel: docLabel.toLowerCase() })}</p>
           <p style="margin: 0;">${nurseryName}</p>
           <p style="margin: 5px 0 0 0; font-weight: bold; color: #0e7490;">Thank you for your business!</p>
         </div>
@@ -877,6 +878,7 @@ ${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}${
         : ''
     }
 Thank you for choosing ${nurseryName}!
+A PDF copy of this ${docLabel.toLowerCase()} is attached.
 `;
   };
 
@@ -931,6 +933,11 @@ Thank you for choosing ${nurseryName}!
       }
       const emailHtml = generateEmailHTML(payUrl);
       const emailText = generateEmailText(payUrl);
+      const pdfDoc = await buildDocumentPdf();
+      const pdfAttachment = {
+        filename: pdfDoc.fileName,
+        content: await blobToBase64(pdfDoc.blob)
+      };
 
       const result = await sendInvoiceEmail({
         tenantId,
@@ -940,7 +947,8 @@ Thank you for choosing ${nurseryName}!
         text: emailText,
         html: emailHtml,
         fromName: nurseryName,
-        fromEmail: selectedReplyTo || undefined
+        fromEmail: selectedReplyTo || undefined,
+        pdfAttachment
       });
 
       if (result.success) {
@@ -1774,9 +1782,25 @@ Thank you for choosing ${nurseryName}!
 
   const handleExportPdf = async () => {
     try {
-      // Build the PDF programmatically (not a DOM screenshot). html2canvas can't
-      // parse Tailwind v4's oklch() colors, which made the old export fail.
-      const pdf = new jsPDF('p', 'pt', 'letter');
+      const { blob, fileName } = await buildDocumentPdf();
+      const result = await deliverPdfBlob(blob, fileName);
+      if (result.method === 'preview') {
+        setPdfSheet({
+          url: result.url,
+          fileName: result.fileName,
+          blob: result.blob
+        });
+      }
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert(t('invoice.pdfExportFailed', { message: err instanceof Error ? err.message : t('invoice.unknownError') }));
+    }
+  };
+
+  const buildDocumentPdf = async (): Promise<{ blob: Blob; fileName: string }> => {
+    // Build the PDF programmatically (not a DOM screenshot). html2canvas can't
+    // parse Tailwind v4's oklch() colors, which made the old export fail.
+    const pdf = new jsPDF('p', 'pt', 'letter');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 40;
@@ -2076,20 +2100,8 @@ Thank you for choosing ${nurseryName}!
         });
       }
 
-      // Mobile-safe delivery — never navigates the SPA away (that blanked phones).
       const fileName = `${(invoiceNumber || docLabel).replace(/[^\w.-]+/g, '_')}.pdf`;
-      const result = await deliverPdfBlob(pdf.output('blob'), fileName);
-      if (result.method === 'preview') {
-        setPdfSheet({
-          url: result.url,
-          fileName: result.fileName,
-          blob: result.blob
-        });
-      }
-    } catch (err) {
-      console.error('PDF export failed:', err);
-      alert(t('invoice.pdfExportFailed', { message: err instanceof Error ? err.message : t('invoice.unknownError') }));
-    }
+      return { blob: pdf.output('blob'), fileName };
   };
 
   // Avoid window.print() — it can crash Cursor's embedded browser / Electron webviews.
@@ -2797,7 +2809,7 @@ Thank you for choosing ${nurseryName}!
                   {emailSentStatus === 'success' && (
                     <div className="p-3 bg-ink-50 border border-ink-200 text-ink-800 rounded-xl text-[10px] leading-normal font-medium">
                       <p className="font-bold flex items-center mb-0.5 text-ink-900"><Check className="h-3.5 w-3.5 mr-1 text-ink-700" /> {docLabel} Sent Successfully!</p>
-                      <p className="text-[9px] text-ink-700">The customer was emailed a formatted HTML version of this {docLabel.toLowerCase()}.</p>
+                      <p className="text-[9px] text-ink-700">{t('invoice.emailSentBody', { docLabel: docLabel.toLowerCase() })}</p>
                       {emailQbNote && (
                         <p className="text-[9px] text-ink-700 mt-1">{emailQbNote}</p>
                       )}

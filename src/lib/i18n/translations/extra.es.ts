@@ -945,7 +945,9 @@ const extra = {
     emailPlaceholder: 'ej. comprador@mayorista.com',
     replyToLabel: 'Enviar desde / responder a',
     replyToFixed: 'Las respuestas van a {{email}}.',
-    emailSentBody: 'Se envió al cliente una versión HTML formateada de este {{docLabel}}.',
+    emailSentBody:
+      'Se envió al cliente este {{docLabel}} en HTML y como archivo PDF adjunto.',
+    emailPdfAttached: 'Se adjunta una copia en PDF de este {{docLabel}}.',
     emailAlsoSyncedQb: 'También se sincronizó este documento con QuickBooks.',
     emailUpdatedInQb: 'Se actualizó este documento en QuickBooks.',
     emailAlreadyInQb: 'Ya está en QuickBooks.',

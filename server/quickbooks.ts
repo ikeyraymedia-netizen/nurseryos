@@ -1181,6 +1181,107 @@ async function findOrCreateCustomer(
   return { id: String(id), displayName };
 }
 
+function isQboShippingLine(line: any): boolean {
+  if (line?.DetailType !== 'SalesItemLineDetail') return false;
+  const ref = String(line?.SalesItemLineDetail?.ItemRef?.value || '').trim();
+  const name = String(line?.SalesItemLineDetail?.ItemRef?.name || '').trim();
+  const desc = String(line?.Description || '').trim();
+  return (
+    ref === 'SHIPPING_ITEM_ID' ||
+    /^shipping$/i.test(name) ||
+    /^freight$/i.test(name) ||
+    /^shipping$/i.test(desc) ||
+    /^freight$/i.test(desc)
+  );
+}
+
+/**
+ * QBO sparse updates ignore a new SHIPPING_ITEM_ID line unless it keeps the
+ * existing shipping line Id. Reuse Ids for matching plant/discount lines too.
+ */
+function mergeLinesForQboUpdate(existingLines: any[], mappedLines: any[]): any[] {
+  const existing = Array.isArray(existingLines) ? existingLines : [];
+  const existingShipping = existing.find(isQboShippingLine);
+  const existingDiscount = existing.find((l) => l?.DetailType === 'DiscountLineDetail');
+  const existingSales = existing.filter(
+    (l) => l?.DetailType === 'SalesItemLineDetail' && !isQboShippingLine(l)
+  );
+  const used = new Set<string>();
+  const out: any[] = [];
+  const mappedHasShipping = mappedLines.some(isQboShippingLine);
+
+  for (const line of mappedLines) {
+    if (isQboShippingLine(line)) {
+      if (existingShipping?.Id) {
+        out.push({
+          ...line,
+          Id: String(existingShipping.Id),
+          ...(existingShipping.LineNum != null ? { LineNum: existingShipping.LineNum } : {}),
+          SalesItemLineDetail: {
+            ...line.SalesItemLineDetail,
+            ItemRef:
+              existingShipping.SalesItemLineDetail?.ItemRef ||
+              line.SalesItemLineDetail?.ItemRef
+          }
+        });
+      } else {
+        out.push(line);
+      }
+      continue;
+    }
+    if (line?.DetailType === 'DiscountLineDetail') {
+      if (existingDiscount?.Id) {
+        out.push({
+          ...line,
+          Id: String(existingDiscount.Id),
+          ...(existingDiscount.LineNum != null ? { LineNum: existingDiscount.LineNum } : {})
+        });
+      } else {
+        out.push(line);
+      }
+      continue;
+    }
+    if (line?.DetailType === 'SalesItemLineDetail') {
+      const itemId = String(line.SalesItemLineDetail?.ItemRef?.value || '');
+      const match = existingSales.find((ex) => {
+        const id = String(ex.Id || '');
+        if (!id || used.has(id)) return false;
+        return String(ex.SalesItemLineDetail?.ItemRef?.value || '') === itemId;
+      });
+      if (match?.Id) {
+        used.add(String(match.Id));
+        out.push({
+          ...line,
+          Id: String(match.Id),
+          ...(match.LineNum != null ? { LineNum: match.LineNum } : {})
+        });
+      } else {
+        out.push(line);
+      }
+      continue;
+    }
+    out.push(line);
+  }
+
+  if (!mappedHasShipping && existingShipping?.Id) {
+    out.push({
+      Id: String(existingShipping.Id),
+      ...(existingShipping.LineNum != null ? { LineNum: existingShipping.LineNum } : {}),
+      DetailType: 'SalesItemLineDetail',
+      Amount: 0,
+      Description: existingShipping.Description || 'Shipping',
+      SalesItemLineDetail: {
+        ItemRef:
+          existingShipping.SalesItemLineDetail?.ItemRef || { value: 'SHIPPING_ITEM_ID' },
+        Qty: 1,
+        UnitPrice: 0
+      }
+    });
+  }
+
+  return out;
+}
+
 async function mapDocToInvoice(
   tenantId: string,
   doc: Record<string, any>,
@@ -1424,6 +1525,9 @@ async function pushDocumentToQboInternal(
   const customer = await findOrCreateCustomer(tenantId, doc);
   const incomeAccountId = await getIncomeAccountId(tenantId);
   const payload = await mapDocToInvoice(tenantId, doc, customer.id, incomeAccountId);
+  if (existing && Array.isArray(payload.Line)) {
+    payload.Line = mergeLinesForQboUpdate(existing.Line, payload.Line);
+  }
   const writeBody = existing
     ? {
         ...payload,

@@ -1532,6 +1532,18 @@ Thank you for choosing ${nurseryName}!
     setIsPushingQb(true);
     setQbPushMessage(null);
     try {
+      const baseDoc = liveDocument || existingDocument || fetchedDocument;
+      if (baseDoc && savedDocumentId) {
+        await updateCustomerDocument({
+          ...baseDoc,
+          id: savedDocumentId,
+          freightCharge: isCreditMemo ? 0 : freightCharge,
+          taxRate,
+          salesTax,
+          discount: isCreditMemo ? 0 : discount,
+          grandTotal
+        });
+      }
       const result = await pushDocumentToQuickbooks({
         tenantId,
         documentId: savedDocumentId

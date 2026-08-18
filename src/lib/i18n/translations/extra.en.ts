@@ -625,7 +625,7 @@ const extra = {
     blindBol: 'Blind BOL',
     blindBolOn: 'On',
     blindBolHint:
-      'Hides the customer name on the printed BOL. Shows delivery address only — for drop-ships from other nurseries.',
+      'Hides the receiver / customer name on the printed BOL. Delivery address still prints — for drop-ships from other nurseries.',
     deliveryDestination: 'Delivery destination',
     deliveryAddressOnly: 'Delivery address',
     blindDeliverInstruction:

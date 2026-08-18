@@ -84,19 +84,32 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     blob: Blob;
   } | null>(null);
 
-  function resolveOrderDeliveryAddress(order: CustomerOrder): string {
+  function customerForOrder(order: CustomerOrder) {
     const byId = order.customerId
       ? customers.find((c) => c.id === order.customerId)
       : undefined;
     const byName = customers.find(
       (c) => c.name.trim().toLowerCase() === order.customerName.trim().toLowerCase()
     );
-    const customer = byId || byName;
+    return byId || byName;
+  }
+
+  function resolveOrderReceiverName(order: CustomerOrder): string {
+    const customer = customerForOrder(order);
+    return customer?.shippingName?.trim() || order.customerName;
+  }
+
+  function resolveOrderDeliveryAddress(order: CustomerOrder): string {
+    const customer = customerForOrder(order);
     return (
       customer?.shippingAddress?.trim() ||
       customer?.receiverAddress?.trim() ||
       ''
     );
+  }
+
+  function stopDeliveryAddress(order: CustomerOrder): string {
+    return resolveOrderDeliveryAddress(order) || receiverAddress.trim();
   }
 
   // Prefill the customer PO # and delivery address from the selected order(s).
@@ -349,39 +362,24 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
           : selectedBOLType === 'consolidated'
             ? t('bol.pdfStopOrder', {
                 n: idx + 1,
-                customer: order.customerName,
+                customer: resolveOrderReceiverName(order),
                 num: order.orderNumber
               })
-            : `${order.customerName} (${t('common.order')} #${order.orderNumber})`;
+            : `${resolveOrderReceiverName(order)} (${t('common.order')} #${order.orderNumber})`;
         writeWrapped(stopLabel, margin + 4, pageWidth - margin * 2 - 8, 10, true, 13);
-        if (blindBol || selectedBOLType !== 'consolidated') {
-          const addr =
-            selectedBOLType === 'consolidated'
-              ? resolveOrderDeliveryAddress(order)
-              : receiverAddress.trim() || resolveOrderDeliveryAddress(order);
-          if (addr) {
-            writeWrapped(
-              t('bol.pdfReceiverAddress', { address: addr }),
-              margin + 4,
-              pageWidth - margin * 2 - 8,
-              10,
-              false,
-              13
-            );
-          }
+        const addr = stopDeliveryAddress(order);
+        if (addr) {
+          writeWrapped(
+            t('bol.pdfReceiverAddress', { address: addr }),
+            margin + 4,
+            pageWidth - margin * 2 - 8,
+            10,
+            false,
+            13
+          );
         }
       });
-      if (!blindBol && selectedBOLType === 'consolidated' && receiverAddress.trim()) {
-        writeWrapped(
-          t('bol.pdfReceiverAddress', { address: receiverAddress }),
-          margin + 4,
-          pageWidth - margin * 2 - 8,
-          10,
-          false,
-          13
-        );
-      }
-      if (receiverContact.trim()) {
+      if (receiverContact.trim() && !blindBol) {
         writeWrapped(
           t('bol.pdfPointOfContact', { contact: receiverContact }),
           margin + 4,
@@ -919,17 +917,20 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                               {t('bol.orderNum', { num: order.orderNumber })}
                             </span>
                           </div>
-                          {blindBol ? (
-                            <p className="text-xs font-medium text-gray-800 whitespace-pre-wrap leading-snug">
-                              {stopAddress ||
-                                receiverAddress.trim() ||
-                                t('bol.deliveryAddressOnly')}
-                            </p>
-                          ) : (
+                          {!blindBol && (
                             <p className="text-xs font-black text-gray-950 truncate">
-                              {order.customerName}
+                              {resolveOrderReceiverName(order)}
                             </p>
                           )}
+                          <p
+                            className={`text-xs text-gray-800 whitespace-pre-wrap leading-snug ${
+                              blindBol ? '' : 'mt-1'
+                            }`}
+                          >
+                            {stopAddress ||
+                              receiverAddress.trim() ||
+                              t('bol.deliveryAddressOnly')}
+                          </p>
                           <div className="text-[10px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-gray-200/50">
                             <span>{t('bol.plants', { n: totalItems })}</span>
                           </div>
@@ -957,9 +958,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         {t('bol.orderNum', { num: singleOrder?.orderNumber })}
                       </span>
                     </div>
-                    {!blindBol && (
+                    {!blindBol && singleOrder && (
                       <p className="text-sm font-black text-gray-950">
-                        {singleOrder?.customerName}
+                        {resolveOrderReceiverName(singleOrder)}
                       </p>
                     )}
                     <p className="text-xs text-gray-600 mt-1 leading-relaxed">
@@ -975,7 +976,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                           (singleOrder ? resolveOrderDeliveryAddress(singleOrder) : '')}
                       </p>
                     )}
-                    {receiverContact && (
+                    {receiverContact && !blindBol && (
                       <p className="text-xs text-gray-700 mt-1 leading-relaxed">
                         <span className="font-bold text-gray-500">{t('bol.pointOfContactLabel')}</span>{' '}
                         {receiverContact}
@@ -1138,22 +1139,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                             : selectedBOLType === 'consolidated'
                               ? t('bol.stopCustomer', {
                                   n: index + 1,
-                                  customer: order.customerName,
+                                  customer: resolveOrderReceiverName(order),
                                   num: order.orderNumber
                                 })
-                              : `${order.customerName} (${t('common.order')} #${order.orderNumber})`}
+                              : `${resolveOrderReceiverName(order)} (${t('common.order')} #${order.orderNumber})`}
                         </p>
-                        {blindBol && (
-                          <p className="text-[10px] text-gray-600 font-sans mt-1 whitespace-pre-wrap leading-snug">
-                            {selectedBOLType === 'consolidated'
-                              ? resolveOrderDeliveryAddress(order) ||
-                                receiverAddress.trim() ||
-                                t('bol.deliveryAddressOnly')
-                              : receiverAddress.trim() ||
-                                resolveOrderDeliveryAddress(order) ||
-                                t('bol.deliveryAddressOnly')}
-                          </p>
-                        )}
+                        <p className="text-[10px] text-gray-600 font-sans mt-1 whitespace-pre-wrap leading-snug">
+                          {stopDeliveryAddress(order) || t('bol.deliveryAddressOnly')}
+                        </p>
                         <div className="flex items-end pt-3 border-b border-gray-300">
                           <span className="text-[9px] text-gray-400 mr-2 shrink-0">{t('bol.receivedBy')}</span>
                           <span className="flex-1"></span>

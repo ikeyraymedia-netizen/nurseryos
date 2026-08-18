@@ -1008,9 +1008,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         </div>
                       </form>
                     ) : (
-                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 w-full">
+                      <div className="flex flex-col gap-3 w-full min-w-0">
                         {/* Item Description */}
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           <div className="flex items-center flex-wrap gap-2">
                             <h4 className={`text-base font-bold font-sans ${isFullyLoaded && isFullyPulled ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                               {dp.plant(item.plantName)}
@@ -1053,21 +1053,23 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             )}
                           </div>
                           
-                          {/* Notes & Weight Specs */}
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                          {/* Notes & Weight Specs — keep off the pulled/loaded boxes */}
+                          <div className="flex flex-col gap-1.5 mt-1.5">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                             {item.notes && (
                               <span className="text-amber-800 bg-amber-50 border border-amber-100/50 px-1.5 py-0.5 rounded font-medium">
                                 {t('loader.notePrefix', { text: item.notes })}
                               </span>
                             )}
-                            <span className="font-mono">Unit Wt: {unitWeight} lbs</span>
-                            <span className="font-mono font-bold text-gray-700">Total: {itemTotalWeight.toLocaleString()} lbs</span>
+                            <span className="font-mono shrink-0">Unit Wt: {unitWeight} lbs</span>
+                            <span className="font-mono font-bold text-gray-700 shrink-0">Total: {itemTotalWeight.toLocaleString()} lbs</span>
+                            </div>
 
+                            {(permissions.canEditCost || permissions.canUseVendors) && (
+                            <div className="flex flex-wrap items-center gap-2">
                             {/* Cost Section (internal; gated by profit module) */}
                             {permissions.canEditCost && (
-                              <>
-                                <span className="text-gray-300">|</span>
-                                <span
+                              <span
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50/70 text-indigo-800 font-semibold"
                                   onClick={(e) => e.stopPropagation()}
                                   title={t('loader.costHint')}
@@ -1088,14 +1090,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                     className="w-16 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none rounded px-1 py-0.5 text-xs font-mono font-bold text-right text-indigo-800"
                                   />
                                 </span>
-                              </>
                             )}
 
                             {/* Vendor Section */}
                             {permissions.canUseVendors && (
-                              <>
-                            <span className="text-gray-300">|</span>
-                            {permissions.canEditOrders ? (
+                            permissions.canEditOrders ? (
                             editingVendorItemId === item.id ? (
                               <div className="flex items-center space-x-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
                                 <div className="relative">
@@ -1113,7 +1112,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                     }}
                                     autoFocus
                                     placeholder={t('loader.vendorPlaceholder')}
-                                    className="px-2 py-0.5 border border-ink-400 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855 w-44"
+                                    className="px-2 py-0.5 border border-ink-400 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855 w-44 max-w-full"
                                   />
                                 </div>
                                 <button
@@ -1149,16 +1148,17 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             )
                             ) : item.vendor ? (
                               <span className="text-xs text-indigo-700 font-semibold">{t('loader.vendorLabel', { name: item.vendor })}</span>
-                            ) : null}
-                              </>
+                            ) : null
+                            )}
+                            </div>
                             )}
                           </div>
                         </div>
 
                         {/* Twin Checkboxes / Progress Controls */}
-                        <div className="grid grid-cols-2 gap-3 w-full border-t lg:border-t-0 pt-3 lg:pt-0">
+                        <div className="grid grid-cols-2 gap-3 w-full min-w-0 border-t border-gray-100 pt-3 sm:flex sm:w-auto sm:ml-auto sm:border-0 sm:pt-0">
                           {/* Delivered / Pulled Box */}
-                          <div className="flex flex-col items-center bg-teal-50/30 border border-teal-500/20 rounded-xl p-2.5">
+                          <div className="flex flex-col items-center bg-teal-50/30 border border-teal-500/20 rounded-xl p-2.5 min-w-0 sm:min-w-[11.5rem] sm:shrink-0">
                             <label className="text-[10px] font-black text-teal-800 uppercase tracking-wider mb-1.5 cursor-pointer select-none">
                               {t('loader.pulled')}
                             </label>
@@ -1193,7 +1193,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                           </div>
 
                           {/* Loaded Box */}
-                          <div className="flex flex-col items-center bg-ink-50/30 border border-ink-500/20 rounded-xl p-2.5">
+                          <div className="flex flex-col items-center bg-ink-50/30 border border-ink-500/20 rounded-xl p-2.5 min-w-0 sm:min-w-[11.5rem] sm:shrink-0">
                             <label className="text-[10px] font-black text-ink-800 uppercase tracking-wider mb-1.5 cursor-pointer select-none">
                               {t('loader.loaded')}
                             </label>

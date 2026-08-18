@@ -632,7 +632,7 @@ const extra = {
     blindBol: 'BOL ciega',
     blindBolOn: 'Activa',
     blindBolHint:
-      'Oculta el nombre del cliente en el BOL impreso. Solo muestra la dirección de entrega — para envíos directos desde otros viveros.',
+      'Oculta el nombre del receptor / cliente en el BOL impreso. La dirección de entrega sí se imprime — para envíos directos desde otros viveros.',
     deliveryDestination: 'Destino de entrega',
     deliveryAddressOnly: 'Dirección de entrega',
     blindDeliverInstruction:

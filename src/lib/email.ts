@@ -100,9 +100,67 @@ export async function disconnectEmail(tenantId: string): Promise<void> {
   if (!res.ok) throw new Error(await readApiError(res));
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const MAX_CC_RECIPIENTS = 20;
+
+export function looksLikeEmail(value: string): boolean {
+  return EMAIL_RE.test(String(value || '').trim());
+}
+
+/** Split comma / semicolon / newline lists into unique trimmed emails. */
+export function splitEmailList(value: string | string[] | undefined | null): string[] {
+  const parts = Array.isArray(value)
+    ? value.flatMap((entry) => String(entry || '').split(/[,;\s]+/))
+    : String(value || '').split(/[,;\s]+/);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of parts) {
+    const email = raw.trim().toLowerCase();
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
+}
+
+export function parseCcEmails(
+  value: string | string[] | undefined | null,
+  to?: string
+): { cc: string[]; invalid: string[] } {
+  const toNorm = String(to || '').trim().toLowerCase();
+  const cc: string[] = [];
+  const invalid: string[] = [];
+  for (const email of splitEmailList(value)) {
+    if (toNorm && email === toNorm) continue;
+    if (!looksLikeEmail(email)) {
+      invalid.push(email);
+      continue;
+    }
+    cc.push(email);
+  }
+  return { cc, invalid };
+}
+
+export function mailtoUrl(params: {
+  to: string;
+  cc?: string[];
+  subject: string;
+  body: string;
+}): string {
+  const query = [
+    params.cc?.length ? `cc=${encodeURIComponent(params.cc.join(','))}` : '',
+    `subject=${encodeURIComponent(params.subject)}`,
+    `body=${encodeURIComponent(params.body)}`
+  ]
+    .filter(Boolean)
+    .join('&');
+  return `mailto:${encodeURIComponent(params.to)}?${query}`;
+}
+
 export async function sendInvoiceEmail(params: {
   tenantId: string;
   to: string;
+  cc?: string[];
   subject: string;
   text: string;
   html: string;
@@ -116,6 +174,7 @@ export async function sendInvoiceEmail(params: {
   fromEmail?: string;
   fromName?: string;
   messageId?: string;
+  cc?: string[];
 }> {
   const res = await fetch('/api/send-invoice', {
     method: 'POST',

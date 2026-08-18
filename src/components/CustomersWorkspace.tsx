@@ -34,8 +34,9 @@ import { logAuditEvent } from '../lib/audit';
 import { exportNurseryBackup } from '../lib/backup';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
-import { sendTenantEmail } from '../lib/email';
+import { looksLikeEmail, mailtoUrl, MAX_CC_RECIPIENTS, parseCcEmails, sendTenantEmail } from '../lib/email';
 import { OutboundReplySelect } from './OutboundReplySelect';
+import { EmailCcSection } from './EmailCcSection';
 import {
   buildCustomerStatementEmailHtml,
   buildCustomerStatementEmailText,
@@ -174,6 +175,7 @@ export function CustomersWorkspace({
   const [convertingDocId, setConvertingDocId] = useState<string | null>(null);
   const [showStatementEmail, setShowStatementEmail] = useState(false);
   const [statementEmailTo, setStatementEmailTo] = useState('');
+  const [statementEmailCc, setStatementEmailCc] = useState('');
   const [statementEmailSubject, setStatementEmailSubject] = useState('');
   const [statementEmailMessage, setStatementEmailMessage] = useState('');
   const [statementEmailSending, setStatementEmailSending] = useState(false);
@@ -322,6 +324,7 @@ export function CustomersWorkspace({
   function openStatementEmailPanel() {
     if (!selectedCustomer || !customerStatement) return;
     setStatementEmailTo(selectedCustomer.contactEmail || '');
+    setStatementEmailCc(selectedCustomer.contactEmailCc || '');
     setStatementEmailSubject(
       defaultCustomerStatementSubject(
         nurseryName,
@@ -342,8 +345,17 @@ export function CustomersWorkspace({
       return;
     }
     const to = statementEmailTo.trim();
-    if (!to || !to.includes('@')) {
+    if (!looksLikeEmail(to)) {
       setStatementEmailStatus(t('customers.statementValidEmail'));
+      return;
+    }
+    const { cc, invalid } = parseCcEmails(statementEmailCc, to);
+    if (invalid.length) {
+      setStatementEmailStatus(t('invoice.ccInvalid', { emails: invalid.join(', ') }));
+      return;
+    }
+    if (cc.length > MAX_CC_RECIPIENTS) {
+      setStatementEmailStatus(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
     setStatementEmailSending(true);
@@ -352,6 +364,7 @@ export function CustomersWorkspace({
       const result = await sendTenantEmail({
         tenantId,
         to,
+        cc,
         subject:
           statementEmailSubject.trim() ||
           defaultCustomerStatementSubject(
@@ -379,11 +392,13 @@ export function CustomersWorkspace({
       }
       if (
         permissions.canEditCustomers &&
-        to !== (selectedCustomer.contactEmail || '')
+        (to !== (selectedCustomer.contactEmail || '') ||
+          (cc.join(', ') || '') !== (selectedCustomer.contactEmailCc || ''))
       ) {
         await updateCustomer({
           ...selectedCustomer,
           contactEmail: to,
+          contactEmailCc: cc.join(', ') || undefined,
           updatedAt: new Date().toISOString()
         });
       }
@@ -393,6 +408,7 @@ export function CustomersWorkspace({
         meta: {
           customerId: selectedCustomer.id,
           to,
+          cc: cc.join(', '),
           totalDue: customerStatement.totalDue,
           totalPastDue: customerStatement.totalPastDue,
           lineCount: customerStatement.lines.length
@@ -418,8 +434,17 @@ export function CustomersWorkspace({
   function handleStatementMailto() {
     if (!selectedCustomer || !customerStatement) return;
     const to = statementEmailTo.trim();
-    if (!to || !to.includes('@')) {
+    if (!looksLikeEmail(to)) {
       setStatementEmailStatus(t('customers.statementValidEmail'));
+      return;
+    }
+    const { cc, invalid } = parseCcEmails(statementEmailCc, to);
+    if (invalid.length) {
+      setStatementEmailStatus(t('invoice.ccInvalid', { emails: invalid.join(', ') }));
+      return;
+    }
+    if (cc.length > MAX_CC_RECIPIENTS) {
+      setStatementEmailStatus(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
     const subject =
@@ -434,10 +459,7 @@ export function CustomersWorkspace({
       statement: customerStatement,
       message: statementEmailMessage
     });
-    const href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(body)}`;
-    window.location.href = href;
+    window.location.href = mailtoUrl({ to, cc, subject, body });
   }
 
   useEffect(() => {
@@ -785,6 +807,7 @@ export function CustomersWorkspace({
         status: 'pending',
         totalWeightLbs: estimateWeightLbs(doc),
         customerEmail: doc.customerEmail || selectedCustomer.contactEmail,
+        customerEmailCc: doc.customerEmailCc || selectedCustomer.contactEmailCc,
         invoiceDetails: {
           invoiceNumber: doc.documentNumber,
           invoiceDate: doc.documentDate,
@@ -919,6 +942,12 @@ export function CustomersWorkspace({
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
                       disabled={statementEmailSending}
                       required
+                    />
+                    <EmailCcSection
+                      value={statementEmailCc}
+                      onChange={setStatementEmailCc}
+                      toEmail={statementEmailTo}
+                      disabled={statementEmailSending}
                     />
                     {tenantId ? (
                       <OutboundReplySelect

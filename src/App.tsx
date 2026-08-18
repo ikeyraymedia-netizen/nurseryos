@@ -715,6 +715,7 @@ function NurseryApp({
         status: 'pending' as const,
         totalWeightLbs: 0,
         customerEmail: doc.customerEmail,
+        customerEmailCc: doc.customerEmailCc,
         invoiceDetails: {
           invoiceNumber: doc.documentNumber,
           invoiceDate: doc.documentDate,
@@ -740,7 +741,8 @@ function NurseryApp({
         dateCreated: new Date().toISOString(),
         status: 'pending' as const,
         totalWeightLbs: 0,
-        customerEmail: customer?.contactEmail
+        customerEmail: customer?.contactEmail,
+        customerEmailCc: customer?.contactEmailCc
       } satisfies CustomerOrder;
     }
     return null;

@@ -62,8 +62,9 @@ import {
   FreightShare
 } from '../lib/freightAllocation';
 import { pushDocumentToQuickbooks, pushPaymentToQuickbooks, ensureQboPayLink, refreshQboPaymentStatus } from '../lib/quickbooks';
-import { sendInvoiceEmail } from '../lib/email';
+import { looksLikeEmail, mailtoUrl, MAX_CC_RECIPIENTS, parseCcEmails, sendInvoiceEmail } from '../lib/email';
 import { OutboundReplySelect } from './OutboundReplySelect';
+import { EmailCcSection } from './EmailCcSection';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -195,6 +196,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Email state variables
   const [customerEmail, setCustomerEmail] = useState(order.customerEmail || '');
+  const [ccEmails, setCcEmails] = useState(
+    existingDocument?.customerEmailCc || order.customerEmailCc || customer?.contactEmailCc || ''
+  );
   const [emailSubject, setEmailSubject] = useState(
     `${
       initialDocumentType === 'estimate'
@@ -208,7 +212,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [emailQbNote, setEmailQbNote] = useState<string | null>(null);
-  const [showEmailPanel, setShowEmailPanel] = useState(false);
+  const [showEmailPanel, setShowEmailPanel] = useState(true);
   const [selectedReplyTo, setSelectedReplyTo] = useState('');
   /** Only include a Stripe pay button when Stripe is actually connected. */
   const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(false);
@@ -391,6 +395,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setCustomerEmail(
       existingDocument?.customerEmail || order.customerEmail || customer?.contactEmail || ''
     );
+    setCcEmails(
+      existingDocument?.customerEmailCc || order.customerEmailCc || customer?.contactEmailCc || ''
+    );
     setEmailSubject(
       `${
         type === 'estimate'
@@ -402,7 +409,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
     setEmailSentStatus('idle');
     setEmailErrorMessage('');
-    setShowEmailPanel(false);
+    setShowEmailPanel(true);
     // Depend on identity keys only — live order/customer object updates (e.g. after save)
     // must not wipe savedDocumentId or the Stripe/QuickBooks buttons stay disabled.
     return () => {
@@ -880,9 +887,20 @@ Thank you for choosing ${nurseryName}!
       setEmailErrorMessage(t('invoice.nurseryContextMissing'));
       return;
     }
-    if (!customerEmail || !customerEmail.includes('@')) {
+    if (!looksLikeEmail(customerEmail)) {
       setEmailSentStatus('error_general');
       setEmailErrorMessage(t('invoice.validEmailRequired'));
+      return;
+    }
+    const { cc, invalid } = parseCcEmails(ccEmails, customerEmail);
+    if (invalid.length) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage(t('invoice.ccInvalid', { emails: invalid.join(', ') }));
+      return;
+    }
+    if (cc.length > MAX_CC_RECIPIENTS) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
 
@@ -917,6 +935,7 @@ Thank you for choosing ${nurseryName}!
       const result = await sendInvoiceEmail({
         tenantId,
         to: customerEmail,
+        cc,
         subject: emailSubject,
         text: emailText,
         html: emailHtml,
@@ -925,13 +944,25 @@ Thank you for choosing ${nurseryName}!
       });
 
       if (result.success) {
+        const ccJoined = cc.join(', ') || undefined;
         if (!order.id.startsWith('preview-')) {
           const updatedOrder: CustomerOrder = {
             ...order,
             customerEmail,
+            customerEmailCc: ccJoined,
             emailSentAt: new Date().toISOString()
           };
           await updateCustomerOrder(updatedOrder);
+        }
+        const savedDoc = liveDocument || existingDocument || fetchedDocument;
+        if (savedDocumentId && savedDoc) {
+          await updateCustomerDocument({
+            ...savedDoc,
+            id: savedDocumentId,
+            customerEmail,
+            customerEmailCc: ccJoined,
+            emailSentAt: new Date().toISOString()
+          });
         }
         setEmailSentStatus('success');
       } else if (
@@ -964,17 +995,35 @@ Thank you for choosing ${nurseryName}!
 
   // Fallback: Open Default Mail Client
   const handleOpenMailClient = () => {
-    if (!customerEmail) {
+    if (!looksLikeEmail(customerEmail)) {
       setEmailSentStatus('error_general');
       setEmailErrorMessage(t('invoice.emailFirstRequired'));
+      return;
+    }
+    const { cc, invalid } = parseCcEmails(ccEmails, customerEmail);
+    if (invalid.length) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage(t('invoice.ccInvalid', { emails: invalid.join(', ') }));
+      return;
+    }
+    if (cc.length > MAX_CC_RECIPIENTS) {
+      setEmailSentStatus('error_general');
+      setEmailErrorMessage(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
     void syncToQuickbooksOnEmail().then((note) => {
       if (note) setEmailQbNote(note);
     });
     const textBody = generateEmailText();
-    const mailtoUrl = `mailto:${encodeURIComponent(customerEmail)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(textBody)}`;
-    window.open(mailtoUrl, '_blank');
+    window.open(
+      mailtoUrl({
+        to: customerEmail,
+        cc,
+        subject: emailSubject,
+        body: textBody
+      }),
+      '_blank'
+    );
     
     // Save email only tracking
     const saveEmailTracking = async () => {
@@ -982,6 +1031,7 @@ Thank you for choosing ${nurseryName}!
         const updatedOrder: CustomerOrder = {
           ...order,
           customerEmail,
+          customerEmailCc: cc.join(', ') || undefined,
           emailSentAt: new Date().toISOString() + ' (opened in mail client)',
         };
         await updateCustomerOrder(updatedOrder);
@@ -1211,6 +1261,7 @@ Thank you for choosing ${nurseryName}!
         items: updatedItems,
         invoiceDetails: invoiceDetailsPayload,
         customerEmail: customerEmail || order.customerEmail,
+        customerEmailCc: parseCcEmails(ccEmails, customerEmail).cc.join(', ') || undefined,
         owner: salesRep.trim() || order.owner || undefined
       };
 
@@ -1265,6 +1316,7 @@ Thank you for choosing ${nurseryName}!
           billToName,
           billToAddress: billToAddress || undefined,
           customerEmail: customerEmail || undefined,
+          customerEmailCc: parseCcEmails(ccEmails, customerEmail).cc.join(', ') || undefined,
           owner: salesRep.trim() || undefined,
           items: lineItems,
           subtotal,
@@ -2211,7 +2263,7 @@ Thank you for choosing ${nurseryName}!
       <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">
         
         {/* Left Side: Customize Form (Hidden during print) */}
-        <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-4 shrink-0 print:hidden overflow-y-auto max-h-[90vh] md:max-h-[85vh] lg:max-h-none">
+        <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-4 shrink-0 print:hidden overflow-y-auto max-h-[90vh] md:max-h-[85vh]">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
               <FileCheck className="h-4 w-4 mr-2 text-ink-800" />
@@ -2286,6 +2338,33 @@ Thank you for choosing ${nurseryName}!
                   Link a customer on the order to save this under their account.
                 </p>
               )}
+            </div>
+
+            <div className="rounded-xl border-2 border-ink-300 bg-white p-3 space-y-3">
+              <p className="font-black uppercase tracking-wider text-[10px] text-ink-900">
+                {t('invoice.recipients')}
+              </p>
+              <div>
+                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                  {t('invoice.toEmail')}
+                </label>
+                <input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder={t('invoice.emailPlaceholder')}
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
+                />
+                <p className="mt-1 text-[9px] text-slate-500 leading-relaxed">
+                  {t('invoice.toEmailHint')}
+                </p>
+              </div>
+              <EmailCcSection
+                value={ccEmails}
+                onChange={setCcEmails}
+                toEmail={customerEmail}
+                disabled={isSendingEmail}
+              />
             </div>
 
             {/* Quantity Basis Toggle */}
@@ -2687,19 +2766,6 @@ Thank you for choosing ${nurseryName}!
 
               {showEmailPanel && (
                 <div className="mt-3 p-3 bg-ink-50/45 border border-ink-100 rounded-2xl space-y-3.5 text-xs">
-                  <div>
-                    <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                      Customer Email
-                    </label>
-                    <input
-                      type="email"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder={t('invoice.emailPlaceholder')}
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
-                    />
-                  </div>
-
                   {tenantId ? (
                     <OutboundReplySelect
                       tenantId={tenantId}
@@ -2960,31 +3026,53 @@ Thank you for choosing ${nurseryName}!
         <div className="flex-1 bg-white p-6 md:p-10 flex flex-col min-h-0 print:p-0">
           
           {/* Action header inside modal (Hidden during print) */}
-          <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
-            <div>
-              <h2 className="text-base font-black text-gray-900 flex items-center">
-                <FileCheck className="h-5 w-5 mr-1.5 text-ink-700" />
-                Invoice Preview
-              </h2>
-              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
-              </p>
+          <div className="pb-4 mb-6 border-b border-gray-150 print:hidden space-y-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-black text-gray-900 flex items-center">
+                  <FileCheck className="h-5 w-5 mr-1.5 text-ink-700" />
+                  {docLabel} Preview
+                </h2>
+                <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
+                  Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handlePrint}
+                  className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
+                  title={t('invoice.downloadPdfTitle')}
+                >
+                  <Printer className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
+                  title={t('invoice.closeWindowTitle')}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={handlePrint}
-                className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
-                title={t('invoice.downloadPdfTitle')}
-              >
-                <Printer className="h-4 w-4" />
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
-                title={t('invoice.closeWindowTitle')}
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
+                  {t('invoice.toEmail')}
+                </label>
+                <input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder={t('invoice.emailPlaceholder')}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-sm"
+                />
+              </div>
+              <EmailCcSection
+                value={ccEmails}
+                onChange={setCcEmails}
+                toEmail={customerEmail}
+                disabled={isSendingEmail}
+              />
             </div>
           </div>
 

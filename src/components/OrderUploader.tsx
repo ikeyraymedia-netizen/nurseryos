@@ -55,6 +55,35 @@ interface ParsedOrderDraft {
 type UploadKind = 'order' | 'estimate';
 type InputMode = 'file' | 'text';
 
+function applyInventoryName(
+  item: PlantOrderItem,
+  plant: Pick<InventoryPlant, 'plantName' | 'containerSize'>
+): PlantOrderItem {
+  const containerSize = plant.containerSize || item.containerSize;
+  if (item.plantName === plant.plantName && item.containerSize === containerSize) {
+    return item;
+  }
+  return {
+    ...item,
+    plantName: plant.plantName,
+    containerSize
+  };
+}
+
+function orderWeightLbs(
+  items: Array<Pick<PlantOrderItem, 'containerSize' | 'quantity'>>,
+  weights: ContainerWeight[]
+): number {
+  return items.reduce((total, item) => {
+    const match = weights.find(
+      (w) =>
+        w.id.toLowerCase() === item.containerSize.toLowerCase() ||
+        w.label.toLowerCase() === item.containerSize.toLowerCase()
+    );
+    return total + (match ? match.weightLbs : 0) * item.quantity;
+  }, 0);
+}
+
 export const OrderUploader: React.FC<OrderUploaderProps> = ({
   containerWeights,
   customers,
@@ -91,22 +120,46 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
   useEffect(() => subscribeToInventory(setInventoryPlants), []);
 
+  useEffect(() => {
+    if (!pendingDraft || inventoryPlants.length === 0) return;
+
+    let changed = false;
+    const items = pendingDraft.items.map((item) => {
+      const manual = linkedInventoryByItemId[item.id];
+      const plant = manual
+        ? inventoryPlants.find((p) => p.id === manual.plantId) || manual
+        : findMatchingInventoryPlants(
+            inventoryPlants,
+            item.plantName,
+            item.containerSize,
+            containerWeights
+          )[0];
+      if (!plant) return item;
+      const next = applyInventoryName(item, plant);
+      if (next === item) return item;
+      changed = true;
+      rememberInventoryAlias(
+        tenantId,
+        item.plantName,
+        item.containerSize,
+        plant.plantName,
+        plant.containerSize
+      );
+      return next;
+    });
+
+    if (!changed) return;
+    setPendingDraft({
+      ...pendingDraft,
+      items,
+      totalWeightLbs: orderWeightLbs(items, containerWeights)
+    });
+  }, [pendingDraft, inventoryPlants, linkedInventoryByItemId, containerWeights, tenantId]);
+
   const selectedCustomer = useMemo(
     () => customers.find((c) => c.id === selectedCustomerId) || null,
     [customers, selectedCustomerId]
   );
-
-  const calculateOrderWeight = (items: Omit<PlantOrderItem, 'id' | 'loadedQuantity'>[]): number => {
-    return items.reduce((total, item) => {
-      const match = containerWeights.find(
-        (w) =>
-          w.id.toLowerCase() === item.containerSize.toLowerCase() ||
-          w.label.toLowerCase() === item.containerSize.toLowerCase()
-      );
-      const unitWeight = match ? match.weightLbs : 0;
-      return total + unitWeight * item.quantity;
-    }, 0);
-  };
 
   const resetDraftState = () => {
     setPendingDraft(null);
@@ -219,7 +272,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         orderNumber: result.orderNumber || 'N/A',
         items: itemsWithIds,
         originalText: result.plainText || orderText || '',
-        totalWeightLbs: calculateOrderWeight(itemsWithIds),
+        totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights),
         suggestedCustomerId: suggestedId,
         matchConfidence: match.confidence,
         matchSuggestions: match.suggestions
@@ -253,6 +306,17 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         containerSize: plant.containerSize
       }
     }));
+    setPendingDraft((draft) => {
+      if (!draft) return draft;
+      const items = draft.items.map((row) =>
+        row.id === item.id ? applyInventoryName(row, plant) : row
+      );
+      return {
+        ...draft,
+        items,
+        totalWeightLbs: orderWeightLbs(items, containerWeights)
+      };
+    });
     setSearchItemId(null);
     setInventorySearch('');
   };
@@ -324,19 +388,34 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     return { type: 'unmatched' as const };
   };
 
+  const itemsNamedFromInventory = (items: PlantOrderItem[]): PlantOrderItem[] =>
+    items.map((item) => {
+      const manual = linkedInventoryByItemId[item.id];
+      const plant = manual
+        ? inventoryPlants.find((p) => p.id === manual.plantId) || manual
+        : findMatchingInventoryPlants(
+            inventoryPlants,
+            item.plantName,
+            item.containerSize,
+            containerWeights
+          )[0];
+      return plant ? applyInventoryName(item, plant) : item;
+    });
+
   const saveDraft = async () => {
     if (!pendingDraft || !uploadKind) return;
     setSaving(true);
     setErrorMessage(null);
     try {
       const linked = selectedCustomer;
+      const namedItems = itemsNamedFromInventory(pendingDraft.items);
 
       if (uploadKind === 'estimate') {
         if (!linked?.id) {
           throw new Error('Pick a customer before saving an estimate. Estimates are saved under the customer only — not as a plant order.');
         }
 
-        const lineItems = pendingDraft.items.map((item) => {
+        const lineItems = namedItems.map((item) => {
           const unitPrice = getDefaultPriceForSize(item.containerSize);
           return {
             id: item.id,
@@ -394,10 +473,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         customerName: linked?.name || pendingDraft.customerName,
         customerId: linked?.id || undefined,
         orderNumber: pendingDraft.orderNumber,
-        items: pendingDraft.items,
+        items: namedItems,
         originalText: pendingDraft.originalText,
         status: 'pending',
-        totalWeightLbs: pendingDraft.totalWeightLbs,
+        totalWeightLbs: orderWeightLbs(namedItems, containerWeights),
         owner: salesRep.trim() || undefined
       });
 

@@ -55,8 +55,9 @@ import {
   resolvePurchaseCategory,
   purchaseCategoryLabel
 } from '../lib/purchaseCategories';
-import { sendTenantEmail } from '../lib/email';
+import { looksLikeEmail, MAX_CC_RECIPIENTS, parseCcEmails, sendTenantEmail } from '../lib/email';
 import { OutboundReplySelect } from './OutboundReplySelect';
+import { EmailCcSection } from './EmailCcSection';
 import {
   buildPurchaseOrderEmailHtml,
   buildPurchaseOrderEmailText,
@@ -195,6 +196,7 @@ export function PurchasingWorkspace({
   // Email PO
   const [emailingOrder, setEmailingOrder] = useState<PurchaseOrder | null>(null);
   const [emailTo, setEmailTo] = useState('');
+  const [emailCc, setEmailCc] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMessage, setEmailMessage] = useState('');
   const [emailSending, setEmailSending] = useState(false);
@@ -583,6 +585,7 @@ export function PurchasingWorkspace({
     const vendor = vendors.find((v) => v.id === order.vendorId);
     setEmailingOrder(order);
     setEmailTo(vendor?.contactEmail || '');
+    setEmailCc(vendor?.contactEmailCc || '');
     setEmailSubject(defaultPurchaseOrderEmailSubject(nurseryName, order));
     setEmailMessage('');
     setEmailStatus(null);
@@ -592,8 +595,17 @@ export function PurchasingWorkspace({
     e.preventDefault();
     if (!emailingOrder || !permissions.canEditPurchaseOrders) return;
     const to = emailTo.trim();
-    if (!to || !to.includes('@')) {
+    if (!looksLikeEmail(to)) {
       setEmailStatus(t('purchasing.validEmail'));
+      return;
+    }
+    const { cc, invalid } = parseCcEmails(emailCc, to);
+    if (invalid.length) {
+      setEmailStatus(t('invoice.ccInvalid', { emails: invalid.join(', ') }));
+      return;
+    }
+    if (cc.length > MAX_CC_RECIPIENTS) {
+      setEmailStatus(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
     setEmailSending(true);
@@ -602,6 +614,7 @@ export function PurchasingWorkspace({
       const result = await sendTenantEmail({
         tenantId,
         to,
+        cc,
         subject: emailSubject.trim() || defaultPurchaseOrderEmailSubject(nurseryName, emailingOrder),
         text: buildPurchaseOrderEmailText({
           nurseryName,
@@ -624,8 +637,17 @@ export function PurchasingWorkspace({
 
       // Remember vendor email if they typed a new one
       const vendor = vendors.find((v) => v.id === emailingOrder.vendorId);
-      if (vendor && permissions.canEditVendors && to !== (vendor.contactEmail || '')) {
-        await updateVendor({ ...vendor, contactEmail: to });
+      if (
+        vendor &&
+        permissions.canEditVendors &&
+        (to !== (vendor.contactEmail || '') ||
+          (cc.join(', ') || '') !== (vendor.contactEmailCc || ''))
+      ) {
+        await updateVendor({
+          ...vendor,
+          contactEmail: to,
+          contactEmailCc: cc.join(', ') || undefined
+        });
       }
 
       if (emailingOrder.status === 'draft') {
@@ -2392,6 +2414,12 @@ export function PurchasingWorkspace({
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 />
               </label>
+              <EmailCcSection
+                value={emailCc}
+                onChange={setEmailCc}
+                toEmail={emailTo}
+                disabled={emailSending}
+              />
               <OutboundReplySelect
                 tenantId={tenantId}
                 value={poReplyTo}

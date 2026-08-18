@@ -99,6 +99,43 @@ function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+const MAX_CC_RECIPIENTS = 20;
+
+function splitEmailList(value: unknown): string[] {
+  const parts = Array.isArray(value)
+    ? value.flatMap((entry) => String(entry || '').split(/[,;\s]+/))
+    : String(value || '').split(/[,;\s]+/);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of parts) {
+    const email = raw.trim().toLowerCase();
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
+}
+
+function parseCcRecipients(value: unknown, to: string): string[] {
+  const toNorm = String(to || '').trim().toLowerCase();
+  const cc = splitEmailList(value).filter((email) => email !== toNorm);
+  if (!cc.length) return [];
+  const invalid = cc.filter((email) => !looksLikeEmail(email));
+  if (invalid.length) {
+    throw Object.assign(
+      new Error(`These CC addresses are not valid: ${invalid.join(', ')}`),
+      { status: 400 }
+    );
+  }
+  if (cc.length > MAX_CC_RECIPIENTS) {
+    throw Object.assign(
+      new Error(`You can CC at most ${MAX_CC_RECIPIENTS} addresses.`),
+      { status: 400 }
+    );
+  }
+  return cc;
+}
+
 function newIdentityId(): string {
   return `email_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -166,6 +203,7 @@ async function sendViaResend(params: {
   fromName: string;
   replyTo: string;
   to: string;
+  cc?: string[];
   subject: string;
   text?: string;
   html?: string;
@@ -195,6 +233,7 @@ async function sendViaResend(params: {
     body: JSON.stringify({
       from: fromHeader,
       to: [params.to],
+      ...(params.cc?.length ? { cc: params.cc } : {}),
       reply_to: params.replyTo,
       subject: params.subject,
       text: params.text,
@@ -219,12 +258,13 @@ async function sendViaResend(params: {
 export async function sendTenantInvoiceEmail(params: {
   tenantId: string;
   to: string;
+  cc?: string[] | string;
   subject: string;
   text?: string;
   html?: string;
   fromNameOverride?: string;
   fromEmailOverride?: string;
-}): Promise<{ messageId: string; fromEmail: string; fromName: string }> {
+}): Promise<{ messageId: string; fromEmail: string; fromName: string; cc: string[] }> {
   const integration = await loadIntegration(params.tenantId);
   const identities = identitiesFromDoc(integration);
   if (!identities.length) {
@@ -257,11 +297,17 @@ export async function sendTenantInvoiceEmail(params: {
   const fromName =
     (params.fromNameOverride || chosen.fromName || integration?.fromName || '').trim() || 'Nursery';
   const replyTo = chosen.fromEmail;
+  const to = String(params.to || '').trim().toLowerCase();
+  if (!looksLikeEmail(to)) {
+    throw Object.assign(new Error('Enter a valid To email address.'), { status: 400 });
+  }
+  const cc = parseCcRecipients(params.cc, to);
 
   const messageId = await sendViaResend({
     fromName,
     replyTo,
-    to: params.to,
+    to,
+    cc,
     subject: params.subject,
     text: params.text,
     html: params.html
@@ -270,7 +316,8 @@ export async function sendTenantInvoiceEmail(params: {
   return {
     messageId,
     fromEmail: replyTo,
-    fromName
+    fromName,
+    cc
   };
 }
 
@@ -380,6 +427,7 @@ export function registerEmailRoutes(app: Express) {
     withAuth(req, res, async (uid) => {
       const tenantId = String(req.body?.tenantId || '');
       const to = String(req.body?.to || '').trim();
+      const cc = req.body?.cc;
       const subject = String(req.body?.subject || '').trim();
       const text = typeof req.body?.text === 'string' ? req.body.text : undefined;
       const html = typeof req.body?.html === 'string' ? req.body.html : undefined;
@@ -402,6 +450,7 @@ export function registerEmailRoutes(app: Express) {
         const result = await sendTenantInvoiceEmail({
           tenantId,
           to,
+          cc,
           subject,
           text,
           html,
@@ -412,7 +461,8 @@ export function registerEmailRoutes(app: Express) {
           success: true,
           messageId: result.messageId,
           fromEmail: result.fromEmail,
-          fromName: result.fromName
+          fromName: result.fromName,
+          cc: result.cc
         });
       } catch (err: any) {
         if (

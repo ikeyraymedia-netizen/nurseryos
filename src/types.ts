@@ -134,6 +134,8 @@ export interface CustomerOrder {
   truckId?: string | null; // ID of the truck this order is assigned to
   invoiceDetails?: InvoiceDetails; // Optional saved invoice customization
   customerEmail?: string; // Contact email for invoicing
+  /** Comma-separated CC list remembered from the last send. */
+  customerEmailCc?: string;
   emailSentAt?: string; // Timestamp of when the last invoice was emailed
   stagedLocation?: string; // Where this order is staged out
   owner?: string; // Sales rep this order/invoice is credited to
@@ -143,6 +145,8 @@ export interface Customer {
   id: string;
   name: string;
   contactEmail?: string;
+  /** Optional CC list for invoices, estimates, and statements. */
+  contactEmailCc?: string;
   phone?: string;
   /** Bill-to company / person name (defaults to `name` when empty). */
   billingName?: string;
@@ -207,6 +211,8 @@ export interface CustomerDocument {
   billToName: string;
   billToAddress?: string;
   customerEmail?: string;
+  /** Comma-separated CC list for this document’s email. */
+  customerEmailCc?: string;
   owner?: string; // Sales rep credited for this invoice/estimate
   items: CustomerDocumentLineItem[];
   subtotal: number;
@@ -340,6 +346,8 @@ export interface Vendor {
   id: string;
   name: string;
   contactEmail?: string;
+  /** Optional CC list when emailing purchase orders. */
+  contactEmailCc?: string;
   phone?: string;
   contactName?: string;
   billingAddress?: string;

@@ -793,7 +793,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ${t('invoice.payOnlineButton', { amount: balanceDue.toFixed(2) })}
           </a>
           <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
-            ${t(useQboPayLinks ? 'invoice.payOnlineSecureQb' : 'invoice.payOnlineSecure')}<br/>
+            ${t('invoice.payOnlineLinkFallback')}<br/>
             <a href="${payUrl}" style="color: #5b21b6; word-break: break-all;">${payUrl}</a>
           </p>
         </div>`
@@ -2772,9 +2772,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       placeholder={t('invoice.emailPlaceholder')}
                       className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 text-xs"
                     />
-                    <p className="mt-1 text-[9px] text-slate-500 leading-relaxed">
-                      {t('invoice.toEmailHint')}
-                    </p>
                   </div>
 
                   <EmailCcSection

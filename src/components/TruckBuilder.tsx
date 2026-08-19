@@ -4,6 +4,7 @@ import { addTruck, updateTruck } from '../lib/db';
 import { X, Check, Save, Truck as TruckIcon, HelpCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
 import { toDateKey } from '../lib/dates';
+import { dropNumber, loadNumber } from '../lib/loadSequence';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { useT } from '../lib/i18n';
 
@@ -392,25 +393,29 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                   const isFirst = index === 0;
                   const isLast = index === selectedOrderIds.length - 1;
 
+                  const loadN = loadNumber(selectedOrderIds, id);
+                  const dropN = dropNumber(selectedOrderIds, id);
+                  const ordinal = (n: number) =>
+                    n === 1
+                      ? t('truckBuilder.first')
+                      : n === 2
+                        ? t('truckBuilder.second')
+                        : n === 3
+                          ? t('truckBuilder.third')
+                          : t('truckBuilder.nth', { n });
+
                   return (
                     <div
                       key={id}
                       className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-150 shadow-sm gap-3 hover:border-gray-300 transition-all"
                     >
                       <div className="flex items-center space-x-3 min-w-0">
-                        {/* Position Badge */}
-                        <div className="w-14 shrink-0 flex flex-col items-center justify-center bg-ink-50 text-ink-800 border border-ink-100 rounded-lg py-1.5 font-mono">
-                          <span className="text-[9px] font-black leading-none uppercase tracking-wide opacity-80">
-                            {t('truckBuilder.loadOrdinal')}
+                        <div className="w-[4.25rem] shrink-0 flex flex-col items-center justify-center bg-ink-50 text-ink-800 border border-ink-100 rounded-lg py-1.5 font-mono gap-1">
+                          <span className="text-[8px] font-black leading-none uppercase tracking-wide opacity-80">
+                            {t('truckBuilder.loadOrdinal')} {ordinal(loadN)}
                           </span>
-                          <span className="text-xs font-black mt-1 leading-none text-ink-950">
-                            {index === 0
-                              ? t('truckBuilder.first')
-                              : index === 1
-                                ? t('truckBuilder.second')
-                                : index === 2
-                                  ? t('truckBuilder.third')
-                                  : t('truckBuilder.nth', { n: index + 1 })}
+                          <span className="text-[8px] font-black leading-none uppercase tracking-wide text-ink-950">
+                            {t('truckBuilder.dropOrdinal')} {ordinal(dropN)}
                           </span>
                         </div>
 

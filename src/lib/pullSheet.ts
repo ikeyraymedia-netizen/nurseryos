@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { CustomerOrder, Truck } from '../types';
+import { truckCustomerOrders } from './loadSequence';
 
 function normalizeLineKey(plantName: string, containerSize: string): string {
   return `${plantName.trim().toLowerCase()}::${containerSize.trim().toLowerCase()}`;
@@ -33,15 +34,7 @@ export function downloadTruckPullSheetPdf(params: {
   nurseryName?: string;
 }): void {
   const { truck, orders, nurseryName = 'NurseryOS' } = params;
-  const truckOrders = orders
-    .filter((o) => truck.orderIds.includes(o.id) || o.truckId === truck.id)
-    .sort((a, b) => {
-      const idxA = truck.orderIds.indexOf(a.id);
-      const idxB = truck.orderIds.indexOf(b.id);
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      return idxA - idxB;
-    });
+  const truckOrders = truckCustomerOrders(orders, truck);
 
   const consolidated = new Map<
     string,

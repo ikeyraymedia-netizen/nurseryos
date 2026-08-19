@@ -40,6 +40,7 @@ import {
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
 import { downloadTruckPullSheetPdf } from '../lib/pullSheet';
+import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 
@@ -89,15 +90,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   function handleDownloadPullSheet() {
     setPullSheetBusy(true);
     try {
-      const sheetOrders = orders
-        .filter((o) => truck.orderIds.includes(o.id) || o.truckId === truck.id)
-        .sort((a, b) => {
-          const idxA = truck.orderIds.indexOf(a.id);
-          const idxB = truck.orderIds.indexOf(b.id);
-          if (idxA === -1) return 1;
-          if (idxB === -1) return -1;
-          return idxA - idxB;
-        });
+      const sheetOrders = truckCustomerOrders(orders, truck);
       downloadTruckPullSheetPdf({
         truck,
         orders: sheetOrders,
@@ -138,16 +131,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [standaloneNotes, setStandaloneNotes] = useState('');
   const [standaloneError, setStandaloneError] = useState<string | null>(null);
 
-  // Filter orders belonging to this truck, sorted by their designated loading sequence
-  const truckOrders = orders
-    .filter((o) => truck.orderIds.includes(o.id) || o.truckId === truck.id)
-    .sort((a, b) => {
-      const idxA = truck.orderIds.indexOf(a.id);
-      const idxB = truck.orderIds.indexOf(b.id);
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      return idxA - idxB;
-    });
+  // Filter orders belonging to this truck, sorted by loading sequence (first loaded first)
+  const truckOrders = truckCustomerOrders(orders, truck);
 
   // Fallback to auto-open first order if none expanded
   const handleToggleOrderExpansion = (orderId: string) => {
@@ -938,7 +923,17 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
               const loadedItems = order.items.reduce((sum, item) => sum + item.loadedQuantity, 0);
               const orderPercentage = totalItems > 0 ? Math.round((loadedItems / totalItems) * 100) : 0;
-              const loadIndex = truck.orderIds ? truck.orderIds.indexOf(order.id) : -1;
+              const ids = truckOrderIds(truck);
+              const loadN = loadNumber(ids, order.id);
+              const dropN = dropNumber(ids, order.id);
+              const ordinal = (n: number) =>
+                n === 1
+                  ? t('truckBuilder.first')
+                  : n === 2
+                    ? t('truckBuilder.second')
+                    : n === 3
+                      ? t('truckBuilder.third')
+                      : t('truckBuilder.nth', { n });
               const orderTrailerPct = calculateWeightPercentage(order.totalWeightLbs, truck.truckType);
 
               return (
@@ -957,10 +952,15 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
-                        {loadIndex !== -1 && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-ink-100 text-ink-800 border border-ink-250/30 font-mono tracking-wide">
-                            {loadIndex === 0 ? '1ST TO LOAD' : loadIndex === 1 ? '2ND TO LOAD' : loadIndex === 2 ? '3RD TO LOAD' : `${loadIndex + 1}TH TO LOAD`}
-                          </span>
+                        {loadN > 0 && (
+                          <>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-ink-100 text-ink-800 border border-ink-250/30 font-mono tracking-wide">
+                              {t('truckBuilder.toLoad', { ordinal: ordinal(loadN) })}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-800 border border-slate-300 font-mono tracking-wide">
+                              {t('truckBuilder.toDrop', { ordinal: ordinal(dropN) })}
+                            </span>
+                          </>
                         )}
                         <h4 className="text-sm font-bold text-gray-900 truncate">
                           {order.customerName}

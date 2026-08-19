@@ -7,6 +7,7 @@ import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
 import { useT, useLocale } from '../lib/i18n';
 import { imageSrcToDataUrl, resolveNurseryLogoSrc } from '../lib/nurseryBranding';
+import { sortOrdersByDropSequence } from '../lib/loadSequence';
 
 interface BillOfLadingModalProps {
   isOpen: boolean;
@@ -36,19 +37,10 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const { locale } = useLocale();
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const truckName = String(truck?.name || t('bol.defaultTruckName'));
-  const orderIds = Array.isArray(truck?.orderIds) ? truck.orderIds : [];
   const safeOrders = Array.isArray(orders) ? orders : [];
 
-  // Sort orders by the designated loading sequence on the truck
-  const sortedOrders = safeOrders
-    .filter((o) => orderIds.includes(o.id) || o.truckId === truck?.id)
-    .sort((a, b) => {
-      const idxA = orderIds.indexOf(a.id);
-      const idxB = orderIds.indexOf(b.id);
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      return idxA - idxB;
-    });
+  // Delivery / drop sequence: last loaded is Stop 1
+  const sortedOrders = sortOrdersByDropSequence(safeOrders, truck);
 
   // State for document selection: 'consolidated' or a specific customer order ID
   const [selectedBOLType, setSelectedBOLType] = useState<'consolidated' | string>('consolidated');

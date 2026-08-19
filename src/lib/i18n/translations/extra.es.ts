@@ -74,9 +74,9 @@ const extra = {
     statusLoaded: 'Estado: cargado',
     status: 'Estado: {{status}}',
     plants: 'plantas',
-    sequenceHint: 'La primera parada se carga al final (LIFO). Arrastre o use flechas para reordenar.',
+    sequenceHint: 'Lo último que se carga se entrega primero. Arrastre o use flechas para reordenar.',
     sequenceDetail:
-      'Especifique el orden en que se cargarán físicamente estos envíos (ej. 1.º, 2.º, 3.º). Use las flechas para reordenar.',
+      'El orden de carga es el inverso del de entrega. Lo primero que sube al camión se entrega al final. Use las flechas para reordenar.',
     ordersAssigned: '{{n}} asignados',
     driverNotesPlaceholder:
       'ej. Cargar macetas #45 pesadas primero, amarrar lona, separar pedidos de Lafayette cerca de la cabina...',
@@ -86,6 +86,9 @@ const extra = {
       '⚠️ ADVERTENCIA DE SOBREPESO: Excede el límite de capacidad de {{type}} de {{limit}} lbs. Considere dividir.',
     selectedTrailer: 'remolque seleccionado',
     loadOrdinal: 'CARGA',
+    dropOrdinal: 'ENTREGA',
+    toLoad: '{{ordinal}} EN CARGA',
+    toDrop: '{{ordinal}} EN ENTREGA',
     first: '1.º',
     second: '2.º',
     third: '3.º',

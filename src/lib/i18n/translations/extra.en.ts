@@ -74,9 +74,9 @@ const extra = {
     statusLoaded: 'Status: loaded',
     status: 'Status: {{status}}',
     plants: 'plants',
-    sequenceHint: 'First stop loads last (LIFO). Drag or use arrows to reorder.',
+    sequenceHint: 'Last loaded drops first. Drag or use arrows to reorder.',
     sequenceDetail:
-      'Specify the sequence in which these customer shipments will be physically loaded onto the truck (e.g. 1st, 2nd, 3rd). Use the arrows to reorder.',
+      'Load sequence is the opposite of drop sequence. First onto the truck comes off last. Use the arrows to reorder.',
     ordersAssigned: '{{n}} Assigned',
     driverNotesPlaceholder:
       'e.g. Load heavy #45 first, tie down canvas securely, separate Lafayette orders near cab...',
@@ -86,6 +86,9 @@ const extra = {
       '⚠️ OVERWEIGHT WARNING: Exceeds {{type}} capacity limit of {{limit}} lbs. Consider splitting.',
     selectedTrailer: 'selected trailer',
     loadOrdinal: 'LOAD',
+    dropOrdinal: 'DROP',
+    toLoad: '{{ordinal}} TO LOAD',
+    toDrop: '{{ordinal}} TO DROP',
     first: '1st',
     second: '2nd',
     third: '3rd',

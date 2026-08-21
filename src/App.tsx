@@ -687,14 +687,17 @@ function NurseryApp({
   const selectedOrder = dynamicOrders.find((o) => o.id === selectedOrderId);
   const documentModalOrder = useMemo(() => {
     if (!documentModal) return null;
+    // Prefer the live order when it still exists; saved invoices must open even after
+    // the plant order was deleted.
     if (documentModal.orderId) {
-      return dynamicOrders.find((o) => o.id === documentModal.orderId) || null;
+      const live = dynamicOrders.find((o) => o.id === documentModal.orderId);
+      if (live) return live;
     }
     const doc = documentModal.existingDocument;
     if (doc) {
-      // Synthetic order so estimate-only documents can open in InvoiceModal
+      // Synthetic order from the saved document (invoice / estimate / credit memo)
       return {
-        id: `preview-${doc.id}`,
+        id: doc.orderId || `preview-${doc.id}`,
         customerName: doc.customerName,
         customerId: doc.customerId,
         orderNumber: doc.orderNumber || doc.documentNumber,
@@ -708,6 +711,9 @@ function NurseryApp({
           unitCost: item.unitCost,
           notes: item.notes,
           substitutes: item.substitutes,
+          unavailable: item.unavailable,
+          includePhotoLink: item.includePhotoLink,
+          photoUrl: item.photoUrl,
           vendor: item.vendor
         })),
         originalText: '',

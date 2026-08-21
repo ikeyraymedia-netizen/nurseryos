@@ -2297,11 +2297,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         </div>
       )}
       
-      {/* Modal Container */}
-      <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">
+      {/* Modal Container — on mobile stack naturally so the preview isn't flex-collapsed to 0 height */}
+      <div className="bg-white w-full max-w-5xl rounded-3xl border border-gray-150 shadow-2xl overflow-visible md:overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:rounded-none">
         
         {/* Left Side: Customize Form (Hidden during print) */}
-        <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-6 flex flex-col space-y-4 shrink-0 print:hidden overflow-y-auto max-h-[90vh] md:max-h-[85vh]">
+        <div className="w-full md:w-80 bg-slate-50 border-r border-gray-150 p-4 md:p-6 flex flex-col space-y-4 shrink-0 print:hidden md:overflow-y-auto md:max-h-[85vh] order-2 md:order-1">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-900 font-sans tracking-tight uppercase flex items-center">
               <FileCheck className="h-4 w-4 mr-2 text-ink-800" />
@@ -3054,20 +3054,20 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         </div>
 
         {/* Right Side / Document Preview (Becomes full-page on print) */}
-        <div className="flex-1 bg-white p-6 md:p-10 flex flex-col min-h-0 print:p-0">
+        <div className="flex-none md:flex-1 bg-white p-4 md:p-10 flex flex-col md:min-h-0 print:p-0 order-1 md:order-2">
           
           {/* Action header inside modal (Hidden during print) */}
-          <div className="flex justify-between items-center pb-4 mb-6 border-b border-gray-150 print:hidden">
-            <div>
+          <div className="flex justify-between items-center pb-3 mb-4 border-b border-gray-150 print:hidden">
+            <div className="min-w-0 pr-2">
               <h2 className="text-base font-black text-gray-900 flex items-center">
-                <FileCheck className="h-5 w-5 mr-1.5 text-ink-700" />
+                <FileCheck className="h-5 w-5 mr-1.5 text-ink-700 shrink-0" />
                 {docLabel} Preview
               </h2>
               <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
                 Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 shrink-0">
               <button
                 onClick={handlePrint}
                 className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
@@ -3085,11 +3085,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             </div>
           </div>
 
-          {/* Printable Document Sheet */}
-          <div className="flex-1 overflow-y-auto pr-2 print:overflow-visible print:pr-0">
+          {/* Printable Document Sheet — natural height on mobile; scroll pane on desktop */}
+          <div className="md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2 print:overflow-visible print:pr-0">
             <div
               ref={printRef}
-              className="border border-gray-300 p-5 sm:p-6 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal"
+              className="border border-gray-300 p-3 sm:p-6 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal overflow-x-auto"
             >
               
               {/* STYLE TAG FOR PRINT WORKAROUNDS */}
@@ -3242,8 +3242,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               </div>
 
               {/* Items Table */}
-              <div className="py-3">
-                <table className="w-full text-left border-collapse">
+              <div className="py-3 overflow-x-auto -mx-1 px-1">
+                <table className="w-full min-w-[28rem] text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
                       <th className="pb-1 text-left">{t('invoice.plantVarietyName')}</th>

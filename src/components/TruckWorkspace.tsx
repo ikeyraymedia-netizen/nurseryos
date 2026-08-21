@@ -1268,14 +1268,14 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           const isEditing = editingItemId === `${order.id}-${item.id}` && permissions.canEditOrders;
 
                           return (
-                            <div key={item.id} className="py-3">
+                            <div key={item.id} className="py-1.5">
                               {isEditing ? (
                                 <form
                                   onSubmit={(e) => {
                                     e.preventDefault();
                                     handleSaveEditedItem(order, item.id);
                                   }}
-                                  className="space-y-3 bg-slate-50 border border-slate-200 rounded-lg p-3 w-full"
+                                  className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-2 w-full"
                                 >
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                     <div className="sm:col-span-2">
@@ -1368,7 +1368,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                   </div>
                                 </form>
                               ) : (
-                                <div className="flex flex-col gap-3 w-full">
+                                <div className="flex flex-col gap-1.5 w-full">
                                   <div className="min-w-0">
                                     <div className="text-xs font-bold text-gray-900 flex items-center flex-wrap gap-1.5">
                                       <span>{dp.plant(item.plantName)}</span>
@@ -1416,8 +1416,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                   </div>
 
                                   {/* Pulled + Loaded — stacked on mobile so controls aren't clipped */}
-                                  <div className="grid grid-cols-2 gap-3 w-full border-t border-gray-100 pt-3 sm:flex sm:items-start sm:justify-end sm:gap-4 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto">
-                                    <div className="flex flex-col items-center gap-1.5 bg-teal-50/40 border border-teal-200/60 rounded-xl p-2.5">
+                                  <div className="grid grid-cols-2 gap-2 w-full border-t border-gray-100 pt-1.5 sm:flex sm:items-start sm:justify-end sm:gap-3 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto">
+                                    <div className="flex flex-col items-center gap-1 bg-teal-50/40 border border-teal-200/60 rounded-lg p-1.5">
                                       <label className="text-[10px] font-bold text-teal-700 uppercase tracking-wide cursor-pointer select-none">
                                         {t('loader.pulled')}
                                       </label>
@@ -1450,7 +1450,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         </button>
                                       </div>
                                     </div>
-                                    <div className="flex flex-col items-center gap-1.5 bg-ink-50/40 border border-ink-200/60 rounded-xl p-2.5">
+                                    <div className="flex flex-col items-center gap-1 bg-ink-50/40 border border-ink-200/60 rounded-lg p-1.5">
                                       <label className="text-[10px] font-bold text-ink-700 uppercase tracking-wide cursor-pointer select-none">
                                         {t('loader.loaded')}
                                       </label>

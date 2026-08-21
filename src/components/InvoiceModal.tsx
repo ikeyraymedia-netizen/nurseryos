@@ -3089,7 +3089,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           <div className="flex-1 overflow-y-auto pr-2 print:overflow-visible print:pr-0">
             <div
               ref={printRef}
-              className="border border-gray-300 p-8 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal"
+              className="border border-gray-300 p-5 sm:p-6 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal"
             >
               
               {/* STYLE TAG FOR PRINT WORKAROUNDS */}
@@ -3125,17 +3125,17 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               `}} />
 
               {/* Document Header */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-3 border-b border-gray-300">
                 <div className="flex items-start gap-3">
                   {logoSrc ? (
                     <img
                       src={logoSrc}
                       alt={`${nurseryName} logo`}
-                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl border border-ink-100 bg-white shadow-sm shrink-0"
+                      className="h-14 w-14 sm:h-16 sm:w-16 object-contain rounded-xl border border-ink-100 bg-white shadow-sm shrink-0"
                     />
                   ) : null}
                   <div className="min-w-0">
-                    <h1 className="text-2xl font-black tracking-tight text-ink-950 uppercase leading-none">
+                    <h1 className="text-xl font-black tracking-tight text-ink-950 uppercase leading-none">
                       {nurseryName}
                     </h1>
                     <p className="text-xs text-gray-500 font-mono font-bold mt-1 uppercase tracking-widest">
@@ -3195,7 +3195,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               </div>
 
               {/* Bill To & Ship To section */}
-              <div className={`grid grid-cols-1 gap-6 py-6 border-b border-gray-300 ${isCreditMemo ? '' : 'md:grid-cols-2'}`}>
+              <div className={`grid grid-cols-1 gap-4 py-3 border-b border-gray-300 ${isCreditMemo ? '' : 'md:grid-cols-2'}`}>
                 <div>
                   <h3 className="text-xs font-black font-mono uppercase text-ink-800 tracking-wider mb-2">
                     Bill To Customer:
@@ -3242,16 +3242,16 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               </div>
 
               {/* Items Table */}
-              <div className="py-6">
+              <div className="py-3">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
-                      <th className="pb-2 text-left">{t('invoice.plantVarietyName')}</th>
-                      <th className="pb-2 text-center w-28">{t('invoice.potSize')}</th>
-                      <th className="pb-2 text-center w-20">Quantity</th>
-                      <th className="pb-2 text-right w-28">{t('invoice.unitPrice')}</th>
-                      <th className="pb-2 text-right w-24">Total</th>
-                      {canEditLines && <th className="pb-2 w-10 print:hidden" />}
+                      <th className="pb-1 text-left">{t('invoice.plantVarietyName')}</th>
+                      <th className="pb-1 text-center w-28">{t('invoice.potSize')}</th>
+                      <th className="pb-1 text-center w-20">Quantity</th>
+                      <th className="pb-1 text-right w-28">{t('invoice.unitPrice')}</th>
+                      <th className="pb-1 text-right w-24">Total</th>
+                      {canEditLines && <th className="pb-1 w-10 print:hidden" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -3271,7 +3271,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               : 'text-gray-800'
                           }`}
                         >
-                          <td className="py-3">
+                          <td className="py-1.5">
                             {canEditLines ? (
                               <input
                                 type="text"
@@ -3325,7 +3325,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                             {documentType === 'estimate' ? (
                               <>
                               {canEditLines && (
-                                <div className="mt-1.5 space-y-1.5 print:hidden">
+                                <div className="mt-1 space-y-1 print:hidden">
                                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                                     <label className="inline-flex items-center gap-1.5 cursor-pointer">
                                       <input
@@ -3505,7 +3505,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               </span>
                             ) : null}
                           </td>
-                          <td className={`py-3 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-500'}`}>
+                          <td className={`py-1.5 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-500'}`}>
                             {canEditLines ? (
                               <input
                                 type="text"
@@ -3522,7 +3522,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               item.containerSize
                             )}
                           </td>
-                          <td className={`py-3 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-900'}`}>
+                          <td className={`py-1.5 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-900'}`}>
                             {canEditLines ? (
                               <input
                                 type="number"
@@ -3542,7 +3542,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               qty
                             )}
                           </td>
-                          <td className="py-3 text-right">
+                          <td className="py-1.5 text-right">
                             {/* Inline editable price */}
                             <div className={`inline-flex items-center justify-end ${unavailable ? 'opacity-40' : ''}`}>
                               <span className="price-input-prefix text-[10px] text-slate-400 font-mono font-bold mr-0.5">$</span>
@@ -3556,11 +3556,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               />
                             </div>
                           </td>
-                          <td className={`py-3 text-right font-mono font-black ${unavailable ? 'text-slate-400' : 'text-gray-950'}`}>
+                          <td className={`py-1.5 text-right font-mono font-black ${unavailable ? 'text-slate-400' : 'text-gray-950'}`}>
                             {unavailable ? '—' : `$${total.toFixed(2)}`}
                           </td>
                           {canEditLines && (
-                            <td className="py-3 text-right print:hidden">
+                            <td className="py-1.5 text-right print:hidden">
                               <button
                                 type="button"
                                 onClick={() => removeDraftLine(item.id)}

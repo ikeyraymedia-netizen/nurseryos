@@ -140,7 +140,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
       </div>
 
       {/* Orders Scroller */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[500px] lg:max-h-[600px] min-h-[300px]">
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px] lg:max-h-[600px] min-h-[300px]">
         {filteredOrders.length === 0 ? (
           <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-300">
             <p className="text-sm font-semibold text-gray-700">{t('orders.noOrders')}</p>
@@ -157,7 +157,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
               <div
                 key={order.id}
                 onClick={() => onSelectOrder(order.id)}
-                className={`group relative border-2 rounded-xl p-4 cursor-pointer transition-all duration-150 flex flex-col justify-between ${
+                className={`group relative border rounded-xl p-3 cursor-pointer transition-all duration-150 flex flex-col justify-between ${
                   isSelected
                     ? 'border-ink-600 bg-ink-50/40 shadow-sm ring-1 ring-ink-500/20'
                     : 'border-slate-200/90 bg-white hover:border-ink-600 hover:bg-ink-50/10 hover:shadow-md shadow-sm'

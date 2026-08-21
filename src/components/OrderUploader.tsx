@@ -440,7 +440,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           orderNumber:
             pendingDraft.orderNumber !== 'N/A' ? pendingDraft.orderNumber : undefined,
           type: 'estimate',
-          documentNumber: await nextDocumentNumber('estimate'),
+          documentNumber: await nextDocumentNumber('estimate', {
+            considerQuickbooks: true,
+            tenantId
+          }),
           documentDate,
           paymentTerms: linked.paymentTerms || 'Net 30',
           taxRate,

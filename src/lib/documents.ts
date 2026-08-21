@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { CustomerDocument, CustomerDocumentType } from '../types';
-import { deleteLinkedQuickbooksDocument } from './quickbooks';
+import { deleteLinkedQuickbooksDocument, fetchHighestQuickbooksDocNumber } from './quickbooks';
 
 let activeTenantId: string | null = null;
 
@@ -203,15 +203,41 @@ export function parseSequentialDocumentNumber(
  * Estimates: EST-1000…
  * Credit memos: CM-1000…
  * Continues from the highest existing number of that type (never below 1000).
+ * When QuickBooks is connected, also skips numbers already used in QBO
+ * (e.g. invoices created only in QuickBooks).
  */
-export async function nextDocumentNumber(type: CustomerDocumentType): Promise<string> {
+export async function nextDocumentNumber(
+  type: CustomerDocumentType,
+  opts?: { considerQuickbooks?: boolean; tenantId?: string }
+): Promise<string> {
   const docs = await listAllDocuments();
   let max = DOCUMENT_NUMBER_START - 1;
   for (const d of docs) {
     if (d.type !== type) continue;
     const n = parseSequentialDocumentNumber(d.documentNumber, type);
     if (n != null && Number.isFinite(n) && n > max) max = n;
+    // Also honor numbers QuickBooks assigned (may be plain digits without EST-/CM-).
+    const qboRaw = String(d.qboDocNumber || '').trim();
+    if (qboRaw) {
+      const qboN =
+        parseSequentialDocumentNumber(qboRaw, type) ??
+        (/^\d+$/.test(qboRaw) ? Number(qboRaw) : null);
+      if (qboN != null && Number.isFinite(qboN) && qboN > max) max = qboN;
+    }
   }
+
+  if (opts?.considerQuickbooks) {
+    const tenantId = opts.tenantId || activeTenantId;
+    if (tenantId) {
+      try {
+        const qboMax = await fetchHighestQuickbooksDocNumber(tenantId, type);
+        if (qboMax != null && qboMax > max) max = qboMax;
+      } catch (err) {
+        console.warn('[documents] could not read QBO doc numbers', err);
+      }
+    }
+  }
+
   const next = Math.max(max + 1, DOCUMENT_NUMBER_START);
   if (type === 'estimate') return `EST-${next}`;
   if (type === 'credit_memo') return `CM-${next}`;

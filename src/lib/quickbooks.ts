@@ -68,6 +68,7 @@ export async function pushDocumentToQuickbooks(params: {
   qboInvoiceId: string;
   qboDocType: string;
   qboDocNumber?: string | null;
+  documentNumber?: string | null;
   qboInvoiceLink?: string | null;
   customerName?: string | null;
   totalAmt?: number | null;
@@ -92,6 +93,7 @@ export async function pushDocumentToQuickbooks(params: {
     qboInvoiceId: String(data.qboInvoiceId),
     qboDocType: String(data.qboDocType || 'invoice'),
     qboDocNumber: data.qboDocNumber ? String(data.qboDocNumber) : null,
+    documentNumber: data.documentNumber ? String(data.documentNumber) : null,
     qboInvoiceLink: data.qboInvoiceLink ? String(data.qboInvoiceLink) : null,
     customerName: data.customerName ? String(data.customerName) : null,
     totalAmt: data.totalAmt != null ? Number(data.totalAmt) : null,
@@ -272,6 +274,30 @@ export async function fetchRecentQuickbooksInvoices(tenantId: string): Promise<{
   );
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
+}
+
+/** Highest numeric DocNumber in QBO for this document type (null if disconnected). */
+export async function fetchHighestQuickbooksDocNumber(
+  tenantId: string,
+  type: 'invoice' | 'estimate' | 'credit_memo' = 'invoice'
+): Promise<number | null> {
+  const res = await fetch(
+    `/api/quickbooks/highest-doc-number?tenantId=${encodeURIComponent(tenantId)}&type=${encodeURIComponent(type)}`,
+    { headers: await authHeaders() }
+  );
+  if (!res.ok) {
+    // Don't block local numbering if QBO is briefly unreachable.
+    console.warn('[quickbooks] highest-doc-number failed', await readApiError(res));
+    return null;
+  }
+  const data = (await res.json().catch(() => ({}))) as {
+    connected?: boolean;
+    highest?: number | null;
+  };
+  if (!data.connected) return null;
+  return typeof data.highest === 'number' && Number.isFinite(data.highest)
+    ? data.highest
+    : null;
 }
 
 export async function deleteLinkedQuickbooksDocument(params: {

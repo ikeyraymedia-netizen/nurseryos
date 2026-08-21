@@ -254,7 +254,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setInvoiceNumber(existingNumber);
     } else {
       setInvoiceNumber(defaultDocumentNumber(type));
-      void nextDocumentNumber(type).then((num) => {
+      void nextDocumentNumber(type, {
+        considerQuickbooks: canUseQuickbooks,
+        tenantId
+      }).then((num) => {
         if (!cancelled) setInvoiceNumber(num);
       });
     }
@@ -423,7 +426,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     existingDocument?.type,
     initialDocumentType,
     customer?.id,
-    nurseryName
+    nurseryName,
+    canUseQuickbooks,
+    tenantId
   ]);
 
   useEffect(() => {
@@ -1538,10 +1543,18 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             ...prev,
             qboInvoiceId: result.qboInvoiceId,
             qboInvoiceLink: result.qboInvoiceLink || prev.qboInvoiceLink,
+            qboDocNumber: result.qboDocNumber || prev.qboDocNumber,
+            documentNumber: result.documentNumber || prev.documentNumber,
             qboSyncedAt: new Date().toISOString()
           }
         : prev
     );
+    if (result.documentNumber) {
+      const nextNum = String(result.documentNumber).trim();
+      if (nextNum && nextNum !== invoiceNumber) {
+        setInvoiceNumber(nextNum);
+      }
+    }
     if (result.qboInvoiceLink) {
       setPayLinkUrl(result.qboInvoiceLink);
       setPayLinkMessage(t('invoice.payLinkReady'));
@@ -2122,7 +2135,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   const handleDocumentTypeChange = (type: CustomerDocumentType) => {
     setDocumentType(type);
     setInvoiceNumber(defaultDocumentNumber(type));
-    void nextDocumentNumber(type).then(setInvoiceNumber);
+    void nextDocumentNumber(type, {
+      considerQuickbooks: canUseQuickbooks,
+      tenantId
+    }).then(setInvoiceNumber);
     setSaveSuccess(false);
     if (type === 'credit_memo' || type === 'estimate') {
       setCreditLines((prev) => {

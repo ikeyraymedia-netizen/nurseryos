@@ -252,6 +252,82 @@ function isQboMissingError(err: any): boolean {
   );
 }
 
+/** Duplicate DocNumber when creating invoices/estimates/credit memos in QBO. */
+function isDuplicateDocNumberError(err: any): boolean {
+  const code = String(err?.qboCode || '');
+  const msg = String(err?.message || '').toLowerCase();
+  return (
+    code === '6140' ||
+    code === '5010' ||
+    msg.includes('duplicate document number') ||
+    (msg.includes('docnumber') && msg.includes('duplicate')) ||
+    (msg.includes('document number') && msg.includes('already'))
+  );
+}
+
+/** Pull a sequential integer out of a QBO DocNumber (1001, INV-1001, EST-1001, …). */
+function parseLooseNumericDocNumber(raw: unknown): number | null {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  const prefixed = s.match(/^(?:EST|CM|INV)[- ]?(\d+)$/i);
+  if (prefixed) {
+    const n = Number(prefixed[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+  const digits = s.match(/\d+/g);
+  if (!digits?.length) return null;
+  const n = Number(digits[digits.length - 1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatNurseryDocNumber(
+  kind: 'invoice' | 'estimate' | 'credit_memo',
+  n: number
+): string {
+  if (kind === 'estimate') return `EST-${n}`;
+  if (kind === 'credit_memo') return `CM-${n}`;
+  return String(n);
+}
+
+/**
+ * Highest numeric DocNumber currently used in QuickBooks for this txn type.
+ * Used so NurseryOS does not reuse numbers that were issued only in QBO.
+ */
+async function fetchHighestQboNumericDocNumber(
+  tenantId: string,
+  kind: 'invoice' | 'estimate' | 'credit_memo'
+): Promise<number | null> {
+  const entity =
+    kind === 'estimate' ? 'Estimate' : kind === 'credit_memo' ? 'CreditMemo' : 'Invoice';
+  try {
+    const result = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/query?query=${encodeURIComponent(
+        `SELECT DocNumber FROM ${entity} MAXRESULTS 1000`
+      )}&minorversion=65`
+    );
+    const rows = result?.QueryResponse?.[entity] || [];
+    let max: number | null = null;
+    for (const row of rows) {
+      const n = parseLooseNumericDocNumber(row?.DocNumber);
+      if (n == null) continue;
+      if (max == null || n > max) max = n;
+    }
+    return max;
+  } catch (err: any) {
+    console.warn(
+      `[quickbooks] could not read highest ${entity} DocNumber:`,
+      err?.message || err
+    );
+    return null;
+  }
+}
+
 type QboTxnKind = 'invoice' | 'estimate' | 'credit_memo' | 'bill';
 
 function qboTxnSpec(kind: QboTxnKind): { path: string; entity: string; ui: string } {
@@ -1484,6 +1560,7 @@ async function pushDocumentToQboInternal(
   qboInvoiceId: string;
   qboDocType: string;
   qboDocNumber: string | null;
+  documentNumber: string | null;
   qboInvoiceLink: string | null;
   qboOpenUrl: string | null;
   customerName: string | null;
@@ -1540,17 +1617,39 @@ async function pushDocumentToQboInternal(
     qboRequest<any>(tenantId, 'POST', `/${spec.path}?minorversion=65`, body);
 
   let written: any;
+  let documentNumberOverride: string | null = null;
+  const attemptWriteWithFallback = async (body: any) => {
+    try {
+      return await attemptWrite(body);
+    } catch (err) {
+      if (body?.CustomField) {
+        const withoutCustomField = { ...body };
+        delete withoutCustomField.CustomField;
+        console.warn(
+          '[quickbooks] push with CustomField failed, retrying without it',
+          (err as any)?.message
+        );
+        return await attemptWrite(withoutCustomField);
+      }
+      throw err;
+    }
+  };
+
   try {
-    written = await attemptWrite(writeBody);
+    written = await attemptWriteWithFallback(writeBody);
   } catch (err) {
-    if (writeBody && writeBody.CustomField) {
-      const withoutCustomField = { ...writeBody };
-      delete withoutCustomField.CustomField;
+    // Create only: if QBO already used this DocNumber (invoice made in QBO),
+    // bump to the next free number and retry once.
+    if (!existing && isDuplicateDocNumberError(err)) {
+      const qboMax = (await fetchHighestQboNumericDocNumber(tenantId, kind)) || 0;
+      const localN = parseLooseNumericDocNumber(doc.documentNumber) || 0;
+      const nextN = Math.max(qboMax, localN) + 1;
+      documentNumberOverride = formatNurseryDocNumber(kind, nextN);
       console.warn(
-        '[quickbooks] push with CustomField failed, retrying without it',
-        (err as any)?.message
+        `[quickbooks] duplicate DocNumber “${doc.documentNumber}”; retrying as ${documentNumberOverride}`
       );
-      written = await attemptWrite(withoutCustomField);
+      const retryBody = { ...writeBody, DocNumber: sanitizeQbString(documentNumberOverride, 21) };
+      written = await attemptWriteWithFallback(retryBody);
     } else {
       throw err;
     }
@@ -1559,6 +1658,22 @@ async function pushDocumentToQboInternal(
   const qboId = entity?.Id ? String(entity.Id) : existing ? String(existing.Id) : null;
   if (!qboId) {
     throw new Error('QuickBooks did not return a document id.');
+  }
+
+  const qboRawDocNumber = entity?.DocNumber
+    ? String(entity.DocNumber)
+    : existing?.DocNumber
+      ? String(existing.DocNumber)
+      : documentNumberOverride;
+  // Keep NurseryOS invoice # in sync when QBO assigned / we bumped the number.
+  const resolvedNumeric =
+    parseLooseNumericDocNumber(qboRawDocNumber) ??
+    parseLooseNumericDocNumber(documentNumberOverride);
+  if (resolvedNumeric != null) {
+    const formatted = formatNurseryDocNumber(kind, resolvedNumeric);
+    if (String(doc.documentNumber || '').trim() !== formatted) {
+      documentNumberOverride = formatted;
+    }
   }
 
   const integration = await loadIntegration(tenantId);
@@ -1610,15 +1725,14 @@ async function pushDocumentToQboInternal(
     {
       qboInvoiceId: qboId,
       qboDocType: kind,
-      qboDocNumber: entity?.DocNumber
-        ? String(entity.DocNumber)
-        : existing?.DocNumber
-          ? String(existing.DocNumber)
-          : null,
+      qboDocNumber: qboRawDocNumber || null,
       qboOpenUrl: openUrl,
       qboInvoiceLink: qboInvoiceLink || null,
       qboSyncedAt: now,
       qboSyncedByUserId: uid,
+      ...(documentNumberOverride
+        ? { documentNumber: documentNumberOverride }
+        : {}),
       ...(existingId && existingId !== qboId
         ? { qboPaymentId: null, qboPaymentSyncedAt: null, qboPaymentNote: null }
         : {}),
@@ -1630,11 +1744,8 @@ async function pushDocumentToQboInternal(
   return {
     qboInvoiceId: qboId,
     qboDocType: kind,
-    qboDocNumber: entity?.DocNumber
-      ? String(entity.DocNumber)
-      : existing?.DocNumber
-        ? String(existing.DocNumber)
-        : null,
+    qboDocNumber: qboRawDocNumber || null,
+    documentNumber: documentNumberOverride || String(doc.documentNumber || '') || null,
     qboInvoiceLink,
     qboOpenUrl: openUrl,
     customerName: verifiedCustomer,
@@ -2138,6 +2249,7 @@ export function registerQuickbooksRoutes(app: Express) {
         qboInvoiceId: result.qboInvoiceId,
         qboDocType: result.qboDocType,
         qboDocNumber: result.qboDocNumber,
+        documentNumber: result.documentNumber,
         qboInvoiceLink: result.qboInvoiceLink,
         customerName: result.customerName,
         totalAmt: result.totalAmt,
@@ -2481,6 +2593,32 @@ export function registerQuickbooksRoutes(app: Express) {
         realmId: integration.realmId,
         invoices
       });
+    })
+  );
+
+  /**
+   * Highest DocNumber used in QuickBooks for invoices/estimates/credit memos.
+   * NurseryOS uses this when allocating the next local document number so QBO-only
+   * invoices do not collide with the next NurseryOS invoice.
+   */
+  app.get('/api/quickbooks/highest-doc-number', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.query.tenantId || '');
+      const typeRaw = String(req.query.type || 'invoice');
+      const kind =
+        typeRaw === 'estimate' || typeRaw === 'credit_memo' ? typeRaw : 'invoice';
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+      const integration = await loadIntegration(tenantId);
+      if (!integration?.realmId) {
+        res.json({ connected: false, highest: null, type: kind });
+        return;
+      }
+      const highest = await fetchHighestQboNumericDocNumber(tenantId, kind);
+      res.json({ connected: true, highest, type: kind });
     })
   );
 

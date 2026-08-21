@@ -32,32 +32,53 @@ function normalizedWordSet(name: string): Set<string> {
   );
 }
 
-/** True when names match exactly or one contains the other (e.g. "Crimson Fire" ↔ "Crimson Fire Loropetalum"). */
+/**
+ * Prefer specific cultivar matches over generic genus-only rows.
+ * - Exact names match.
+ * - Abbreviated orders match longer inventory names ("Crimson Fire" → "Crimson Fire Loropetalum").
+ * - Do NOT match a longer order to a shorter single-word inventory
+ *   ("Hydrangea Limelight" must not auto-link to bare "Hydrangea").
+ */
 export function plantNamesMatch(orderName: string, inventoryName: string): boolean {
   const a = normalizePlantName(orderName);
   const b = normalizePlantName(inventoryName);
+  if (!a || !b) return false;
   if (a === b) return true;
 
-  const shorter = a.length <= b.length ? a : b;
-  const longer = a.length > b.length ? a : b;
-  if (shorter.length >= 3 && longer.includes(shorter)) return true;
+  const orderWords = normalizedWordSet(orderName);
+  const inventoryWords = normalizedWordSet(inventoryName);
+  if (orderWords.size === 0 || inventoryWords.size === 0) return false;
 
-  const words = shorter.split(' ').filter((w) => w.length >= 2);
-  if (words.length >= 2) {
-    return words.every((word) => longer.includes(word));
-  }
+  // Order is an abbreviated form of the inventory name.
+  const orderSubsetOfInventory = [...orderWords].every((w) => inventoryWords.has(w));
+  if (orderSubsetOfInventory) return true;
 
-  const setA = normalizedWordSet(orderName);
-  const setB = normalizedWordSet(inventoryName);
-  if (setA.size === 0 || setB.size === 0) return false;
+  // Inventory is a multi-word subset of the order (not a bare genus like "Hydrangea").
+  const inventorySubsetOfOrder = [...inventoryWords].every((w) => orderWords.has(w));
+  if (inventorySubsetOfOrder && inventoryWords.size >= 2) return true;
 
+  return false;
+}
+
+/** Higher is better. Exact name wins; then closer word coverage / specificity. */
+export function plantNameMatchScore(orderName: string, inventoryName: string): number {
+  const a = normalizePlantName(orderName);
+  const b = normalizePlantName(inventoryName);
+  if (!a || !b) return 0;
+  if (a === b) return 10_000;
+
+  if (!plantNamesMatch(orderName, inventoryName)) return 0;
+
+  const orderWords = normalizedWordSet(orderName);
+  const inventoryWords = normalizedWordSet(inventoryName);
   let overlap = 0;
-  setA.forEach((w) => {
-    if (setB.has(w)) overlap += 1;
+  orderWords.forEach((w) => {
+    if (inventoryWords.has(w)) overlap += 1;
   });
 
-  // Accept close botanical variants (e.g. asian jasmine vs asiatic jasmine).
-  return overlap >= Math.min(setA.size, setB.size);
+  const wordCountGap = Math.abs(orderWords.size - inventoryWords.size);
+  // Prefer more shared words and inventory names whose specificity is closest to the order.
+  return overlap * 100 - wordCountGap * 25 + Math.min(inventoryWords.size, 20);
 }
 
 const SIZE_ALIASES: Record<string, string> = {
@@ -89,7 +110,7 @@ const SIZE_ALIASES: Record<string, string> = {
   '65g': '#65',
   '#100': '#100',
   '100g': '#100',
-  'bb': 'b&b',
+  bb: 'b&b',
   'b&b': 'b&b',
   'balled and burlapped': 'b&b',
   '4 inch': '4 inch',
@@ -127,9 +148,15 @@ export function findMatchingInventoryPlants(
   weights: ContainerWeight[] = DEFAULT_CONTAINER_WEIGHTS
 ): InventoryPlant[] {
   const normSize = normalizeContainerSize(containerSize, weights);
-  return plants.filter(
-    (p) =>
-      plantNamesMatch(plantName, p.plantName) &&
-      normalizeContainerSize(p.containerSize, weights) === normSize
-  );
+  return plants
+    .filter(
+      (p) =>
+        plantNamesMatch(plantName, p.plantName) &&
+        normalizeContainerSize(p.containerSize, weights) === normSize
+    )
+    .sort(
+      (a, b) =>
+        plantNameMatchScore(plantName, b.plantName) - plantNameMatchScore(plantName, a.plantName) ||
+        a.plantName.localeCompare(b.plantName)
+    );
 }

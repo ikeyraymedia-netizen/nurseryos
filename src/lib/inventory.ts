@@ -16,6 +16,7 @@ import {
   findMatchingInventoryPlants,
   normalizeContainerSize,
   normalizePlantName,
+  plantNameMatchScore,
   plantNamesMatch
 } from './inventoryMatch';
 import { DEFAULT_CONTAINER_WEIGHTS } from '../data/defaultWeights';
@@ -165,7 +166,9 @@ export function getInventoryMatchSuggestions(
         normalizeContainerSize(plant.containerSize, weights) === normalizedSize;
       let score = similarityScore(plantName, plant.plantName);
       if (plantNamesMatch(plantName, plant.plantName)) {
-        score = Math.max(score, 0.75);
+        // Exact / specific cultivar beats a loose genus-only overlap.
+        const specificity = Math.min(1, plantNameMatchScore(plantName, plant.plantName) / 10_000);
+        score = Math.max(score, 0.75 + specificity * 0.2);
       }
       if (sizeMatch) {
         score += 0.2;

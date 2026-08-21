@@ -2529,7 +2529,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             )}
 
             {/* Financial Adjustments */}
-            <div className="bg-slate-100 p-2.5 rounded-xl space-y-2 border border-slate-200">
+            <div
+              id="invoice-charges"
+              className="bg-slate-100 p-2.5 rounded-xl space-y-2 border border-slate-200 scroll-mt-4"
+            >
               <span className="block font-mono font-bold text-[9px] text-gray-400 uppercase tracking-widest">{t('invoice.charges')}</span>
               
               {/* Freight Charge */}
@@ -3066,6 +3069,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
                 Real-time generated invoice for <span className="font-bold">{order.customerName}</span>. Type prices directly into the invoice sheet below to customize!
               </p>
+              {!isCreditMemo && (
+                <a
+                  href="#invoice-charges"
+                  className="mt-1.5 inline-flex md:hidden text-[11px] font-bold text-ink-700 hover:text-ink-900 underline underline-offset-2"
+                >
+                  Edit freight, tax & discount ↓
+                </a>
+              )}
             </div>
             <div className="flex items-center space-x-2 shrink-0">
               <button
@@ -3637,11 +3648,26 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     <span className="font-bold text-gray-950">${subtotal.toFixed(2)}</span>
                   </div>
 
-                  {/* Freight */}
-                  {freightCharge > 0 && (
-                    <div className="flex justify-between py-1 border-b border-gray-150">
-                      <span className="text-gray-500 font-medium">Freight / Delivery:</span>
-                      <span className="font-bold text-gray-950">${freightCharge.toFixed(2)}</span>
+                  {/* Freight — always editable on-screen (print shows value only) */}
+                  {!isCreditMemo && (
+                    <div className="flex justify-between items-center py-1 border-b border-gray-150 gap-2">
+                      <span className="text-gray-500 font-medium shrink-0">Freight / Delivery:</span>
+                      <div className="flex items-center justify-end min-w-0">
+                        <span className="text-gray-500 mr-0.5 print:hidden">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={freightCharge || ''}
+                          placeholder="0.00"
+                          onChange={(e) => setFreightCharge(Number(e.target.value) || 0)}
+                          className="price-input w-24 max-w-full font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white print:hidden"
+                          aria-label={t('invoice.freight')}
+                        />
+                        <span className="hidden print:inline font-bold text-gray-950">
+                          ${freightCharge.toFixed(2)}
+                        </span>
+                      </div>
                     </div>
                   )}
 

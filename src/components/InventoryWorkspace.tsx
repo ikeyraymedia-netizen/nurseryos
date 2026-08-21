@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sprout,
   Upload,
@@ -19,7 +19,9 @@ import {
   Copy,
   Check,
   Link2,
-  Globe
+  Globe,
+  ChevronDown,
+  Download
 } from 'lucide-react';
 import { CustomerOrder, InventoryPlant, Tenant, Truck as TruckType, Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
@@ -153,6 +155,8 @@ export function InventoryWorkspace({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [pubBusy, setPubBusy] = useState(false);
   const [showPublicAvailability, setShowPublicAvailability] = useState(false);
   const [copiedPublic, setCopiedPublic] = useState<'page' | 'api' | null>(null);
@@ -240,6 +244,22 @@ export function InventoryWorkspace({
     tenant?.publicAvailabilityInStockOnly,
     nurseryName
   ]);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (exportMenuRef.current && target && !exportMenuRef.current.contains(target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+    };
+  }, [showExportMenu]);
 
   useEffect(() => {
     try {
@@ -566,6 +586,7 @@ export function InventoryWorkspace({
       });
       setMessage(t('inventory.exportedExcel', { n: exportPlants.length }));
       setMessageIsError(false);
+      setShowExportMenu(false);
     } catch (err: any) {
       setMessage(err?.message || t('inventory.excelExportFailed'));
       setMessageIsError(true);
@@ -591,6 +612,7 @@ export function InventoryWorkspace({
         setMessage(t('inventory.exportedPdf', { n: exportPlants.length }));
         setMessageIsError(false);
       }
+      setShowExportMenu(false);
     } catch (err: any) {
       setMessage(err?.message || t('inventory.pdfExportFailed'));
       setMessageIsError(true);
@@ -730,8 +752,7 @@ export function InventoryWorkspace({
               <p className="text-xs text-gray-500">{t('inventory.subtitle')}</p>
             </div>
           </div>
-          <div className="flex flex-col items-stretch sm:items-end gap-2">
-            <div className="flex flex-wrap gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end">
               {permissions.canManageTeam && tenantId ? (
                 <button
                   type="button"
@@ -747,71 +768,98 @@ export function InventoryWorkspace({
                   ) : null}
                 </button>
               ) : null}
-              <button
-                type="button"
-                disabled={exportBusy || exportPlants.length === 0}
-                onClick={() => void handleExportExcel()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold hover:bg-ink-100 disabled:opacity-50"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5" />
-                {t('inventory.exportExcel')}
-              </button>
-              <button
-                type="button"
-                disabled={exportBusy || exportPlants.length === 0}
-                onClick={() => void handleExportPdf()}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                {t('inventory.exportPdf')}
-              </button>
-            </div>
-            <div className="flex flex-col items-stretch sm:items-end gap-1.5">
-              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={exportIncludeQty}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setExportIncludeQty(on);
-                    try {
-                      localStorage.setItem(EXPORT_INCLUDE_QTY_KEY, on ? '1' : '0');
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
-                />
-                {t('inventory.exportIncludeQty')}
-              </label>
-              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={exportIncludePhotos}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setExportIncludePhotos(on);
-                    try {
-                      localStorage.setItem(EXPORT_INCLUDE_PHOTOS_KEY, on ? '1' : '0');
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
-                />
-                {t('inventory.exportIncludePhotos')}
-              </label>
-              {exportIncludeQty && (
-                <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={exportInStockOnly}
-                    onChange={(e) => setExportInStockOnly(e.target.checked)}
+              <div className="relative" ref={exportMenuRef}>
+                <button
+                  type="button"
+                  disabled={exportBusy || plants.length === 0}
+                  onClick={() => setShowExportMenu((open) => !open)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
+                  aria-expanded={showExportMenu}
+                  aria-haspopup="dialog"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {t('inventory.export')}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${showExportMenu ? 'rotate-180' : ''}`}
                   />
-                  {t('inventory.inStockOnly', { n: exportPlants.length })}
-                </label>
-              )}
+                </button>
+                {showExportMenu ? (
+                  <div className="absolute right-0 z-30 mt-2 w-[min(100vw-2rem,18rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      {t('inventory.exportOptions')}
+                    </p>
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={exportIncludeQty}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setExportIncludeQty(on);
+                            try {
+                              localStorage.setItem(EXPORT_INCLUDE_QTY_KEY, on ? '1' : '0');
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        />
+                        <span>{t('inventory.exportIncludeQty')}</span>
+                      </label>
+                      <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={exportIncludePhotos}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setExportIncludePhotos(on);
+                            try {
+                              localStorage.setItem(EXPORT_INCLUDE_PHOTOS_KEY, on ? '1' : '0');
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        />
+                        <span>{t('inventory.exportIncludePhotos')}</span>
+                      </label>
+                      {exportIncludeQty ? (
+                        <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer pl-5">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={exportInStockOnly}
+                            onChange={(e) => setExportInStockOnly(e.target.checked)}
+                          />
+                          <span>{t('inventory.inStockOnly', { n: exportPlants.length })}</span>
+                        </label>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        disabled={exportBusy || exportPlants.length === 0}
+                        onClick={() => void handleExportExcel()}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-ink-200 bg-ink-50 text-ink-800 text-xs font-bold hover:bg-ink-100 disabled:opacity-50"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        {exportBusy ? t('inventory.exporting') : t('inventory.exportExcel')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={exportBusy || exportPlants.length === 0}
+                        onClick={() => void handleExportPdf()}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-ink-700 text-white text-xs font-bold hover:bg-ink-800 disabled:opacity-50"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        {exportBusy ? t('inventory.exporting') : t('inventory.exportPdf')}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
 
         {(permissions.canUploadInventory || permissions.canEditInventory) && (
           <div className="mt-4 space-y-3">

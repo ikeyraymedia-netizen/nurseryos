@@ -47,6 +47,7 @@ import {
   receivePurchaseOrder,
   subscribeToPurchaseOrders,
   subscribeToVendorBills,
+  updatePurchaseOrder,
   updateVendorBill
 } from '../lib/purchasing';
 import {
@@ -69,6 +70,7 @@ import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { BillEditModal } from './BillEditModal';
+import { PoEditModal } from './PoEditModal';
 import {
   fetchStripeTreasuryReady,
   payVendorBillStripeAch,
@@ -226,6 +228,8 @@ export function PurchasingWorkspace({
   const [poExpected, setPoExpected] = useState('');
   const [poNotes, setPoNotes] = useState('');
   const [poLines, setPoLines] = useState([emptyLine()]);
+
+  const [editingPo, setEditingPo] = useState<PurchaseOrder | null>(null);
 
   // Receive
   const [receivingOrder, setReceivingOrder] = useState<PurchaseOrder | null>(null);
@@ -580,6 +584,26 @@ export function PurchasingWorkspace({
     }
     setReceiptQty(initial);
     setReceivingOrder(order);
+  }
+
+  function canEditPo(order: PurchaseOrder) {
+    return order.status !== 'cancelled' && order.status !== 'received';
+  }
+
+  function openEditPo(order: PurchaseOrder) {
+    setEditingPo(order);
+  }
+
+  async function handleSaveEditedPo(updated: PurchaseOrder) {
+    await run(async () => {
+      await updatePurchaseOrder(updated);
+      void logAuditEvent({
+        action: 'purchase_order.updated',
+        summary: `Updated ${updated.poNumber}`,
+        metadata: { poId: updated.id, poNumber: updated.poNumber }
+      });
+      setEditingPo(null);
+    });
   }
 
   function openEmailPo(order: PurchaseOrder) {
@@ -2001,6 +2025,17 @@ export function PurchasingWorkspace({
                     )}
                   </ul>
                   <div className="flex flex-wrap gap-2">
+                    {permissions.canEditPurchaseOrders && canEditPo(order) && (
+                      <button
+                        type="button"
+                        disabled={busy || emailSending}
+                        onClick={() => openEditPo(order)}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-ink-200 text-ink-800"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {t('common.edit')}
+                      </button>
+                    )}
                     {permissions.canEditPurchaseOrders &&
                       order.status !== 'cancelled' &&
                       order.status !== 'received' && (
@@ -2513,6 +2548,16 @@ export function PurchasingWorkspace({
           canCreateVendor={permissions.canEditVendors}
           onClose={() => setEditingBill(null)}
           onSave={handleSaveEditedBill}
+        />
+      )}
+
+      {editingPo && (
+        <PoEditModal
+          order={editingPo}
+          vendors={vendors}
+          busy={busy}
+          onClose={() => setEditingPo(null)}
+          onSave={handleSaveEditedPo}
         />
       )}
 

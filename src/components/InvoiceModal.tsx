@@ -223,24 +223,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   useEffect(() => {
     if (!order || !isOpen) return;
 
-    const type = existingDocument?.type || initialDocumentType;
+    const doc = existingDocument || fetchedDocument;
+    const type = doc?.type || initialDocumentType;
     setDocumentType(type);
-    const documentContext = `${order.id}:${type}`;
+    const documentContext = `${order.id}:${type}:${doc?.id || 'new'}`;
     if (documentContextRef.current !== documentContext) {
       documentContextRef.current = documentContext;
-      setSavedDocumentId(existingDocument?.id || null);
-    } else if (existingDocument?.id) {
-      setSavedDocumentId(existingDocument.id);
+      setSavedDocumentId(doc?.id || null);
+    } else if (doc?.id) {
+      setSavedDocumentId(doc.id);
     }
 
     setBillToName(
-      existingDocument?.billToName ||
+      doc?.billToName ||
         customer?.billingName ||
         customer?.name ||
         order.customerName
     );
     setBillToAddress(
-      existingDocument?.billToAddress ||
+      doc?.billToAddress ||
         customer?.billingAddress ||
         customer?.shippingAddress ||
         ''
@@ -248,7 +249,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     const details = order.invoiceDetails;
     const existingNumber =
-      existingDocument?.documentNumber || details?.invoiceNumber || null;
+      doc?.documentNumber || details?.invoiceNumber || null;
     let cancelled = false;
     if (existingNumber) {
       setInvoiceNumber(existingNumber);
@@ -262,43 +263,43 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       });
     }
     setInvoiceDate(
-      existingDocument?.documentDate ||
+      doc?.documentDate ||
         details?.invoiceDate ||
         new Date().toISOString().split('T')[0]
     );
     setPaymentTerms(
-      existingDocument?.paymentTerms ||
+      doc?.paymentTerms ||
         details?.paymentTerms ||
         customer?.paymentTerms ||
         'Net 30'
     );
-    setDueDate(existingDocument?.dueDate || details?.dueDate || '');
-    setPoNumber(existingDocument?.poNumber || details?.poNumber || '');
-    setReferencedInvoiceNumber(existingDocument?.referencedInvoiceNumber || '');
-    setSalesRep(existingDocument?.owner || order.owner || '');
+    setDueDate(doc?.dueDate || details?.dueDate || '');
+    setPoNumber(doc?.poNumber || details?.poNumber || '');
+    setReferencedInvoiceNumber(doc?.referencedInvoiceNumber || '');
+    setSalesRep(doc?.owner || order.owner || '');
     setTaxRate(
-      existingDocument?.taxRate !== undefined
-        ? existingDocument.taxRate
+      doc?.taxRate !== undefined
+        ? doc.taxRate
         : details?.taxRate !== undefined
           ? details.taxRate
           : 0
     );
     setFreightCharge(
-      existingDocument?.freightCharge !== undefined
-        ? existingDocument.freightCharge
+      doc?.freightCharge !== undefined
+        ? doc.freightCharge
         : details?.freightCharge !== undefined
           ? details.freightCharge
           : 0
     );
     setDiscount(
-      existingDocument?.discount !== undefined
-        ? existingDocument.discount
+      doc?.discount !== undefined
+        ? doc.discount
         : details?.discount !== undefined
           ? details.discount
           : 0
     );
     setInvoiceNotes(
-      existingDocument?.notes ||
+      doc?.notes ||
         details?.notes ||
         (type === 'estimate'
           ? t('invoice.defaultNotesEstimate')
@@ -308,7 +309,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
 
     const seedDraftLines = (): PlantOrderItem[] => {
-      const fromDoc = existingDocument?.items || [];
+      const fromDoc = doc?.items || [];
       if (fromDoc.length > 0) {
         return fromDoc.map((item) => ({
           id: item.id,
@@ -340,13 +341,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         }
       ];
     };
+    const hasSavedItems = Boolean(doc?.items?.length);
     const seededDraftLines =
-      type === 'credit_memo' || type === 'estimate' ? seedDraftLines() : [];
+      type === 'credit_memo' || type === 'estimate' || (type === 'invoice' && hasSavedItems)
+        ? seedDraftLines()
+        : [];
+
     setCreditLines(seededDraftLines);
 
     const pricesMap: Record<string, number> = {};
-    if (existingDocument?.items?.length) {
-      existingDocument.items.forEach((item) => {
+    if (doc?.items?.length) {
+      doc.items.forEach((item) => {
         pricesMap[item.id] = item.unitPrice;
       });
       // Also map any order items not in the saved doc
@@ -376,7 +381,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     order.items.forEach((item) => {
       if (item.substitutes) subsMap[item.id] = item.substitutes;
     });
-    existingDocument?.items?.forEach((item) => {
+    doc?.items?.forEach((item) => {
       if (item.substitutes != null) subsMap[item.id] = item.substitutes;
     });
     setItemSubstitutes(subsMap);
@@ -385,7 +390,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     order.items.forEach((item) => {
       costsMap[item.id] = item.unitCost ?? 0;
     });
-    existingDocument?.items?.forEach((item) => {
+    doc?.items?.forEach((item) => {
       if (item.unitCost !== undefined) costsMap[item.id] = item.unitCost;
     });
     seededDraftLines.forEach((item) => {
@@ -396,10 +401,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setSaveSuccess(false);
 
     setCustomerEmail(
-      existingDocument?.customerEmail || order.customerEmail || customer?.contactEmail || ''
+      doc?.customerEmail || order.customerEmail || customer?.contactEmail || ''
     );
     setCcEmails(
-      existingDocument?.customerEmailCc || order.customerEmailCc || customer?.contactEmailCc || ''
+      doc?.customerEmailCc || order.customerEmailCc || customer?.contactEmailCc || ''
     );
     setEmailSubject(
       `${
@@ -424,6 +429,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     order?.orderNumber,
     existingDocument?.id,
     existingDocument?.type,
+    fetchedDocument?.id,
     initialDocumentType,
     customer?.id,
     nurseryName,
@@ -510,8 +516,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   const isCreditMemo = documentType === 'credit_memo';
   const isEstimate = documentType === 'estimate';
-  /** Estimates and credit memos allow add/edit/remove plant lines in the document. */
-  const canEditLines = isCreditMemo || isEstimate;
+  const activeSavedDoc = existingDocument || fetchedDocument || liveDocument;
+  /** Estimates, credit memos, and saved invoices allow add/edit/remove plant lines. */
+  const canEditLines =
+    isCreditMemo || isEstimate || (documentType === 'invoice' && Boolean(activeSavedDoc?.id));
   const docLabel =
     documentType === 'estimate'
       ? t('invoice.estimate')
@@ -1252,7 +1260,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           throw new Error(
             isCreditMemo
               ? t('invoice.creditMemoLinesRequired')
-              : t('invoice.estimateLinesRequired')
+              : isEstimate
+                ? t('invoice.estimateLinesRequired')
+                : t('invoice.invoiceLinesRequired')
           );
         }
       }
@@ -1348,7 +1358,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           await updateCustomerDocument({
             id: persistedId,
             ...docPayload,
-            createdAt: existingDocument?.createdAt || new Date().toISOString(),
+            createdAt:
+              existingDocument?.createdAt ||
+              fetchedDocument?.createdAt ||
+              new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
         } else {
@@ -2655,9 +2668,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   <span>
                     {isSaving
                       ? t('invoice.saving')
-                      : customer?.id || order.customerId
-                        ? `Save ${docLabel} to Customer`
-                        : t('invoice.savePricing')}
+                      : savedDocumentId
+                        ? t('invoice.updateDoc', { docLabel })
+                        : customer?.id || order.customerId
+                          ? `Save ${docLabel} to Customer`
+                          : t('invoice.savePricing')}
                   </span>
                 </>
               )}

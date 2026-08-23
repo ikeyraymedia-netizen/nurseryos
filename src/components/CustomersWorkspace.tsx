@@ -1282,7 +1282,7 @@ export function CustomersWorkspace({
                             className="inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
-                            {t('customers.openDoc', { type: docTypeLabel(doc.type) })}
+                            {t('customers.editDoc', { type: docTypeLabel(doc.type) })}
                           </button>
                         )}
                         {permissions.canViewInvoices && (
@@ -1577,7 +1577,7 @@ export function CustomersWorkspace({
                             className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-800"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
-                            {t('customers.openInvoice')}
+                            {t('customers.editInvoice')}
                           </button>
                         )}
                         {permissions.canViewInvoices && (

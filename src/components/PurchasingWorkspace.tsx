@@ -55,7 +55,7 @@ import {
   resolvePurchaseCategory,
   purchaseCategoryLabel
 } from '../lib/purchaseCategories';
-import { looksLikeEmail, MAX_CC_RECIPIENTS, parseCcEmails, sendTenantEmail } from '../lib/email';
+import { blobToBase64, looksLikeEmail, MAX_CC_RECIPIENTS, parseCcEmails, sendTenantEmail } from '../lib/email';
 import { OutboundReplySelect } from './OutboundReplySelect';
 import { EmailCcSection } from './EmailCcSection';
 import {
@@ -63,6 +63,7 @@ import {
   buildPurchaseOrderEmailText,
   defaultPurchaseOrderEmailSubject
 } from '../lib/purchaseOrderEmail';
+import { buildPurchaseOrderPdf } from '../lib/purchaseOrderPdf';
 import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
@@ -611,6 +612,16 @@ export function PurchasingWorkspace({
     setEmailSending(true);
     setEmailStatus(null);
     try {
+      const pdfDoc = await buildPurchaseOrderPdf({
+        nurseryName,
+        order: emailingOrder,
+        message: emailMessage
+      });
+      const pdfAttachment = {
+        filename: pdfDoc.fileName,
+        content: await blobToBase64(pdfDoc.blob)
+      };
+
       const result = await sendTenantEmail({
         tenantId,
         to,
@@ -627,7 +638,8 @@ export function PurchasingWorkspace({
           message: emailMessage
         }),
         fromName: nurseryName,
-        fromEmail: poReplyTo || undefined
+        fromEmail: poReplyTo || undefined,
+        pdfAttachment
       });
       if (!result.success) {
         throw new Error(
@@ -1851,6 +1863,13 @@ export function PurchasingWorkspace({
                 </label>
               </div>
               <div className="space-y-2">
+                <div className="grid grid-cols-12 gap-1.5 px-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                  <span className="col-span-4">{t('purchasing.plant')}</span>
+                  <span className="col-span-2">{t('purchasing.size')}</span>
+                  <span className="col-span-2">{t('common.qty')}</span>
+                  <span className="col-span-3">{t('purchasing.unitPrice')}</span>
+                  <span className="col-span-1" />
+                </div>
                 {poLines.map((line, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-1.5">
                     <input
@@ -1876,7 +1895,7 @@ export function PurchasingWorkspace({
                     <input
                       type="number"
                       min={1}
-                      value={line.quantityOrdered}
+                      value={line.quantityOrdered || ''}
                       onChange={(e) => {
                         const next = [...poLines];
                         next[idx] = { ...line, quantityOrdered: Number(e.target.value) || 0 };
@@ -1885,19 +1904,25 @@ export function PurchasingWorkspace({
                       placeholder={t('common.qty')}
                       className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                     />
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={line.unitCost}
-                      onChange={(e) => {
-                        const next = [...poLines];
-                        next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
-                        setPoLines(next);
-                      }}
-                      placeholder={t('purchasing.cost')}
-                      className="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
-                    />
+                    <div className="col-span-3 relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-slate-400 pointer-events-none">
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.unitCost || ''}
+                        onChange={(e) => {
+                          const next = [...poLines];
+                          next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
+                          setPoLines(next);
+                        }}
+                        placeholder={t('purchasing.unitPricePlaceholder')}
+                        aria-label={t('purchasing.unitPrice')}
+                        className="w-full pl-5 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => setPoLines(poLines.filter((_, i) => i !== idx))}

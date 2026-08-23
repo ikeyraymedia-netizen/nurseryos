@@ -1125,6 +1125,8 @@ const extra = {
     plant: 'Plant',
     size: 'Size',
     cost: 'Cost',
+    unitPrice: 'Unit price',
+    unitPricePlaceholder: '0.00',
     notes: 'Notes',
     addLine: '+ Add line',
     createPo: 'Create PO',
@@ -1175,7 +1177,7 @@ const extra = {
     emailPlaceholder: 'vendor@example.com',
     messagePlaceholder: 'Please confirm availability and ship date…',
     emailPoHint:
-      'Email includes the full PO line items and totals. Draft POs are marked sent after a successful send.',
+      'Email includes the full PO line items and totals, with a PDF attachment. Draft POs are marked sent after a successful send.',
     sentStatus: 'sent',
     sentTo: 'Sent to {{email}}',
     couldNotSendEmail: 'Could not send email.',

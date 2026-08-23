@@ -1138,6 +1138,8 @@ const extra = {
     plant: 'Planta',
     size: 'Tamaño',
     cost: 'Costo',
+    unitPrice: 'Precio unitario',
+    unitPricePlaceholder: '0.00',
     notes: 'Notas',
     addLine: '+ Agregar línea',
     createPo: 'Crear OC',
@@ -1188,7 +1190,7 @@ const extra = {
     emailPlaceholder: 'proveedor@ejemplo.com',
     messagePlaceholder: 'Confirme disponibilidad y fecha de envío…',
     emailPoHint:
-      'El correo incluye todas las líneas y totales de la OC. Las OC en borrador se marcan como enviadas tras un envío exitoso.',
+      'El correo incluye todas las líneas y totales de la OC, con un PDF adjunto. Las OC en borrador se marcan como enviadas tras un envío exitoso.',
     sentStatus: 'enviado',
     sentTo: 'Enviado a {{email}}',
     couldNotSendEmail: 'No se pudo enviar el correo.',

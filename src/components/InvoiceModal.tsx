@@ -15,7 +15,6 @@ import {
 } from '../lib/nurseryBranding';
 import { 
   X, 
-  Printer, 
   FileText, 
   DollarSign, 
   Percent, 
@@ -2167,11 +2166,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       return { blob: pdf.output('blob'), fileName };
   };
 
-  // Avoid window.print() — it can crash Cursor's embedded browser / Electron webviews.
-  const handlePrint = async () => {
-    await handleExportPdf();
-  };
-
   const handleDocumentTypeChange = (type: CustomerDocumentType) => {
     setDocumentType(type);
     setInvoiceNumber(defaultDocumentNumber(type));
@@ -2866,18 +2860,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
             <button
               onClick={handleExportPdf}
-              className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+              className="w-full py-2.5 px-4 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
             >
               <Download className="h-4 w-4" />
               <span>{t('invoice.exportPdf')}</span>
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="w-full py-2.5 px-4 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-            >
-              <Printer className="h-4 w-4" />
-              <span>{t('invoice.downloadPrint', { docLabel })}</span>
             </button>
 
             {documentType === 'invoice' && !isPaid && (
@@ -3134,11 +3120,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             </div>
             <div className="flex items-center space-x-2 shrink-0">
               <button
-                onClick={handlePrint}
+                onClick={handleExportPdf}
                 className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
-                title={t('invoice.downloadPdfTitle')}
+                title={t('invoice.exportPdf')}
               >
-                <Printer className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               </button>
               <button
                 onClick={onClose}

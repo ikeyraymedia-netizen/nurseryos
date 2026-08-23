@@ -860,7 +860,6 @@ const extra = {
     sending: 'Enviando...',
     useMailApp: 'Usar app de correo',
     exportPdf: 'Exportar PDF',
-    downloadPrint: 'Descargar e imprimir {{docLabel}}',
     refreshPayment: 'Actualizar estado de pago',
     checkingStripe: 'Verificando Stripe…',
     checkingQbPayment: 'Verificando QuickBooks…',

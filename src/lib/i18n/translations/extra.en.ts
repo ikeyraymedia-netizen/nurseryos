@@ -849,7 +849,6 @@ const extra = {
     sending: 'Sending...',
     useMailApp: 'Use Mail App',
     exportPdf: 'Export PDF',
-    downloadPrint: 'Download & Print {{docLabel}}',
     refreshPayment: 'Refresh payment status',
     checkingStripe: 'Checking Stripe…',
     distributeFreight: 'Distribute truck freight?',

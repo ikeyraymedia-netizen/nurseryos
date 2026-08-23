@@ -3154,7 +3154,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           <div className="md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2 print:overflow-visible print:pr-0">
             <div
               ref={printRef}
-              className="border border-gray-300 p-3 sm:p-6 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal overflow-x-auto"
+              className="border border-gray-300 p-3 sm:p-6 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal md:overflow-x-auto print:overflow-visible"
             >
               
               {/* STYLE TAG FOR PRINT WORKAROUNDS */}
@@ -3306,9 +3306,220 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 )}
               </div>
 
-              {/* Items Table */}
-              <div className="py-3 overflow-x-auto -mx-1 px-1">
-                <table className="w-full min-w-[28rem] text-left border-collapse">
+              {/* Line items — stacked cards on mobile, table on desktop/print */}
+              <div className="py-3 md:overflow-x-auto -mx-1 px-1">
+                <div className="md:hidden print:hidden space-y-2.5">
+                  {workingItems.map((item) => {
+                    const qty = getItemQty(item);
+                    const price =
+                      itemPrices[item.id] !== undefined
+                        ? itemPrices[item.id]
+                        : getDefaultPriceForSize(item.containerSize);
+                    const unavailable = Boolean(item.unavailable);
+                    const total = unavailable ? 0 : qty * price;
+                    const subs = itemSubstitutes[item.id] ?? item.substitutes ?? '';
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`rounded-lg border p-2.5 ${
+                          unavailable
+                            ? 'border-slate-200 bg-slate-50 text-slate-400'
+                            : 'border-gray-200 bg-white text-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            {canEditLines ? (
+                              <input
+                                type="text"
+                                value={item.plantName}
+                                onChange={(e) =>
+                                  updateDraftLine(item.id, { plantName: e.target.value })
+                                }
+                                placeholder={t('invoice.plantVarietyName')}
+                                className={`w-full font-black bg-transparent border-b border-gray-200 focus:border-ink-600 focus:outline-none py-0.5 break-words ${
+                                  unavailable
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-gray-950'
+                                }`}
+                              />
+                            ) : (
+                              <p
+                                className={`font-black break-words leading-snug ${
+                                  unavailable
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-gray-950'
+                                }`}
+                              >
+                                {item.plantName}
+                              </p>
+                            )}
+                            {unavailable && (
+                              <span className="block text-[10px] font-bold uppercase tracking-wide text-rose-600 mt-0.5">
+                                {t('invoice.notAvailable')}
+                              </span>
+                            )}
+                            {item.notes && (
+                              <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5 break-words">
+                                Note: {item.notes}
+                              </span>
+                            )}
+                            {!canEditLines && subs.trim() ? (
+                              <span className="block text-[10px] text-slate-500 font-normal italic mt-0.5 break-words">
+                                {t('invoice.possibleSubs')}: {subs.trim()}
+                              </span>
+                            ) : null}
+                          </div>
+                          {canEditLines && (
+                            <button
+                              type="button"
+                              onClick={() => removeDraftLine(item.id)}
+                              disabled={workingItems.length <= 1}
+                              className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 shrink-0"
+                              title={t('invoice.removeLine')}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                          <label className="block min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              {t('invoice.potSize')}
+                            </span>
+                            {canEditLines ? (
+                              <input
+                                type="text"
+                                value={item.containerSize}
+                                onChange={(e) =>
+                                  updateDraftLine(item.id, { containerSize: e.target.value })
+                                }
+                                placeholder={t('invoice.potSize')}
+                                className={`mt-0.5 w-full font-mono font-bold bg-slate-50 border border-gray-200 rounded px-2 py-1 focus:border-ink-600 focus:outline-none ${
+                                  unavailable ? 'text-slate-400' : 'text-gray-700'
+                                }`}
+                              />
+                            ) : (
+                              <p className="mt-0.5 font-mono font-bold text-gray-700">
+                                {item.containerSize || '—'}
+                              </p>
+                            )}
+                          </label>
+                          <label className="block min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              Quantity
+                            </span>
+                            {canEditLines ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={qty || ''}
+                                onChange={(e) =>
+                                  updateDraftLine(item.id, {
+                                    quantity: Math.max(0, Number(e.target.value) || 0)
+                                  })
+                                }
+                                className={`mt-0.5 w-full font-mono font-bold bg-slate-50 border border-gray-200 rounded px-2 py-1 text-center focus:border-ink-600 focus:outline-none ${
+                                  unavailable ? 'text-slate-400' : 'text-gray-900'
+                                }`}
+                              />
+                            ) : (
+                              <p className="mt-0.5 font-mono font-bold text-gray-900 text-center">
+                                {qty}
+                              </p>
+                            )}
+                          </label>
+                          <label className="block min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              {t('invoice.unitPrice')}
+                            </span>
+                            <div
+                              className={`mt-0.5 inline-flex w-full items-center bg-ink-50/40 border border-gray-200 rounded px-2 py-1 ${
+                                unavailable ? 'opacity-40' : ''
+                              }`}
+                            >
+                              <span className="text-[10px] text-slate-400 font-mono font-bold mr-1">
+                                $
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={price}
+                                onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
+                                className="w-full min-w-0 font-mono font-bold text-ink-800 bg-transparent focus:outline-none"
+                              />
+                            </div>
+                          </label>
+                          <div className="block min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              Total
+                            </span>
+                            <p
+                              className={`mt-0.5 font-mono font-black text-right pr-1 ${
+                                unavailable ? 'text-slate-400' : 'text-gray-950'
+                              }`}
+                            >
+                              {unavailable ? '—' : `$${total.toFixed(2)}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {documentType === 'estimate' && canEditLines && (
+                          <div className="mt-2 pt-2 border-t border-gray-100 space-y-2">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={unavailable}
+                                  onChange={(e) =>
+                                    updateDraftLine(item.id, { unavailable: e.target.checked })
+                                  }
+                                  className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                />
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                  {t('invoice.markUnavailable')}
+                                </span>
+                              </label>
+                            </div>
+                            <label className="block">
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                {t('invoice.possibleSubs')}
+                              </span>
+                              <input
+                                type="text"
+                                value={subs}
+                                onChange={(e) =>
+                                  setItemSubstitutes((prev) => ({
+                                    ...prev,
+                                    [item.id]: e.target.value
+                                  }))
+                                }
+                                placeholder={t('invoice.possibleSubsPlaceholder')}
+                                className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white"
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {canEditLines && (
+                    <button
+                      type="button"
+                      onClick={addDraftLine}
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {isCreditMemo ? t('invoice.addCreditLine') : t('invoice.addEstimateLine')}
+                    </button>
+                  )}
+                </div>
+
+                <table className="hidden md:table print:table w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
                       <th className="pb-1 text-left">{t('invoice.plantVarietyName')}</th>
@@ -3646,7 +3857,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   <button
                     type="button"
                     onClick={addDraftLine}
-                    className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900 print:hidden"
+                    className="mt-3 hidden md:inline-flex print:hidden items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     {isCreditMemo ? t('invoice.addCreditLine') : t('invoice.addEstimateLine')}

@@ -230,7 +230,7 @@ const extra = {
     promoCreate: 'Crear publicación',
     promoTitle: 'Publicación de marketing',
     promoIntro:
-      'Redacte un correo o texto para redes desde esta planta del inventario. Copie y pegue en su correo o app social — NurseryOS no publica por usted.',
+      'Redacte un correo o texto para redes desde esta planta del inventario — incluyendo zonas USDA, sol y otros datos útiles. Copie y pegue en su correo o app social — NurseryOS no publica por usted.',
     promoFormat: 'Formato',
     promoFormatSocial: 'Instagram / Facebook',
     promoFormatEmail: 'Cuerpo de correo',

@@ -227,7 +227,7 @@ const extra = {
     promoCreate: 'Create post',
     promoTitle: 'Marketing post',
     promoIntro:
-      'Draft email or social copy from this inventory plant. Copy and paste into your email or social app — NurseryOS does not post for you.',
+      'Draft email or social copy from this inventory plant — including zones, sun needs, and other helpful plant details. Copy and paste into your email or social app — NurseryOS does not post for you.',
     promoFormat: 'Format',
     promoFormatSocial: 'Instagram / Facebook',
     promoFormatEmail: 'Email body',

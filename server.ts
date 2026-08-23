@@ -1210,6 +1210,9 @@ app.post('/api/generate-plant-promo', async (req, res) => {
       category,
       listPrice,
       notes,
+      plantedDate,
+      readyDate,
+      location,
       photoUrl,
       nurseryName,
       format,
@@ -1241,17 +1244,20 @@ app.post('/api/generate-plant-promo', async (req, res) => {
         : null,
       category ? `Category: ${category}` : null,
       listPrice != null && listPrice !== '' ? `List price: $${Number(listPrice).toFixed(2)}` : null,
-      notes ? `Notes: ${String(notes).slice(0, 240)}` : null
+      plantedDate ? `Planted date: ${String(plantedDate).slice(0, 10)}` : null,
+      readyDate ? `Ready date: ${String(readyDate).slice(0, 10)}` : null,
+      location ? `Location in nursery: ${String(location).slice(0, 120)}` : null,
+      notes ? `Nursery notes: ${String(notes).slice(0, 240)}` : null
     ]
       .filter(Boolean)
       .join('\n');
 
     const formatGuide =
       fmt === 'email'
-        ? 'Write a short customer email: subject line + body (2–4 short paragraphs). Friendly wholesale nursery tone. Include a soft call to action to inquire or order.'
+        ? 'Write a short customer email: subject line + body (2–4 short paragraphs). Friendly wholesale nursery tone. Include a soft call to action to inquire or order. Weave in plant details (zones, sun, size/habit) naturally — do not list them as dry bullet labels unless it reads better that way.'
         : fmt === 'sms'
-          ? 'Write a short SMS / text blast (under 280 characters). One hook + plant + size + call to action. No hashtags.'
-          : 'Write an Instagram/Facebook caption (2–5 short lines) plus 5–10 relevant hashtags on the last line. Conversational, not corporate.';
+          ? 'Write a short SMS / text blast (under 320 characters). One hook + plant + size + USDA zones + sun exposure (abbreviate if needed) + call to action. No hashtags.'
+          : 'Write an Instagram/Facebook caption (3–6 short lines) plus 5–10 relevant hashtags on the last line. Conversational, not corporate. Include USDA hardiness zones and sun exposure (full sun, part sun, part shade, shade, etc.) plus 1–2 other helpful plant facts (mature size, bloom, drought tolerance, evergreen/deciduous, etc.) when well known for this plant.';
 
     const audienceGuide =
       aud === 'retail'
@@ -1271,8 +1277,15 @@ ${languageGuide}
 ${formatGuide}
 ${audienceGuide}
 
-Use ONLY these plant facts (do not invent availability, prices, or botanical claims beyond what's given):
+Use these inventory facts exactly for availability, pricing, dates, and nursery-specific notes — do not invent quantities, prices, or ready dates beyond what is listed:
 ${facts}
+
+You SHOULD use reliable horticultural knowledge for this plant species/cultivar to enrich the copy with helpful buyer-facing plant details. Always include when known:
+- USDA hardiness zones (e.g. "Zones 7–10" or "Zone 8–9")
+- Light / sun exposure: full sun, part sun, part shade, shade, or similar plain language
+- At least one additional useful detail when well established for this plant, such as mature size, growth habit, bloom season/color, drought tolerance, evergreen vs deciduous, native status, or typical landscape use
+
+If the exact cultivar is ambiguous from the name, describe the best botanical match conservatively. Do not make up rare or unverified claims.
 
 ${photoUrl ? 'A plant photo is attached when available — reference the look only if the image is present.' : 'No photo was provided.'}
 

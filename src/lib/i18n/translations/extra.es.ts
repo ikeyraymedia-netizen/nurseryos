@@ -827,6 +827,9 @@ const extra = {
     profit: 'Ganancia',
     savedToCustomer: '¡Guardado en el cliente!',
     updateDoc: 'Actualizar {{docLabel}}',
+    deleteDoc: 'Eliminar {{docLabel}}',
+    deletePaidConfirm:
+      '¿Eliminar la factura pagada {{doc}}? Esto elimina el registro aquí y en QuickBooks si está sincronizado. Se perderá el historial de pago.',
     saving: 'Guardando...',
     saveToCustomer: 'Guardar {{docLabel}} en cliente',
     savePricing: 'Guardar precios en pedido',
@@ -1186,6 +1189,11 @@ const extra = {
     needVendorPermission: 'Necesita permiso para crear proveedores.',
     pickSavedVendor: 'Seleccione un proveedor guardado o cree uno nuevo.',
     deletePoConfirm: '¿Eliminar {{poNumber}}?',
+    deletePoSentConfirm:
+      '¿Eliminar {{poNumber}}? Esta OC ya se envió al proveedor.',
+    deletePoPartialConfirm:
+      '¿Eliminar {{poNumber}}? Algunos artículos ya se recibieron en inventario; eliminar no revertirá esos recibos.',
+    deletePoReceivedBlocked: 'No se pueden eliminar OC totalmente recibidas.',
     deleteBillConfirm:
       '¿Eliminar {{billNumber}}? Si estaba sincronizada con QuickBooks, también se eliminará (o anulará) allí.',
     receiveTitle: 'Recibir {{poNumber}}',

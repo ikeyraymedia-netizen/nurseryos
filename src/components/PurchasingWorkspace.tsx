@@ -590,6 +590,34 @@ export function PurchasingWorkspace({
     return order.status !== 'cancelled' && order.status !== 'received';
   }
 
+  function canDeletePo(order: PurchaseOrder) {
+    return order.status !== 'received';
+  }
+
+  function deletePoConfirmMessage(order: PurchaseOrder) {
+    if (order.status === 'partial') {
+      return t('purchasing.deletePoPartialConfirm', { poNumber: order.poNumber });
+    }
+    if (order.status === 'sent') {
+      return t('purchasing.deletePoSentConfirm', { poNumber: order.poNumber });
+    }
+    return t('purchasing.deletePoConfirm', { poNumber: order.poNumber });
+  }
+
+  async function handleDeletePo(order: PurchaseOrder) {
+    if (!permissions.canEditPurchaseOrders || !canDeletePo(order)) return;
+    if (!confirm(deletePoConfirmMessage(order))) return;
+    await run(async () => {
+      await deletePurchaseOrder(order.id);
+      if (editingPo?.id === order.id) setEditingPo(null);
+      void logAuditEvent({
+        action: 'purchase_order.deleted',
+        summary: `Deleted ${order.poNumber}`,
+        metadata: { poId: order.id, poNumber: order.poNumber }
+      });
+    });
+  }
+
   function openEditPo(order: PurchaseOrder) {
     setEditingPo(order);
   }
@@ -2086,16 +2114,11 @@ export function PurchasingWorkspace({
                         {t('purchasing.createBill')}
                       </button>
                     )}
-                    {permissions.canEditPurchaseOrders && order.status === 'draft' && (
+                    {permissions.canEditPurchaseOrders && canDeletePo(order) && (
                       <button
                         type="button"
-                        onClick={() =>
-                          void run(async () => {
-                            if (!confirm(t('purchasing.deletePoConfirm', { poNumber: order.poNumber })))
-                              return;
-                            await deletePurchaseOrder(order.id);
-                          })
-                        }
+                        disabled={busy || emailSending}
+                        onClick={() => void handleDeletePo(order)}
                         className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-rose-700"
                       >
                         {t('common.delete')}
@@ -2556,8 +2579,10 @@ export function PurchasingWorkspace({
           order={editingPo}
           vendors={vendors}
           busy={busy}
+          canDelete={canDeletePo(editingPo)}
           onClose={() => setEditingPo(null)}
           onSave={handleSaveEditedPo}
+          onDelete={() => handleDeletePo(editingPo)}
         />
       )}
 

@@ -47,11 +47,13 @@ interface PoEditModalProps {
   order: PurchaseOrder;
   vendors: Vendor[];
   busy?: boolean;
+  canDelete?: boolean;
   onClose: () => void;
   onSave: (updated: PurchaseOrder) => Promise<void>;
+  onDelete?: () => Promise<void>;
 }
 
-export function PoEditModal({ order, vendors, busy, onClose, onSave }: PoEditModalProps) {
+export function PoEditModal({ order, vendors, busy, canDelete, onClose, onSave, onDelete }: PoEditModalProps) {
   const t = useT();
   const hasReceipts = order.items.some((line) => (line.quantityReceived || 0) > 0);
   const [vendorId, setVendorId] = useState(order.vendorId || '');
@@ -310,21 +312,35 @@ export function PoEditModal({ order, vendors, busy, onClose, onSave }: PoEditMod
           />
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2 bg-white shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="submit"
-            disabled={busy}
-            className="px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
-          >
-            {busy ? t('common.pleaseWait') : t('purchasing.savePo')}
-          </button>
+        <div className="px-5 py-4 border-t border-slate-100 flex justify-between gap-2 bg-white shrink-0">
+          {canDelete && onDelete ? (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={busy}
+              className="px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl disabled:opacity-50"
+            >
+              {t('common.delete')}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
+            >
+              {busy ? t('common.pleaseWait') : t('purchasing.savePo')}
+            </button>
+          </div>
         </div>
       </form>
     </div>,

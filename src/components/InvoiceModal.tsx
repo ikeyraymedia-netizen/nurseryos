@@ -43,6 +43,7 @@ import { updateCustomerOrder } from '../lib/db';
 import {
   addCustomerDocument,
   updateCustomerDocument,
+  deleteCustomerDocument,
   markCustomerInvoicePaid,
   defaultDocumentNumber,
   nextDocumentNumber,
@@ -1195,6 +1196,32 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       return;
     }
     void saveInvoice();
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!savedDocumentId) return;
+    const doc = paymentDocument;
+    const label = invoiceNumber || doc?.documentNumber || docLabel;
+    const confirmMsg =
+      doc?.type === 'invoice' && doc.paymentStatus === 'paid'
+        ? t('invoice.deletePaidConfirm', { doc: label })
+        : t('customers.deleteDocConfirm', { doc: label });
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsSaving(true);
+    try {
+      await deleteCustomerDocument(savedDocumentId);
+      void logAuditEvent({
+        action: `${documentType}.deleted`,
+        summary: `Deleted ${documentType} ${label}`,
+        metadata: { documentId: savedDocumentId, documentNumber: label }
+      });
+      onClose();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : t('customers.deleteDocFailed'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleFreightChoice = (method: FreightAllocationMethod | 'keep') => {
@@ -2677,6 +2704,18 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 </>
               )}
             </button>
+
+            {savedDocumentId && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteDocument()}
+                disabled={isSaving}
+                className="w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>{t('invoice.deleteDoc', { docLabel })}</span>
+              </button>
+            )}
 
             {/* Email Invoice Panel */}
             <div className="border-t border-gray-200 pt-3">

@@ -816,6 +816,9 @@ const extra = {
     profit: 'Profit',
     savedToCustomer: 'Saved to Customer!',
     updateDoc: 'Update {{docLabel}}',
+    deleteDoc: 'Delete {{docLabel}}',
+    deletePaidConfirm:
+      'Delete paid invoice {{doc}}? This removes the record here and in QuickBooks if synced. Payment history will be lost.',
     saving: 'Saving...',
     saveToCustomer: 'Save {{docLabel}} to Customer',
     savePricing: 'Save Pricing to Order',
@@ -1172,6 +1175,11 @@ const extra = {
     needVendorPermission: 'You need permission to create vendors.',
     pickSavedVendor: 'Pick a saved vendor, or create a new one.',
     deletePoConfirm: 'Delete {{poNumber}}?',
+    deletePoSentConfirm:
+      'Delete {{poNumber}}? This PO was already sent to the vendor.',
+    deletePoPartialConfirm:
+      'Delete {{poNumber}}? Some items were already received into inventory — deleting will not reverse those receipts.',
+    deletePoReceivedBlocked: 'Fully received POs cannot be deleted.',
     deleteBillConfirm:
       'Delete {{billNumber}}? If it was synced to QuickBooks, it will be deleted (or voided) there too.',
     receiveTitle: 'Receive {{poNumber}}',

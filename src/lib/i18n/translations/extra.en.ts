@@ -1450,7 +1450,9 @@ const extra = {
     salesRepHint: 'Track who this order belongs to for reporting.',
     linkInventory: 'Link plants to inventory',
     linkHint:
-      'Match each line to live inventory. The order will use your inventory plant name (and size).',
+      'Match each line to live inventory. The estimate or order will use your inventory plant name and size. You can change a link if the auto-match is wrong.',
+    changeLink: 'Change link',
+    uploadedAs: 'Uploaded as {{name}} ({{size}})',
     searchInventory: 'Search inventory',
     createAndLink: 'Create new and link',
     autoMatched: 'auto-matched',

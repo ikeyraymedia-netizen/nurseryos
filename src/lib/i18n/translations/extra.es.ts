@@ -1465,7 +1465,9 @@ const extra = {
     salesRepHint: 'Registre a quién pertenece este pedido para reportes.',
     linkInventory: 'Vincular plantas al inventario',
     linkHint:
-      'Vincule cada línea a su inventario. El pedido usará el nombre (y tamaño) de inventario.',
+      'Vincule cada línea a su inventario. El presupuesto o pedido usará el nombre y tamaño de inventario. Puede cambiar un vínculo si la coincidencia automática es incorrecta.',
+    changeLink: 'Cambiar vínculo',
+    uploadedAs: 'Subido como {{name}} ({{size}})',
     searchInventory: 'Buscar inventario',
     createAndLink: 'Crear nueva y vincular',
     autoMatched: 'auto-vinculado',

@@ -116,6 +116,12 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [linkedInventoryByItemId, setLinkedInventoryByItemId] = useState<
     Record<string, { plantId: string; plantName: string; containerSize: string }>
   >({});
+  /** Original uploaded wording per line — used for aliases and re-link suggestions. */
+  const [originalParsedByItemId, setOriginalParsedByItemId] = useState<
+    Record<string, { plantName: string; containerSize: string }>
+  >({});
+  /** Lines that were auto-matched (vs manually chosen). Cleared when the user changes the link. */
+  const [autoLinkedItemIds, setAutoLinkedItemIds] = useState<Record<string, true>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => subscribeToInventory(setInventoryPlants), []);
@@ -123,38 +129,69 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   useEffect(() => {
     if (!pendingDraft || inventoryPlants.length === 0) return;
 
-    let changed = false;
+    let draftChanged = false;
+    const linkUpdates: Record<string, { plantId: string; plantName: string; containerSize: string }> =
+      {};
+    const autoIds: Record<string, true> = {};
+
     const items = pendingDraft.items.map((item) => {
       const manual = linkedInventoryByItemId[item.id];
-      const plant = manual
-        ? inventoryPlants.find((p) => p.id === manual.plantId) || manual
-        : findMatchingInventoryPlants(
-            inventoryPlants,
-            item.plantName,
-            item.containerSize,
-            containerWeights
-          )[0];
-      if (!plant) return item;
-      const next = applyInventoryName(item, plant);
-      if (next === item) return item;
-      changed = true;
-      rememberInventoryAlias(
-        tenantId,
+      if (manual) {
+        const plant =
+          inventoryPlants.find((p) => p.id === manual.plantId) || manual;
+        const next = applyInventoryName(item, plant);
+        if (next !== item) draftChanged = true;
+        return next;
+      }
+
+      const plant = findMatchingInventoryPlants(
+        inventoryPlants,
         item.plantName,
         item.containerSize,
+        containerWeights
+      )[0];
+      if (!plant) return item;
+
+      linkUpdates[item.id] = {
+        plantId: plant.id,
+        plantName: plant.plantName,
+        containerSize: plant.containerSize
+      };
+      autoIds[item.id] = true;
+      const original = originalParsedByItemId[item.id] || {
+        plantName: item.plantName,
+        containerSize: item.containerSize
+      };
+      rememberInventoryAlias(
+        tenantId,
+        original.plantName,
+        original.containerSize,
         plant.plantName,
         plant.containerSize
       );
+      const next = applyInventoryName(item, plant);
+      if (next !== item) draftChanged = true;
       return next;
     });
 
-    if (!changed) return;
+    if (Object.keys(linkUpdates).length > 0) {
+      setLinkedInventoryByItemId((prev) => ({ ...prev, ...linkUpdates }));
+      setAutoLinkedItemIds((prev) => ({ ...prev, ...autoIds }));
+    }
+    if (!draftChanged) return;
     setPendingDraft({
       ...pendingDraft,
       items,
       totalWeightLbs: orderWeightLbs(items, containerWeights)
     });
-  }, [pendingDraft, inventoryPlants, linkedInventoryByItemId, containerWeights, tenantId]);
+  }, [
+    pendingDraft,
+    inventoryPlants,
+    linkedInventoryByItemId,
+    originalParsedByItemId,
+    containerWeights,
+    tenantId
+  ]);
 
   const selectedCustomer = useMemo(
     () => customers.find((c) => c.id === selectedCustomerId) || null,
@@ -167,6 +204,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setSelectedCustomerId('');
     setSalesRep('');
     setLinkedInventoryByItemId({});
+    setOriginalParsedByItemId({});
+    setAutoLinkedItemIds({});
     setSearchItemId(null);
     setInventorySearch('');
   };
@@ -263,6 +302,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         notes: item.notes || ''
       }));
 
+      const originals: Record<string, { plantName: string; containerSize: string }> = {};
+      for (const item of itemsWithIds) {
+        originals[item.id] = {
+          plantName: item.plantName,
+          containerSize: item.containerSize
+        };
+      }
+
       const parsedCustomerName = result.customerName || t('upload.unknownCustomer');
       const match = findMatchingCustomers(parsedCustomerName, customers);
       const suggestedId = match.best?.id || '';
@@ -280,6 +327,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setSelectedCustomerId(suggestedId);
       setUploadKind(null);
       setLinkedInventoryByItemId({});
+      setOriginalParsedByItemId(originals);
+      setAutoLinkedItemIds({});
       setPastedText('');
       setLoading(false);
       setStatusMessage('');
@@ -291,10 +340,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   };
 
   const linkItemToPlant = (item: PlantOrderItem, plant: InventoryPlant) => {
+    const original = originalParsedByItemId[item.id] || {
+      plantName: item.plantName,
+      containerSize: item.containerSize
+    };
     rememberInventoryAlias(
       tenantId,
-      item.plantName,
-      item.containerSize,
+      original.plantName,
+      original.containerSize,
       plant.plantName,
       plant.containerSize
     );
@@ -306,6 +359,12 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         containerSize: plant.containerSize
       }
     }));
+    setAutoLinkedItemIds((prev) => {
+      if (!prev[item.id]) return prev;
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
     setPendingDraft((draft) => {
       if (!draft) return draft;
       const items = draft.items.map((row) =>
@@ -323,7 +382,17 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
   function openInventorySearch(item: PlantOrderItem) {
     setSearchItemId(item.id);
-    setInventorySearch(item.plantName || '');
+    const original = originalParsedByItemId[item.id];
+    setInventorySearch(original?.plantName || item.plantName || '');
+  }
+
+  function suggestionSourceForItem(item: PlantOrderItem) {
+    return (
+      originalParsedByItemId[item.id] || {
+        plantName: item.plantName,
+        containerSize: item.containerSize
+      }
+    );
   }
 
   const inventorySearchResults = useMemo(() => {
@@ -353,11 +422,12 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setLinkingItemId(item.id);
     setErrorMessage(null);
     try {
+      const original = suggestionSourceForItem(item);
       const linked = await promptInventoryLink(
         tenantId,
         inventoryPlants,
-        item.plantName,
-        item.containerSize,
+        original.plantName,
+        original.containerSize,
         item.quantity,
         containerWeights
       );
@@ -374,16 +444,12 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const getItemInventoryStatus = (item: PlantOrderItem) => {
     const manual = linkedInventoryByItemId[item.id];
     if (manual) {
-      return { type: 'linked' as const, label: manual.plantName, containerSize: manual.containerSize };
-    }
-    const exact = findMatchingInventoryPlants(
-      inventoryPlants,
-      item.plantName,
-      item.containerSize,
-      containerWeights
-    );
-    if (exact.length > 0) {
-      return { type: 'auto' as const, label: exact[0].plantName, containerSize: exact[0].containerSize };
+      return {
+        type: (autoLinkedItemIds[item.id] ? 'auto' : 'linked') as 'auto' | 'linked',
+        label: manual.plantName,
+        containerSize: manual.containerSize,
+        plantId: manual.plantId
+      };
     }
     return { type: 'unmatched' as const };
   };
@@ -891,7 +957,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             </p>
           </div>
 
-          {uploadKind === 'order' && (
+          {(uploadKind === 'order' || uploadKind === 'estimate') && (
           <div className="border-t border-ink-200/80 pt-3 space-y-2">
             <div className="flex items-center gap-2">
               <Sprout className="h-4 w-4 text-ink-700" />
@@ -902,16 +968,17 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {pendingDraft.items.map((item) => {
                 const status = getItemInventoryStatus(item);
-                const suggestions =
-                  status.type === 'unmatched'
-                    ? getInventoryMatchSuggestions(
-                        inventoryPlants,
-                        item.plantName,
-                        item.containerSize,
-                        containerWeights
-                      )
-                    : [];
+                const source = suggestionSourceForItem(item);
+                const suggestions = getInventoryMatchSuggestions(
+                  inventoryPlants,
+                  source.plantName,
+                  source.containerSize,
+                  containerWeights
+                ).filter(({ plant }) =>
+                  status.type === 'unmatched' ? true : plant.id !== status.plantId
+                );
                 const searching = searchItemId === item.id;
+                const isLinked = status.type !== 'unmatched';
 
                 return (
                   <div
@@ -925,36 +992,101 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                         • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
                       </span>
                     </div>
+                    {originalParsedByItemId[item.id] &&
+                      (originalParsedByItemId[item.id].plantName !== item.plantName ||
+                        originalParsedByItemId[item.id].containerSize !== item.containerSize) && (
+                        <p className="text-[10px] text-slate-500 italic">
+                          {t('upload.uploadedAs', {
+                            name: dp.plant(originalParsedByItemId[item.id].plantName),
+                            size: dp.size(originalParsedByItemId[item.id].containerSize)
+                          })}
+                        </p>
+                      )}
 
-                    {status.type !== 'unmatched' ? (
-                      <p className="text-[11px] font-semibold text-ink-800 bg-ink-50 border border-ink-100 rounded-md px-2 py-1">
-                        {t('upload.linkedTo', {
-                          name: dp.plant(status.label),
-                          size: dp.size(status.containerSize)
-                        })}
-                        {status.type === 'auto' ? t('upload.autoMatchedSuffix') : ''}
-                      </p>
-                    ) : (
-                      <>
-                        {suggestions.length > 0 && !searching && (
+                    {isLinked && !searching && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[11px] font-semibold text-ink-800 bg-ink-50 border border-ink-100 rounded-md px-2 py-1 flex-1 min-w-0">
+                          {t('upload.linkedTo', {
+                            name: dp.plant(status.label),
+                            size: dp.size(status.containerSize)
+                          })}
+                          {status.type === 'auto' ? t('upload.autoMatchedSuffix') : ''}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={linkingItemId === item.id}
+                          onClick={() => openInventorySearch(item)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation shrink-0"
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                          {t('upload.changeLink')}
+                        </button>
+                      </div>
+                    )}
+
+                    {!isLinked && !searching && suggestions.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('upload.suggestedMatchesTap')}
+                        </p>
+                        {suggestions.map(({ plant, score }) => (
+                          <button
+                            key={plant.id}
+                            type="button"
+                            disabled={linkingItemId === item.id}
+                            onClick={() => linkItemToPlant(item, plant)}
+                            className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
+                          >
+                            <span className="font-bold text-gray-900">{dp.plant(plant.plantName)}</span>
+                            <span className="text-gray-500"> • {plant.containerSize}</span>
+                            <span className="text-gray-400">
+                              {' '}
+                              • Qty {plant.quantityAvailable}
+                            </span>
+                            {score < 1 && (
+                              <span className="text-amber-600 font-semibold ml-1">
+                                ({Math.round(score * 100)}%)
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {searching ? (
+                      <div className="space-y-2 rounded-lg border border-ink-200 bg-ink-50/40 p-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-800">
+                            {isLinked ? t('upload.changeLink') : t('upload.searchInventory')}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchItemId(null);
+                              setInventorySearch('');
+                            }}
+                            className="text-[10px] font-bold text-slate-500 hover:text-slate-800"
+                          >
+                            {t('upload.closeSearch')}
+                          </button>
+                        </div>
+                        {suggestions.length > 0 && (
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                               {t('upload.suggestedMatchesTap')}
                             </p>
-                            {suggestions.map(({ plant, score }) => (
+                            {suggestions.slice(0, 5).map(({ plant, score }) => (
                               <button
-                                key={plant.id}
+                                key={`sug-${plant.id}`}
                                 type="button"
                                 disabled={linkingItemId === item.id}
                                 onClick={() => linkItemToPlant(item, plant)}
-                                className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
+                                className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
                               >
-                                <span className="font-bold text-gray-900">{dp.plant(plant.plantName)}</span>
-                                <span className="text-gray-500"> • {plant.containerSize}</span>
-                                <span className="text-gray-400">
-                                  {' '}
-                                  • Qty {plant.quantityAvailable}
+                                <span className="font-bold text-gray-900">
+                                  {dp.plant(plant.plantName)}
                                 </span>
+                                <span className="text-gray-500"> • {plant.containerSize}</span>
                                 {score < 1 && (
                                   <span className="text-amber-600 font-semibold ml-1">
                                     ({Math.round(score * 100)}%)
@@ -964,123 +1096,96 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                             ))}
                           </div>
                         )}
-
-                        {searching ? (
-                          <div className="space-y-2 rounded-lg border border-ink-200 bg-ink-50/40 p-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-ink-800">
-                                {t('upload.searchInventory')}
-                              </p>
+                        <div className="relative">
+                          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                          <input
+                            autoFocus
+                            value={inventorySearch}
+                            onChange={(e) => setInventorySearch(e.target.value)}
+                            placeholder={t('upload.searchPlaceholderInventory')}
+                            className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-xs bg-white"
+                          />
+                        </div>
+                        <div className="max-h-44 overflow-y-auto space-y-1">
+                          {inventoryPlants.length === 0 ? (
+                            <p className="text-[11px] text-amber-800 px-1 py-2">
+                              {t('upload.noInventoryLoaded')}
+                            </p>
+                          ) : inventorySearchResults.length === 0 ? (
+                            <p className="text-[11px] text-slate-500 px-1 py-2">
+                              {t('upload.noPlantsMatch', { query: inventorySearch.trim() })}
+                            </p>
+                          ) : (
+                            inventorySearchResults.map((plant) => (
                               <button
+                                key={plant.id}
                                 type="button"
-                                onClick={() => {
-                                  setSearchItemId(null);
-                                  setInventorySearch('');
-                                }}
-                                className="text-[10px] font-bold text-slate-500 hover:text-slate-800"
+                                disabled={linkingItemId === item.id}
+                                onClick={() => linkItemToPlant(item, plant)}
+                                className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
                               >
-                                {t('upload.closeSearch')}
+                                <span className="font-bold text-gray-900">
+                                  {dp.plant(plant.plantName)}
+                                </span>
+                                <span className="text-gray-500">
+                                  {' '}
+                                  • {plant.containerSize}
+                                </span>
+                                <span className="text-gray-400">
+                                  {' '}
+                                  • Qty {plant.quantityAvailable}
+                                </span>
+                                {plant.category && (
+                                  <span className="text-slate-400">
+                                    {' '}
+                                    · {plant.category}
+                                  </span>
+                                )}
                               </button>
-                            </div>
-                            <div className="relative">
-                              <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-gray-400" />
-                              <input
-                                autoFocus
-                                value={inventorySearch}
-                                onChange={(e) => setInventorySearch(e.target.value)}
-                                placeholder={t('upload.searchPlaceholderInventory')}
-                                className="w-full pl-8 pr-2 py-2 border border-gray-200 rounded-lg text-xs bg-white"
-                              />
-                            </div>
-                            <div className="max-h-44 overflow-y-auto space-y-1">
-                              {inventoryPlants.length === 0 ? (
-                                <p className="text-[11px] text-amber-800 px-1 py-2">
-                                  {t('upload.noInventoryLoaded')}
-                                </p>
-                              ) : inventorySearchResults.length === 0 ? (
-                                <p className="text-[11px] text-slate-500 px-1 py-2">
-                                  {t('upload.noPlantsMatch', { query: inventorySearch.trim() })}
-                                </p>
-                              ) : (
-                                inventorySearchResults.map((plant) => (
-                                  <button
-                                    key={plant.id}
-                                    type="button"
-                                    disabled={linkingItemId === item.id}
-                                    onClick={() => linkItemToPlant(item, plant)}
-                                    className="w-full text-left px-2.5 py-2 rounded-md border border-gray-200 bg-white hover:border-ink-400 hover:bg-ink-50/60 text-[11px] disabled:opacity-50 touch-manipulation"
-                                  >
-                                    <span className="font-bold text-gray-900">
-                                      {dp.plant(plant.plantName)}
-                                    </span>
-                                    <span className="text-gray-500">
-                                      {' '}
-                                      • {plant.containerSize}
-                                    </span>
-                                    <span className="text-gray-400">
-                                      {' '}
-                                      • Qty {plant.quantityAvailable}
-                                    </span>
-                                    {plant.category && (
-                                      <span className="text-slate-400">
-                                        {' '}
-                                        · {plant.category}
-                                      </span>
-                                    )}
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={linkingItemId === item.id}
-                            onClick={() => openInventorySearch(item)}
-                            className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
-                          >
-                            <Search className="h-3.5 w-3.5" />
-                            {t('upload.searchInventoryLink')}
-                          </button>
-                        )}
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      !isLinked && (
+                        <button
+                          type="button"
+                          disabled={linkingItemId === item.id}
+                          onClick={() => openInventorySearch(item)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                          {t('upload.searchInventoryLink')}
+                        </button>
+                      )
+                    )}
 
-                        {permissions.canEditInventory ? (
-                          <button
-                            type="button"
-                            disabled={linkingItemId === item.id}
-                            onClick={() => handleCreateAndLink(item)}
-                            className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-dashed border-ink-400 text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
-                          >
-                            {linkingItemId === item.id ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Plus className="h-3.5 w-3.5" />
-                            )}
-                            {t('upload.createAndLink')}
-                          </button>
-                        ) : suggestions.length === 0 && !searching ? (
-                          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
-                            {t('upload.noAutoMatchInventory')}
-                          </p>
-                        ) : null}
-                      </>
+                    {!isLinked && !searching && (
+                      permissions.canEditInventory ? (
+                        <button
+                          type="button"
+                          disabled={linkingItemId === item.id}
+                          onClick={() => handleCreateAndLink(item)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-md border border-dashed border-ink-400 text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 touch-manipulation"
+                        >
+                          {linkingItemId === item.id ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="h-3.5 w-3.5" />
+                          )}
+                          {t('upload.createAndLink')}
+                        </button>
+                      ) : suggestions.length === 0 ? (
+                        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
+                          {t('upload.noAutoMatchInventory')}
+                        </p>
+                      ) : null
                     )}
                   </div>
                 );
               })}
             </div>
           </div>
-          )}
-
-          {uploadKind === 'estimate' && (
-            <div className="bg-white border border-gray-100 rounded-lg px-3 py-2 max-h-40 overflow-y-auto space-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Line items</p>
-              {pendingDraft.items.map((item) => (
-                <p key={item.id} className="text-xs text-gray-700">
-                  {dp.plant(item.plantName)} • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
-                </p>
-              ))}
-            </div>
           )}
 
           <div className="flex gap-2 pt-1">

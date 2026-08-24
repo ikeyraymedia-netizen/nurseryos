@@ -7,7 +7,8 @@ import {
   CustomerDocumentType,
   CustomerDocument,
   FreightAllocation,
-  InventoryPlant
+  InventoryPlant,
+  ContainerWeight
 } from '../types';
 import {
   imageSrcToDataUrl,
@@ -53,6 +54,7 @@ import { getDefaultPriceForSize } from '../lib/pricing';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
 import { subscribeToInventory } from '../lib/inventory';
+import { subscribeToWeights } from '../lib/db';
 import { uploadEstimateLinePhoto } from '../lib/estimatePhotos';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
@@ -165,6 +167,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [itemCosts, setItemCosts] = useState<Record<string, number>>({});
   /** Inventory plants — used to resolve estimate photo links. */
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
+  /** Container weights — used for estimate shipping weight. */
+  const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
   const [photoUploadBusyId, setPhotoUploadBusyId] = useState<string | null>(null);
   const [photoPickError, setPhotoPickError] = useState<string | null>(null);
 
@@ -619,6 +623,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
   };
 
+  const getContainerUnitWeight = (size: string): number => {
+    const match = containerWeights.find(
+      (w) =>
+        w.id.toLowerCase() === size.toLowerCase() ||
+        w.label.toLowerCase() === size.toLowerCase()
+    );
+    return match ? match.weightLbs : 0;
+  };
+
   // Calculate Order Totals (unavailable estimate lines stay visible but do not count)
   const subtotal = workingItems.reduce((sum, item) => {
     if (item.unavailable) return sum;
@@ -626,6 +639,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const price = itemPrices[item.id] ?? 0;
     return sum + qty * price;
   }, 0);
+
+  /** Estimated shipping weight for estimates (uses nursery pot/tray weight table). */
+  const estimatedWeightLbs = isEstimate
+    ? workingItems.reduce((sum, item) => {
+        if (item.unavailable) return sum;
+        return sum + getContainerUnitWeight(item.containerSize) * getItemQty(item);
+      }, 0)
+    : 0;
 
   const discountAmount = Math.min(subtotal, discount);
   const taxableAmount = Math.max(0, subtotal - discountAmount);
@@ -751,6 +772,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
         <div style="width: 280px; margin-left: auto; font-size: 13px; border-top: 2px solid #e2e8f0; padding-top: 10px; font-family: Arial, sans-serif;">
           <table style="width: 100%; border-collapse: collapse;">
+            ${
+              isEstimate
+                ? `
+            <tr>
+              <td style="padding: 4px 0; color: #475569;">${t('invoice.estimatedWeight')}:</td>
+              <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">${estimatedWeightLbs.toLocaleString()} ${t('common.lbs')}</td>
+            </tr>`
+                : ''
+            }
             <tr>
               <td style="padding: 4px 0; color: #475569;">Subtotal:</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${subtotal.toFixed(2)}</td>
@@ -875,7 +905,11 @@ ${itemsText}
 --------------------------------------------------------------------------------
 
 Subtotal: $${subtotal.toFixed(2)}
-${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${
+${
+  isEstimate
+    ? `Estimated Weight: ${estimatedWeightLbs.toLocaleString()} lbs\n`
+    : ''
+}${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${
       documentType === 'estimate'
         ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}`
         : isCreditMemo
@@ -1086,6 +1120,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
     return subscribeToInventory(setInventoryPlants);
   }, [isOpen, tenantId]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setContainerWeights([]);
+      return;
+    }
+    return subscribeToWeights(setContainerWeights);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !tenantId || !canCollectPayments) {
@@ -2128,6 +2170,12 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       };
 
       writeTotal(t('invoice.subtotal'), money(subtotal));
+      if (isEstimate) {
+        writeTotal(
+          t('invoice.estimatedWeight'),
+          `${estimatedWeightLbs.toLocaleString()} ${t('common.lbs')}`
+        );
+      }
       if (discountAmount > 0) writeTotal(t('invoice.discountLabel'), `-${money(discountAmount)}`);
       if (freightCharge > 0) writeTotal(t('invoice.freightLabel'), money(freightCharge));
       if (salesTax > 0) writeTotal(`Sales Tax (${taxRate}%)`, money(salesTax));
@@ -3287,6 +3335,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         {qtyBasis === 'ordered' ? t('invoice.orderedQuantities') : qtyBasis === 'pulled' ? t('invoice.deliveredPulledCounts') : t('invoice.loadedCounts')}
                       </span>
                     </p>
+                    {isEstimate && (
+                      <p>
+                        <span className="font-bold text-gray-400">{t('invoice.estimatedWeight')}:</span>{' '}
+                        <span className="font-bold text-ink-900">
+                          {estimatedWeightLbs.toLocaleString()} {t('common.lbs')}
+                        </span>
+                      </p>
+                    )}
                   </div>
                 </div>
                 )}
@@ -3893,6 +3949,15 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 {/* Subtotal table */}
                 <div className="md:col-span-5 flex flex-col space-y-1.5 text-xs text-right font-mono">
                   
+                  {isEstimate && (
+                    <div className="flex justify-between py-1 border-b border-gray-150">
+                      <span className="text-gray-500 font-medium">{t('invoice.estimatedWeight')}:</span>
+                      <span className="font-bold text-gray-950">
+                        {estimatedWeightLbs.toLocaleString()} {t('common.lbs')}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Subtotal */}
                   <div className="flex justify-between py-1 border-b border-gray-150">
                     <span className="text-gray-500 font-medium">Subtotal:</span>

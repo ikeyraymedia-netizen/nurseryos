@@ -865,6 +865,7 @@ const extra = {
     salesTax: 'Sales Tax',
     balanceDue: 'BALANCE DUE',
     estimateTotal: 'ESTIMATE TOTAL',
+    estimatedWeight: 'Est. Weight',
     notes: 'NOTES',
     wholesaleNursery: 'Wholesale Nursery',
     previewTitle: 'Invoice Preview',

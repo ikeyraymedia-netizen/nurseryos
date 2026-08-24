@@ -877,6 +877,7 @@ const extra = {
     salesTax: 'Impuesto de ventas',
     balanceDue: 'SALDO PENDIENTE',
     estimateTotal: 'TOTAL DEL PRESUPUESTO',
+    estimatedWeight: 'Peso est.',
     notes: 'NOTAS',
     wholesaleNursery: 'Vivero mayorista',
     previewTitle: 'Vista previa de factura',

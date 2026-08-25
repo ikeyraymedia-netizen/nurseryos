@@ -2633,6 +2633,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     min="0"
                     value={freightCharge || ''}
                     placeholder="0.00"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setFreightCharge(Number(e.target.value) || 0)}
                     className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
                   />
@@ -2659,7 +2660,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     type="number"
                     step="0.01"
                     min="0"
-                    value={taxRate}
+                    value={taxRate || ''}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
                     className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
                   />
@@ -2682,6 +2685,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     min="0"
                     value={discount || ''}
                     placeholder="0.00"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setDiscount(Number(e.target.value) || 0)}
                     className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
                   />
@@ -3091,6 +3095,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 min="0"
                                 value={cost || ''}
                                 placeholder={t('invoice.costPlaceholder')}
+                                onFocus={(e) => e.target.select()}
                                 onChange={(e) => handleCostChange(item.id, Number(e.target.value))}
                                 className="w-16 font-mono font-bold text-right text-indigo-800 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded"
                               />
@@ -3490,7 +3495,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={price}
+                                value={price || ''}
+                                placeholder="0.00"
+                                onFocus={(e) => e.target.select()}
                                 onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
                                 className="w-full min-w-0 font-mono font-bold text-ink-800 bg-transparent focus:outline-none"
                               />
@@ -3868,7 +3875,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={price}
+                                value={price || ''}
+                                placeholder="0.00"
+                                onFocus={(e) => e.target.select()}
                                 onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
                                 className="price-input w-20 font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
                               />
@@ -3976,6 +3985,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                           min="0"
                           value={freightCharge || ''}
                           placeholder="0.00"
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setFreightCharge(Number(e.target.value) || 0)}
                           className="price-input w-24 max-w-full font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white print:hidden"
                           aria-label={t('invoice.freight')}

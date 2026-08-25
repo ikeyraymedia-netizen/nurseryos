@@ -2313,7 +2313,8 @@ export function PurchasingWorkspace({
                         <input
                           type="number"
                           min={1}
-                          value={line.quantity}
+                          value={line.quantity || ''}
+                          placeholder="0"
                           onChange={(e) => {
                             const next = [...billLines];
                             next[idx] = { ...line, quantity: Number(e.target.value) || 0 };
@@ -2332,13 +2333,13 @@ export function PurchasingWorkspace({
                           type="number"
                           min={0}
                           step="0.01"
-                          value={line.unitCost}
+                          value={line.unitCost || ''}
+                          placeholder="0.00"
                           onChange={(e) => {
                             const next = [...billLines];
                             next[idx] = { ...line, unitCost: Number(e.target.value) || 0 };
                             setBillLines(next);
                           }}
-                          placeholder="0.00"
                           className="mt-0.5 w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
                         />
                       </label>

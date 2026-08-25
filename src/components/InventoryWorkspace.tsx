@@ -1382,7 +1382,9 @@ export function InventoryWorkspace({
                     type="number"
                     min={0}
                     disabled={!permissions.canEditInventory}
-                    value={selected.quantityAvailable}
+                    value={selected.quantityAvailable || ''}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) =>
                       saveSelected({ quantityAvailable: Number(e.target.value) || 0 })
                     }

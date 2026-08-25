@@ -652,7 +652,8 @@ export function VendorInvoiceScanner({
                     <input
                       type="number"
                       min={0}
-                      value={line.quantity}
+                      value={line.quantity || ''}
+                      placeholder="0"
                       onChange={(e) => {
                         const items = [...draft.items];
                         items[idx] = { ...line, quantity: Number(e.target.value) || 0 };
@@ -671,7 +672,7 @@ export function VendorInvoiceScanner({
                       type="number"
                       min={0}
                       step="0.01"
-                      value={line.unitCost}
+                      value={line.unitCost || ''}
                       onChange={(e) => {
                         const items = [...draft.items];
                         items[idx] = { ...line, unitCost: Number(e.target.value) || 0 };

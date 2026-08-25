@@ -79,6 +79,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [receiverAddressesByType, setReceiverAddressesByType] = useState<Record<string, string>>(
     {}
   );
+  const [receiverContactsByType, setReceiverContactsByType] = useState<Record<string, string>>(
+    {}
+  );
   const [poNumbersByType, setPoNumbersByType] = useState<Record<string, string>>({});
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -117,8 +120,29 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     );
   }
 
+  /** Per-stop address only — never reuse another drop's form value. */
   function stopDeliveryAddress(order: CustomerOrder): string {
-    return resolveOrderDeliveryAddress(order) || receiverAddress.trim();
+    const live =
+      selectedBOLType === order.id
+        ? receiverAddress
+        : receiverAddressesByType[order.id];
+    if (live !== undefined && String(live).trim()) return String(live).trim();
+    return resolveOrderDeliveryAddress(order);
+  }
+
+  function resolveOrderContact(order: CustomerOrder): string {
+    const customer = customerForOrder(order);
+    return customer?.pointOfContact?.trim() || customer?.phone?.trim() || '';
+  }
+
+  /** Per-stop contact only — never reuse another drop's form value. */
+  function stopContact(order: CustomerOrder): string {
+    const live =
+      selectedBOLType === order.id
+        ? receiverContact
+        : receiverContactsByType[order.id];
+    if (live !== undefined && String(live).trim()) return String(live).trim();
+    return resolveOrderContact(order);
   }
 
   function defaultReceiverForType(type: string): string {
@@ -129,6 +153,16 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     return Array.from(
       new Set(scoped.map((o) => resolveOrderDeliveryAddress(o)).filter(Boolean))
     ).join('\n\n');
+  }
+
+  function defaultContactForType(type: string): string {
+    const scoped =
+      type === 'consolidated'
+        ? sortedOrders
+        : sortedOrders.filter((o) => o.id === type);
+    return Array.from(
+      new Set(scoped.map((o) => resolveOrderContact(o)).filter(Boolean))
+    ).join(', ');
   }
 
   function defaultPoForType(type: string): string {
@@ -180,17 +214,25 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     setTruckNumber(draft?.truckNumber || defaultTruckNum);
     setTrailerNumber(draft?.trailerNumber || '');
     setSealNumber(draft?.sealNumber || '');
-    setReceiverContact(draft?.receiverContact || '');
     setSpecialInstructions(
       draft?.specialInstructions || truck.notes || t('bol.defaultInstructions')
     );
 
     const savedReceivers = { ...(draft?.receiverAddresses || {}) };
+    const savedContacts = { ...(draft?.receiverContacts || {}) };
+    // Migrate older drafts that only stored a single shared contact.
+    if (!draft?.receiverContacts && draft?.receiverContact?.trim()) {
+      savedContacts[nextType] = draft.receiverContact.trim();
+    }
     const savedPos = { ...(draft?.poNumbers || {}) };
     setReceiverAddressesByType(savedReceivers);
+    setReceiverContactsByType(savedContacts);
     setPoNumbersByType(savedPos);
     setReceiverAddress(
       (savedReceivers[nextType] ?? '').trim() || defaultReceiverForType(nextType)
+    );
+    setReceiverContact(
+      (savedContacts[nextType] ?? '').trim() || defaultContactForType(nextType)
     );
     setPoNumber((savedPos[nextType] ?? '').trim() || defaultPoForType(nextType));
     setSaveDraftSuccess(false);
@@ -214,17 +256,27 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       ...receiverAddressesByType,
       [prevType]: receiverAddress
     };
+    const nextContacts = {
+      ...receiverContactsByType,
+      [prevType]: receiverContact
+    };
     const nextPos = {
       ...poNumbersByType,
       [prevType]: poNumber
     };
     setReceiverAddressesByType(nextReceivers);
+    setReceiverContactsByType(nextContacts);
     setPoNumbersByType(nextPos);
     setSelectedBOLType(nextType);
     setReceiverAddress(
       nextReceivers[nextType] !== undefined
         ? nextReceivers[nextType]
         : defaultReceiverForType(nextType)
+    );
+    setReceiverContact(
+      nextContacts[nextType] !== undefined
+        ? nextContacts[nextType]
+        : defaultContactForType(nextType)
     );
     setPoNumber(
       nextPos[nextType] !== undefined ? nextPos[nextType] : defaultPoForType(nextType)
@@ -242,11 +294,16 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         ...receiverAddressesByType,
         [selectedBOLType]: receiverAddress
       };
+      const receiverContacts = {
+        ...receiverContactsByType,
+        [selectedBOLType]: receiverContact
+      };
       const poNumbers = {
         ...poNumbersByType,
         [selectedBOLType]: poNumber
       };
       setReceiverAddressesByType(receiverAddresses);
+      setReceiverContactsByType(receiverContacts);
       setPoNumbersByType(poNumbers);
 
       const draft: TruckBolDraft = {
@@ -256,11 +313,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         truckNumber: truckNumber.trim() || undefined,
         trailerNumber: trailerNumber.trim() || undefined,
         sealNumber: sealNumber.trim() || undefined,
-        receiverContact: receiverContact.trim() || undefined,
         specialInstructions: specialInstructions.trim() || undefined,
         blindBol,
         selectedBOLType,
         receiverAddresses,
+        receiverContacts,
         poNumbers,
         updatedAt: new Date().toISOString()
       };
@@ -507,17 +564,18 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             13
           );
         }
+        const contact = stopContact(order);
+        if (contact && !blindBol) {
+          writeWrapped(
+            t('bol.pdfPointOfContact', { contact }),
+            margin + 4,
+            pageWidth - margin * 2 - 8,
+            10,
+            false,
+            13
+          );
+        }
       });
-      if (receiverContact.trim() && !blindBol) {
-        writeWrapped(
-          t('bol.pdfPointOfContact', { contact: receiverContact }),
-          margin + 4,
-          pageWidth - margin * 2 - 8,
-          10,
-          false,
-          13
-        );
-      }
       y += 4;
 
       drawSectionTitle(t('bol.pdfCargoManifest'));
@@ -1065,7 +1123,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {sortedOrders.map((order, index) => {
                       const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
-                      const stopAddress = resolveOrderDeliveryAddress(order);
+                      const stopAddress = stopDeliveryAddress(order);
+                      const contact = stopContact(order);
                       return (
                         <div
                           key={order.id}
@@ -1089,10 +1148,13 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                               blindBol ? '' : 'mt-1'
                             }`}
                           >
-                            {stopAddress ||
-                              receiverAddress.trim() ||
-                              t('bol.deliveryAddressOnly')}
+                            {stopAddress || t('bol.deliveryAddressOnly')}
                           </p>
+                          {contact && !blindBol && (
+                            <p className="text-[10px] text-gray-600 mt-1 leading-snug">
+                              {contact}
+                            </p>
+                          )}
                           <div className="text-[10px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-gray-200/50">
                             <span>{t('bol.plants', { n: totalItems })}</span>
                           </div>

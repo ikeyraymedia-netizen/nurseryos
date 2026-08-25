@@ -259,6 +259,7 @@ export interface TruckBolDraft {
   truckNumber?: string;
   trailerNumber?: string;
   sealNumber?: string;
+  /** @deprecated Prefer receiverContacts keyed by stop; kept for older drafts. */
   receiverContact?: string;
   specialInstructions?: string;
   blindBol?: boolean;
@@ -266,6 +267,8 @@ export interface TruckBolDraft {
   selectedBOLType?: string;
   /** Receiver address keyed by 'consolidated' or order id. */
   receiverAddresses?: Record<string, string>;
+  /** Point of contact keyed by 'consolidated' or order id. */
+  receiverContacts?: Record<string, string>;
   /** Customer PO # keyed by 'consolidated' or order id. */
   poNumbers?: Record<string, string>;
   updatedAt?: string;

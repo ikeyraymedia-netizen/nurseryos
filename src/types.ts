@@ -251,6 +251,26 @@ export interface CustomerDocument {
   updatedAt: string;
 }
 
+/** Saved BOL form fields so addresses survive closing the modal. */
+export interface TruckBolDraft {
+  shipperAddress?: string;
+  shipDate?: string;
+  driverName?: string;
+  truckNumber?: string;
+  trailerNumber?: string;
+  sealNumber?: string;
+  receiverContact?: string;
+  specialInstructions?: string;
+  blindBol?: boolean;
+  /** Last selected BOL type: 'consolidated' or an order id. */
+  selectedBOLType?: string;
+  /** Receiver address keyed by 'consolidated' or order id. */
+  receiverAddresses?: Record<string, string>;
+  /** Customer PO # keyed by 'consolidated' or order id. */
+  poNumbers?: Record<string, string>;
+  updatedAt?: string;
+}
+
 export interface Truck {
   id: string;
   name: string; // e.g. "Truck A - Lafayette Delivery"
@@ -263,6 +283,8 @@ export interface Truck {
   owner?: string; // Sales rep this truck is credited to
 
   loadingDate?: string; // The date when the truck is scheduled to be loaded
+  /** Draft BOL form (addresses, driver, etc.) saved from the BOL modal. */
+  bolDraft?: TruckBolDraft;
 }
 
 export interface TenantInvite {

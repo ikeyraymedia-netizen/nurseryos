@@ -631,6 +631,12 @@ const extra = {
     ready: 'Bill of Lading ready',
     customize: 'Customize BOL',
     selection: 'BOL Selection',
+    saveDraft: 'Save BOL',
+    savingDraft: 'Saving BOL…',
+    draftSaved: 'BOL saved',
+    saveDraftHint:
+      'Saves addresses, driver, and BOL details on this truck so they are still here if you close and reopen.',
+    saveDraftFailed: 'Could not save BOL details.',
     blindBol: 'Blind BOL',
     blindBolOn: 'On',
     blindBolHint:

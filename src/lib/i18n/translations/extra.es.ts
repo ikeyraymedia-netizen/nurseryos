@@ -638,6 +638,12 @@ const extra = {
     ready: 'Conocimiento de embarque listo',
     customize: 'Personalizar BOL',
     selection: 'Selección de BOL',
+    saveDraft: 'Guardar BOL',
+    savingDraft: 'Guardando BOL…',
+    draftSaved: 'BOL guardado',
+    saveDraftHint:
+      'Guarda direcciones, conductor y detalles del BOL en este camión para que sigan aquí si cierra y vuelve a abrir.',
+    saveDraftFailed: 'No se pudieron guardar los detalles del BOL.',
     blindBol: 'BOL ciega',
     blindBolOn: 'Activa',
     blindBolHint:

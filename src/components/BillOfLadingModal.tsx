@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Truck, CustomerOrder, ContainerWeight, Customer } from '../types';
-import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin, EyeOff } from 'lucide-react';
+import { Truck, CustomerOrder, ContainerWeight, Customer, TruckBolDraft } from '../types';
+import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin, EyeOff, Save } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -21,6 +21,14 @@ interface BillOfLadingModalProps {
   nurseryAddress?: string;
   /** Nursery logo image URL (resolved from tenant branding). */
   nurseryLogoSrc?: string | null;
+  /** Persist BOL form fields onto the truck so addresses survive closing. */
+  onSaveBolDraft?: (draft: TruckBolDraft) => Promise<void>;
+}
+
+function defaultShipperAddress(nurseryName: string, nurseryAddress: string, fallback: string) {
+  return nurseryAddress
+    ? `${nurseryName}\n${nurseryAddress}`
+    : `${nurseryName}\n${fallback}`;
 }
 
 export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
@@ -32,6 +40,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
   nurseryLogoSrc = null,
+  onSaveBolDraft
 }) => {
   const t = useT();
   const { locale } = useLocale();
@@ -49,9 +58,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
   // State for customizable document fields
   const [shipperAddress, setShipperAddress] = useState(
-    nurseryAddress
-      ? `${nurseryName}\n${nurseryAddress}`
-      : `${nurseryName}\n${t('bol.defaultShipperSuffix')}`
+    defaultShipperAddress(nurseryName, nurseryAddress, t('bol.defaultShipperSuffix'))
   );
   const [shipDate, setShipDate] = useState(
     truck?.loadingDate || new Date().toISOString().split('T')[0]
@@ -69,12 +76,22 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [specialInstructions, setSpecialInstructions] = useState(
     truck?.notes || t('bol.defaultInstructions')
   );
+  const [receiverAddressesByType, setReceiverAddressesByType] = useState<Record<string, string>>(
+    {}
+  );
+  const [poNumbersByType, setPoNumbersByType] = useState<Record<string, string>>({});
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [saveDraftSuccess, setSaveDraftSuccess] = useState(false);
+  const [saveDraftError, setSaveDraftError] = useState<string | null>(null);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
     fileName: string;
     blob: Blob;
   } | null>(null);
+  const hydratedTruckIdRef = useRef<string | null>(null);
+  const selectedBOLTypeRef = useRef(selectedBOLType);
+  selectedBOLTypeRef.current = selectedBOLType;
 
   function customerForOrder(order: CustomerOrder) {
     const byId = order.customerId
@@ -104,29 +121,82 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     return resolveOrderDeliveryAddress(order) || receiverAddress.trim();
   }
 
-  // Prefill the customer PO # and delivery address from the selected order(s).
-  // MUST stay above any early return — calling useEffect only when isOpen flips
-  // true crashes React ("Rendered more hooks than during the previous render").
-  useEffect(() => {
-    if (!isOpen) return;
+  function defaultReceiverForType(type: string): string {
     const scoped =
-      selectedBOLType === 'consolidated'
+      type === 'consolidated'
         ? sortedOrders
-        : sortedOrders.filter((o) => o.id === selectedBOLType);
-    const pos = Array.from(
+        : sortedOrders.filter((o) => o.id === type);
+    return Array.from(
+      new Set(scoped.map((o) => resolveOrderDeliveryAddress(o)).filter(Boolean))
+    ).join('\n\n');
+  }
+
+  function defaultPoForType(type: string): string {
+    const scoped =
+      type === 'consolidated'
+        ? sortedOrders
+        : sortedOrders.filter((o) => o.id === type);
+    return Array.from(
       new Set(
         scoped
           .map((o) => (o.invoiceDetails?.poNumber || '').trim())
           .filter(Boolean)
       )
+    ).join(', ');
+  }
+
+  // Hydrate from saved truck.bolDraft when the modal opens (or truck changes).
+  useEffect(() => {
+    if (!isOpen) {
+      hydratedTruckIdRef.current = null;
+      return;
+    }
+    if (hydratedTruckIdRef.current === truck.id) return;
+    hydratedTruckIdRef.current = truck.id;
+
+    const draft = truck.bolDraft;
+    const match = truckName.match(/\d+/);
+    const defaultTruckNum = match
+      ? t('bol.truckUnit', { num: match[0] })
+      : t('bol.defaultTruck');
+
+    const nextType =
+      draft?.selectedBOLType &&
+      (draft.selectedBOLType === 'consolidated' ||
+        sortedOrders.some((o) => o.id === draft.selectedBOLType))
+        ? draft.selectedBOLType
+        : 'consolidated';
+
+    setSelectedBOLType(nextType);
+    setBlindBol(Boolean(draft?.blindBol));
+    setShipperAddress(
+      draft?.shipperAddress?.trim() ||
+        defaultShipperAddress(nurseryName, nurseryAddress, t('bol.defaultShipperSuffix'))
     );
-    setPoNumber(pos.join(', '));
-    const addrs = Array.from(
-      new Set(scoped.map((o) => resolveOrderDeliveryAddress(o)).filter(Boolean))
+    setShipDate(
+      draft?.shipDate || truck.loadingDate || new Date().toISOString().split('T')[0]
     );
-    setReceiverAddress(addrs.join('\n\n'));
+    setDriverName(draft?.driverName || '');
+    setTruckNumber(draft?.truckNumber || defaultTruckNum);
+    setTrailerNumber(draft?.trailerNumber || '');
+    setSealNumber(draft?.sealNumber || '');
+    setReceiverContact(draft?.receiverContact || '');
+    setSpecialInstructions(
+      draft?.specialInstructions || truck.notes || t('bol.defaultInstructions')
+    );
+
+    const savedReceivers = { ...(draft?.receiverAddresses || {}) };
+    const savedPos = { ...(draft?.poNumbers || {}) };
+    setReceiverAddressesByType(savedReceivers);
+    setPoNumbersByType(savedPos);
+    setReceiverAddress(
+      (savedReceivers[nextType] ?? '').trim() || defaultReceiverForType(nextType)
+    );
+    setPoNumber((savedPos[nextType] ?? '').trim() || defaultPoForType(nextType));
+    setSaveDraftSuccess(false);
+    setSaveDraftError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, selectedBOLType]);
+  }, [isOpen, truck.id]);
 
   // Lock body scroll while open (helps mobile Safari keep the overlay visible).
   useEffect(() => {
@@ -137,6 +207,73 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       document.body.style.overflow = prev;
     };
   }, [isOpen]);
+
+  function handleBolTypeChange(nextType: string) {
+    const prevType = selectedBOLTypeRef.current;
+    const nextReceivers = {
+      ...receiverAddressesByType,
+      [prevType]: receiverAddress
+    };
+    const nextPos = {
+      ...poNumbersByType,
+      [prevType]: poNumber
+    };
+    setReceiverAddressesByType(nextReceivers);
+    setPoNumbersByType(nextPos);
+    setSelectedBOLType(nextType);
+    setReceiverAddress(
+      nextReceivers[nextType] !== undefined
+        ? nextReceivers[nextType]
+        : defaultReceiverForType(nextType)
+    );
+    setPoNumber(
+      nextPos[nextType] !== undefined ? nextPos[nextType] : defaultPoForType(nextType)
+    );
+    setSaveDraftSuccess(false);
+  }
+
+  async function handleSaveBolDraft() {
+    if (!onSaveBolDraft) return;
+    setIsSavingDraft(true);
+    setSaveDraftError(null);
+    setSaveDraftSuccess(false);
+    try {
+      const receiverAddresses = {
+        ...receiverAddressesByType,
+        [selectedBOLType]: receiverAddress
+      };
+      const poNumbers = {
+        ...poNumbersByType,
+        [selectedBOLType]: poNumber
+      };
+      setReceiverAddressesByType(receiverAddresses);
+      setPoNumbersByType(poNumbers);
+
+      const draft: TruckBolDraft = {
+        shipperAddress: shipperAddress.trim() || undefined,
+        shipDate: shipDate || undefined,
+        driverName: driverName.trim() || undefined,
+        truckNumber: truckNumber.trim() || undefined,
+        trailerNumber: trailerNumber.trim() || undefined,
+        sealNumber: sealNumber.trim() || undefined,
+        receiverContact: receiverContact.trim() || undefined,
+        specialInstructions: specialInstructions.trim() || undefined,
+        blindBol,
+        selectedBOLType,
+        receiverAddresses,
+        poNumbers,
+        updatedAt: new Date().toISOString()
+      };
+      await onSaveBolDraft(draft);
+      setSaveDraftSuccess(true);
+    } catch (err: unknown) {
+      setSaveDraftError(
+        err instanceof Error ? err.message : t('bol.saveDraftFailed')
+      );
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }
 
   if (!isOpen) return null;
 
@@ -558,7 +695,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               </label>
               <select
                 value={selectedBOLType}
-                onChange={(e) => setSelectedBOLType(e.target.value)}
+                onChange={(e) => handleBolTypeChange(e.target.value)}
                 className="w-full px-3 py-2 border border-ink-200 rounded-xl focus:outline-none focus:border-ink-500 bg-ink-50/40 font-semibold text-gray-800 text-xs"
               >
                 <option value="consolidated">{t('bol.consolidated')}</option>
@@ -703,6 +840,39 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
           {/* Sticky on mobile so Download stays reachable after scrolling the long form. */}
           <div className="pt-4 border-t border-gray-200 flex flex-col space-y-2 sticky bottom-0 bg-slate-50 -mx-6 px-6 pb-2 md:static md:mx-0 md:px-0 md:pb-0">
+            {onSaveBolDraft && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveBolDraft()}
+                  disabled={isSavingDraft}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 ${
+                    saveDraftSuccess
+                      ? 'bg-ink-600 text-white'
+                      : 'bg-white border border-ink-200 hover:bg-ink-50 text-ink-900'
+                  }`}
+                >
+                  {saveDraftSuccess ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  <span>
+                    {isSavingDraft
+                      ? t('bol.savingDraft')
+                      : saveDraftSuccess
+                        ? t('bol.draftSaved')
+                        : t('bol.saveDraft')}
+                  </span>
+                </button>
+                <p className="text-[10px] text-slate-500 text-center leading-snug">
+                  {t('bol.saveDraftHint')}
+                </p>
+                {saveDraftError && (
+                  <p className="text-[10px] text-rose-700 text-center">{saveDraftError}</p>
+                )}
+              </>
+            )}
             <button
               type="button"
               onClick={handleDownloadPdf}

@@ -1510,6 +1510,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         nurseryName={nurseryName}
         nurseryAddress={nurseryAddress}
         nurseryLogoSrc={nurseryLogoSrc}
+        onSaveBolDraft={async (draft) => {
+          await updateTruck({ ...truck, bolDraft: draft });
+        }}
       />
       )}
 

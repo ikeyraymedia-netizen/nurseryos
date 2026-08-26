@@ -1493,7 +1493,9 @@ const extra = {
     similarMatchConfirm: 'Similar customer match found — confirm or choose another.',
     suggestedMatchesTap: 'Suggested matches — tap to link',
     trackSalesRepHint:
-      'Track who this {{type}} belongs to — no truck required.',
+      'Credits this {{type}} to a sales rep for reports — no truck required.',
+    salesRepRequiredLabel: 'Sales rep *',
+    salesRepRequired: 'Select a sales rep before saving. Orders are tracked by rep even when no truck is built yet.',
     linkedTo: '✓ Linked to {{name}} ({{size}})',
     autoMatchedSuffix: ' — auto-matched',
     noInventoryLoaded: 'No inventory plants loaded yet.',

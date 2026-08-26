@@ -471,6 +471,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
   const saveDraft = async () => {
     if (!pendingDraft || !uploadKind) return;
+    if (!salesRep.trim()) {
+      setErrorMessage(t('upload.salesRepRequired'));
+      return;
+    }
     setSaving(true);
     setErrorMessage(null);
     try {
@@ -940,15 +944,19 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">
-              Sales Rep
+              {t('upload.salesRepRequiredLabel')}
             </label>
             <select
               value={salesRep}
-              onChange={(e) => setSalesRep(e.target.value)}
+              onChange={(e) => {
+                setSalesRep(e.target.value);
+                setErrorMessage(null);
+              }}
               disabled={saving}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white disabled:bg-gray-100"
+              required
+              className="w-full px-3 py-2 border border-ink-300 rounded-lg text-sm bg-white disabled:bg-gray-100"
             >
-              <option value="">Select sales rep...</option>
+              <option value="">{t('upload.selectSalesRep')}</option>
               {salesRepOptions.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -1205,7 +1213,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             <button
               type="button"
               onClick={saveDraft}
-              disabled={saving || (uploadKind === 'estimate' && !selectedCustomerId)}
+              disabled={
+                saving ||
+                !salesRep.trim() ||
+                (uploadKind === 'estimate' && !selectedCustomerId)
+              }
               className="flex-1 px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
             >
               {saving ? (

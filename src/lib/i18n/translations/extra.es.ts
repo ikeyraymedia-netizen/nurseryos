@@ -1507,7 +1507,11 @@ const extra = {
       'Los presupuestos requieren un cliente vinculado y no aparecerán en Pedidos hasta convertirlos.',
     similarMatchConfirm: 'Coincidencia similar encontrada — confirme o elija otra.',
     suggestedMatchesTap: 'Coincidencias sugeridas — toque para vincular',
-    trackSalesRepHint: 'Registre a quién pertenece este {{type}} — no se requiere camión.',
+    trackSalesRepHint:
+      'Asigna este {{type}} a un representante para reportes — no se requiere camión.',
+    salesRepRequiredLabel: 'Representante *',
+    salesRepRequired:
+      'Seleccione un representante antes de guardar. Los pedidos se rastrean por representante aunque aún no haya camión.',
     linkedTo: '✓ Vinculado a {{name}} ({{size}})',
     autoMatchedSuffix: ' — auto-vinculado',
     noInventoryLoaded: 'Aún no hay plantas de inventario cargadas.',

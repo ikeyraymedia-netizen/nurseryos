@@ -477,6 +477,30 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               );
             })()}
           </p>
+          {permissions.canEditOrders && (
+            <div className="mt-3 max-w-md" onClick={(e) => e.stopPropagation()}>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                {t('loader.changeCustomer')}
+              </label>
+              <select
+                value={order.customerId || ''}
+                onChange={(e) => void handleAssignCustomer(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold bg-white text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-ink-500/15 focus:border-ink-600"
+              >
+                <option value="">
+                  {order.customerName && !order.customerId
+                    ? t('loader.keepNameOnly', { name: order.customerName })
+                    : t('loader.unassigned')}
+                </option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">{t('loader.changeCustomerHint')}</p>
+            </div>
+          )}
         </div>
 
         {/* Global Loading Stepper Buttons */}
@@ -638,24 +662,6 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           )}
         </div>
       </div>
-
-      {permissions.canEditOrders && (
-        <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5">
-          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{t('loader.assignedCustomer')}</label>
-          <select
-            value={order.customerId || ''}
-            onChange={(e) => handleAssignCustomer(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-          >
-            <option value="">{t('loader.unassigned')}</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {/* Weight Summary Panel */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-ink-50/75 border border-ink-300 rounded-2xl p-4 mb-5 shadow-sm">

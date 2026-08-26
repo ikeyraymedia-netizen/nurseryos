@@ -96,6 +96,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     setInvoiceOrder(order);
   }
 
+  const handleAssignCustomer = async (order: CustomerOrder, customerId: string) => {
+    if (!permissions.canEditOrders) return;
+    if (!customerId) {
+      await updateCustomerOrder({ ...order, customerId: undefined });
+      return;
+    }
+    const selected = customers.find((c) => c.id === customerId);
+    if (!selected) return;
+    await updateCustomerOrder({
+      ...order,
+      customerId: selected.id,
+      customerName: selected.name
+    });
+  };
+
   function handleDownloadPullSheet() {
     setPullSheetBusy(true);
     try {
@@ -1201,6 +1216,33 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             ))}
                         </div>
                       </div>
+
+                      {permissions.canEditOrders && customers.length > 0 && (
+                        <div
+                          className="bg-slate-50 border border-slate-200 rounded-xl p-3"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                            {t('loader.changeCustomer')}
+                          </label>
+                          <select
+                            value={order.customerId || ''}
+                            onChange={(e) => void handleAssignCustomer(order, e.target.value)}
+                            className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold bg-white text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-ink-500/15 focus:border-ink-600"
+                          >
+                            <option value="">
+                              {order.customerName && !order.customerId
+                                ? t('loader.keepNameOnly', { name: order.customerName })
+                                : t('loader.unassigned')}
+                            </option>
+                            {customers.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       {/* Quick Add Plant Action */}
                       {permissions.canEditOrders &&

@@ -36,11 +36,14 @@ import {
   MapPin,
   Trash2,
   Mail,
-  Printer
+  Printer,
+  Copy,
+  MessageSquare,
+  X
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
-import { downloadTruckPullSheetPdf } from '../lib/pullSheet';
+import { buildVendorPullLists, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
@@ -82,6 +85,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [invoiceOrder, setInvoiceOrder] = useState<CustomerOrder | null>(null);
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false);
   const [pullSheetBusy, setPullSheetBusy] = useState(false);
+  const [vendorPullLists, setVendorPullLists] = useState<VendorPullList[] | null>(null);
+  const [copiedVendorKey, setCopiedVendorKey] = useState<string | null>(null);
 
   function openInvoice(order: CustomerOrder) {
     setShowInvoiceMenu(false);
@@ -103,6 +108,48 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     } finally {
       setPullSheetBusy(false);
     }
+  }
+
+  function handleOpenVendorTextLists() {
+    const sheetOrders = truckCustomerOrders(orders, truck);
+    setVendorPullLists(
+      buildVendorPullLists({
+        truck,
+        orders: sheetOrders,
+        nurseryName
+      })
+    );
+    setCopiedVendorKey(null);
+  }
+
+  async function copyVendorText(list: VendorPullList) {
+    try {
+      await navigator.clipboard.writeText(list.text);
+      setCopiedVendorKey(list.vendor);
+      window.setTimeout(() => {
+        setCopiedVendorKey((current) => (current === list.vendor ? null : current));
+      }, 2000);
+    } catch (err) {
+      console.error('Copy vendor list failed:', err);
+      alert(t('trucksExtra.copyVendorFailed'));
+    }
+  }
+
+  async function shareVendorText(list: VendorPullList) {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: list.vendor === 'Unassigned' ? truck.name : list.vendor,
+          text: list.text
+        });
+        return;
+      } catch (err: unknown) {
+        // User cancel — ignore; fall through to SMS / copy.
+        if (err instanceof Error && err.name === 'AbortError') return;
+      }
+    }
+    const smsUrl = `sms:?&body=${encodeURIComponent(list.text)}`;
+    window.location.href = smsUrl;
   }
 
   // States for adding a plant to an existing order in this truck
@@ -602,6 +649,17 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             >
               <Printer className="h-3.5 w-3.5 mr-1.5" />
               {pullSheetBusy ? t('trucks.preparing') : t('trucks.pullSheetPdf')}
+            </button>
+
+            <button
+              type="button"
+              disabled={truckOrders.length === 0}
+              onClick={handleOpenVendorTextLists}
+              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-ink-200 shadow-sm font-sans disabled:opacity-50"
+              title={t('trucksExtra.copyVendorListsTitle')}
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+              {t('trucksExtra.textVendors')}
             </button>
 
             {permissions.canViewBOL && (
@@ -1503,6 +1561,86 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {vendorPullLists && (
+        <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-gray-150">
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-gray-900">{t('trucksExtra.textVendorsTitle')}</h3>
+                <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                  {t('trucksExtra.textVendorsHint')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVendorPullLists(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-800 hover:bg-gray-100 shrink-0"
+                aria-label={t('common.close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {vendorPullLists.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-8">{t('trucksExtra.noVendorLists')}</p>
+              ) : (
+                vendorPullLists.map((list) => (
+                  <div
+                    key={list.vendor}
+                    className="border border-gray-200 rounded-xl p-3 bg-slate-50/60 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-gray-900 truncate">
+                          {list.vendor === 'Unassigned'
+                            ? t('trucksExtra.noVendorAssigned')
+                            : list.vendor}
+                        </p>
+                        <p className="text-[10px] text-gray-500 font-mono">
+                          {t('trucksExtra.vendorPlantCount', { n: list.quantity })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => void copyVendorText(list)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white border border-ink-200 text-ink-900 hover:bg-ink-50"
+                        >
+                          {copiedVendorKey === list.vendor ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-ink-700" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          {copiedVendorKey === list.vendor
+                            ? t('common.copied')
+                            : t('common.copy')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void shareVendorText(list)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-ink-700 text-white hover:bg-ink-800"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          {t('trucksExtra.textShare')}
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={list.text}
+                      rows={Math.min(10, list.text.split('\n').length + 1)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {permissions.canViewBOL && (
       <BillOfLadingModal

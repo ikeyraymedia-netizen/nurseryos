@@ -30,7 +30,6 @@ function drawCheckbox(
   if (checked) {
     pdf.setDrawColor(6, 78, 59);
     pdf.setLineWidth(1.4);
-    // Check mark
     pdf.line(x + 2, top + size / 2, x + size * 0.4, top + size - 2.5);
     pdf.line(x + size * 0.4, top + size - 2.5, x + size - 2, top + 2);
   }
@@ -51,14 +50,7 @@ function compareVendors(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
-export function downloadTruckPullSheetPdf(params: {
-  truck: Truck;
-  orders: CustomerOrder[];
-  nurseryName?: string;
-}): void {
-  const { truck, orders, nurseryName = 'NurseryOS' } = params;
-  const truckOrders = truckCustomerOrders(orders, truck);
-
+function buildConsolidatedPullLines(truckOrders: CustomerOrder[]): PullLine[] {
   const consolidated = new Map<string, PullLine>();
 
   for (const order of truckOrders) {
@@ -83,20 +75,75 @@ export function downloadTruckPullSheetPdf(params: {
     }
   }
 
-  const lines = [...consolidated.values()].sort(
+  return [...consolidated.values()].sort(
     (a, b) =>
       compareVendors(a.vendor, b.vendor) ||
       a.plantName.localeCompare(b.plantName) ||
       a.containerSize.localeCompare(b.containerSize)
   );
+}
 
+function groupLinesByVendor(lines: PullLine[]): Array<[string, PullLine[]]> {
   const byVendor = new Map<string, PullLine[]>();
   for (const line of lines) {
     const list = byVendor.get(line.vendor) || [];
     list.push(line);
     byVendor.set(line.vendor, list);
   }
-  const vendorGroups = [...byVendor.entries()].sort(([a], [b]) => compareVendors(a, b));
+  return [...byVendor.entries()].sort(([a], [b]) => compareVendors(a, b));
+}
+
+export type VendorPullList = {
+  vendor: string;
+  quantity: number;
+  /** Plain text ready to paste into a text / iMessage / WhatsApp. */
+  text: string;
+};
+
+/** Build per-vendor plain-text lists for copying / texting growers. */
+export function buildVendorPullLists(params: {
+  truck: Truck;
+  orders: CustomerOrder[];
+  nurseryName?: string;
+}): VendorPullList[] {
+  const { truck, orders, nurseryName = 'NurseryOS' } = params;
+  const truckOrders = truckCustomerOrders(orders, truck);
+  const vendorGroups = groupLinesByVendor(buildConsolidatedPullLines(truckOrders));
+  const loading = truck.loadingDate ? `Loading: ${truck.loadingDate}` : null;
+
+  return vendorGroups.map(([vendor, vendorLines]) => {
+    const quantity = vendorLines.reduce((sum, line) => sum + line.quantity, 0);
+    const header =
+      vendor === UNASSIGNED_VENDOR
+        ? 'Need from yard (no vendor assigned)'
+        : `Need from ${vendor}`;
+    const text = [
+      header,
+      `${nurseryName} · ${truck.name}`,
+      loading,
+      '',
+      ...vendorLines.map(
+        (line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`
+      ),
+      '',
+      `Total: ${quantity} plants`
+    ]
+      .filter((row) => row !== null)
+      .join('\n');
+
+    return { vendor, quantity, text };
+  });
+}
+
+export function downloadTruckPullSheetPdf(params: {
+  truck: Truck;
+  orders: CustomerOrder[];
+  nurseryName?: string;
+}): void {
+  const { truck, orders, nurseryName = 'NurseryOS' } = params;
+  const truckOrders = truckCustomerOrders(orders, truck);
+  const lines = buildConsolidatedPullLines(truckOrders);
+  const vendorGroups = groupLinesByVendor(lines);
 
   const pdf = new jsPDF('p', 'pt', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -112,7 +159,10 @@ export function downloadTruckPullSheetPdf(params: {
     }
   };
 
-  const write = (text: string, opts?: { size?: number; bold?: boolean; color?: [number, number, number] }) => {
+  const write = (
+    text: string,
+    opts?: { size?: number; bold?: boolean; color?: [number, number, number] }
+  ) => {
     ensureSpace((opts?.size || 10) + 6);
     pdf.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
     pdf.setFontSize(opts?.size || 10);
@@ -121,7 +171,6 @@ export function downloadTruckPullSheetPdf(params: {
     y += (opts?.size || 10) + 6;
   };
 
-  // Column layout (letter width ~612pt, content ~532)
   const col = {
     plant: margin,
     size: margin + 250,
@@ -229,15 +278,14 @@ export function downloadTruckPullSheetPdf(params: {
   for (const order of truckOrders) {
     y += 6;
     const ref = orderRefLabel(order);
-    write(
-      ref ? `${order.customerName}  ·  ${ref}` : order.customerName,
-      { size: 10, bold: true }
-    );
+    write(ref ? `${order.customerName}  ·  ${ref}` : order.customerName, {
+      size: 10,
+      bold: true
+    });
     if (order.stagedLocation) {
       write(`Staged: ${order.stagedLocation}`, { size: 8, color: [90, 90, 90] });
     }
 
-    // Mini header for this order
     ensureSpace(14);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(7);

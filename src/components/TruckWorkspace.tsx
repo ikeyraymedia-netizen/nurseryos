@@ -5,6 +5,7 @@ import { notifyInventorySyncIssue } from '../lib/inventory';
 import {
   updateOrderItemProgress,
   updateOrderItemPulledProgress,
+  updateOrderItemVendor,
   markAllItemsAsLoaded,
   resetOrderProgress,
   updateCustomerOrder,
@@ -39,7 +40,8 @@ import {
   Printer,
   Copy,
   MessageSquare,
-  X
+  X,
+  Building
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
@@ -47,6 +49,7 @@ import { buildVendorPullLists, downloadTruckPullSheetPdf, VendorPullList } from 
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
+import { DEFAULT_VENDORS } from '../data/vendors';
 
 interface TruckWorkspaceProps {
   truck: Truck;
@@ -168,6 +171,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [editQuantity, setEditQuantity] = useState(1);
   const [editNotes, setEditNotes] = useState('');
   const [editIsAddition, setEditIsAddition] = useState(false);
+  const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
+  const [tempVendorName, setTempVendorName] = useState('');
 
   // States for creating a brand new standalone customer addition to this truck
   const [isCreatingStandalone, setIsCreatingStandalone] = useState(false);
@@ -178,6 +183,16 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [standaloneQuantity, setStandaloneQuantity] = useState(1);
   const [standaloneNotes, setStandaloneNotes] = useState('');
   const [standaloneError, setStandaloneError] = useState<string | null>(null);
+
+  async function handleVendorSave(order: CustomerOrder, itemId: string, vendorName: string) {
+    if (!permissions.canUseVendors) return;
+    try {
+      await updateOrderItemVendor(order.id, itemId, vendorName.trim(), order.items);
+      setEditingVendorKey(null);
+    } catch (err) {
+      console.error('Error saving item vendor:', err);
+    }
+  }
 
   // Filter orders belonging to this truck, sorted by loading sequence (first loaded first)
   const truckOrders = truckCustomerOrders(orders, truck);
@@ -1476,6 +1491,70 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         Note: {item.notes}
                                       </p>
                                     )}
+
+                                    {permissions.canUseVendors && (
+                                      <div
+                                        className="mt-1.5 w-full"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {editingVendorKey === `${order.id}-${item.id}` ? (
+                                          <div className="flex items-center gap-1.5 w-full">
+                                            <input
+                                              type="text"
+                                              list="vendors-list-truck"
+                                              value={tempVendorName}
+                                              onChange={(e) => setTempVendorName(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  void handleVendorSave(order, item.id, tempVendorName);
+                                                } else if (e.key === 'Escape') {
+                                                  setEditingVendorKey(null);
+                                                }
+                                              }}
+                                              autoFocus
+                                              placeholder={t('loader.vendorPlaceholder')}
+                                              className="flex-1 min-w-0 px-2.5 py-2 border border-ink-400 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                void handleVendorSave(order, item.id, tempVendorName)
+                                              }
+                                              className="shrink-0 px-3 py-2 bg-ink-600 hover:bg-ink-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setEditingVendorKey(null)}
+                                              className="shrink-0 px-2.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold transition-all"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingVendorKey(`${order.id}-${item.id}`);
+                                              setTempVendorName(item.vendor || '');
+                                            }}
+                                            className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all touch-manipulation ${
+                                              item.vendor
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100'
+                                                : 'bg-slate-50 border-slate-300 text-slate-700 border-dashed hover:border-ink-400 hover:bg-ink-50'
+                                            }`}
+                                          >
+                                            <Building className="h-3.5 w-3.5 shrink-0" />
+                                            <span>
+                                              {item.vendor
+                                                ? t('loader.vendorLabel', { name: item.vendor })
+                                                : t('loader.assignVendor')}
+                                            </span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* Pulled + Loaded — stacked on mobile so controls aren't clipped */}
@@ -1561,6 +1640,14 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {permissions.canUseVendors && (
+        <datalist id="vendors-list-truck">
+          {DEFAULT_VENDORS.map((vendor) => (
+            <option key={vendor} value={vendor} />
+          ))}
+        </datalist>
+      )}
 
       {vendorPullLists && (
         <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">

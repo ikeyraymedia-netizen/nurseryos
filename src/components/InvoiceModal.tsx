@@ -531,7 +531,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         ? t('invoice.creditMemo')
         : t('invoice.invoice');
   const docLabelUpper = docLabel.toUpperCase();
-  const workingItems = canEditLines ? creditLines : order.items;
+  // Prefer editable draft lines when present. For invoices, never fall through to an
+  // empty draft right after first save (canEditLines flips on before creditLines is seeded).
+  const workingItems =
+    canEditLines && creditLines.length > 0
+      ? creditLines
+      : documentType === 'invoice'
+        ? order.items
+        : creditLines;
   const totalLabel =
     documentType === 'estimate'
       ? t('invoice.estimateTotal')
@@ -1436,6 +1443,30 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           persistedId = await addCustomerDocument(docPayload);
           setSavedDocumentId(persistedId);
         }
+
+      // Invoices unlock line editing once a document id exists. Seed creditLines
+      // immediately so workingItems does not flip to [] and wipe prices on screen.
+      setCreditLines(
+        updatedItems.map((item) => ({
+          ...item,
+          loadedQuantity: item.loadedQuantity ?? 0
+        }))
+      );
+      setItemPrices((prev) => {
+        const next = { ...prev };
+        for (const item of updatedItems) {
+          next[item.id] =
+            item.unitPrice !== undefined ? item.unitPrice : next[item.id] ?? 0;
+        }
+        return next;
+      });
+      setItemCosts((prev) => {
+        const next = { ...prev };
+        for (const item of updatedItems) {
+          if (item.unitCost !== undefined) next[item.id] = item.unitCost;
+        }
+        return next;
+      });
 
         if (freightShares && freightAllocation) {
           const allDocuments = await listAllDocuments();

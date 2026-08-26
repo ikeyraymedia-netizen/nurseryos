@@ -166,6 +166,9 @@ const extra = {
     goodLinersShort: 'Good liners',
     lowStock: 'Low stock for upcoming trucks',
     lowStockHint: 'Compare on-hand inventory to plants needed on trucks loading in the next 14 days.',
+    loadAlerts: 'Alerts when loading trucks',
+    loadAlertsHint:
+      'Pop-up warnings if a plant is short or missing from inventory when you mark items loaded. Turn off to stop the alerts.',
     on: 'On',
     off: 'Off',
     shortages: 'Shortages ({{n}})',

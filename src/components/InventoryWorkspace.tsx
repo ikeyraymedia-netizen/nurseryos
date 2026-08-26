@@ -40,6 +40,10 @@ import {
 import { subscribeToVendors } from '../lib/vendors';
 import { buildLowStockForUpcomingTrucks } from '../lib/lowStockAlerts';
 import {
+  areInventoryLoadAlertsEnabled,
+  setInventoryLoadAlertsEnabled
+} from '../lib/inventoryAlertPrefs';
+import {
   exportAvailabilityExcel,
   exportAvailabilityPdf,
   removeInventoryPlantPhoto,
@@ -202,6 +206,9 @@ export function InventoryWorkspace({
       return false;
     }
   });
+  const [loadAlertsEnabled, setLoadAlertsEnabled] = useState(() =>
+    areInventoryLoadAlertsEnabled()
+  );
 
   const [newPlantName, setNewPlantName] = useState('');
   const [newContainerSize, setNewContainerSize] = useState('#3');
@@ -1181,6 +1188,44 @@ export function InventoryWorkspace({
             <span
               className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
                 showLowStockUpcoming ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </label>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-700" />
+            {t('inventory.loadAlerts')}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+            {t('inventory.loadAlertsHint')}
+          </p>
+        </div>
+        <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer select-none">
+          <span className="text-xs font-bold text-slate-600">
+            {loadAlertsEnabled ? t('inventory.on') : t('inventory.off')}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={loadAlertsEnabled}
+            onClick={() => {
+              setLoadAlertsEnabled((prev) => {
+                const next = !prev;
+                setInventoryLoadAlertsEnabled(next);
+                return next;
+              });
+            }}
+            className={`relative h-7 w-12 rounded-full transition-colors ${
+              loadAlertsEnabled ? 'bg-ink-700' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                loadAlertsEnabled ? 'left-5' : 'left-0.5'
               }`}
             />
           </button>

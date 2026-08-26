@@ -168,6 +168,9 @@ const extra = {
     lowStock: 'Stock bajo para camiones próximos',
     lowStockHint:
       'Compare el inventario en mano con las plantas necesarias en camiones que cargan en los próximos 14 días.',
+    loadAlerts: 'Alertas al cargar camiones',
+    loadAlertsHint:
+      'Avisos emergentes si falta planta o stock al marcar como cargado. Desactívelos para dejar de ver las alertas.',
     on: 'Activado',
     off: 'Desactivado',
     shortages: 'Faltantes ({{n}})',

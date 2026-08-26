@@ -562,7 +562,10 @@ export function inventorySyncSucceeded(result: InventoryAdjustResult): boolean {
   return result.unmatched.length === 0 && result.shortfalls.length === 0;
 }
 
+import { areInventoryLoadAlertsEnabled } from './inventoryAlertPrefs';
+
 export function notifyInventorySyncIssue(note: string) {
+  if (!areInventoryLoadAlertsEnabled()) return;
   const lower = note.toLowerCase();
   const isIssue =
     lower.includes('no matching inventory row') ||

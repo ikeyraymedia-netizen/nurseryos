@@ -277,6 +277,7 @@ const es: TranslationDict = {
     sizeRequired: 'El tamaño del contenedor es obligatorio',
     addFailed: 'No se pudo agregar la planta al pedido',
     vendorLabel: 'Proveedor: {{name}}',
+    assignVendor: '+ Asignar proveedor',
     estimatedWeight: 'PESO ESTIMADO DE ENVÍO: {{weight}} LBS',
     optionalNotes: 'Notas opcionales',
     editItem: 'Editar detalles',

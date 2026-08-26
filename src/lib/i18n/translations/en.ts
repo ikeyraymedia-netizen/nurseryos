@@ -271,6 +271,7 @@ const en = {
     sizeRequired: 'Container size is required',
     addFailed: 'Failed to add plant to order',
     vendorLabel: 'Vendor: {{name}}',
+    assignVendor: '+ Assign vendor',
     estimatedWeight: 'ESTIMATED SHIPPING WEIGHT: {{weight}} LBS',
     optionalNotes: 'Optional notes',
     editItem: 'Edit item details',

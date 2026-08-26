@@ -1082,12 +1082,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             <span className="font-mono font-bold text-gray-700 shrink-0">Total: {itemTotalWeight.toLocaleString()} lbs</span>
                             </div>
 
-                            {(permissions.canEditCost || permissions.canUseVendors) && (
-                            <div className="flex flex-wrap items-center gap-2">
-                            {/* Cost Section (internal; gated by profit module) */}
                             {permissions.canEditCost && (
                               <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50/70 text-indigo-800 font-semibold"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded border border-indigo-200 bg-indigo-50/70 text-indigo-800 font-semibold w-fit"
                                   onClick={(e) => e.stopPropagation()}
                                   title={t('loader.costHint')}
                                 >
@@ -1108,13 +1105,13 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                   />
                                 </span>
                             )}
+                          </div>
 
-                            {/* Vendor Section */}
-                            {permissions.canUseVendors && (
-                            permissions.canEditOrders ? (
-                            editingVendorItemId === item.id ? (
-                              <div className="flex items-center space-x-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                                <div className="relative">
+                          {/* Vendor — own row so it stays visible on mobile */}
+                          {permissions.canUseVendors && (
+                            <div className="mt-1.5 w-full" onClick={(e) => e.stopPropagation()}>
+                              {editingVendorItemId === item.id ? (
+                                <div className="flex items-center gap-1.5 w-full animate-fade-in">
                                   <input
                                     type="text"
                                     list="vendors-list-loader"
@@ -1129,47 +1126,48 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                     }}
                                     autoFocus
                                     placeholder={t('loader.vendorPlaceholder')}
-                                    className="px-2 py-0.5 border border-ink-400 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855 w-44 max-w-full"
+                                    className="flex-1 min-w-0 px-2.5 py-2 border border-ink-400 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-ink-500 bg-white font-semibold text-gray-855"
                                   />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVendorSave(item.id, tempVendorName)}
+                                    className="shrink-0 px-3 py-2 bg-ink-600 hover:bg-ink-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                                    title="Save"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingVendorItemId(null)}
+                                    className="shrink-0 px-2.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold transition-all"
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
                                 </div>
+                              ) : (
                                 <button
-                                  onClick={() => handleVendorSave(item.id, tempVendorName)}
-                                  className="px-2 py-0.5 bg-ink-600 hover:bg-ink-700 text-white rounded-md text-[10px] font-bold transition-all shadow-sm"
-                                  title="Save"
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingVendorItemId(item.id);
+                                    setTempVendorName(item.vendor || '');
+                                  }}
+                                  className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all touch-manipulation ${
+                                    item.vendor
+                                      ? 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100'
+                                      : 'bg-slate-50 border-slate-300 text-slate-700 border-dashed hover:border-ink-400 hover:bg-ink-50'
+                                  }`}
                                 >
-                                  Save
+                                  <Building className="h-3.5 w-3.5 shrink-0" />
+                                  <span>
+                                    {item.vendor
+                                      ? t('loader.vendorLabel', { name: item.vendor })
+                                      : t('loader.assignVendor')}
+                                  </span>
                                 </button>
-                                <button
-                                  onClick={() => setEditingVendorItemId(null)}
-                                  className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md text-[10px] font-bold transition-all"
-                                  title="Cancel"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setEditingVendorItemId(item.id);
-                                  setTempVendorName(item.vendor || '');
-                                }}
-                                className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-semibold border transition-all ${
-                                  item.vendor
-                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100'
-                                    : 'bg-slate-50 border-slate-200 text-slate-500 border-dashed hover:border-slate-350 hover:bg-slate-100'
-                                }`}
-                              >
-                                <Building className="h-3.5 w-3.5 shrink-0" />
-                                <span>{item.vendor ? `Vendor: ${item.vendor}` : '+ Assign Vendor'}</span>
-                              </button>
-                            )
-                            ) : item.vendor ? (
-                              <span className="text-xs text-indigo-700 font-semibold">{t('loader.vendorLabel', { name: item.vendor })}</span>
-                            ) : null
-                            )}
+                              )}
                             </div>
-                            )}
-                          </div>
+                          )}
                         </div>
 
                         {/* Twin Checkboxes / Progress Controls */}

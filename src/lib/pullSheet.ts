@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { CustomerOrder, Truck } from '../types';
 import { truckCustomerOrders } from './loadSequence';
+import { orderRefLabel } from './orderLabels';
 
 function normalizeLineKey(plantName: string, containerSize: string): string {
   return `${plantName.trim().toLowerCase()}::${containerSize.trim().toLowerCase()}`;
@@ -177,7 +178,11 @@ export function downloadTruckPullSheetPdf(params: {
 
   for (const order of truckOrders) {
     y += 6;
-    write(`${order.customerName}  ·  Order #${order.orderNumber}`, { size: 10, bold: true });
+    const ref = orderRefLabel(order);
+    write(
+      ref ? `${order.customerName}  ·  ${ref}` : order.customerName,
+      { size: 10, bold: true }
+    );
     if (order.stagedLocation) {
       write(`Staged: ${order.stagedLocation}`, { size: 8, color: [90, 90, 90] });
     }

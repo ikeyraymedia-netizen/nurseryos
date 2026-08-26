@@ -31,6 +31,7 @@ import {
 } from '../lib/documents';
 import { addCustomerOrder } from '../lib/db';
 import { logAuditEvent } from '../lib/audit';
+import { orderRefLabel } from '../lib/orderLabels';
 import { exportNurseryBackup } from '../lib/backup';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
@@ -1336,7 +1337,8 @@ export function CustomersWorkspace({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-900 truncate">
-                            {t('customers.orderNum')}{order.orderNumber}
+                            {orderRefLabel(order) ||
+                              new Date(order.dateCreated).toLocaleDateString()}
                           </p>
                           <p className="text-xs text-gray-500">
                             {new Date(order.dateCreated).toLocaleDateString()} • {order.items.length} {t('customers.items')}

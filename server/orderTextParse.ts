@@ -7,7 +7,8 @@ export interface ParsedOrderItem {
 
 export interface ParsedOrderFromText {
   customerName: string;
-  orderNumber: string;
+  /** Customer PO when clearly labeled; empty otherwise. No invented order numbers. */
+  poNumber: string;
   items: ParsedOrderItem[];
   plainText: string;
 }
@@ -78,9 +79,9 @@ function stripSizeTokens(raw: string): string {
     .trim();
 }
 
-function extractMeta(lines: string[]): { customerName: string; orderNumber: string } {
+function extractMeta(lines: string[]): { customerName: string; poNumber: string } {
   let customerName = 'Unknown Customer';
-  let orderNumber = 'N/A';
+  let poNumber = '';
 
   for (const line of lines) {
     const customerMatch = line.match(
@@ -90,15 +91,17 @@ function extractMeta(lines: string[]): { customerName: string; orderNumber: stri
       customerName = customerMatch[1].trim();
       continue;
     }
-    const orderMatch = line.match(
-      /^(?:po|p\.?o\.?|order|invoice|ticket)\s*(?:#|number|no\.?)?\s*[:\-#]?\s*(.+)$/i
+    // Only capture explicitly labeled purchase orders — not invoice/order numbers.
+    const poMatch = line.match(
+      /^(?:po|p\.?o\.?|purchase\s*order)\s*(?:#|number|no\.?)?\s*[:\-#]?\s*(.+)$/i
     );
-    if (orderMatch?.[1]?.trim()) {
-      orderNumber = orderMatch[1].trim();
+    if (poMatch?.[1]?.trim()) {
+      const value = poMatch[1].trim();
+      if (!/^n\/?a$/i.test(value)) poNumber = value;
     }
   }
 
-  return { customerName, orderNumber };
+  return { customerName, poNumber };
 }
 
 function isMetaOrJunkLine(line: string): boolean {
@@ -244,12 +247,12 @@ function parseLineItem(line: string): ParsedOrderItem | null {
 
 function buildPlainTextChecklist(
   customerName: string,
-  orderNumber: string,
+  poNumber: string,
   items: ParsedOrderItem[]
 ): string {
   const header = [
     `CUSTOMER: ${customerName}`,
-    orderNumber !== 'N/A' ? `ORDER/PO: ${orderNumber}` : null,
+    poNumber ? `PO: ${poNumber}` : null,
     ''
   ].filter(Boolean);
 
@@ -299,7 +302,7 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
     }
   }
 
-  const { customerName, orderNumber } = extractMeta(rawLines);
+  const { customerName, poNumber } = extractMeta(rawLines);
   const items: ParsedOrderItem[] = [];
 
   for (const line of candidateLines) {
@@ -311,9 +314,9 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
 
   return {
     customerName,
-    orderNumber,
+    poNumber,
     items,
-    plainText: buildPlainTextChecklist(customerName, orderNumber, items)
+    plainText: buildPlainTextChecklist(customerName, poNumber, items)
   };
 }
 

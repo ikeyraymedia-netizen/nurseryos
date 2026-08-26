@@ -8,6 +8,7 @@ import { PdfShareSheet } from './PdfShareSheet';
 import { useT, useLocale } from '../lib/i18n';
 import { imageSrcToDataUrl, resolveNurseryLogoSrc } from '../lib/nurseryBranding';
 import { sortOrdersByDropSequence } from '../lib/loadSequence';
+import { orderRefLabel } from '../lib/orderLabels';
 
 interface BillOfLadingModalProps {
   isOpen: boolean;
@@ -392,10 +393,15 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       a.notes.localeCompare(b.notes)
   );
 
+  function orderStopRef(order: CustomerOrder | null | undefined): string {
+    if (!order) return '—';
+    return orderRefLabel(order) || '—';
+  }
+
   // Dynamic BOL Number
   const bolNumber = selectedBOLType === 'consolidated'
     ? `BOL-${String(truck?.id || 'TRUCK').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
-    : `BOL-ORD-${(singleOrder?.orderNumber || '').toUpperCase()}-${new Date(shipDate).getFullYear()}`;
+    : `BOL-${String(singleOrder?.id || 'ORD').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`;
 
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);
@@ -543,15 +549,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       currentBOLOrders.forEach((order, idx) => {
         const stopLabel = blindBol
           ? selectedBOLType === 'consolidated'
-            ? t('bol.pdfStopBlind', { n: idx + 1, num: order.orderNumber })
-            : t('bol.pdfConsigneeBlind', { num: order.orderNumber })
+            ? t('bol.pdfStopBlind', { n: idx + 1, num: orderStopRef(order) })
+            : t('bol.pdfConsigneeBlind', { num: orderStopRef(order) })
           : selectedBOLType === 'consolidated'
             ? t('bol.pdfStopOrder', {
                 n: idx + 1,
                 customer: resolveOrderReceiverName(order),
-                num: order.orderNumber
+                num: orderStopRef(order)
               })
-            : `${resolveOrderReceiverName(order)} (${t('common.order')} #${order.orderNumber})`;
+            : `${resolveOrderReceiverName(order)}${
+                orderStopRef(order) !== '—' ? ` (${orderStopRef(order)})` : ''
+              }`;
         writeWrapped(stopLabel, margin + 4, pageWidth - margin * 2 - 8, 10, true, 13);
         const addr = stopDeliveryAddress(order);
         if (addr) {
@@ -761,7 +769,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   <option key={order.id} value={order.id}>
                     {t('bol.stopOrder', {
                       n: idx + 1,
-                      num: order.orderNumber || '—',
+                      num: orderStopRef(order),
                       customer: String(order.customerName || t('reports.customer')).slice(0, 25)
                     })}
                   </option>
@@ -966,7 +974,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <h2 className="text-base font-black text-gray-900 flex items-center gap-2 flex-wrap">
                 {selectedBOLType === 'consolidated'
                   ? t('bol.consolidatedTitle')
-                  : t('bol.orderTitle', { num: singleOrder?.orderNumber })}
+                  : t('bol.orderTitle', { num: orderStopRef(singleOrder) })}
                 {blindBol && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-ink-100 text-ink-900 border border-ink-200">
                     <EyeOff className="h-3 w-3" />
@@ -1135,7 +1143,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                               {t('bol.stop', { n: index + 1 })}
                             </span>
                             <span className="text-[10px] text-gray-400 font-mono font-medium">
-                              {t('bol.orderNum', { num: order.orderNumber })}
+                              {t('bol.orderNum', { num: orderStopRef(order) })}
                             </span>
                           </div>
                           {!blindBol && (
@@ -1179,7 +1187,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                             })}
                       </span>
                       <span className="text-xs font-mono font-bold text-gray-500">
-                        {t('bol.orderNum', { num: singleOrder?.orderNumber })}
+                        {t('bol.orderNum', { num: orderStopRef(singleOrder) })}
                       </span>
                     </div>
                     {!blindBol && singleOrder && (
@@ -1189,8 +1197,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     )}
                     <p className="text-xs text-gray-600 mt-1 leading-relaxed">
                       {blindBol
-                        ? t('bol.blindDeliverInstruction', { num: singleOrder?.orderNumber })
-                        : t('bol.deliverInstruction', { num: singleOrder?.orderNumber })}
+                        ? t('bol.blindDeliverInstruction', { num: orderStopRef(singleOrder) })
+                        : t('bol.deliverInstruction', { num: orderStopRef(singleOrder) })}
                     </p>
                     {(receiverAddress ||
                       (singleOrder && resolveOrderDeliveryAddress(singleOrder))) && (
@@ -1219,7 +1227,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider">
                     {selectedBOLType === 'consolidated'
                       ? t('bol.consolidatedManifest')
-                      : t('bol.orderManifest', { num: singleOrder?.orderNumber })}
+                      : t('bol.orderManifest', { num: orderStopRef(singleOrder) })}
                   </h3>
                   <span className="text-[10px] font-mono font-bold text-gray-400">
                     {selectedBOLType === 'consolidated'
@@ -1357,16 +1365,20 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                             ? selectedBOLType === 'consolidated'
                               ? t('bol.stopBlind', {
                                   n: index + 1,
-                                  num: order.orderNumber
+                                  num: orderStopRef(order)
                                 })
-                              : t('bol.pdfConsigneeBlind', { num: order.orderNumber })
+                              : t('bol.pdfConsigneeBlind', { num: orderStopRef(order) })
                             : selectedBOLType === 'consolidated'
                               ? t('bol.stopCustomer', {
                                   n: index + 1,
                                   customer: resolveOrderReceiverName(order),
-                                  num: order.orderNumber
+                                  num: orderStopRef(order)
                                 })
-                              : `${resolveOrderReceiverName(order)} (${t('common.order')} #${order.orderNumber})`}
+                              : `${resolveOrderReceiverName(order)}${
+                                  orderStopRef(order) !== '—'
+                                    ? ` (${orderStopRef(order)})`
+                                    : ''
+                                }`}
                         </p>
                         <p className="text-[10px] text-gray-600 font-sans mt-1 whitespace-pre-wrap leading-snug">
                           {stopDeliveryAddress(order) || t('bol.deliveryAddressOnly')}
@@ -1389,7 +1401,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <div className="pt-10 text-center text-[9px] text-gray-400 font-mono">
                 {selectedBOLType === 'consolidated'
                   ? t('bol.footerConsolidated', { name: nurseryName })
-                  : t('bol.footerIndividual', { name: nurseryName, num: singleOrder?.orderNumber })}
+                  : t('bol.footerIndividual', { name: nurseryName, num: orderStopRef(singleOrder) })}
               </div>
 
             </div>

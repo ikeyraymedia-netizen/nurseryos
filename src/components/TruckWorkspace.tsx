@@ -12,6 +12,7 @@ import {
   updateTruck
 } from '../lib/db';
 import { getTruckWeightCapacity, calculateWeightPercentage, getCapacitySeverity } from '../lib/capacity';
+import { orderRefLabel } from '../lib/orderLabels';
 import { 
   Truck as TruckIcon, 
   Weight, 
@@ -652,7 +653,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           className="w-full text-left px-3 py-2.5 text-xs hover:bg-ink-50 border-b border-slate-50 last:border-b-0"
                         >
                           <span className="font-bold text-gray-900 block truncate">{order.customerName}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">Order #{order.orderNumber}</span>
+                          {orderRefLabel(order) && (
+                            <span className="text-[10px] text-gray-500 font-mono">{orderRefLabel(order)}</span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -965,9 +968,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                         <h4 className="text-sm font-bold text-gray-900 truncate">
                           {order.customerName}
                         </h4>
-                        <span className="text-[10px] font-mono font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
-                          Order #{order.orderNumber}
-                        </span>
+                        {orderRefLabel(order) && (
+                          <span className="text-[10px] font-mono font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                            {orderRefLabel(order)}
+                          </span>
+                        )}
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-400 font-mono mt-1">

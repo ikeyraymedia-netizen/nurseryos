@@ -3,6 +3,7 @@ import { Search, Calendar, Weight, Trash2, CheckCircle2, CircleDot, PlayCircle, 
 import { CustomerOrder } from '../types';
 import { deleteCustomerOrder } from '../lib/db';
 import { useT } from '../lib/i18n';
+import { orderRefLabel } from '../lib/orderLabels';
 
 interface OrdersListProps {
   orders: CustomerOrder[];
@@ -35,9 +36,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({
 
   // Filter orders based on search query and status filter
   const filteredOrders = orders.filter((order) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      order.customerName.toLowerCase().includes(q) ||
+      (order.orderNumber || '').toLowerCase().includes(q) ||
+      (order.invoiceDetails?.poNumber || '').toLowerCase().includes(q);
 
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
 
@@ -168,9 +171,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                     <h4 className="text-sm font-black text-gray-900 font-sans truncate pr-4">
                       {order.customerName}
                     </h4>
-                    <p className="text-xs text-slate-500 font-mono mt-0.5 font-bold">
-                      Order #: {order.orderNumber}
-                    </p>
+                    {orderRefLabel(order) && (
+                      <p className="text-xs text-slate-500 font-mono mt-0.5 font-bold">
+                        {orderRefLabel(order)}
+                      </p>
+                    )}
                   </div>
                   {canDelete &&
                     (deletingOrderId === order.id ? (

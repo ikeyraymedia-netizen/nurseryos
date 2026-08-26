@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { CustomerOrder, CustomerDocument, NurseryTask, Truck } from '../types';
+import { orderRefLabel } from './orderLabels';
 
 export type WhatsNewKind = 'order' | 'truck' | 'task' | 'plant' | 'payment';
 
@@ -80,7 +81,7 @@ export function buildWhatsNewDigest(params: {
         id: `order-${order.id}`,
         kind: 'order',
         title: `New order · ${order.customerName}`,
-        detail: `Order #${order.orderNumber} · ${order.items.length} line${order.items.length === 1 ? '' : 's'}`,
+        detail: `${orderRefLabel(order) || 'Order'} · ${order.items.length} line${order.items.length === 1 ? '' : 's'}`,
         at: order.dateCreated
       });
       continue;

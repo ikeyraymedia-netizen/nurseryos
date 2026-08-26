@@ -43,7 +43,8 @@ interface OrderUploaderProps {
 
 interface ParsedOrderDraft {
   customerName: string;
-  orderNumber: string;
+  /** Customer PO when clearly labeled on the upload; empty otherwise. */
+  poNumber: string;
   items: PlantOrderItem[];
   originalText: string;
   totalWeightLbs: number;
@@ -316,7 +317,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
       setPendingDraft({
         customerName: parsedCustomerName,
-        orderNumber: result.orderNumber || 'N/A',
+        poNumber: String(result.poNumber || '').trim().replace(/^n\/?a$/i, ''),
         items: itemsWithIds,
         originalText: result.plainText || orderText || '',
         totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights),
@@ -503,8 +504,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         await addCustomerDocument({
           customerId: linked.id,
           customerName: linked.name,
-          orderNumber:
-            pendingDraft.orderNumber !== 'N/A' ? pendingDraft.orderNumber : undefined,
+          poNumber: pendingDraft.poNumber || undefined,
           type: 'estimate',
           documentNumber: await nextDocumentNumber('estimate', {
             considerQuickbooks: true,
@@ -541,12 +541,15 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       const orderId = await addCustomerOrder({
         customerName: linked?.name || pendingDraft.customerName,
         customerId: linked?.id || undefined,
-        orderNumber: pendingDraft.orderNumber,
+        orderNumber: '',
         items: namedItems,
         originalText: pendingDraft.originalText,
         status: 'pending',
         totalWeightLbs: orderWeightLbs(namedItems, containerWeights),
-        owner: salesRep.trim() || undefined
+        owner: salesRep.trim() || undefined,
+        ...(pendingDraft.poNumber
+          ? { invoiceDetails: { poNumber: pendingDraft.poNumber } }
+          : {})
       });
 
       await logAuditEvent({
@@ -810,7 +813,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           <p className="text-sm font-bold text-gray-900">{t('upload.isEstimate')}</p>
           <p className="text-xs text-gray-600 leading-relaxed">
             Parsed <span className="font-semibold">{pendingDraft.customerName}</span>
-            {pendingDraft.orderNumber !== 'N/A' ? ` • #${pendingDraft.orderNumber}` : ''} •{' '}
+            {pendingDraft.poNumber ? ` • PO ${pendingDraft.poNumber}` : ''} •{' '}
             {pendingDraft.items.length} line
             {pendingDraft.items.length === 1 ? '' : 's'}.
           </p>
@@ -871,7 +874,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           <div className="text-xs text-gray-600 bg-white border border-gray-100 rounded-lg px-3 py-2">
             <span className="font-semibold text-gray-800">Parsed from document:</span>{' '}
             {pendingDraft.customerName}
-            <span className="text-gray-400"> • #{pendingDraft.orderNumber}</span>
+            {pendingDraft.poNumber ? (
+              <span className="text-gray-400"> • PO {pendingDraft.poNumber}</span>
+            ) : null}
             <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-white border border-gray-200 text-gray-700">
               {uploadKind === 'estimate' ? 'Estimate' : 'Plant order'}
             </span>

@@ -7,6 +7,7 @@ import { toDateKey } from '../lib/dates';
 import { dropNumber, loadNumber } from '../lib/loadSequence';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { useT } from '../lib/i18n';
+import { orderRefLabel } from '../lib/orderLabels';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
@@ -343,10 +344,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                             {order.customerName}
                           </p>
                           <p className="text-[10px] text-gray-400 font-mono">
-                            {t('truckBuilder.orderLineShort', {
-                              num: order.orderNumber,
-                              items: totalItems
-                            })}
+                            {orderRefLabel(order)
+                              ? `${orderRefLabel(order)} • ${totalItems} plants`
+                              : `${totalItems} plants`}
                           </p>
                         </div>
                       </div>
@@ -424,11 +424,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                             {order.customerName}
                           </p>
                           <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                            {t('truckBuilder.orderLineFull', {
-                              num: order.orderNumber,
-                              items: totalItems,
-                              weight: order.totalWeightLbs.toLocaleString()
-                            })}
+                            {orderRefLabel(order)
+                              ? `${orderRefLabel(order)} • ${totalItems} plants • ${order.totalWeightLbs.toLocaleString()} lbs`
+                              : `${totalItems} plants • ${order.totalWeightLbs.toLocaleString()} lbs`}
                           </p>
                         </div>
                       </div>

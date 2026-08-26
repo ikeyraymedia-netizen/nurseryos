@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { CustomerOrder, ContainerWeight, Customer, CustomerDocument, CustomerDocumentType } from '../types';
 import { AppPermissions } from '../lib/permissions';
+import { orderRefLabel } from '../lib/orderLabels';
 import {
   updateOrderItemProgress,
   updateOrderItemPulledProgress,
@@ -458,7 +459,23 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             {order.customerName}
           </h2>
           <p className="text-sm text-slate-600 font-mono flex items-center mt-0.5">
-            <Building className="h-4 w-4 mr-1 text-slate-500" /> Invoice / Order #: <span className="font-bold text-gray-700 ml-1">{order.orderNumber}</span>
+            <Building className="h-4 w-4 mr-1 text-slate-500" />
+            {(() => {
+              const ref = orderRefLabel(order);
+              if (!ref) return null;
+              if (ref.startsWith('PO ')) {
+                return (
+                  <>
+                    PO: <span className="font-bold text-gray-700 ml-1">{ref.slice(3)}</span>
+                  </>
+                );
+              }
+              return (
+                <>
+                  Invoice / Order #: <span className="font-bold text-gray-700 ml-1">{ref}</span>
+                </>
+              );
+            })()}
           </p>
         </div>
 

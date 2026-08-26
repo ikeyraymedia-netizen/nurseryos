@@ -163,9 +163,10 @@ function getOrderParseSchema() {
           type: Type.STRING,
           description: 'The name of the customer or business placing the order'
         },
-        orderNumber: {
+        poNumber: {
           type: Type.STRING,
-          description: 'The order number, invoice number, or PO number'
+          description:
+            'Customer PO number only when clearly labeled as PO / P.O. / Purchase Order. Empty string if none or unclear. Do not invent values or use order/invoice numbers.'
         },
         items: {
           type: Type.ARRAY,
@@ -189,7 +190,7 @@ function getOrderParseSchema() {
           description: 'A clean, highly readable plain-text visual checklist representation for loaders'
         }
       },
-      required: ['customerName', 'orderNumber', 'items', 'plainText']
+      required: ['customerName', 'items', 'plainText']
     }
   };
 }
@@ -293,6 +294,20 @@ function mergeInventoryItems(chunks: any[][]): any[] {
     }
   }
   return out;
+}
+
+function normalizeParsedOrderPayload(parsed: any) {
+  const rawPo = String(parsed?.poNumber ?? '').trim();
+  const poNumber = rawPo && !/^n\/?a$/i.test(rawPo) ? rawPo : '';
+  // Drop legacy orderNumber from the response — we only keep a clear customer PO.
+  const { orderNumber: _ignored, ...rest } = parsed && typeof parsed === 'object' ? parsed : {};
+  return {
+    ...rest,
+    customerName: String(parsed?.customerName || 'Unknown Customer').trim() || 'Unknown Customer',
+    poNumber,
+    items: Array.isArray(parsed?.items) ? parsed.items : [],
+    plainText: String(parsed?.plainText || '')
+  };
 }
 
 async function generateOrderParseResponse(
@@ -526,7 +541,7 @@ app.post('/api/parse-order', async (req, res) => {
       localFallback = local;
       if (local && !localParseLooksIncomplete(textBody, local)) {
         console.log(`Parsed pasted order locally (${local.items.length} items).`);
-        res.json(local);
+        res.json(normalizeParsedOrderPayload(local));
         return;
       }
       if (local) {
@@ -553,7 +568,7 @@ app.post('/api/parse-order', async (req, res) => {
     const prompt = `Analyze this plant order document (${fileName || 'document'}).
 It is a customer plant order list/invoice from a nursery. Extract:
 1. Customer Name (look for Bill To, Ship To, Client, or main header name).
-2. Order or Invoice Number (look for invoice#, order#, PO#, etc. Use 'N/A' if not found).
+2. Customer PO number ONLY if clearly labeled as PO, P.O., or Purchase Order. Leave poNumber as "" if missing or unclear. Do NOT extract order numbers, invoice numbers, or invent placeholders like N/A.
 3. Structured list of plant items. Standardize the container sizes to the closest match from these standard terms:
    - '#1' (for 1 gallon, 1g, #1 pot, No. 1)
    - '#3' (for 3 gallon, 3g, #3 pot, No. 3)
@@ -609,10 +624,10 @@ Return your response in structured JSON format matching the schema provided.`;
       console.log(
         `AI returned ${aiItems.length} items; keeping stronger local parse (${localFallback.items.length}).`
       );
-      res.json(localFallback);
+      res.json(normalizeParsedOrderPayload(localFallback));
       return;
     }
-    res.json(parsedData);
+    res.json(normalizeParsedOrderPayload(parsedData));
   } catch (error: any) {
     console.error('Error parsing order with Gemini:', error);
     // Prefer any local paste parse over a hard failure.
@@ -622,7 +637,7 @@ Return your response in structured JSON format matching the schema provided.`;
       const local = raw.trim() ? parseOrderTextLocally(raw) : null;
       if (local && local.items.length > 0) {
         console.log(`Gemini failed; returning local paste parse (${local.items.length} items).`);
-        res.json(local);
+        res.json(normalizeParsedOrderPayload(local));
         return;
       }
     } catch {

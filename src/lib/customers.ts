@@ -60,6 +60,125 @@ function normalizeCustomerName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * QuickBooks / contact-list exports often put both addresses in one cell:
+ * "Bill: 123 Main St City ST 00000 | Ship: 456 Oak Ave City ST 00000"
+ */
+export function splitCombinedBillShipAddress(
+  raw: string
+): { billingAddress: string; shippingAddress: string } | null {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+
+  const labeled =
+    /^\s*bill(?:ing)?(?:\s*[-–]?\s*to)?\s*:\s*(.+?)\s*(?:\||\s{2,}|\s+-\s+)\s*ship(?:ping)?(?:\s*[-–]?\s*to)?\s*:\s*(.+)\s*$/i.exec(
+      text
+    ) ||
+    /^\s*bill(?:ing)?(?:\s*[-–]?\s*to)?\s*:\s*(.+?)\s+ship(?:ping)?(?:\s*[-–]?\s*to)?\s*:\s*(.+)\s*$/i.exec(
+      text
+    );
+
+  if (!labeled) return null;
+
+  const billingAddress = labeled[1].trim().replace(/\s+/g, ' ');
+  const shippingAddress = labeled[2].trim().replace(/\s+/g, ' ');
+  if (!billingAddress && !shippingAddress) return null;
+  return {
+    billingAddress: billingAddress || shippingAddress,
+    shippingAddress: shippingAddress || billingAddress
+  };
+}
+
+function resolveImportedAddresses(input: {
+  billCell?: string;
+  shipCell?: string;
+  addressCell?: string;
+}): { billingAddress?: string; shippingAddress?: string } {
+  const billCell = (input.billCell || '').trim();
+  const shipCell = (input.shipCell || '').trim();
+  const addressCell = (input.addressCell || '').trim();
+
+  const fromBill = splitCombinedBillShipAddress(billCell);
+  const fromShip = splitCombinedBillShipAddress(shipCell);
+  const fromAddress = splitCombinedBillShipAddress(addressCell);
+
+  let billingAddress =
+    fromBill?.billingAddress ||
+    fromShip?.billingAddress ||
+    fromAddress?.billingAddress ||
+    '';
+  let shippingAddress =
+    fromBill?.shippingAddress ||
+    fromShip?.shippingAddress ||
+    fromAddress?.shippingAddress ||
+    '';
+
+  if (!fromBill && billCell) billingAddress = billingAddress || billCell;
+  if (!fromShip && shipCell) shippingAddress = shippingAddress || shipCell;
+
+  if (!fromAddress && addressCell) {
+    if (!billingAddress) billingAddress = addressCell;
+    if (!shippingAddress) shippingAddress = addressCell;
+  }
+
+  // Same plain value in both bill + ship columns
+  if (!shippingAddress && billingAddress && !fromBill && !fromShip && !fromAddress) {
+    shippingAddress = billingAddress;
+  }
+  if (!billingAddress && shippingAddress && !fromBill && !fromShip && !fromAddress) {
+    billingAddress = shippingAddress;
+  }
+
+  return {
+    billingAddress: billingAddress || undefined,
+    shippingAddress: shippingAddress || undefined
+  };
+}
+
+/** Split Bill:|Ship: blobs already stored on customer address fields. */
+export function withSplitCustomerAddresses<T extends Partial<Customer>>(customer: T): T {
+  const candidates = [
+    customer.billingAddress,
+    customer.shippingAddress,
+    customer.receiverAddress
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const split = splitCombinedBillShipAddress(raw);
+    if (!split) continue;
+    return {
+      ...customer,
+      billingAddress: split.billingAddress,
+      shippingAddress: split.shippingAddress,
+      receiverAddress: split.shippingAddress
+    };
+  }
+  return customer;
+}
+
+export async function repairCombinedCustomerAddresses(): Promise<number> {
+  const tenantId = requireTenantId();
+  const snap = await getDocs(customersCol(tenantId));
+  let repaired = 0;
+
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data() as Customer;
+    const beforeBill = data.billingAddress || '';
+    const beforeShip = data.shippingAddress || data.receiverAddress || '';
+    const next = withSplitCustomerAddresses({ ...data, id: docSnap.id });
+    if (
+      (next.billingAddress || '') === beforeBill &&
+      (next.shippingAddress || next.receiverAddress || '') === beforeShip
+    ) {
+      continue;
+    }
+    await updateCustomer(next as Customer);
+    repaired += 1;
+  }
+
+  return repaired;
+}
+
 function customerCompletenessScore(customer: Customer): number {
   let score = 0;
   if (customer.contactEmail) score += 3;
@@ -265,8 +384,23 @@ export function parseCsvCustomers(text: string): Array<Omit<Customer, 'id' | 'cr
   if (rows.length === 0) return [];
 
   const normalize = (v: string) => v.trim().toLowerCase();
-  const findIdx = (headers: string[], aliases: string[]) =>
-    headers.findIndex((h) => aliases.some((alias) => h.includes(alias)));
+  /** Prefer the longest alias match so "bill to name" does not win as an address column. */
+  const findIdx = (headers: string[], aliases: string[]) => {
+    let bestIdx = -1;
+    let bestLen = -1;
+    for (let i = 0; i < headers.length; i += 1) {
+      const h = headers[i];
+      for (const alias of aliases) {
+        if (h === alias || h.includes(alias)) {
+          if (alias.length > bestLen) {
+            bestIdx = i;
+            bestLen = alias.length;
+          }
+        }
+      }
+    }
+    return bestIdx;
+  };
 
   const headerRowIdx = rows.findIndex((row) => {
     const headers = row.map(normalize);
@@ -282,10 +416,35 @@ export function parseCsvCustomers(text: string): Array<Omit<Customer, 'id' | 'cr
   const emailIdx = findIdx(headers, ['email', 'e-mail', 'mail']);
   const phoneIdx = findIdx(headers, ['phone', 'mobile', 'cell', 'telephone']);
   const notesIdx = findIdx(headers, ['note', 'comment', 'memo']);
-  const billIdx = findIdx(headers, ['bill to address', 'billing address', 'bill address', 'billto', 'bill']);
-  const shipIdx = findIdx(headers, ['ship to address', 'shipping address', 'ship address', 'shipto', 'ship']);
   const billNameIdx = findIdx(headers, ['bill to name', 'billing name', 'bill name']);
   const shipNameIdx = findIdx(headers, ['ship to name', 'shipping name', 'ship name']);
+  const billIdx = findIdx(headers, [
+    'bill to address',
+    'billing address',
+    'bill address',
+    'bill-to address',
+    'billto address',
+    'billing addr'
+  ]);
+  const shipIdx = findIdx(headers, [
+    'ship to address',
+    'shipping address',
+    'ship address',
+    'ship-to address',
+    'shipto address',
+    'shipping addr'
+  ]);
+  // Generic full-address column (QB contact list often uses "Address" with Bill:|Ship: inside).
+  let addressIdx = findIdx(headers, ['full address', 'complete address', 'address']);
+  if (addressIdx >= 0) {
+    const h = headers[addressIdx];
+    if (h.includes('email') || h.includes('e-mail') || h.includes('mail')) {
+      addressIdx = -1;
+    }
+    if (addressIdx === billIdx || addressIdx === shipIdx) {
+      addressIdx = -1;
+    }
+  }
 
   const resolvedNameIdx = nameIdx >= 0 ? nameIdx : 0;
 
@@ -296,22 +455,24 @@ export function parseCsvCustomers(text: string): Array<Omit<Customer, 'id' | 'cr
       const email = emailIdx >= 0 ? (cols[emailIdx] || '').trim() : '';
       const phone = phoneIdx >= 0 ? (cols[phoneIdx] || '').trim() : '';
       const notes = notesIdx >= 0 ? (cols[notesIdx] || '').trim() : '';
-      const billingAddress = billIdx >= 0 ? (cols[billIdx] || '').trim() : '';
-      const shippingAddress = shipIdx >= 0 ? (cols[shipIdx] || '').trim() : '';
       const billingName = billNameIdx >= 0 ? (cols[billNameIdx] || '').trim() : '';
       const shippingName = shipNameIdx >= 0 ? (cols[shipNameIdx] || '').trim() : '';
+      const billCell = billIdx >= 0 ? (cols[billIdx] || '').trim() : '';
+      const shipCell = shipIdx >= 0 ? (cols[shipIdx] || '').trim() : '';
+      const addressCell = addressIdx >= 0 ? (cols[addressIdx] || '').trim() : '';
+      const addresses = resolveImportedAddresses({ billCell, shipCell, addressCell });
 
-      return {
+      return withSplitCustomerAddresses({
         name,
         contactEmail: email || undefined,
         phone: phone || undefined,
         billingName: billingName || undefined,
-        billingAddress: billingAddress || undefined,
+        billingAddress: addresses.billingAddress,
         shippingName: shippingName || undefined,
-        shippingAddress: shippingAddress || undefined,
-        receiverAddress: shippingAddress || undefined,
+        shippingAddress: addresses.shippingAddress,
+        receiverAddress: addresses.shippingAddress,
         notes: notes || undefined
-      };
+      });
     })
     .filter((row) => {
       if (!row.name) return false;
@@ -369,22 +530,72 @@ function parseCsvRows(text: string): string[][] {
 
 export async function bulkImportCustomers(
   customers: Array<Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>>
-): Promise<number> {
+): Promise<{ created: number; addressesUpdated: number }> {
   const tenantId = requireTenantId();
   const existingSnap = await getDocs(customersCol(tenantId));
-  const existingNames = new Set(
-    existingSnap.docs.map((snap) =>
-      normalizeCustomerName(String((snap.data() as { name?: string }).name || ''))
-    )
-  );
-
-  let count = 0;
-  for (const customer of customers) {
-    const key = normalizeCustomerName(customer.name || '');
-    if (!key || existingNames.has(key)) continue;
-    await addCustomer(customer);
-    existingNames.add(key);
-    count += 1;
+  const existingByName = new Map<string, Customer>();
+  for (const snap of existingSnap.docs) {
+    const data = snap.data() as Customer;
+    const key = normalizeCustomerName(String(data.name || ''));
+    if (!key) continue;
+    existingByName.set(key, { ...data, id: snap.id });
   }
-  return count;
+
+  let created = 0;
+  let addressesUpdated = 0;
+  for (const customer of customers) {
+    const incoming = withSplitCustomerAddresses(customer);
+    const key = normalizeCustomerName(incoming.name || '');
+    if (!key) continue;
+
+    const existing = existingByName.get(key);
+    if (!existing) {
+      await addCustomer(incoming);
+      existingByName.set(key, { ...incoming, id: 'pending', createdAt: '', updatedAt: '' });
+      created += 1;
+      continue;
+    }
+
+    // Fill / repair addresses on existing customers without overwriting good data.
+    const existingSplit = withSplitCustomerAddresses(existing);
+    const existingHadCombined =
+      existingSplit.billingAddress !== existing.billingAddress ||
+      (existingSplit.shippingAddress || '') !== (existing.shippingAddress || '') ||
+      (existingSplit.receiverAddress || '') !== (existing.receiverAddress || '');
+
+    const nextBilling =
+      incoming.billingAddress ||
+      (existingHadCombined ? existingSplit.billingAddress : existing.billingAddress);
+    const nextShipping =
+      incoming.shippingAddress ||
+      (existingHadCombined
+        ? existingSplit.shippingAddress || existingSplit.receiverAddress
+        : existing.shippingAddress || existing.receiverAddress);
+
+    const billingChanged = (nextBilling || '') !== (existing.billingAddress || '');
+    const shippingChanged =
+      (nextShipping || '') !== (existing.shippingAddress || existing.receiverAddress || '');
+
+    if (!billingChanged && !shippingChanged && !existingHadCombined) continue;
+
+    // Prefer incoming addresses when present; otherwise keep repaired existing split.
+    await updateCustomer({
+      ...existing,
+      billingAddress: incoming.billingAddress || existingSplit.billingAddress || existing.billingAddress,
+      shippingAddress:
+        incoming.shippingAddress ||
+        existingSplit.shippingAddress ||
+        existing.shippingAddress ||
+        existing.receiverAddress,
+      receiverAddress:
+        incoming.shippingAddress ||
+        existingSplit.shippingAddress ||
+        existing.shippingAddress ||
+        existing.receiverAddress,
+      billingName: existing.billingName || incoming.billingName,
+      shippingName: existing.shippingName || incoming.shippingName
+    });
+    addressesUpdated += 1;
+  }
+  return { created, addressesUpdated };
 }

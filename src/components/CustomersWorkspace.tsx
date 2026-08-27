@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload,
   Users,
@@ -21,7 +21,7 @@ import {
   PlantOrderItem,
   Truck
 } from '../types';
-import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, updateCustomer } from '../lib/customers';
+import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, repairCombinedCustomerAddresses, updateCustomer, withSplitCustomerAddresses } from '../lib/customers';
 import {
     listAllDocuments,
     subscribeToCustomerDocuments,
@@ -159,6 +159,7 @@ export function CustomersWorkspace({
   const [paymentTermsType, setPaymentTermsType] = useState<string>('NET 30');
   const [customPaymentTerms, setCustomPaymentTerms] = useState('');
   const [notes, setNotes] = useState('');
+  const addressRepairAttempted = useRef(false);
 
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -516,6 +517,32 @@ export function CustomersWorkspace({
     setSelectedCustomerId(initialSelectedCustomerId);
   }, [initialSelectedCustomerId]);
 
+  // One-time: split "Bill: … | Ship: …" blobs left from earlier CSV imports.
+  useEffect(() => {
+    if (!permissions.canEditCustomers || addressRepairAttempted.current) return;
+    if (customers.length === 0) return;
+    const needsRepair = customers.some((c) => {
+      const fixed = withSplitCustomerAddresses(c);
+      return (
+        (fixed.billingAddress || '') !== (c.billingAddress || '') ||
+        (fixed.shippingAddress || '') !== (c.shippingAddress || '') ||
+        (fixed.receiverAddress || '') !== (c.receiverAddress || '')
+      );
+    });
+    if (!needsRepair) {
+      addressRepairAttempted.current = true;
+      return;
+    }
+    addressRepairAttempted.current = true;
+    void repairCombinedCustomerAddresses()
+      .then((n) => {
+        if (n > 0) setMessage(t('customers.addressesRepaired', { n }));
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+  }, [customers, permissions.canEditCustomers, t]);
+
   useEffect(() => {
     if (!selectedCustomer) return;
     setEditName(selectedCustomer.name || '');
@@ -638,12 +665,21 @@ export function CustomersWorkspace({
       if (parsed.length === 0) {
         throw new Error(t('customers.csvFormatError'));
       }
-      const count = await bulkImportCustomers(parsed);
-      setMessage(
-        count === 0
-          ? t('customers.noNewImported')
-          : t('customers.importedCustomers', { n: count })
-      );
+      const { created, addressesUpdated } = await bulkImportCustomers(parsed);
+      // Fix any older rows that still have "Bill: … | Ship: …" in one address field.
+      const repaired = await repairCombinedCustomerAddresses();
+      const addressFixes = addressesUpdated + repaired;
+      if (created === 0 && addressFixes === 0) {
+        setMessage(t('customers.noNewImported'));
+      } else if (created > 0 && addressFixes > 0) {
+        setMessage(
+          t('customers.importedCustomersWithAddresses', { n: created, addresses: addressFixes })
+        );
+      } else if (created > 0) {
+        setMessage(t('customers.importedCustomers', { n: created }));
+      } else {
+        setMessage(t('customers.addressesRepaired', { n: addressFixes }));
+      }
     } catch (err: any) {
       setMessage(permissionOrFallback(err, 'customers.csvImportFailed'));
     } finally {

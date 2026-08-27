@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
-import { buildVendorPullListsForTrucks, trucksLoadingOnDate, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
+import { buildVendorPullListsForTrucks, collectVendorOrderItems, trucksLoadingOnDate, vendorItemsFullyPulled, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
@@ -94,6 +94,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [vendorPullLists, setVendorPullLists] = useState<VendorPullList[] | null>(null);
   const [vendorPullScope, setVendorPullScope] = useState<'truck' | 'day'>('day');
   const [copiedVendorKey, setCopiedVendorKey] = useState<string | null>(null);
+  const [markingVendorKey, setMarkingVendorKey] = useState<string | null>(null);
+  const [confirmMarkVendor, setConfirmMarkVendor] = useState<string | null>(null);
 
   const dayTrucks = trucksLoadingOnDate(trucks.length > 0 ? trucks : [truck], truck.loadingDate);
   const dayTruckCount = dayTrucks.length > 0 ? dayTrucks.length : 1;
@@ -150,18 +152,57 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     });
   }
 
+  function vendorScopeTrucks(scope: 'truck' | 'day' = vendorPullScope): Truck[] {
+    if (scope === 'day' && truck.loadingDate) {
+      return dayTrucks.length > 0 ? dayTrucks : [truck];
+    }
+    return [truck];
+  }
+
   function handleOpenVendorTextLists() {
     const defaultScope: 'truck' | 'day' =
       truck.loadingDate && dayTruckCount > 1 ? 'day' : 'truck';
     setVendorPullScope(defaultScope);
     setVendorPullLists(buildVendorLists(defaultScope));
     setCopiedVendorKey(null);
+    setConfirmMarkVendor(null);
+    setMarkingVendorKey(null);
   }
 
   function handleVendorScopeChange(scope: 'truck' | 'day') {
     setVendorPullScope(scope);
     setVendorPullLists(buildVendorLists(scope));
     setCopiedVendorKey(null);
+    setConfirmMarkVendor(null);
+  }
+
+  async function handleMarkVendorPulled(list: VendorPullList) {
+    if (!permissions.canCheckOffLoading) return;
+    const scopeTrucks = vendorScopeTrucks();
+    const groups = collectVendorOrderItems({
+      trucks: scopeTrucks,
+      orders,
+      vendor: list.vendor
+    });
+    if (groups.length === 0) return;
+
+    setMarkingVendorKey(list.vendor);
+    setConfirmMarkVendor(null);
+    try {
+      for (const { order, itemIds } of groups) {
+        const idSet = new Set(itemIds);
+        const updatedItems = order.items.map((item) =>
+          idSet.has(item.id) ? { ...item, pulledQuantity: item.quantity } : item
+        );
+        await updateCustomerOrder({ ...order, items: updatedItems });
+      }
+      setVendorPullLists(buildVendorLists(vendorPullScope));
+    } catch (err) {
+      console.error('Mark vendor pulled failed:', err);
+      alert(t('trucksExtra.markVendorPulledFailed'));
+    } finally {
+      setMarkingVendorKey(null);
+    }
   }
 
   async function copyVendorText(list: VendorPullList) {
@@ -1818,6 +1859,71 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                       onFocus={(e) => e.target.select()}
                       className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
                     />
+                    {permissions.canCheckOffLoading && (() => {
+                      const fullyPulled = vendorItemsFullyPulled({
+                        trucks: vendorScopeTrucks(),
+                        orders,
+                        vendor: list.vendor
+                      });
+                      const confirming = confirmMarkVendor === list.vendor;
+                      const marking = markingVendorKey === list.vendor;
+                      return (
+                        <div className="pt-1 border-t border-gray-200/80">
+                          {confirming ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] font-semibold text-teal-900">
+                                {t('trucksExtra.markVendorPulledConfirm', {
+                                  vendor:
+                                    list.vendor === 'Unassigned'
+                                      ? t('trucksExtra.noVendorAssigned')
+                                      : list.vendor,
+                                  n: list.quantity
+                                })}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={marking}
+                                onClick={() => void handleMarkVendorPulled(list)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                              >
+                                {marking ? t('common.pleaseWait') : t('common.yes')}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={marking}
+                                onClick={() => setConfirmMarkVendor(null)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                              >
+                                {t('common.no')}
+                              </button>
+                            </div>
+                          ) : (
+                            <label
+                              className={`inline-flex items-start gap-2 text-[11px] font-semibold cursor-pointer select-none ${
+                                fullyPulled || marking
+                                  ? 'text-teal-800'
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 rounded border-teal-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
+                                checked={fullyPulled}
+                                disabled={fullyPulled || marking}
+                                onChange={(e) => {
+                                  if (e.target.checked) setConfirmMarkVendor(list.vendor);
+                                }}
+                              />
+                              <span>
+                                {fullyPulled
+                                  ? t('trucksExtra.markVendorPulledDone')
+                                  : t('trucksExtra.markVendorPulled')}
+                              </span>
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))
               )}

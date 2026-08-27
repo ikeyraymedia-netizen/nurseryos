@@ -5,9 +5,13 @@ import { orderRefLabel } from './orderLabels';
 
 const UNASSIGNED_VENDOR = 'Unassigned';
 
-function normalizeVendor(vendor?: string | null): string {
+export function normalizeVendorName(vendor?: string | null): string {
   const v = String(vendor || '').trim();
   return v || UNASSIGNED_VENDOR;
+}
+
+function normalizeVendor(vendor?: string | null): string {
+  return normalizeVendorName(vendor);
 }
 
 function normalizeLineKey(plantName: string, containerSize: string, vendor: string): string {
@@ -306,6 +310,39 @@ export function buildVendorPullLists(params: {
     nurseryName: params.nurseryName,
     scope: 'truck'
   });
+}
+
+/** Orders + item ids for a vendor across the given trucks. */
+export function collectVendorOrderItems(params: {
+  trucks: Truck[];
+  orders: CustomerOrder[];
+  vendor: string;
+}): Array<{ order: CustomerOrder; itemIds: string[] }> {
+  const vendorKey = normalizeVendorName(params.vendor);
+  const truckOrders = collectOrdersForTrucks(params.orders, params.trucks);
+  const result: Array<{ order: CustomerOrder; itemIds: string[] }> = [];
+  for (const order of truckOrders) {
+    const itemIds = order.items
+      .filter((item) => normalizeVendorName(item.vendor) === vendorKey)
+      .map((item) => item.id);
+    if (itemIds.length > 0) result.push({ order, itemIds });
+  }
+  return result;
+}
+
+export function vendorItemsFullyPulled(params: {
+  trucks: Truck[];
+  orders: CustomerOrder[];
+  vendor: string;
+}): boolean {
+  const groups = collectVendorOrderItems(params);
+  if (groups.length === 0) return false;
+  return groups.every(({ order, itemIds }) =>
+    itemIds.every((id) => {
+      const item = order.items.find((i) => i.id === id);
+      return !!item && (item.pulledQuantity ?? 0) >= item.quantity;
+    })
+  );
 }
 
 export function downloadTruckPullSheetPdf(params: {

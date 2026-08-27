@@ -1585,6 +1585,11 @@ const extra = {
     noVendorAssigned: 'No vendor assigned',
     vendorPlantCount: '{{n}} plants',
     textShare: 'Text',
+    markVendorPulled: 'Mark these plants as pulled on the orders',
+    markVendorPulledDone: 'Marked pulled on these orders',
+    markVendorPulledConfirm:
+      'Mark all {{n}} plant(s) from {{vendor}} as pulled on the related orders?',
+    markVendorPulledFailed: 'Could not mark plants as pulled. Try again.',
     loadingDate: 'Loading: {{date}}',
     groupedOrders: '{{n}} grouped orders',
     groupedOrder: '{{n}} grouped order',

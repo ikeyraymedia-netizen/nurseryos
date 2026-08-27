@@ -1603,6 +1603,11 @@ const extra = {
     noVendorAssigned: 'Sin proveedor asignado',
     vendorPlantCount: '{{n}} plantas',
     textShare: 'Enviar',
+    markVendorPulled: 'Marcar estas plantas como extraídas en los pedidos',
+    markVendorPulledDone: 'Marcadas como extraídas en estos pedidos',
+    markVendorPulledConfirm:
+      '¿Marcar las {{n}} planta(s) de {{vendor}} como extraídas en los pedidos relacionados?',
+    markVendorPulledFailed: 'No se pudieron marcar las plantas como extraídas. Intente de nuevo.',
     loadingDate: 'Carga: {{date}}',
     groupedOrders: '{{n}} pedidos agrupados',
     groupedOrder: '{{n}} pedido agrupado',

@@ -1575,7 +1575,7 @@ const extra = {
     textVendors: 'Text vendors',
     textVendorsTitle: 'Text vendor pull lists',
     textVendorsHint:
-      'Copy or share each vendor’s plant list — paste into a text, iMessage, or WhatsApp. Use “All trucks this day” when one vendor delivery feeds multiple loads.',
+      'Copy or share each vendor’s list — plants are grouped by order with stage location, plus combined totals. Use “All trucks this day” when one vendor delivery feeds multiple loads.',
     copyVendorListsTitle: 'Copy plain-text lists to text vendors',
     copyVendorFailed: 'Could not copy. Long-press the text box and copy instead.',
     noVendorLists: 'No plants on this truck yet.',

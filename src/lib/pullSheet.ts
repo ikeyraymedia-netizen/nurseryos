@@ -144,14 +144,75 @@ export function buildVendorPullListsForTrucks(params: {
   const { trucks, orders, nurseryName = 'NurseryOS', scope = 'truck' } = params;
   if (trucks.length === 0) return [];
 
+  const truckByOrderId = new Map<string, Truck>();
+  for (const truck of trucks) {
+    for (const order of truckCustomerOrders(orders, truck)) {
+      if (!truckByOrderId.has(order.id)) truckByOrderId.set(order.id, truck);
+    }
+  }
+
   const truckOrders = collectOrdersForTrucks(orders, trucks);
-  const vendorGroups = groupLinesByVendor(buildConsolidatedPullLines(truckOrders));
   const loadingKey = String(trucks[0]?.loadingDate || '').trim();
   const loadingLabel = loadingKey ? formatLoadingDateLabel(loadingKey) : null;
   const truckNames = trucks.map((t) => t.name).filter(Boolean);
+  const showTruckOnOrder = scope === 'day' || trucks.length > 1;
 
-  return vendorGroups.map(([vendor, vendorLines]) => {
-    const quantity = vendorLines.reduce((sum, line) => sum + line.quantity, 0);
+  // vendor → order sections (preserve plant lines per order for staging)
+  type OrderSection = {
+    orderId: string;
+    customerName: string;
+    ref: string | null;
+    stagedLocation: string;
+    truckName: string;
+    lines: Array<{ plantName: string; containerSize: string; quantity: number }>;
+    quantity: number;
+  };
+
+  const byVendor = new Map<string, OrderSection[]>();
+
+  for (const order of truckOrders) {
+    const sectionsForOrder = new Map<string, OrderSection>();
+    for (const item of order.items) {
+      const vendor = normalizeVendor(item.vendor);
+      let section = sectionsForOrder.get(vendor);
+      if (!section) {
+        section = {
+          orderId: order.id,
+          customerName: order.customerName,
+          ref: orderRefLabel(order),
+          stagedLocation: String(order.stagedLocation || '').trim(),
+          truckName: truckByOrderId.get(order.id)?.name || '',
+          lines: [],
+          quantity: 0
+        };
+        sectionsForOrder.set(vendor, section);
+      }
+      section.lines.push({
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        quantity: item.quantity
+      });
+      section.quantity += item.quantity;
+    }
+    for (const [vendor, section] of sectionsForOrder) {
+      const list = byVendor.get(vendor) || [];
+      list.push(section);
+      byVendor.set(vendor, list);
+    }
+  }
+
+  const vendorNames = [...byVendor.keys()].sort(compareVendors);
+
+  return vendorNames.map((vendor) => {
+    const sections = (byVendor.get(vendor) || []).sort((a, b) => {
+      const stageCmp = (a.stagedLocation || 'zzz').localeCompare(b.stagedLocation || 'zzz');
+      if (stageCmp !== 0) return stageCmp;
+      const truckCmp = a.truckName.localeCompare(b.truckName);
+      if (truckCmp !== 0) return truckCmp;
+      return a.customerName.localeCompare(b.customerName);
+    });
+
+    const quantity = sections.reduce((sum, s) => sum + s.quantity, 0);
     const header =
       vendor === UNASSIGNED_VENDOR
         ? 'Need from yard (no vendor assigned)'
@@ -170,13 +231,59 @@ export function buildVendorPullListsForTrucks(params: {
             loadingLabel ? `Loading: ${loadingLabel}` : null
           ];
 
+    const orderBlocks: string[] = [];
+    for (const section of sections) {
+      const titleParts = [section.customerName];
+      if (section.ref) titleParts.push(section.ref);
+      const meta: string[] = [];
+      if (section.stagedLocation) meta.push(`Stage: ${section.stagedLocation}`);
+      else meta.push('Stage: (not set)');
+      if (showTruckOnOrder && section.truckName) meta.push(`Truck: ${section.truckName}`);
+
+      orderBlocks.push(
+        [
+          `— ${titleParts.join(' · ')}`,
+          `  ${meta.join(' · ')}`,
+          ...section.lines
+            .sort(
+              (a, b) =>
+                a.plantName.localeCompare(b.plantName) ||
+                a.containerSize.localeCompare(b.containerSize)
+            )
+            .map((line) => `  • ${line.quantity} × ${line.containerSize}  ${line.plantName}`)
+        ].join('\n')
+      );
+    }
+
+    // Combined totals so the vendor still sees one shopping list
+    const totals = new Map<string, { plantName: string; containerSize: string; quantity: number }>();
+    for (const section of sections) {
+      for (const line of section.lines) {
+        const key = normalizeLineKey(line.plantName, line.containerSize, vendor);
+        const existing = totals.get(key);
+        if (existing) existing.quantity += line.quantity;
+        else
+          totals.set(key, {
+            plantName: line.plantName,
+            containerSize: line.containerSize,
+            quantity: line.quantity
+          });
+      }
+    }
+    const totalLines = [...totals.values()].sort(
+      (a, b) =>
+        a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
+    );
+
     const text = [
       header,
       ...scopeLines,
       '',
-      ...vendorLines.map(
-        (line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`
-      ),
+      'BY ORDER / STAGE',
+      ...orderBlocks,
+      '',
+      'COMBINED TOTALS',
+      ...totalLines.map((line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`),
       '',
       `Total: ${quantity} plants`
     ]

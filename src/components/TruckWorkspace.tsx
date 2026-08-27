@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
-import { buildVendorPullLists, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
+import { buildVendorPullListsForTrucks, trucksLoadingOnDate, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
@@ -53,6 +53,8 @@ import { DEFAULT_VENDORS } from '../data/vendors';
 
 interface TruckWorkspaceProps {
   truck: Truck;
+  /** All nursery trucks — used for day-wide vendor pull lists. */
+  trucks?: Truck[];
   orders: CustomerOrder[];
   containerWeights: ContainerWeight[];
   permissions: AppPermissions;
@@ -67,6 +69,7 @@ interface TruckWorkspaceProps {
 
 export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   truck,
+  trucks = [],
   orders,
   containerWeights,
   permissions,
@@ -89,7 +92,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false);
   const [pullSheetBusy, setPullSheetBusy] = useState(false);
   const [vendorPullLists, setVendorPullLists] = useState<VendorPullList[] | null>(null);
+  const [vendorPullScope, setVendorPullScope] = useState<'truck' | 'day'>('day');
   const [copiedVendorKey, setCopiedVendorKey] = useState<string | null>(null);
+
+  const dayTrucks = trucksLoadingOnDate(trucks.length > 0 ? trucks : [truck], truck.loadingDate);
+  const dayTruckCount = dayTrucks.length > 0 ? dayTrucks.length : 1;
 
   function openInvoice(order: CustomerOrder) {
     setShowInvoiceMenu(false);
@@ -128,15 +135,32 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     }
   }
 
+  function buildVendorLists(scope: 'truck' | 'day'): VendorPullList[] {
+    const scopeTrucks =
+      scope === 'day' && truck.loadingDate
+        ? dayTrucks.length > 0
+          ? dayTrucks
+          : [truck]
+        : [truck];
+    return buildVendorPullListsForTrucks({
+      trucks: scopeTrucks,
+      orders,
+      nurseryName,
+      scope: scopeTrucks.length > 1 || scope === 'day' ? 'day' : 'truck'
+    });
+  }
+
   function handleOpenVendorTextLists() {
-    const sheetOrders = truckCustomerOrders(orders, truck);
-    setVendorPullLists(
-      buildVendorPullLists({
-        truck,
-        orders: sheetOrders,
-        nurseryName
-      })
-    );
+    const defaultScope: 'truck' | 'day' =
+      truck.loadingDate && dayTruckCount > 1 ? 'day' : 'truck';
+    setVendorPullScope(defaultScope);
+    setVendorPullLists(buildVendorLists(defaultScope));
+    setCopiedVendorKey(null);
+  }
+
+  function handleVendorScopeChange(scope: 'truck' | 'day') {
+    setVendorPullScope(scope);
+    setVendorPullLists(buildVendorLists(scope));
     setCopiedVendorKey(null);
   }
 
@@ -1711,9 +1735,40 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               </button>
             </div>
 
+            {truck.loadingDate && (
+              <div className="px-4 pt-3 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleVendorScopeChange('day')}
+                  className={`flex-1 px-3 py-2 rounded-xl text-[11px] font-bold border transition-colors ${
+                    vendorPullScope === 'day'
+                      ? 'bg-ink-700 text-white border-ink-700'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {t('trucksExtra.vendorScopeDay', { n: dayTruckCount })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleVendorScopeChange('truck')}
+                  className={`flex-1 px-3 py-2 rounded-xl text-[11px] font-bold border transition-colors ${
+                    vendorPullScope === 'truck'
+                      ? 'bg-ink-700 text-white border-ink-700'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {t('trucksExtra.vendorScopeTruck')}
+                </button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {vendorPullLists.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-8">{t('trucksExtra.noVendorLists')}</p>
+                <p className="text-xs text-gray-500 text-center py-8">
+                  {vendorPullScope === 'day'
+                    ? t('trucksExtra.noVendorListsDay')
+                    : t('trucksExtra.noVendorLists')}
+                </p>
               ) : (
                 vendorPullLists.map((list) => (
                   <div

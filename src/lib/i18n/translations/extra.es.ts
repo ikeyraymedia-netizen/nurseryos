@@ -408,6 +408,10 @@ const extra = {
     csvFormatError: 'El CSV necesita un encabezado de nombre (opcional: correo, teléfono, notas).',
     noNewImported: 'No se importaron clientes nuevos (se omitieron nombres ya en su lista).',
     importedCustomers: 'Importados {{n}} cliente(s) nuevo(s) (se omitieron nombres existentes).',
+    importedCustomersWithAddresses:
+      'Importados {{n}} cliente(s) nuevo(s) y actualizadas direcciones de facturación/envío en {{addresses}} cliente(s).',
+    addressesRepaired:
+      'Se actualizaron direcciones de facturación/envío en {{n}} cliente(s) existente(s) (se separó Facturar / Enviar de la importación).',
     csvImportFailed: 'Error al importar CSV de clientes.',
     noDuplicates: 'No se encontraron nombres de clientes duplicados.',
     dedupeConfirm:
@@ -1589,10 +1593,13 @@ const extra = {
     textVendors: 'Enviar a proveedores',
     textVendorsTitle: 'Listas para enviar a proveedores',
     textVendorsHint:
-      'Copie o comparta la lista de cada proveedor — péguela en un mensaje de texto, iMessage o WhatsApp.',
+      'Copie o comparta la lista de cada proveedor — péguela en un mensaje de texto, iMessage o WhatsApp. Use “Todos los camiones del día” cuando un proveedor alimenta varias cargas.',
     copyVendorListsTitle: 'Copiar listas en texto para enviar a proveedores',
     copyVendorFailed: 'No se pudo copiar. Mantenga pulsado el cuadro de texto y copie.',
     noVendorLists: 'Aún no hay plantas en este camión.',
+    noVendorListsDay: 'Aún no hay plantas en los camiones de este día.',
+    vendorScopeDay: 'Todos los camiones del día ({{n}})',
+    vendorScopeTruck: 'Solo este camión',
     noVendorAssigned: 'Sin proveedor asignado',
     vendorPlantCount: '{{n}} plantas',
     textShare: 'Enviar',

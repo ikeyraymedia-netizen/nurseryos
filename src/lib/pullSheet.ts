@@ -100,16 +100,55 @@ export type VendorPullList = {
   text: string;
 };
 
-/** Build per-vendor plain-text lists for copying / texting growers. */
-export function buildVendorPullLists(params: {
-  truck: Truck;
+function collectOrdersForTrucks(orders: CustomerOrder[], trucks: Truck[]): CustomerOrder[] {
+  const seen = new Set<string>();
+  const result: CustomerOrder[] = [];
+  for (const truck of trucks) {
+    for (const order of truckCustomerOrders(orders, truck)) {
+      if (seen.has(order.id)) continue;
+      seen.add(order.id);
+      result.push(order);
+    }
+  }
+  return result;
+}
+
+/** Trucks scheduled to load on the same calendar day (`YYYY-MM-DD`). */
+export function trucksLoadingOnDate(trucks: Truck[], loadingDate: string | undefined | null): Truck[] {
+  const key = String(loadingDate || '').trim();
+  if (!key) return [];
+  return trucks.filter((t) => String(t.loadingDate || '').trim() === key);
+}
+
+function formatLoadingDateLabel(dateKey: string): string {
+  try {
+    return new Date(`${dateKey}T00:00:00`).toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch {
+    return dateKey;
+  }
+}
+
+/** Build per-vendor plain-text lists for one or more trucks (same day or a single truck). */
+export function buildVendorPullListsForTrucks(params: {
+  trucks: Truck[];
   orders: CustomerOrder[];
   nurseryName?: string;
+  /** `day` = all trucks loading that date; `truck` = one truck only. */
+  scope?: 'truck' | 'day';
 }): VendorPullList[] {
-  const { truck, orders, nurseryName = 'NurseryOS' } = params;
-  const truckOrders = truckCustomerOrders(orders, truck);
+  const { trucks, orders, nurseryName = 'NurseryOS', scope = 'truck' } = params;
+  if (trucks.length === 0) return [];
+
+  const truckOrders = collectOrdersForTrucks(orders, trucks);
   const vendorGroups = groupLinesByVendor(buildConsolidatedPullLines(truckOrders));
-  const loading = truck.loadingDate ? `Loading: ${truck.loadingDate}` : null;
+  const loadingKey = String(trucks[0]?.loadingDate || '').trim();
+  const loadingLabel = loadingKey ? formatLoadingDateLabel(loadingKey) : null;
+  const truckNames = trucks.map((t) => t.name).filter(Boolean);
 
   return vendorGroups.map(([vendor, vendorLines]) => {
     const quantity = vendorLines.reduce((sum, line) => sum + line.quantity, 0);
@@ -117,10 +156,23 @@ export function buildVendorPullLists(params: {
       vendor === UNASSIGNED_VENDOR
         ? 'Need from yard (no vendor assigned)'
         : `Need from ${vendor}`;
+
+    const scopeLines: Array<string | null> =
+      scope === 'day' || trucks.length > 1
+        ? [
+            `${nurseryName} · Loading ${loadingLabel || 'unscheduled'} · ${trucks.length} truck${
+              trucks.length === 1 ? '' : 's'
+            }`,
+            truckNames.length > 0 ? `Trucks: ${truckNames.join(', ')}` : null
+          ]
+        : [
+            `${nurseryName} · ${trucks[0].name}`,
+            loadingLabel ? `Loading: ${loadingLabel}` : null
+          ];
+
     const text = [
       header,
-      `${nurseryName} · ${truck.name}`,
-      loading,
+      ...scopeLines,
       '',
       ...vendorLines.map(
         (line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`
@@ -132,6 +184,20 @@ export function buildVendorPullLists(params: {
       .join('\n');
 
     return { vendor, quantity, text };
+  });
+}
+
+/** Build per-vendor plain-text lists for copying / texting growers (single truck). */
+export function buildVendorPullLists(params: {
+  truck: Truck;
+  orders: CustomerOrder[];
+  nurseryName?: string;
+}): VendorPullList[] {
+  return buildVendorPullListsForTrucks({
+    trucks: [params.truck],
+    orders: params.orders,
+    nurseryName: params.nurseryName,
+    scope: 'truck'
   });
 }
 

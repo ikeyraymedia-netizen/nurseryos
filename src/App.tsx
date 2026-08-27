@@ -1244,6 +1244,7 @@ function NurseryApp({
           ) : selectedTruckId && activeTruck ? (
             <TruckWorkspace
               truck={activeTruck}
+              trucks={trucks}
               orders={dynamicOrders}
               containerWeights={containerWeights}
               permissions={permissions}

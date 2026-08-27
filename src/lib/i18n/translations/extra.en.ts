@@ -404,6 +404,10 @@ const extra = {
     csvFormatError: 'CSV needs a name header (optional: email, phone, notes).',
     noNewImported: 'No new customers imported (names already in your list were skipped).',
     importedCustomers: 'Imported {{n}} new customer(s) (existing names were skipped).',
+    importedCustomersWithAddresses:
+      'Imported {{n}} new customer(s) and updated bill-to / ship-to on {{addresses}} customer(s).',
+    addressesRepaired:
+      'Updated bill-to / ship-to addresses on {{n}} existing customer(s) (split Bill / Ship from import).',
     csvImportFailed: 'Customer CSV import failed.',
     noDuplicates: 'No duplicate customer names found.',
     dedupeConfirm:
@@ -1571,10 +1575,13 @@ const extra = {
     textVendors: 'Text vendors',
     textVendorsTitle: 'Text vendor pull lists',
     textVendorsHint:
-      'Copy or share each vendor’s plant list — paste into a text, iMessage, or WhatsApp.',
+      'Copy or share each vendor’s plant list — paste into a text, iMessage, or WhatsApp. Use “All trucks this day” when one vendor delivery feeds multiple loads.',
     copyVendorListsTitle: 'Copy plain-text lists to text vendors',
     copyVendorFailed: 'Could not copy. Long-press the text box and copy instead.',
     noVendorLists: 'No plants on this truck yet.',
+    noVendorListsDay: 'No plants on trucks loading this day yet.',
+    vendorScopeDay: 'All trucks this day ({{n}})',
+    vendorScopeTruck: 'This truck only',
     noVendorAssigned: 'No vendor assigned',
     vendorPlantCount: '{{n}} plants',
     textShare: 'Text',

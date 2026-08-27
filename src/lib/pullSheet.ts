@@ -39,62 +39,10 @@ function drawCheckbox(
   }
 }
 
-type PullLine = {
-  plantName: string;
-  containerSize: string;
-  vendor: string;
-  quantity: number;
-  pulled: number;
-  loaded: number;
-};
-
 function compareVendors(a: string, b: string): number {
   if (a === UNASSIGNED_VENDOR && b !== UNASSIGNED_VENDOR) return 1;
   if (b === UNASSIGNED_VENDOR && a !== UNASSIGNED_VENDOR) return -1;
   return a.localeCompare(b);
-}
-
-function buildConsolidatedPullLines(truckOrders: CustomerOrder[]): PullLine[] {
-  const consolidated = new Map<string, PullLine>();
-
-  for (const order of truckOrders) {
-    for (const item of order.items) {
-      const vendor = normalizeVendor(item.vendor);
-      const key = normalizeLineKey(item.plantName, item.containerSize, vendor);
-      const existing = consolidated.get(key);
-      if (existing) {
-        existing.quantity += item.quantity;
-        existing.pulled += item.pulledQuantity ?? 0;
-        existing.loaded += item.loadedQuantity;
-      } else {
-        consolidated.set(key, {
-          plantName: item.plantName,
-          containerSize: item.containerSize,
-          vendor,
-          quantity: item.quantity,
-          pulled: item.pulledQuantity ?? 0,
-          loaded: item.loadedQuantity
-        });
-      }
-    }
-  }
-
-  return [...consolidated.values()].sort(
-    (a, b) =>
-      compareVendors(a.vendor, b.vendor) ||
-      a.plantName.localeCompare(b.plantName) ||
-      a.containerSize.localeCompare(b.containerSize)
-  );
-}
-
-function groupLinesByVendor(lines: PullLine[]): Array<[string, PullLine[]]> {
-  const byVendor = new Map<string, PullLine[]>();
-  for (const line of lines) {
-    const list = byVendor.get(line.vendor) || [];
-    list.push(line);
-    byVendor.set(line.vendor, list);
-  }
-  return [...byVendor.entries()].sort(([a], [b]) => compareVendors(a, b));
 }
 
 export type VendorPullList = {
@@ -352,8 +300,37 @@ export function downloadTruckPullSheetPdf(params: {
 }): void {
   const { truck, orders, nurseryName = 'NurseryOS' } = params;
   const truckOrders = truckCustomerOrders(orders, truck);
-  const lines = buildConsolidatedPullLines(truckOrders);
-  const vendorGroups = groupLinesByVendor(lines);
+
+  // Consolidate by plant + size only (not by vendor).
+  const consolidated = new Map<
+    string,
+    { plantName: string; containerSize: string; quantity: number; pulled: number; loaded: number }
+  >();
+
+  for (const order of truckOrders) {
+    for (const item of order.items) {
+      const key = `${item.plantName.trim().toLowerCase()}::${item.containerSize.trim().toLowerCase()}`;
+      const existing = consolidated.get(key);
+      if (existing) {
+        existing.quantity += item.quantity;
+        existing.pulled += item.pulledQuantity ?? 0;
+        existing.loaded += item.loadedQuantity;
+      } else {
+        consolidated.set(key, {
+          plantName: item.plantName,
+          containerSize: item.containerSize,
+          quantity: item.quantity,
+          pulled: item.pulledQuantity ?? 0,
+          loaded: item.loadedQuantity
+        });
+      }
+    }
+  }
+
+  const lines = [...consolidated.values()].sort(
+    (a, b) =>
+      a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
+  );
 
   const pdf = new jsPDF('p', 'pt', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -399,87 +376,65 @@ export function downloadTruckPullSheetPdf(params: {
     truck.truckType ? `Type: ${truck.truckType}` : null,
     truck.carrier ? `Carrier: ${truck.carrier}` : null,
     `Orders: ${truckOrders.length}`,
-    `Vendors: ${vendorGroups.length}`,
     `Printed: ${new Date().toLocaleString()}`
   ].filter(Boolean) as string[];
 
   meta.forEach((line) => write(line, { size: 9, color: [80, 80, 80] }));
   y += 4;
-  write('Organized by vendor. Check Pulled / Loaded as you go (same as truck workspace)', {
+  write('Check Pulled / Loaded as you go (same as truck workspace)', {
     size: 9,
     color: [100, 100, 100]
   });
   y += 4;
 
-  write('CONSOLIDATED PULL LIST (BY VENDOR)', { size: 11, bold: true, color: [6, 78, 59] });
+  write('CONSOLIDATED PULL LIST', { size: 11, bold: true, color: [6, 78, 59] });
   y += 2;
 
-  const drawTableHeader = () => {
-    ensureSpace(20);
-    pdf.setFillColor(236, 253, 245);
-    pdf.rect(margin, y - 12, contentWidth, 18, 'F');
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(8);
-    pdf.setTextColor(6, 78, 59);
-    pdf.text('PLANT', col.plant + 2, y);
-    pdf.text('SIZE', col.size, y);
-    pdf.text('QTY', col.qty, y);
-    pdf.text('PULLED', col.pulled + 14, y);
-    pdf.text('LOADED', col.loaded + 14, y);
-    y += 16;
-  };
+  ensureSpace(20);
+  pdf.setFillColor(236, 253, 245);
+  pdf.rect(margin, y - 12, contentWidth, 18, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(8);
+  pdf.setTextColor(6, 78, 59);
+  pdf.text('PLANT', col.plant + 2, y);
+  pdf.text('SIZE', col.size, y);
+  pdf.text('QTY', col.qty, y);
+  pdf.text('PULLED', col.pulled + 14, y);
+  pdf.text('LOADED', col.loaded + 14, y);
+  y += 16;
 
   let totalQty = 0;
-  for (const [vendor, vendorLines] of vendorGroups) {
-    const vendorQty = vendorLines.reduce((sum, line) => sum + line.quantity, 0);
-    ensureSpace(28);
-    pdf.setFillColor(226, 232, 240);
-    pdf.rect(margin, y - 11, contentWidth, 16, 'F');
-    pdf.setFont('helvetica', 'bold');
+  for (const line of lines) {
+    const nameLines = pdf.splitTextToSize(line.plantName, 240);
+    const rowH = Math.max(16, nameLines.length * 11 + 4);
+    ensureSpace(rowH);
+    totalQty += line.quantity;
+
+    const baseline = y;
+    pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.setTextColor(30, 41, 59);
-    const vendorLabel =
-      vendor === UNASSIGNED_VENDOR
-        ? `NO VENDOR ASSIGNED  ·  ${vendorQty} plants`
-        : `${vendor.toUpperCase()}  ·  ${vendorQty} plants`;
-    pdf.text(vendorLabel, margin + 4, y);
-    y += 18;
-
-    drawTableHeader();
-
-    for (const line of vendorLines) {
-      const nameLines = pdf.splitTextToSize(line.plantName, 240);
-      const rowH = Math.max(16, nameLines.length * 11 + 4);
-      ensureSpace(rowH);
-      totalQty += line.quantity;
-
-      const baseline = y;
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.setTextColor(30, 30, 30);
-      pdf.text(nameLines[0], col.plant + 2, baseline);
-      for (let i = 1; i < nameLines.length; i++) {
-        pdf.text(nameLines[i], col.plant + 2, baseline + i * 11);
-      }
-      pdf.text(line.containerSize, col.size, baseline);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(String(line.quantity), col.qty, baseline);
-      pdf.setFont('helvetica', 'normal');
-
-      drawCheckbox(pdf, col.pulled, baseline, line.pulled >= line.quantity && line.quantity > 0);
-      pdf.setFontSize(7);
-      pdf.setTextColor(80, 80, 80);
-      pdf.text(`${line.pulled}/${line.quantity}`, col.pulled + 14, baseline);
-
-      drawCheckbox(pdf, col.loaded, baseline, line.loaded >= line.quantity && line.quantity > 0);
-      pdf.text(`${line.loaded}/${line.quantity}`, col.loaded + 14, baseline);
-
-      y += rowH;
+    pdf.setTextColor(30, 30, 30);
+    pdf.text(nameLines[0], col.plant + 2, baseline);
+    for (let i = 1; i < nameLines.length; i++) {
+      pdf.text(nameLines[i], col.plant + 2, baseline + i * 11);
     }
-    y += 8;
+    pdf.text(line.containerSize, col.size, baseline);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(String(line.quantity), col.qty, baseline);
+    pdf.setFont('helvetica', 'normal');
+
+    drawCheckbox(pdf, col.pulled, baseline, line.pulled >= line.quantity && line.quantity > 0);
+    pdf.setFontSize(7);
+    pdf.setTextColor(80, 80, 80);
+    pdf.text(`${line.pulled}/${line.quantity}`, col.pulled + 14, baseline);
+
+    drawCheckbox(pdf, col.loaded, baseline, line.loaded >= line.quantity && line.quantity > 0);
+    pdf.text(`${line.loaded}/${line.quantity}`, col.loaded + 14, baseline);
+
+    y += rowH;
   }
 
-  y += 2;
+  y += 4;
   write(`Total plants to pull: ${totalQty}`, { size: 10, bold: true });
   y += 10;
 
@@ -507,16 +462,13 @@ export function downloadTruckPullSheetPdf(params: {
 
     const orderItems = [...order.items].sort(
       (a, b) =>
-        compareVendors(normalizeVendor(a.vendor), normalizeVendor(b.vendor)) ||
         a.plantName.localeCompare(b.plantName) ||
         a.containerSize.localeCompare(b.containerSize)
     );
 
     for (const item of orderItems) {
       const pulled = item.pulledQuantity ?? 0;
-      const vendor = normalizeVendor(item.vendor);
-      const vendorSuffix = vendor === UNASSIGNED_VENDOR ? '' : `  ·  ${vendor}`;
-      const label = `${item.quantity} × ${item.containerSize}  ${item.plantName}${vendorSuffix}${
+      const label = `${item.quantity} × ${item.containerSize}  ${item.plantName}${
         item.isAddition ? '  (addition)' : ''
       }`;
       const nameLines = pdf.splitTextToSize(label, contentWidth - 120);

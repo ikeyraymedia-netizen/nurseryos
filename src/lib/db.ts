@@ -839,17 +839,33 @@ export async function deleteCustomerOrder(orderId: string): Promise<void> {
   saveLocalOrders(filtered);
 
   const trucks = getLocalTrucks();
-  let affectedTruck: Truck | null = null;
+  const affectedTrucks: Truck[] = [];
   const updatedTrucks = trucks.map((t) => {
     if (t.orderIds.includes(orderId)) {
-      const newOrderIds = t.orderIds.filter((id) => id !== orderId);
-      affectedTruck = { ...t, orderIds: newOrderIds };
-      return affectedTruck;
+      const next = { ...t, orderIds: t.orderIds.filter((id) => id !== orderId) };
+      affectedTrucks.push(next);
+      return next;
     }
     return t;
   });
-  if (affectedTruck) {
+  if (affectedTrucks.length > 0) {
     saveLocalTrucks(updatedTrucks);
+  }
+
+  // Remove invoices/estimates tied to this plant order so reports stay factual.
+  // Dynamic import avoids a circular dependency with documents ↔ inventory/db.
+  try {
+    const { listDocumentsForOrder, deleteCustomerDocument } = await import('./documents');
+    const linked = await listDocumentsForOrder(orderId);
+    for (const linkedDoc of linked) {
+      try {
+        await deleteCustomerDocument(linkedDoc.id);
+      } catch (err) {
+        console.error(`Failed to delete document ${linkedDoc.id} for order ${orderId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to cascade-delete documents for order:', err);
   }
 
   if (fallbackActive) return;
@@ -858,9 +874,9 @@ export async function deleteCustomerOrder(orderId: string): Promise<void> {
     const batch = writeBatch(db);
     batch.delete(orderDoc(tenantId, orderId));
 
-    if (affectedTruck) {
-      batch.update(truckDoc(tenantId, (affectedTruck as Truck).id), {
-        orderIds: (affectedTruck as Truck).orderIds
+    for (const truck of affectedTrucks) {
+      batch.update(truckDoc(tenantId, truck.id), {
+        orderIds: truck.orderIds
       });
     }
 

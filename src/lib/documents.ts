@@ -151,6 +151,45 @@ export async function deleteCustomerDocument(documentId: string): Promise<void> 
   await deleteDoc(documentDoc(tenantId, documentId));
 }
 
+/** Invoices/estimates/credit memos created from a plant order. */
+export async function listDocumentsForOrder(orderId: string): Promise<CustomerDocument[]> {
+  const tenantId = requireTenantId();
+  const id = String(orderId || '').trim();
+  if (!id) return [];
+
+  try {
+    const snapshot = await getDocs(
+      query(documentsCol(tenantId), where('orderId', '==', id))
+    );
+    const docs: CustomerDocument[] = [];
+    snapshot.forEach((snap) => {
+      docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
+    });
+    return docs;
+  } catch (err) {
+    console.warn('listDocumentsForOrder query failed, scanning all docs:', err);
+    const all = await listAllDocuments();
+    return all.filter((d) => String(d.orderId || '').trim() === id);
+  }
+}
+
+/**
+ * Reports must stay factual: drop saved invoices/estimates whose plant order
+ * was deleted. Standalone customer docs (no orderId) are kept.
+ */
+export function filterDocumentsForLiveOrders(
+  documents: CustomerDocument[],
+  liveOrders: Array<{ id: string }> | Set<string>
+): CustomerDocument[] {
+  const liveIds =
+    liveOrders instanceof Set ? liveOrders : new Set(liveOrders.map((o) => o.id));
+  return documents.filter((d) => {
+    const orderId = String(d.orderId || '').trim();
+    if (!orderId) return true;
+    return liveIds.has(orderId);
+  });
+}
+
 export async function listAllDocuments(): Promise<CustomerDocument[]> {
   const tenantId = requireTenantId();
   try {

@@ -18,7 +18,7 @@ import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument, Vendo
 import { useLocale, useT } from '../lib/i18n';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
-import { listAllDocuments, subscribeToDocuments } from '../lib/documents';
+import { listAllDocuments, subscribeToDocuments, filterDocumentsForLiveOrders } from '../lib/documents';
 import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
 import { subscribeToVendorBills } from '../lib/purchasing';
 import { AccountingReportsPanel } from './AccountingReportsPanel';
@@ -560,6 +560,12 @@ export function ReportsWorkspace({
     void refreshAudit();
   }, []);
 
+  /** Exclude invoices/estimates whose plant order was deleted — reports stay factual. */
+  const reportDocuments = useMemo(
+    () => filterDocumentsForLiveOrders(documents, orders),
+    [documents, orders]
+  );
+
   const salesSnapshot = useMemo(
     () =>
       buildDataSnapshot({
@@ -567,20 +573,20 @@ export function ReportsWorkspace({
         trucks,
         customers,
         inventory,
-        documents
+        documents: reportDocuments
       }).sales,
-    [orders, trucks, customers, inventory, documents]
+    [orders, trucks, customers, inventory, reportDocuments]
   );
   const invoiceCount = salesSnapshot.invoiceCount;
   const estimateCount = salesSnapshot.estimateCount;
   const profitByRep = useMemo(
-    () => buildProfitByRep(documents, orders),
-    [documents, orders]
+    () => buildProfitByRep(reportDocuments, orders),
+    [reportDocuments, orders]
   );
-  const paymentStatus = useMemo(() => buildPaymentStatus(documents), [documents]);
+  const paymentStatus = useMemo(() => buildPaymentStatus(reportDocuments), [reportDocuments]);
   const periodSales = useMemo(
-    () => buildPeriodSalesOverview(documents, orders),
-    [documents, orders]
+    () => buildPeriodSalesOverview(reportDocuments, orders),
+    [reportDocuments, orders]
   );
   const topCustomers = salesSnapshot.byCustomer.slice(0, 15);
   const topPlants = salesSnapshot.topPlantsByRevenue.slice(0, 15);
@@ -643,7 +649,7 @@ export function ReportsWorkspace({
         trucks,
         customers,
         inventory,
-        documents: freshDocuments
+        documents: filterDocumentsForLiveOrders(freshDocuments, orders)
       });
 
       const response = await fetch('/api/run-report', {
@@ -744,7 +750,7 @@ export function ReportsWorkspace({
 
         {viewMode === 'accounting' ? (
           <AccountingReportsPanel
-            documents={documents}
+            documents={reportDocuments}
             bills={vendorBills}
             inventory={inventory}
             canViewPurchasing={permissions.canViewPurchasing}

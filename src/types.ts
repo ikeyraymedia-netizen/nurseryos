@@ -11,6 +11,7 @@ export type TenantModuleId =
   | 'tasks'
   | 'bol'
   | 'vendors'
+  | 'textVendors'
   | 'profit'
   | 'payments'
   | 'quickbooks'
@@ -28,7 +29,7 @@ export interface Tenant {
   logoUrl?: string;
   /**
    * Enabled workspace modules for this nursery.
-   * Omit/undefined = legacy (all standard modules on; vendors/profit stay off).
+   * Omit/undefined = legacy (all standard modules on; opt-in add-ons stay off).
    * `[]` = nothing enabled (new signups until activated in seller console).
    */
   modules?: TenantModuleId[];

@@ -160,6 +160,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   }
 
   function handleOpenVendorTextLists() {
+    if (!permissions.canTextVendors) return;
     const defaultScope: 'truck' | 'day' =
       truck.loadingDate && dayTruckCount > 1 ? 'day' : 'truck';
     setVendorPullScope(defaultScope);
@@ -746,16 +747,18 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               {pullSheetBusy ? t('trucks.preparing') : t('trucks.pullSheetPdf')}
             </button>
 
-            <button
-              type="button"
-              disabled={truckOrders.length === 0}
-              onClick={handleOpenVendorTextLists}
-              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-ink-200 shadow-sm font-sans disabled:opacity-50"
-              title={t('trucksExtra.copyVendorListsTitle')}
-            >
-              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
-              {t('trucksExtra.textVendors')}
-            </button>
+            {permissions.canTextVendors && (
+              <button
+                type="button"
+                disabled={truckOrders.length === 0}
+                onClick={handleOpenVendorTextLists}
+                className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-white hover:bg-ink-50 text-ink-950 transition-colors border border-ink-200 shadow-sm font-sans disabled:opacity-50"
+                title={t('trucksExtra.copyVendorListsTitle')}
+              >
+                <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                {t('trucksExtra.textVendors')}
+              </button>
+            )}
 
             {permissions.canViewBOL && (
               <button

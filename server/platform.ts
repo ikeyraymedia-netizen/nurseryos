@@ -37,6 +37,7 @@ const ALL_MODULE_IDS = new Set([
   'tasks',
   'bol',
   'vendors',
+  'textVendors',
   'profit',
   'payments',
   'quickbooks',

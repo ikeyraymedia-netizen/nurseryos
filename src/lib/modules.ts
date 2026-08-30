@@ -68,6 +68,13 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     group: 'addon'
   },
   {
+    id: 'textVendors',
+    label: 'Text Vendor Pull Lists',
+    description:
+      'Copy or text day-wide / per-truck plant lists to growers from the Trucks workspace.',
+    group: 'addon'
+  },
+  {
     id: 'profit',
     label: 'Cost & Profit',
     description: 'Enter plant cost per line and see profit/margin on the order (internal only).',
@@ -108,6 +115,7 @@ export const ALL_TENANT_MODULE_IDS: TenantModuleId[] = TENANT_MODULE_DEFS.map((m
  */
 export const OPT_IN_MODULE_IDS: TenantModuleId[] = [
   'vendors',
+  'textVendors',
   'profit',
   'payments',
   'quickbooks',
@@ -123,7 +131,7 @@ export const DEFAULT_NEW_TENANT_MODULES: TenantModuleId[] = [];
 
 /**
  * Legacy tenants with no `modules` field keep their previous entitlement:
- * core workspaces + standard add-ons (vendors/profit stay off).
+ * core workspaces + standard add-ons (vendors/textVendors/profit stay off).
  */
 export const LEGACY_TENANT_MODULES: TenantModuleId[] = ALL_TENANT_MODULE_IDS.filter(
   (id) => !OPT_IN_MODULE_IDS.includes(id)
@@ -185,6 +193,7 @@ export function applyModuleGates(
   const tasks = mods.has('tasks');
   const bol = mods.has('bol');
   const vendors = mods.has('vendors');
+  const textVendors = mods.has('textVendors');
   const profit = mods.has('profit');
   const payments = mods.has('payments');
   const quickbooks = mods.has('quickbooks');
@@ -217,6 +226,7 @@ export function applyModuleGates(
     canCompleteTasks: permissions.canCompleteTasks && tasks,
     canViewBOL: permissions.canViewBOL && bol,
     canUseVendors: permissions.canUseVendors && vendors,
+    canTextVendors: permissions.canTextVendors && textVendors && trucks,
     // Profit needs both the module AND invoicing (cost/margin lives in the invoice view).
     canViewProfit: permissions.canViewProfit && profit && invoicing,
     // Cost entry on the order workspace only needs the profit module.

@@ -17,6 +17,8 @@ export interface AppPermissions {
   canViewBOL: boolean;
   /** Assign / view grower vendors on order lines (gated by vendors module). */
   canUseVendors: boolean;
+  /** Copy/text vendor pull lists from Trucks (gated by textVendors module). */
+  canTextVendors: boolean;
   /** Enter plant cost and view profit/margin (gated by profit module; internal only). */
   canViewProfit: boolean;
   /** Enter/edit plant cost on the order workspace (gated by profit module). */
@@ -147,6 +149,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCustomers: true,
         canViewBOL: true,
         canUseVendors: true,
+        canTextVendors: true,
         canViewProfit: true,
         canEditCost: true,
         canManageStripe: true,
@@ -188,6 +191,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCustomers: false,
         canViewBOL: true,
         canUseVendors: true,
+        canTextVendors: true,
         canViewProfit: false,
         canEditCost: true,
         canManageStripe: false,
@@ -228,6 +232,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCustomers: true,
         canViewBOL: false,
         canUseVendors: false,
+        canTextVendors: false,
         canViewProfit: true,
         canEditCost: true,
         canManageStripe: false,
@@ -268,6 +273,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCustomers: true,
         canViewBOL: true,
         canUseVendors: true,
+        canTextVendors: true,
         canViewProfit: true,
         canEditCost: false,
         canManageStripe: false,
@@ -307,6 +313,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCustomers: false,
         canViewBOL: false,
         canUseVendors: true,
+        canTextVendors: true,
         canViewProfit: false,
         canEditCost: false,
         canManageStripe: false,
@@ -346,6 +353,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canEditCustomers: false,
         canViewBOL: false,
         canUseVendors: false,
+        canTextVendors: false,
         canViewProfit: false,
         canEditCost: false,
         canManageStripe: false,

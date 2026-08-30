@@ -247,7 +247,9 @@ export async function reconnectAndSyncToCloud(): Promise<void> {
         owner: truck.owner || '',
         dateCreated: truck.dateCreated,
         status: truck.status || 'pending',
-        orderIds: truck.orderIds || []
+        orderIds: truck.orderIds || [],
+        ...(truck.loadingStartedAt ? { loadingStartedAt: truck.loadingStartedAt } : {}),
+        ...(truck.loadingFinishedAt ? { loadingFinishedAt: truck.loadingFinishedAt } : {})
       },
       { merge: true }
     );
@@ -465,6 +467,88 @@ export function subscribeToTrucks(callback: (trucks: Truck[]) => void) {
   };
 }
 
+function truckPlantLoadTotals(
+  truck: Truck,
+  orders: CustomerOrder[]
+): { total: number; loaded: number } {
+  let total = 0;
+  let loaded = 0;
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  for (const orderId of truck.orderIds || []) {
+    const order = byId.get(orderId);
+    if (!order) continue;
+    for (const item of order.items) {
+      total += item.quantity;
+      loaded += item.loadedQuantity;
+    }
+  }
+  return { total, loaded };
+}
+
+/**
+ * Keep truck-level first/last plant-load timestamps in sync with checkoff.
+ * Call after order load quantities are saved locally.
+ */
+async function syncTruckLoadingTimestampsForOrder(
+  orderId: string,
+  opts: { loadIncreased: boolean }
+): Promise<void> {
+  const orders = getLocalOrders();
+  const trucks = getLocalTrucks();
+  const now = new Date().toISOString();
+  const changed: Truck[] = [];
+
+  const next = trucks.map((t) => {
+    if (!(t.orderIds || []).includes(orderId)) return t;
+    const { loaded } = truckPlantLoadTotals(t, orders);
+    let loadingStartedAt = t.loadingStartedAt;
+    let loadingFinishedAt = t.loadingFinishedAt;
+
+    if (loaded <= 0) {
+      loadingStartedAt = undefined;
+      loadingFinishedAt = undefined;
+    } else if (opts.loadIncreased) {
+      loadingStartedAt = loadingStartedAt || now;
+      loadingFinishedAt = now;
+    }
+
+    if (
+      loadingStartedAt === t.loadingStartedAt &&
+      loadingFinishedAt === t.loadingFinishedAt
+    ) {
+      return t;
+    }
+
+    const updated: Truck = { ...t, loadingStartedAt, loadingFinishedAt };
+    changed.push(updated);
+    return updated;
+  });
+
+  if (changed.length === 0) return;
+
+  saveLocalTrucks(next);
+
+  if (fallbackActive || !activeTenantId) return;
+
+  try {
+    const batch = writeBatch(db);
+    for (const truck of changed) {
+      batch.set(
+        truckDoc(activeTenantId, truck.id),
+        {
+          loadingStartedAt: truck.loadingStartedAt || null,
+          loadingFinishedAt: truck.loadingFinishedAt || null
+        },
+        { merge: true }
+      );
+    }
+    await batch.commit();
+  } catch (error: any) {
+    console.error('Error syncing truck load timestamps:', error);
+    // Timestamps remain on local truck docs; load progress already saved.
+  }
+}
+
 // --- MUTATIONS ---
 export async function resetToFactoryWeights(): Promise<void> {
   const tenantId = requireTenantId();
@@ -535,6 +619,8 @@ export async function updateOrderItemProgress(
 ): Promise<string> {
   const tenantId = requireTenantId();
   const currentItem = orderItems.find((item) => item.id === itemId);
+  const previousLoaded = currentItem?.loadedQuantity ?? 0;
+  const loadIncreased = loadedQuantity > previousLoaded;
   const inventoryDelta = currentItem ? loadedQuantity - confirmedInventoryDeducted(currentItem) : 0;
   const loadDelta =
     currentItem && inventoryDelta !== 0
@@ -576,6 +662,7 @@ export async function updateOrderItemProgress(
     return o;
   });
   saveLocalOrders(optimisticOrders);
+  await syncTruckLoadingTimestampsForOrder(orderId, { loadIncreased });
 
   if (fallbackActive) return 'Saved locally (offline mode).';
 
@@ -736,6 +823,7 @@ export async function updateOrderItemCost(
 
 export async function markAllItemsAsLoaded(orderId: string, orderItems: any[]): Promise<string> {
   const tenantId = requireTenantId();
+  const loadIncreased = orderItems.some((item) => item.loadedQuantity < item.quantity);
   const inventoryDeltas = orderItems
     .map((item) => ({
       plantName: item.plantName,
@@ -744,12 +832,28 @@ export async function markAllItemsAsLoaded(orderId: string, orderItems: any[]): 
     }))
     .filter((d) => d.delta !== 0);
 
+  const updatedItems = orderItems.map((item) => ({
+    ...item,
+    pulledQuantity: item.quantity,
+    loadedQuantity: item.quantity
+  }));
+
+  const orders = getLocalOrders();
+  const updatedOrders = orders.map((o) => {
+    if (o.id === orderId) {
+      return { ...o, items: updatedItems, status: 'completed' as const };
+    }
+    return o;
+  });
+  saveLocalOrders(updatedOrders);
+  await syncTruckLoadingTimestampsForOrder(orderId, { loadIncreased });
+
   if (fallbackActive) return 'Saved locally (offline mode).';
 
   try {
     const sync = await syncInventoryAfterLoad(tenantId, inventoryDeltas);
 
-    const updatedItems = orderItems.map((item) => ({
+    const syncedItems = orderItems.map((item) => ({
       ...item,
       pulledQuantity: item.quantity,
       loadedQuantity: item.quantity,
@@ -757,17 +861,16 @@ export async function markAllItemsAsLoaded(orderId: string, orderItems: any[]): 
       inventorySyncConfirmed: sync.ok ? true : item.inventorySyncConfirmed
     }));
 
-    const orders = getLocalOrders();
-    const updatedOrders = orders.map((o) => {
+    const finalOrders = getLocalOrders().map((o) => {
       if (o.id === orderId) {
-        return { ...o, items: updatedItems, status: 'completed' as const };
+        return { ...o, items: syncedItems, status: 'completed' as const };
       }
       return o;
     });
-    saveLocalOrders(updatedOrders);
+    saveLocalOrders(finalOrders);
 
     await updateDoc(orderDoc(tenantId, orderId), {
-      items: updatedItems,
+      items: syncedItems,
       status: 'completed'
     });
     return sync.message;
@@ -788,27 +891,28 @@ export async function resetOrderProgress(orderId: string, orderItems: any[]): Pr
       delta: -confirmedInventoryDeducted(item)
     }));
 
+  const updatedItems = orderItems.map((item) => ({
+    ...item,
+    pulledQuantity: 0,
+    loadedQuantity: 0,
+    inventoryDeductedQty: 0,
+    inventorySyncConfirmed: false
+  }));
+
+  const orders = getLocalOrders();
+  const updatedOrders = orders.map((o) => {
+    if (o.id === orderId) {
+      return { ...o, items: updatedItems, status: 'pending' as const };
+    }
+    return o;
+  });
+  saveLocalOrders(updatedOrders);
+  await syncTruckLoadingTimestampsForOrder(orderId, { loadIncreased: false });
+
   if (fallbackActive) return 'Saved locally (offline mode).';
 
   try {
     const sync = await syncInventoryAfterLoad(tenantId, inventoryDeltas);
-
-    const updatedItems = orderItems.map((item) => ({
-      ...item,
-      pulledQuantity: 0,
-      loadedQuantity: 0,
-      inventoryDeductedQty: 0,
-      inventorySyncConfirmed: false
-    }));
-
-    const orders = getLocalOrders();
-    const updatedOrders = orders.map((o) => {
-      if (o.id === orderId) {
-        return { ...o, items: updatedItems, status: 'pending' as const };
-      }
-      return o;
-    });
-    saveLocalOrders(updatedOrders);
 
     await updateDoc(orderDoc(tenantId, orderId), {
       items: updatedItems,

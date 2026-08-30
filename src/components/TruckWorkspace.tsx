@@ -41,7 +41,8 @@ import {
   Copy,
   MessageSquare,
   X,
-  Building
+  Building,
+  Clock
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
@@ -50,6 +51,29 @@ import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../l
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { DEFAULT_VENDORS } from '../data/vendors';
+
+function formatLoadClock(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function formatLoadDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
 
 interface TruckWorkspaceProps {
   truck: Truck;
@@ -297,6 +321,20 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   });
 
   const overallPercentage = totalPlants > 0 ? Math.round((loadedPlants / totalPlants) * 100) : 0;
+  const truckFullyLoaded = totalPlants > 0 && loadedPlants >= totalPlants;
+  const loadStartedAt = truck.loadingStartedAt;
+  const loadLastAt = truck.loadingFinishedAt;
+  const loadDurationLabel = (() => {
+    if (!loadStartedAt) return null;
+    const startMs = new Date(loadStartedAt).getTime();
+    if (!Number.isFinite(startMs)) return null;
+    if (truckFullyLoaded && loadLastAt) {
+      const endMs = new Date(loadLastAt).getTime();
+      if (!Number.isFinite(endMs)) return null;
+      return { text: formatLoadDuration(endMs - startMs), inProgress: false };
+    }
+    return { text: formatLoadDuration(Date.now() - startMs), inProgress: true };
+  })();
 
   // Truck weight limits calculations
   const capacity = getTruckWeightCapacity(truck.truckType);
@@ -924,6 +962,35 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           </div>
         </div>
       </div>
+
+      {permissions.canManageTeam && (
+        <div className="px-4 py-3 border-b border-ink-500/20 bg-slate-50/90 flex items-start gap-3">
+          <Clock className="h-4 w-4 text-ink-700 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold text-gray-400 font-mono uppercase leading-tight">
+              {t('trucksExtra.loadTimingAdmin')}
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-800">
+              <span>
+                <span className="font-semibold text-gray-500">{t('trucksExtra.loadTimingStarted')}</span>{' '}
+                {loadStartedAt ? formatLoadClock(loadStartedAt) : '—'}
+              </span>
+              <span>
+                <span className="font-semibold text-gray-500">{t('trucksExtra.loadTimingLast')}</span>{' '}
+                {loadLastAt ? formatLoadClock(loadLastAt) : '—'}
+              </span>
+              <span>
+                <span className="font-semibold text-gray-500">{t('trucksExtra.loadTimingDuration')}</span>{' '}
+                {loadDurationLabel
+                  ? loadDurationLabel.inProgress
+                    ? t('trucksExtra.loadTimingSoFar', { duration: loadDurationLabel.text })
+                    : loadDurationLabel.text
+                  : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Active Work Area */}
       <div className="flex-1 overflow-y-auto p-6 max-h-[550px]">

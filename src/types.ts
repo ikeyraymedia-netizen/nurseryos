@@ -289,6 +289,10 @@ export interface Truck {
   owner?: string; // Sales rep this truck is credited to
 
   loadingDate?: string; // The date when the truck is scheduled to be loaded
+  /** ISO time of first plant loaded on this truck (admin load-duration timer). */
+  loadingStartedAt?: string;
+  /** ISO time of most recent plant load increase (last plant when truck is 100%). */
+  loadingFinishedAt?: string;
   /** Draft BOL form (addresses, driver, etc.) saved from the BOL modal. */
   bolDraft?: TruckBolDraft;
 }

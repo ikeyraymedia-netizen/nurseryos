@@ -107,20 +107,29 @@ export function looksLikeEmail(value: string): boolean {
   return EMAIL_RE.test(String(value || '').trim());
 }
 
-/** Split comma / semicolon / newline lists into unique trimmed emails. */
+/** Split comma / semicolon lists into unique trimmed emails. */
 export function splitEmailList(value: string | string[] | undefined | null): string[] {
-  const parts = Array.isArray(value)
-    ? value.flatMap((entry) => String(entry || '').split(/[,;\s]+/))
-    : String(value || '').split(/[,;\s]+/);
+  const rawParts = Array.isArray(value)
+    ? value.flatMap((entry) => String(entry || '').split(/[,;\n\r]+/))
+    : String(value || '').split(/[,;\n\r]+/);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of parts) {
-    const email = raw.trim().toLowerCase();
+  for (const raw of rawParts) {
+    const email = extractEmailAddress(raw);
     if (!email || seen.has(email)) continue;
     seen.add(email);
     out.push(email);
   }
   return out;
+}
+
+/** Accept bare emails or "Name <email@x.com>" / "<email@x.com>". */
+function extractEmailAddress(raw: string): string {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+  const angle = trimmed.match(/<([^>]+)>/);
+  const candidate = (angle?.[1] || trimmed).trim().toLowerCase();
+  return looksLikeEmail(candidate) ? candidate : '';
 }
 
 export function parseCcEmails(

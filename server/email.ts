@@ -102,18 +102,27 @@ function looksLikeEmail(value: string): boolean {
 const MAX_CC_RECIPIENTS = 20;
 
 function splitEmailList(value: unknown): string[] {
-  const parts = Array.isArray(value)
-    ? value.flatMap((entry) => String(entry || '').split(/[,;\s]+/))
-    : String(value || '').split(/[,;\s]+/);
+  const rawParts = Array.isArray(value)
+    ? value.flatMap((entry) => String(entry || '').split(/[,;\n\r]+/))
+    : String(value || '').split(/[,;\n\r]+/);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of parts) {
-    const email = raw.trim().toLowerCase();
+  for (const raw of rawParts) {
+    const email = extractEmailAddress(raw);
     if (!email || seen.has(email)) continue;
     seen.add(email);
     out.push(email);
   }
   return out;
+}
+
+/** Accept bare emails or "Name <email@x.com>" / "<email@x.com>". */
+function extractEmailAddress(raw: string): string {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+  const angle = trimmed.match(/<([^>]+)>/);
+  const candidate = (angle?.[1] || trimmed).trim().toLowerCase();
+  return looksLikeEmail(candidate) ? candidate : '';
 }
 
 function parseCcRecipients(value: unknown, to: string): string[] {
@@ -246,6 +255,19 @@ async function sendViaResend(params: {
   const match = platform.match(/<([^>]+)>/);
   const fromAddress = match?.[1] || (looksLikeEmail(platform) ? platform : 'onboarding@resend.dev');
   const fromHeader = `${safeName} <${fromAddress}>`;
+  const usingTestSender = /resend\.dev$/i.test(fromAddress);
+
+  // Include CC on `to` so Resend actually delivers to them. The standalone `cc`
+  // field is unreliable on some Resend from-domains (notably onboarding@resend.dev).
+  const toRecipients = [params.to, ...(params.cc || [])].filter(
+    (email, index, all) => looksLikeEmail(email) && all.indexOf(email) === index
+  );
+
+  if (usingTestSender && (params.cc?.length || 0) > 0) {
+    console.warn(
+      '[email] Sending with Resend test sender; CC recipients were added to `to` for delivery. Set RESEND_FROM_EMAIL to a verified domain.'
+    );
+  }
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -255,9 +277,8 @@ async function sendViaResend(params: {
     },
     body: JSON.stringify({
       from: fromHeader,
-      to: [params.to],
-      ...(params.cc?.length ? { cc: params.cc } : {}),
-      reply_to: params.replyTo,
+      to: toRecipients,
+      reply_to: [params.replyTo],
       subject: params.subject,
       text: params.text,
       html: params.html,

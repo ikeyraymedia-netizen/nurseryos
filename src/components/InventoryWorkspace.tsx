@@ -59,6 +59,7 @@ import { PdfShareSheet } from './PdfShareSheet';
 import { PlantPromoModal } from './PlantPromoModal';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
+import { authJsonHeaders } from '../lib/apiAuth';
 
 interface InventoryWorkspaceProps {
   permissions: AppPermissions;
@@ -445,7 +446,7 @@ export function InventoryWorkspace({
           '/api/parse-inventory',
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await authJsonHeaders(),
             body: JSON.stringify({
               base64Data,
               mimeType,

@@ -19,6 +19,7 @@ import { useLocale, useT } from '../lib/i18n';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
 import { listAllDocuments, subscribeToDocuments, filterDocumentsForLiveOrders } from '../lib/documents';
+import { authJsonHeaders } from '../lib/apiAuth';
 import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
 import { subscribeToVendorBills } from '../lib/purchasing';
 import { AccountingReportsPanel } from './AccountingReportsPanel';
@@ -654,7 +655,7 @@ export function ReportsWorkspace({
 
       const response = await fetch('/api/run-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authJsonHeaders(),
         body: JSON.stringify({
           question: trimmed,
           nurseryName,

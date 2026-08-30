@@ -16,6 +16,7 @@ import {
   SpreadsheetInventoryItem
 } from './inventorySpreadsheet';
 import { normalizePlantName, plantNamesMatch } from './inventoryMatch';
+import { authJsonHeaders } from './apiAuth';
 
 let activeTenantId: string | null = null;
 
@@ -208,7 +209,7 @@ async function parseAvailabilityPdf(
       '/api/parse-inventory',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authJsonHeaders(),
         body: JSON.stringify({
           base64Data,
           mimeType: 'application/pdf',

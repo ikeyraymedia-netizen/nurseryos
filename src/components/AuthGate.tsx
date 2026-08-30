@@ -7,7 +7,6 @@ import {
   getUserProfile,
   joinNurseryWithInvite,
   logOut,
-  renameTenant,
   signIn,
   signUpAndJoinNursery,
   updateUserLocale,
@@ -76,7 +75,6 @@ function bindTenantContexts(tenantId: string) {
 }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const TARGET_NURSERY_NAME = 'Bayou Sate Plant Co';
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -167,15 +165,6 @@ export function AuthGate({ children }: AuthGateProps) {
     }
 
     let resolvedTenant = nextTenant;
-    const lowerName = nextTenant.name.trim().toLowerCase();
-    if (lowerName === 'green valley nursery' || lowerName.startsWith('green valley nursery')) {
-      try {
-        await renameTenant(nextTenant.id, TARGET_NURSERY_NAME);
-        resolvedTenant = { ...nextTenant, name: TARGET_NURSERY_NAME };
-      } catch (renameErr) {
-        console.warn('Could not auto-rename nursery:', renameErr);
-      }
-    }
     if (loadGen !== authLoadGenRef.current) return;
 
     setProfile(nextProfile);

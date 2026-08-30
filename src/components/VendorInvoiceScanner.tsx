@@ -16,6 +16,7 @@ import { findMatchingVendors } from '../lib/vendorMatch';
 import { createVendorBill } from '../lib/purchasing';
 import { addVendor } from '../lib/vendors';
 import { uploadVendorInvoiceAttachment } from '../lib/vendorInvoicePhotos';
+import { authJsonHeaders } from '../lib/apiAuth';
 import {
   emptyBillLine,
   isPlantPurchaseCategory,
@@ -181,7 +182,7 @@ export function VendorInvoiceScanner({
       try {
         response = await fetch('/api/parse-vendor-invoice', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authJsonHeaders(),
           signal: controller.signal,
           body: JSON.stringify({
             ...(base64Data ? { base64Data } : {}),

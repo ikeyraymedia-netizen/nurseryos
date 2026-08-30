@@ -118,12 +118,24 @@ service cloud.firestore {
     }
 
     match /inviteCodes/{code} {
-      allow read: if signedIn();
+      // Get a specific code when joining; never list/scan the whole collection.
+      allow get: if signedIn();
+      allow list: if false;
       allow create: if signedIn()
         && request.resource.data.keys().hasAll(['tenantId', 'inviteId', 'role', 'tenantName', 'active', 'createdAt'])
         && isAdminOrOwner(request.resource.data.tenantId);
+      // Admins manage codes; members may only deactivate after a successful join.
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+        && (
+          isAdminOrOwner(resource.data.tenantId)
+          || (
+            isMember(resource.data.tenantId)
+            && resource.data.active == true
+            && request.resource.data.active == false
+          )
+        );
+      allow delete: if isAdminOrOwner(resource.data.tenantId);
     }
 
     // Access requests are created/updated by Admin SDK (API). Platform admins may read.
@@ -139,9 +151,8 @@ service cloud.firestore {
 
     match /tenants/{tenantId} {
       allow read: if isMember(tenantId) || isPlatformAdmin();
-      allow create: if signedIn()
-        && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.keys().hasAll(['name', 'createdAt', 'ownerId']);
+      // Nurseries are provisioned by platform Admin SDK / seller console — not open client create.
+      allow create: if isPlatformAdmin();
       // Owners may rename; only platform admins may change modules / ownership fields.
       allow update: if isPlatformAdmin()
         || (
@@ -158,12 +169,23 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isMember(tenantId);
-        // Owner bootstrap on nursery creation, admin invites, or self-join via invite code
-        allow create: if signedIn()
-          && (
+        // Admin invites, or self-join only with a live invite code (cannot self-grant owner).
+        allow create: if signedIn() && (
+          isAdminOrOwner(tenantId)
+          || (
             memberId == request.auth.uid
-            || isAdminOrOwner(tenantId)
-          );
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.role != 'owner'
+            && (
+              !('roles' in request.resource.data)
+              || !(request.resource.data.roles.hasAny(['owner']))
+            )
+            && request.resource.data.keys().hasAny(['inviteCode'])
+            && exists(/databases/$(database)/documents/inviteCodes/$(request.resource.data.inviteCode))
+            && get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.inviteCode)).data.tenantId == tenantId
+            && get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.inviteCode)).data.active == true
+          )
+        );
         allow update, delete: if isAdminOrOwner(tenantId);
       }
 

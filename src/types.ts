@@ -53,6 +53,8 @@ export interface TenantMember {
   roles?: MemberRole[];
   displayName?: string;
   joinedAt: string;
+  /** Present during invite redemption so Firestore rules can validate the code. */
+  inviteCode?: string;
 }
 
 export interface UserProfile {

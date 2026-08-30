@@ -23,6 +23,7 @@ import {
 import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
 import { addCustomerDocument, nextDocumentNumber } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
+import { authJsonHeaders } from '../lib/apiAuth';
 import { logAuditEvent } from '../lib/audit';
 import { AppPermissions } from '../lib/permissions';
 import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
@@ -254,7 +255,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       try {
         response = await fetch('/api/parse-order', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authJsonHeaders(),
           signal: controller.signal,
           body: JSON.stringify({
             ...(base64Data ? { base64Data } : {}),

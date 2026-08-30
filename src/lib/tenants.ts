@@ -456,7 +456,8 @@ export async function joinNurseryWithInvite(params: {
     role,
     roles: roles.length ? roles : [role],
     displayName: params.displayName?.trim() || undefined,
-    joinedAt: now
+    joinedAt: now,
+    inviteCode: code
   };
 
   const profile: UserProfile = {

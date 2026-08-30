@@ -13,6 +13,10 @@ import { registerEmailRoutes } from './server/email';
 import { registerPlatformRoutes } from './server/platform';
 import { registerPublicAvailabilityRoutes } from './server/publicAvailability';
 import {
+  isFirebaseAdminConfigured,
+  verifyFirebaseIdToken
+} from './server/firebaseAdmin';
+import {
   isSpreadsheetInventoryUpload,
   parseInventorySpreadsheetBuffer
 } from './server/inventoryParse';
@@ -42,6 +46,31 @@ registerStripeRoutes(app);
 registerEmailRoutes(app);
 registerPlatformRoutes(app);
 registerPublicAvailabilityRoutes(app);
+
+/** Require a signed-in Firebase user for AI / cost-bearing routes. */
+async function requireAuthUid(req: express.Request): Promise<string> {
+  if (!isFirebaseAdminConfigured()) {
+    throw Object.assign(new Error('Firebase Admin is not configured on the server.'), {
+      status: 503
+    });
+  }
+  const header = String(req.headers.authorization || '');
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    throw Object.assign(new Error('Sign in required.'), { status: 401 });
+  }
+  const decoded = await verifyFirebaseIdToken(match[1]);
+  return decoded.uid;
+}
+
+function authErrorResponse(res: express.Response, err: unknown): boolean {
+  const status = typeof (err as any)?.status === 'number' ? (err as any).status : 0;
+  if (status === 401 || status === 403 || status === 503) {
+    res.status(status).json({ error: (err as any)?.message || 'Unauthorized.' });
+    return true;
+  }
+  return false;
+}
 
 // Lazy initialize Google Gen AI
 let aiClient: GoogleGenAI | null = null;
@@ -518,6 +547,7 @@ async function parseInventoryTextChunks(
 // API endpoint to parse the order
 app.post('/api/parse-order', async (req, res) => {
   try {
+    await requireAuthUid(req);
     const { base64Data, mimeType, fileName, orderText: rawOrderText } = req.body;
 
     const providedText =
@@ -629,6 +659,7 @@ Return your response in structured JSON format matching the schema provided.`;
     }
     res.json(normalizeParsedOrderPayload(parsedData));
   } catch (error: any) {
+    if (authErrorResponse(res, error)) return;
     console.error('Error parsing order with Gemini:', error);
     // Prefer any local paste parse over a hard failure.
     try {
@@ -676,6 +707,7 @@ Return your response in structured JSON format matching the schema provided.`;
 // API endpoint to parse inventory files (PDF/image via AI; CSV/Excel parsed locally)
 app.post('/api/parse-inventory', async (req, res) => {
   try {
+    await requireAuthUid(req);
     const { base64Data, mimeType, fileName, purpose } = req.body;
     if (!base64Data || !mimeType) {
       res.status(400).json({ error: 'Missing base64Data or mimeType.' });
@@ -774,6 +806,7 @@ Return strict JSON matching schema. Do not include narrative text.`;
     }
     res.json({ items });
   } catch (error: any) {
+    if (authErrorResponse(res, error)) return;
     console.error('Error parsing inventory with Gemini:', error);
     const statusCode = getApiStatusCode(error);
     const isTimeout = String(error?.message || '').includes('timed out');
@@ -969,6 +1002,7 @@ async function parseVendorInvoiceWithFallback(
 /** Parse a vendor (accounts-payable) invoice from photo, PDF, or pasted text. */
 app.post('/api/parse-vendor-invoice', async (req, res) => {
   try {
+    await requireAuthUid(req);
     const { base64Data, mimeType, fileName, invoiceText: rawInvoiceText } = req.body;
 
     const providedText =
@@ -1040,6 +1074,7 @@ Return structured JSON matching the schema.`;
     }
     res.json(parsedData);
   } catch (error: any) {
+    if (authErrorResponse(res, error)) return;
     console.error('Error parsing vendor invoice with Gemini:', error);
     const msg = String(error?.message || error || '');
     if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
@@ -1082,6 +1117,7 @@ app.get('/api/config-status', (req, res) => {
 
 app.post('/api/run-report', async (req, res) => {
   try {
+    await requireAuthUid(req);
     const { question, nurseryName, data } = req.body || {};
     if (!question || typeof question !== 'string' || !question.trim()) {
       res.status(400).json({ error: 'Missing report question.' });
@@ -1162,6 +1198,7 @@ ${snapshot}`;
 
     res.json({ report: reportText });
   } catch (error: any) {
+    if (authErrorResponse(res, error)) return;
     console.error('Error running report with Gemini:', error);
     const msg = String(error?.message || error || '');
     if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {
@@ -1218,6 +1255,7 @@ async function fetchImageAsInlineData(
 
 app.post('/api/generate-plant-promo', async (req, res) => {
   try {
+    await requireAuthUid(req);
     const {
       plantName,
       containerSize,
@@ -1393,6 +1431,7 @@ Return JSON only with this shape:
       locale: lang
     });
   } catch (error: any) {
+    if (authErrorResponse(res, error)) return;
     console.error('Error generating plant promo:', error);
     const msg = String(error?.message || error || '');
     if (msg.toLowerCase().includes('gemini_api_key') || msg.toLowerCase().includes('not configured')) {

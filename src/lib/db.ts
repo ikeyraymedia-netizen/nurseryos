@@ -196,6 +196,12 @@ function activateLocalFallback(reason: string) {
     weightsListeners.forEach((cb) => cb(localW));
     ordersListeners.forEach((cb) => cb(localO));
     trucksListeners.forEach((cb) => cb(localT));
+
+    window.alert(
+      'NurseryOS switched this device to offline/local mode.\n\n' +
+        'Other phones or computers will NOT see changes you make until you click “Sync to cloud” in the header.\n\n' +
+        `Reason: ${reason}`
+    );
   } else {
     fallbackReason = reason;
   }

@@ -3,6 +3,7 @@ import { Check, Copy, Loader2, Megaphone, RefreshCw, X } from 'lucide-react';
 import { InventoryPlant } from '../types';
 import { useLocale, useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
+import { authJsonHeaders } from '../lib/apiAuth';
 
 type PromoFormat = 'email' | 'social' | 'sms';
 type PromoAudience = 'wholesale' | 'retail' | 'ready';
@@ -39,7 +40,7 @@ export function PlantPromoModal({ plant, nurseryName, onClose }: PlantPromoModal
     try {
       const response = await fetch('/api/generate-plant-promo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authJsonHeaders(),
         body: JSON.stringify({
           plantName: plant.plantName,
           containerSize: plant.containerSize,

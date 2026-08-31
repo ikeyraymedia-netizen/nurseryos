@@ -424,10 +424,10 @@ const extra = {
     removedCustomers: 'Removed {{n}} customer(s).',
     deleteCustomersFailed: 'Failed to delete customers.',
     convertConfirm:
-      'Convert {{doc}} into a plant order for {{customer}}? This adds it to Orders for pulling/loading. The estimate stays on the customer record.',
-    noLineItems: 'This estimate has no line items to convert.',
-    convertSuccess: 'Estimate converted to order. Opening it now…',
-    convertFailed: 'Failed to convert estimate to order.',
+      'Convert {{doc}} into a plant order for {{customer}}? This adds it to Orders so it can be pulled and loaded on a truck. The document stays on the customer record.',
+    noLineItems: 'This document has no line items to convert.',
+    convertSuccess: 'Converted to a plant order. Opening it now…',
+    convertFailed: 'Failed to convert document to order.',
     customersSubtitle: 'Search customers, then open one to view details.',
     noDocsHint:
       'No documents yet. Create a credit memo here, or an estimate/invoice from an order.',

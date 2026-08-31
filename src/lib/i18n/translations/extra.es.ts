@@ -428,10 +428,10 @@ const extra = {
     removedCustomers: 'Eliminados {{n}} cliente(s).',
     deleteCustomersFailed: 'No se pudieron eliminar los clientes.',
     convertConfirm:
-      '¿Convertir {{doc}} en un pedido de plantas para {{customer}}? Se agrega a Pedidos para extracción/carga. El presupuesto permanece en el registro del cliente.',
-    noLineItems: 'Este presupuesto no tiene líneas para convertir.',
-    convertSuccess: 'Presupuesto convertido a pedido. Abriéndolo ahora…',
-    convertFailed: 'No se pudo convertir el presupuesto a pedido.',
+      '¿Convertir {{doc}} en un pedido de plantas para {{customer}}? Se agrega a Pedidos para extracción y carga en un camión. El documento permanece en el registro del cliente.',
+    noLineItems: 'Este documento no tiene líneas para convertir.',
+    convertSuccess: 'Convertido a pedido de plantas. Abriéndolo ahora…',
+    convertFailed: 'No se pudo convertir el documento a pedido.',
     customersSubtitle: 'Busque clientes, luego abra uno para ver detalles.',
     noDocsHint:
       'Aún no hay documentos. Cree una nota de crédito aquí, o un presupuesto/factura desde un pedido.',

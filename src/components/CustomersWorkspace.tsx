@@ -802,9 +802,9 @@ export function CustomersWorkspace({
     }
   }
 
-  async function handleConvertEstimateToOrder(doc: CustomerDocument) {
+  async function handleConvertDocumentToOrder(doc: CustomerDocument) {
     if (!permissions.canUploadOrders || !selectedCustomer) return;
-    if (doc.type !== 'estimate') return;
+    if (doc.type !== 'estimate' && doc.type !== 'invoice') return;
     if (doc.orderId) {
       onOpenOrder?.(doc.orderId);
       return;
@@ -838,9 +838,12 @@ export function CustomersWorkspace({
       const orderId = await addCustomerOrder({
         customerName: selectedCustomer.name,
         customerId: selectedCustomer.id,
-        orderNumber: doc.orderNumber || doc.documentNumber.replace(/^EST-/i, '') || 'N/A',
+        orderNumber:
+          doc.orderNumber ||
+          doc.documentNumber.replace(/^(EST|INV)-/i, '') ||
+          'N/A',
         items,
-        originalText: `Converted from estimate ${doc.documentNumber}`,
+        originalText: `Converted from ${doc.type} ${doc.documentNumber}`,
         status: 'pending',
         totalWeightLbs: estimateWeightLbs(doc),
         customerEmail: doc.customerEmail || selectedCustomer.contactEmail,
@@ -864,9 +867,9 @@ export function CustomersWorkspace({
       });
 
       await logAuditEvent({
-        action: 'estimate.converted_to_order',
+        action: `${doc.type}.converted_to_order`,
         summary: `Converted ${doc.documentNumber} to order for ${selectedCustomer.name}`,
-        meta: { estimateId: doc.id, orderId, customerId: selectedCustomer.id }
+        meta: { documentId: doc.id, orderId, customerId: selectedCustomer.id }
       });
 
       setMessage(t('customers.convertSuccess'));
@@ -1332,18 +1335,20 @@ export function CustomersWorkspace({
                             {t('common.delete')}
                           </button>
                         )}
-                        {permissions.canUploadOrders && doc.type === 'estimate' && !doc.orderId && (
+                        {permissions.canUploadOrders &&
+                          (doc.type === 'estimate' || doc.type === 'invoice') &&
+                          !doc.orderId && (
                           <button
                             type="button"
                             disabled={convertingDocId === doc.id || busy}
-                            onClick={() => handleConvertEstimateToOrder(doc)}
+                            onClick={() => handleConvertDocumentToOrder(doc)}
                             className="inline-flex items-center gap-1 text-xs font-bold text-sky-800 hover:text-sky-950 disabled:opacity-50"
                           >
                             <ClipboardList className="h-3.5 w-3.5" />
                             {convertingDocId === doc.id ? t('customers.converting') : t('customers.convertToOrder')}
                           </button>
                         )}
-                        {permissions.canViewOrders && doc.type === 'estimate' && doc.orderId && onOpenOrder && (
+                        {permissions.canViewOrders && doc.orderId && onOpenOrder && (
                           <button
                             type="button"
                             onClick={() => onOpenOrder(doc.orderId!)}

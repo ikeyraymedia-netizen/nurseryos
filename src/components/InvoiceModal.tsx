@@ -39,7 +39,7 @@ import {
   Image as ImageIcon,
   Upload
 } from 'lucide-react';
-import { updateCustomerOrder } from '../lib/db';
+import { updateCustomerOrder, addCustomerOrder, subscribeToWeights } from '../lib/db';
 import {
   addCustomerDocument,
   updateCustomerDocument,
@@ -54,7 +54,6 @@ import { getDefaultPriceForSize } from '../lib/pricing';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
 import { subscribeToInventory } from '../lib/inventory';
-import { subscribeToWeights } from '../lib/db';
 import { uploadEstimateLinePhoto } from '../lib/estimatePhotos';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
@@ -132,6 +131,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   );
   const [savedDocumentId, setSavedDocumentId] = useState<string | null>(
     existingDocument?.id || null
+  );
+  /** Plant order linked for truck loading when saving a document-only invoice. */
+  const [linkedPlantOrderId, setLinkedPlantOrderId] = useState<string | null>(
+    existingDocument?.orderId ||
+      (order.id && !order.id.startsWith('preview-') ? order.id : null)
   );
   const documentContextRef = useRef('');
   // State for quantity basis: 'ordered' | 'pulled' | 'loaded'
@@ -234,8 +238,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     if (documentContextRef.current !== documentContext) {
       documentContextRef.current = documentContext;
       setSavedDocumentId(doc?.id || null);
+      setLinkedPlantOrderId(
+        doc?.orderId ||
+          (order.id && !order.id.startsWith('preview-') ? order.id : null)
+      );
     } else if (doc?.id) {
       setSavedDocumentId(doc.id);
+      if (doc.orderId) setLinkedPlantOrderId(doc.orderId);
     }
 
     setBillToName(
@@ -1364,9 +1373,69 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         owner: salesRep.trim() || order.owner || undefined
       };
 
-      const isDocumentOnlyOrder =
-        order.id.startsWith('preview-') || isCreditMemo;
-      if (!isDocumentOnlyOrder) {
+      const customerId = customer?.id || order.customerId;
+      if (!customerId) {
+        throw new Error(t('invoice.noCustomerLinked'));
+      }
+
+      const isCreditOnly = isCreditMemo;
+      let plantOrderId: string | undefined =
+        linkedPlantOrderId ||
+        (!order.id.startsWith('preview-') && !isCreditOnly ? order.id : undefined) ||
+        existingDocument?.orderId ||
+        undefined;
+      let plantOrderNumber: string | undefined =
+        (!order.id.startsWith('preview-') ? order.orderNumber : undefined) ||
+        existingDocument?.orderNumber ||
+        undefined;
+
+      // Document-only invoices need a plant order so they can be loaded on a truck.
+      if (
+        !plantOrderId &&
+        !isCreditOnly &&
+        documentType === 'invoice' &&
+        updatedItems.some((item) => String(item.plantName || '').trim())
+      ) {
+        const plantItems: PlantOrderItem[] = updatedItems
+          .filter((item) => String(item.plantName || '').trim())
+          .map((item) => ({
+            id: item.id,
+            plantName: String(item.plantName || '').trim(),
+            containerSize: String(item.containerSize || '').trim(),
+            quantity: getItemQty(item),
+            loadedQuantity: 0,
+            unitPrice: item.unitPrice,
+            unitCost: item.unitCost,
+            notes: item.notes,
+            vendor: item.vendor
+          }));
+
+        const totalWeightLbs = plantItems.reduce(
+          (sum, item) => sum + getContainerUnitWeight(item.containerSize) * item.quantity,
+          0
+        );
+        const derivedOrderNumber =
+          invoiceNumber.replace(/^(INV|EST)-/i, '').trim() || 'N/A';
+
+        plantOrderId = await addCustomerOrder({
+          customerName: billToName || customer?.name || order.customerName,
+          customerId,
+          orderNumber: derivedOrderNumber,
+          items: plantItems,
+          originalText: `Created from invoice ${invoiceNumber}`,
+          status: 'pending',
+          totalWeightLbs,
+          customerEmail: customerEmail || order.customerEmail,
+          customerEmailCc:
+            parseCcEmails(ccEmails, customerEmail).cc.join(', ') || undefined,
+          owner: salesRep.trim() || order.owner || undefined,
+          invoiceDetails: invoiceDetailsPayload
+        });
+        plantOrderNumber = derivedOrderNumber;
+        setLinkedPlantOrderId(plantOrderId);
+      }
+
+      if (!order.id.startsWith('preview-') && !isCreditOnly && plantOrderId === order.id) {
         await updateCustomerOrder(updatedOrder);
       }
 
@@ -1388,16 +1457,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         vendor: isEstimate ? item.vendor : undefined
       }));
 
-      const customerId = customer?.id || order.customerId;
-      if (!customerId) {
-        throw new Error(t('invoice.noCustomerLinked'));
-      }
-
       const docPayload = {
           customerId,
           customerName: billToName || customer?.name || order.customerName,
-          orderId: isDocumentOnlyOrder ? undefined : order.id,
-          orderNumber: isDocumentOnlyOrder ? undefined : order.orderNumber,
+          orderId: isCreditOnly ? undefined : plantOrderId,
+          orderNumber: isCreditOnly ? undefined : plantOrderNumber,
           type: documentType,
           documentNumber: invoiceNumber,
           documentDate: invoiceDate,
@@ -1515,7 +1579,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         }
 
       // Keep order linked to the same customer used for the saved document
-      if (!isDocumentOnlyOrder && (!order.customerId || order.customerId !== customerId)) {
+      if (
+        !order.id.startsWith('preview-') &&
+        plantOrderId === order.id &&
+        (!order.customerId || order.customerId !== customerId)
+      ) {
         await updateCustomerOrder({
           ...updatedOrder,
           customerId,
@@ -1530,7 +1598,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           documentType,
           documentNumber: invoiceNumber,
           customerId,
-          orderId: isDocumentOnlyOrder ? null : order.id,
+          orderId: plantOrderId || null,
           grandTotal: savedGrandTotal,
           freightAllocationMethod: freightMethod || null,
           totalFreight: totalFreight ?? null

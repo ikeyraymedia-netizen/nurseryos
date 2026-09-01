@@ -47,7 +47,10 @@ import {
   enablePushNotifications,
   isPushEnabledLocally,
   loadPushConfig,
-  pushPermissionState
+  pushPermissionState,
+  sendTestPushNotification,
+  isStandalonePwa,
+  isIosDevice
 } from '../lib/pushNotifications';
 
 interface TeamManagerProps {
@@ -743,6 +746,9 @@ export function TeamManager({
               {t('teamExtra.pushNotifications')}
             </p>
             <p className="text-[11px] text-gray-600 mb-2 leading-relaxed">{t('teamExtra.pushNotificationsHint')}</p>
+            {isIosDevice() && !isStandalonePwa() ? (
+              <p className="text-[11px] text-amber-700 mb-2 leading-relaxed">{t('teamExtra.pushIosHomeScreen')}</p>
+            ) : null}
             {!pushConfigured ? (
               <p className="text-[11px] text-amber-700">
                 {pushConfigured === null ? t('common.loading') : t('teamExtra.pushNotConfigured')}
@@ -804,8 +810,33 @@ export function TeamManager({
                 {pushPermission === 'denied' && !pushEnabled ? (
                   <span className="text-[11px] text-amber-700">{t('teamExtra.pushDenied')}</span>
                 ) : null}
+                {pushEnabled && pushPermission === 'granted' ? (
+                  <button
+                    type="button"
+                    disabled={pushBusy || busy}
+                    onClick={() => {
+                      setPushBusy(true);
+                      setError(null);
+                      void sendTestPushNotification(tenant.id)
+                        .then((result) => {
+                          if (result.ok) {
+                            setMessage(t('teamExtra.pushTestSent'));
+                          } else {
+                            setError(result.error || t('teamExtra.pushTestFailed'));
+                          }
+                        })
+                        .finally(() => setPushBusy(false));
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {t('teamExtra.pushTest')}
+                  </button>
+                ) : null}
               </div>
             )}
+            {pushConfigured ? (
+              <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">{t('teamExtra.pushSelfActionHint')}</p>
+            ) : null}
           </div>
 
           {onOpenWeights && (

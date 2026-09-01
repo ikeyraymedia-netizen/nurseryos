@@ -1715,6 +1715,13 @@ const extra = {
     pushNotConfigured: 'Las notificaciones push aún no están configuradas en el servidor (falta clave VAPID).',
     pushEnableFailed: 'No se pudieron activar las notificaciones.',
     pushDisableFailed: 'No se pudieron desactivar las notificaciones.',
+    pushIosHomeScreen:
+      'iPhone: las alertas en pantalla bloqueada solo funcionan desde la app en Inicio — Safari → Compartir → Añadir a pantalla de inicio, abra NurseryOS desde ese icono y active notificaciones.',
+    pushTest: 'Enviar notificación de prueba',
+    pushTestSent: 'Prueba enviada — bloquee el teléfono y espere unos segundos.',
+    pushTestFailed: 'Falló la notificación de prueba.',
+    pushSelfActionHint:
+      'Consejo: no recibirá notificaciones de acciones que usted mismo realiza (p. ej. agregar una planta). Use Enviar notificación de prueba o pida a un compañero que dispare un evento.',
     qbo: 'QuickBooks Online',
     qboIntro:
       'Conecte este vivero para enviar facturas/presupuestos y facturas de proveedores a la misma compañía QuickBooks. Los pagos de facturas se sincronizan como Receive Payment. Solo dueño/admin.',

@@ -20,6 +20,38 @@ const RECIPIENT_ROLES: Record<Exclude<PushEventType, 'task_assigned'>, MemberRol
   plant_added: ['owner', 'admin', 'supervisor', 'loader', 'sales']
 };
 
+function appOrigin(): string {
+  const raw = process.env.APP_URL?.trim() || 'https://nurseryos.app';
+  return raw.replace(/\/+$/, '');
+}
+
+function absoluteAppUrl(path = '/'): string {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${appOrigin()}${p}`;
+}
+
+async function collectTokensForUserIds(userIds: string[]): Promise<{
+  tokens: string[];
+  tokenToUser: Map<string, string>;
+}> {
+  const db = getAdminDb();
+  const tokenToUser = new Map<string, string>();
+  const allTokens: string[] = [];
+  for (const uid of userIds) {
+    const snap = await db.doc(`users/${uid}`).get();
+    const fcmTokens = snap.data()?.fcmTokens as
+      | Record<string, { token?: string }>
+      | undefined;
+    if (!fcmTokens) continue;
+    for (const entry of Object.values(fcmTokens)) {
+      if (!entry?.token) continue;
+      tokenToUser.set(entry.token, uid);
+      allTokens.push(entry.token);
+    }
+  }
+  return { tokens: [...new Set(allTokens)], tokenToUser };
+}
+
 export interface SendTenantPushParams {
   tenantId: string;
   type: PushEventType;
@@ -45,24 +77,6 @@ async function getTenantMemberUserIds(
     if (hasAnyRole(memberRoles, roles)) ids.push(doc.id);
   }
   return ids;
-}
-
-async function collectTokensForUsers(userIds: string[]): Promise<Map<string, string[]>> {
-  const db = getAdminDb();
-  const byUser = new Map<string, string[]>();
-  for (const uid of userIds) {
-    const snap = await db.doc(`users/${uid}`).get();
-    const fcmTokens = snap.data()?.fcmTokens as
-      | Record<string, { token?: string }>
-      | undefined;
-    if (!fcmTokens) continue;
-    const tokens: string[] = [];
-    for (const entry of Object.values(fcmTokens)) {
-      if (entry?.token) tokens.push(entry.token);
-    }
-    if (tokens.length) byUser.set(uid, [...new Set(tokens)]);
-  }
-  return byUser;
 }
 
 async function removeInvalidTokens(
@@ -97,6 +111,74 @@ async function removeInvalidTokens(
   }
 }
 
+export async function sendPushToUserIds(params: {
+  userIds: string[];
+  title: string;
+  body: string;
+  url?: string;
+  type?: PushEventType;
+  tenantId?: string;
+}): Promise<{ sent: number; failed: number; tokens: number }> {
+  getAdminDb();
+  const uniqueIds = [...new Set(params.userIds.filter(Boolean))];
+  if (!uniqueIds.length) return { sent: 0, failed: 0, tokens: 0 };
+
+  const { tokens: uniqueTokens, tokenToUser } = await collectTokensForUserIds(uniqueIds);
+  if (!uniqueTokens.length) return { sent: 0, failed: 0, tokens: 0 };
+
+  const url = params.url || '/';
+  const origin = appOrigin();
+  const icon = `${origin}/favicon.png`;
+  const messaging = admin.messaging();
+  const res = await messaging.sendEachForMulticast({
+    tokens: uniqueTokens,
+    data: {
+      title: params.title,
+      body: params.body,
+      url,
+      type: params.type || 'plant_added',
+      tenantId: params.tenantId || ''
+    },
+    webpush: {
+      notification: {
+        title: params.title,
+        body: params.body,
+        icon,
+        badge: icon
+      },
+      fcmOptions: {
+        link: absoluteAppUrl(url)
+      }
+    }
+  });
+
+  let sent = 0;
+  let failed = 0;
+  const invalid: string[] = [];
+  res.responses.forEach((r, i) => {
+    if (r.success) {
+      sent += 1;
+      return;
+    }
+    failed += 1;
+    const code = (r.error as { code?: string } | undefined)?.code;
+    console.warn('[push] send failed', uniqueTokens[i]?.slice(0, 12), code, r.error?.message);
+    if (
+      code === 'messaging/invalid-registration-token' ||
+      code === 'messaging/registration-token-not-registered'
+    ) {
+      invalid.push(uniqueTokens[i]);
+    }
+  });
+
+  if (invalid.length) {
+    await removeInvalidTokens(tokenToUser, invalid);
+  }
+
+  console.log('[push] delivered', { sent, failed, tokens: uniqueTokens.length, title: params.title });
+  return { sent, failed, tokens: uniqueTokens.length };
+}
+
 export async function sendTenantPush(params: SendTenantPushParams): Promise<void> {
   getAdminDb();
 
@@ -120,46 +202,12 @@ export async function sendTenantPush(params: SendTenantPushParams): Promise<void
 
   if (!userIds.length) return;
 
-  const tokensByUser = await collectTokensForUsers(userIds);
-  const tokenToUser = new Map<string, string>();
-  const allTokens: string[] = [];
-  for (const [uid, tokens] of tokensByUser) {
-    for (const token of tokens) {
-      tokenToUser.set(token, uid);
-      allTokens.push(token);
-    }
-  }
-
-  const uniqueTokens = [...new Set(allTokens)];
-  if (!uniqueTokens.length) return;
-
-  const messaging = admin.messaging();
-  const res = await messaging.sendEachForMulticast({
-    notification: {
-      title: params.title,
-      body: params.body
-    },
-    data: {
-      url: params.url || '/',
-      type: params.type,
-      tenantId: params.tenantId
-    },
-    tokens: uniqueTokens
+  await sendPushToUserIds({
+    userIds,
+    title: params.title,
+    body: params.body,
+    url: params.url,
+    type: params.type,
+    tenantId: params.tenantId
   });
-
-  const invalid: string[] = [];
-  res.responses.forEach((r, i) => {
-    if (r.success) return;
-    const code = (r.error as { code?: string } | undefined)?.code;
-    if (
-      code === 'messaging/invalid-registration-token' ||
-      code === 'messaging/registration-token-not-registered'
-    ) {
-      invalid.push(uniqueTokens[i]);
-    }
-  });
-
-  if (invalid.length) {
-    await removeInvalidTokens(tokenToUser, invalid);
-  }
 }

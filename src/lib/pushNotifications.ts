@@ -91,8 +91,8 @@ function attachForegroundListener(messaging: Messaging): void {
   if (foregroundListenerAttached) return;
   foregroundListenerAttached = true;
   onMessage(messaging, (payload) => {
-    const title = payload.notification?.title || 'NurseryOS';
-    const body = payload.notification?.body || '';
+    const title = payload.notification?.title || payload.data?.title || 'NurseryOS';
+    const body = payload.notification?.body || payload.data?.body || '';
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       const n = new Notification(title, {
         body,
@@ -209,4 +209,42 @@ export async function notifyPushEvent(params: {
 export function pushPermissionState(): NotificationPermission | 'unsupported' {
   if (typeof Notification === 'undefined') return 'unsupported';
   return Notification.permission;
+}
+
+export async function sendTestPushNotification(tenantId: string): Promise<{
+  ok: boolean;
+  sent?: number;
+  tokens?: number;
+  error?: string;
+}> {
+  try {
+    const headers = await authJsonHeaders();
+    const res = await fetch('/api/push/test', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tenantId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: data.error || 'Test push failed.' };
+    }
+    return { ok: true, sent: data.sent, tokens: data.tokens };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Test push failed.' };
+  }
+}
+
+export function isStandalonePwa(): boolean {
+  try {
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isIosDevice(): boolean {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
 }

@@ -6,7 +6,7 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
-import { PushEventType, sendTenantPush } from './pushNotifications';
+import { PushEventType, sendPushToUserIds, sendTenantPush } from './pushNotifications';
 
 async function readBearerUid(req: Request): Promise<string> {
   const header = String(req.headers.authorization || '');
@@ -154,6 +154,45 @@ export function registerPushRoutes(app: Express): void {
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 500;
       res.status(status).json({ error: err?.message || 'Failed to send push notification.' });
+    }
+  });
+
+  /** Send a test notification to the signed-in user (includes when they triggered the event). */
+  app.post('/api/push/test', async (req: Request, res: Response) => {
+    try {
+      if (!isFirebaseAdminConfigured()) {
+        res.status(503).json({ error: 'Firebase Admin is not configured.' });
+        return;
+      }
+      const uid = await readBearerUid(req);
+      const tenantId = String(req.body?.tenantId || '').trim();
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertTenantMember(tenantId, uid);
+
+      const result = await sendPushToUserIds({
+        userIds: [uid],
+        tenantId,
+        type: 'plant_added',
+        title: 'NurseryOS test',
+        body: 'Lock your phone — you should see this on your lock screen.',
+        url: '/?tab=orders'
+      });
+
+      if (result.tokens === 0) {
+        res.status(400).json({
+          error: 'No push token registered for this device. Tap Enable notifications first.',
+          ...result
+        });
+        return;
+      }
+
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 500;
+      res.status(status).json({ error: err?.message || 'Failed to send test push.' });
     }
   });
 }

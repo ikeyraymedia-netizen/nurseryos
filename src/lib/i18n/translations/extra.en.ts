@@ -1696,6 +1696,13 @@ const extra = {
     pushNotConfigured: 'Push is not configured on the server yet (VAPID key missing).',
     pushEnableFailed: 'Could not enable notifications.',
     pushDisableFailed: 'Could not disable notifications.',
+    pushIosHomeScreen:
+      'iPhone: lock-screen alerts only work from the Home Screen app — Safari → Share → Add to Home Screen, then open NurseryOS from that icon and enable notifications.',
+    pushTest: 'Send test notification',
+    pushTestSent: 'Test sent — lock your phone and wait a few seconds.',
+    pushTestFailed: 'Test notification failed.',
+    pushSelfActionHint:
+      'Tip: you will not get notified for actions you perform yourself (e.g. adding a plant). Use Send test notification or ask a teammate to trigger an event.',
     qbo: 'QuickBooks Online',
     qboIntro:
       'Connect this nursery to push invoices/estimates and vendor bills into the same QuickBooks company. Payments on invoices sync as Receive Payment. Owner/admin only.',

@@ -83,6 +83,8 @@ export interface PlantOrderItem {
   containerSize: string; // The recognized size string (e.g., "#3", "#15")
   quantity: number;
   loadedQuantity: number; // For loaders to track loading progress
+  /** Qty already saved on one or more invoices for this order line. */
+  invoicedQuantity?: number;
   inventoryDeductedQty?: number; // Qty removed from live inventory after confirmed sync
   inventorySyncConfirmed?: boolean; // True only after inventory write succeeded
   pulledQuantity?: number; // To track pulled/delivered progress

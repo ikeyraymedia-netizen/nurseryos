@@ -37,7 +37,8 @@ import {
   Plus,
   Trash2,
   Image as ImageIcon,
-  Upload
+  Upload,
+  Split
 } from 'lucide-react';
 import { updateCustomerOrder, addCustomerOrder, subscribeToWeights } from '../lib/db';
 import {
@@ -73,6 +74,15 @@ import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import jsPDF from 'jspdf';
 import { useT } from '../lib/i18n';
 import { dueDateFromPaymentTerms } from '../lib/dates';
+import { SplitInvoiceModal } from './SplitInvoiceModal';
+import {
+  bumpInvoicedQuantities,
+  orderFullyInvoiced,
+  orderItemsRemainingForInvoice,
+  invoicesForOrder,
+  restoreInvoicedQuantitiesAfterDelete,
+  itemInvoicedQty
+} from '../lib/invoicing';
 
 function isHttpUrl(url: unknown): url is string {
   return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
@@ -226,6 +236,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [includePayLinkInEmail, setIncludePayLinkInEmail] = useState(true);
   const [stripePaymentsReady, setStripePaymentsReady] = useState(false);
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>(DEFAULT_VENDORS);
+  const [linkedInvoices, setLinkedInvoices] = useState<CustomerDocument[]>([]);
+  const [showSplitModal, setShowSplitModal] = useState(false);
 
   // Initialize or reload states when order / document type changes
   useEffect(() => {
@@ -467,16 +479,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     listAllDocuments()
       .then((docs) => {
         if (cancelled) return;
-        const match = docs.find(
-          (d) => d.orderId === order.id && d.type === (initialDocumentType || 'invoice')
-        );
-        if (match) {
-          setFetchedDocument(match);
-          setSavedDocumentId(match.id);
-        }
+        const linked = invoicesForOrder(order.id, docs) as CustomerDocument[];
+        setLinkedInvoices(linked);
+        // Do not auto-open a single linked invoice — use Customers to edit, or split/new here.
+        setFetchedDocument(null);
       })
       .catch(() => {
-        /* ignore — payment badge simply won't show until reopen from Customers */
+        /* ignore */
       });
 
     return () => {
@@ -540,13 +549,23 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         ? t('invoice.creditMemo')
         : t('invoice.invoice');
   const docLabelUpper = docLabel.toUpperCase();
-  // Prefer editable draft lines when present. For invoices, never fall through to an
-  // empty draft right after first save (canEditLines flips on before creditLines is seeded).
+  const remainingOrderItems = orderItemsRemainingForInvoice(order);
+  const totalOrderPlants = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const invoicedPlantCount = order.items.reduce((sum, item) => sum + itemInvoicedQty(item), 0);
+  const remainingPlantCount = Math.max(0, totalOrderPlants - invoicedPlantCount);
+  const orderFullyBilled =
+    documentType === 'invoice' &&
+    !isCreditMemo &&
+    !order.id.startsWith('preview-') &&
+    orderFullyInvoiced(order);
+  // Prefer editable draft lines when present. For invoices, show remaining uninvoiced lines.
   const workingItems =
     canEditLines && creditLines.length > 0
       ? creditLines
       : documentType === 'invoice'
-        ? order.items
+        ? remainingOrderItems.length > 0
+          ? remainingOrderItems
+          : order.items
         : creditLines;
   const totalLabel =
     documentType === 'estimate'
@@ -1267,6 +1286,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
     setIsSaving(true);
     try {
+      const doc = paymentDocument;
+      if (doc?.type === 'invoice' && doc.orderId === order.id && !order.id.startsWith('preview-')) {
+        const restoredItems = restoreInvoicedQuantitiesAfterDelete(
+          order.items,
+          doc.items.map((item) => ({ id: item.id, quantity: item.quantity }))
+        );
+        await updateCustomerOrder({ ...order, items: restoredItems });
+      }
       await deleteCustomerDocument(savedDocumentId);
       void logAuditEvent({
         action: `${documentType}.deleted`,
@@ -1436,7 +1463,29 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       }
 
       if (!order.id.startsWith('preview-') && !isCreditOnly && plantOrderId === order.id) {
-        await updateCustomerOrder(updatedOrder);
+        if (documentType === 'invoice') {
+          const invoicedLines = updatedItems.map((item) => ({
+            id: item.id,
+            quantity: getItemQty(item)
+          }));
+          const mergedItems = order.items.map((item) => {
+            const fromWorking = updatedItems.find((w) => w.id === item.id);
+            if (!fromWorking) return item;
+            return {
+              ...item,
+              unitPrice: fromWorking.unitPrice,
+              unitCost: fromWorking.unitCost,
+              notes: fromWorking.notes,
+              vendor: fromWorking.vendor
+            };
+          });
+          await updateCustomerOrder({
+            ...updatedOrder,
+            items: bumpInvoicedQuantities(mergedItems, invoicedLines)
+          });
+        } else {
+          await updateCustomerOrder(updatedOrder);
+        }
       }
 
       const lineItems = updatedItems.map((item) => ({
@@ -2820,9 +2869,48 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           </div>
 
           <div className="pt-3 border-t border-gray-200 flex flex-col space-y-2">
+            {documentType === 'invoice' &&
+              !isCreditMemo &&
+              !order.id.startsWith('preview-') &&
+              totalOrderPlants > 0 && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2.5 text-[11px] text-sky-950">
+                  {orderFullyBilled ? (
+                    <p className="font-semibold">{t('invoice.splitFullyInvoiced')}</p>
+                  ) : (
+                    <p className="font-semibold">
+                      {t('invoice.splitRemainingBanner', {
+                        invoiced: invoicedPlantCount,
+                        total: totalOrderPlants,
+                        remaining: remainingPlantCount
+                      })}
+                    </p>
+                  )}
+                  {linkedInvoices.length > 0 && (
+                    <p className="text-sky-800/80 mt-1">
+                      {t('invoice.splitExisting', { n: linkedInvoices.length })}
+                    </p>
+                  )}
+                </div>
+              )}
+
+            {documentType === 'invoice' &&
+              !isCreditMemo &&
+              !order.id.startsWith('preview-') &&
+              remainingPlantCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSplitModal(true)}
+                  disabled={isSaving}
+                  className="w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 bg-white hover:bg-sky-50 text-sky-900 border border-sky-200 disabled:opacity-50"
+                >
+                  <Split className="h-4 w-4" />
+                  <span>{t('invoice.splitOpen')}</span>
+                </button>
+              )}
+
             <button
               onClick={handleSaveInvoice}
-              disabled={isSaving}
+              disabled={isSaving || (documentType === 'invoice' && orderFullyBilled && !savedDocumentId)}
               className={`w-full py-2.5 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2 ${
                 saveSuccess
                   ? 'bg-ink-600 text-white'
@@ -4181,6 +4269,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         </div>
 
       </div>
+
+      {showSplitModal && (
+        <SplitInvoiceModal
+          isOpen={showSplitModal}
+          onClose={() => setShowSplitModal(false)}
+          order={order}
+          customer={customer}
+          nurseryName={nurseryName}
+          tenantId={tenantId}
+          onSaved={() => {
+            void listAllDocuments().then((docs) => {
+              setLinkedInvoices(invoicesForOrder(order.id, docs) as CustomerDocument[]);
+            });
+          }}
+        />
+      )}
 
     </div>
   );

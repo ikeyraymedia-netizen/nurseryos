@@ -13,6 +13,7 @@ import { registerEmailRoutes } from './server/email';
 import { registerPushRoutes } from './server/push';
 import { registerPlatformRoutes } from './server/platform';
 import { registerPublicAvailabilityRoutes } from './server/publicAvailability';
+import { registerEstimatePhotoRoutes } from './server/estimatePhotos';
 import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
@@ -48,6 +49,7 @@ registerEmailRoutes(app);
 registerPushRoutes(app);
 registerPlatformRoutes(app);
 registerPublicAvailabilityRoutes(app);
+registerEstimatePhotoRoutes(app);
 
 /** Require a signed-in Firebase user for AI / cost-bearing routes. */
 async function requireAuthUid(req: express.Request): Promise<string> {

@@ -25,6 +25,10 @@ function payloadUrl(payload) {
   return payload?.data?.url || payload?.fcmOptions?.link || '/';
 }
 
+function notificationTag(payload) {
+  return payload?.data?.dedupeKey || payload?.data?.type || 'nurseryos-alert';
+}
+
 function showPushNotification(payload) {
   const title = payloadTitle(payload);
   const body = payloadBody(payload);
@@ -34,26 +38,14 @@ function showPushNotification(payload) {
     body,
     icon,
     badge: icon,
-    tag: 'nurseryos-' + Date.now(),
+    tag: notificationTag(payload),
     renotify: true,
     data: { url }
   });
 }
 
-// Data-only / custom payloads (lock screen when app is backgrounded).
+// Single handler — data-only FCM payloads (background + lock screen).
 messaging.onBackgroundMessage((payload) => showPushNotification(payload));
-
-// Fallback for browsers that deliver raw push events.
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  let payload = {};
-  try {
-    payload = event.data.json();
-  } catch {
-    payload = { data: { body: event.data.text() } };
-  }
-  event.waitUntil(showPushNotification(payload));
-});
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

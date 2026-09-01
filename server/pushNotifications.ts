@@ -127,9 +127,8 @@ export async function sendPushToUserIds(params: {
   if (!uniqueTokens.length) return { sent: 0, failed: 0, tokens: 0 };
 
   const url = params.url || '/';
-  const origin = appOrigin();
-  const icon = `${origin}/favicon.png`;
   const messaging = admin.messaging();
+  const dedupeKey = `${params.type || 'alert'}:${params.tenantId || ''}:${url}:${params.title}:${params.body}`;
   const res = await messaging.sendEachForMulticast({
     tokens: uniqueTokens,
     data: {
@@ -137,15 +136,11 @@ export async function sendPushToUserIds(params: {
       body: params.body,
       url,
       type: params.type || 'plant_added',
-      tenantId: params.tenantId || ''
+      tenantId: params.tenantId || '',
+      dedupeKey
     },
     webpush: {
-      notification: {
-        title: params.title,
-        body: params.body,
-        icon,
-        badge: icon
-      },
+      // Data-only — the service worker shows one notification (avoids triple alerts).
       fcmOptions: {
         link: absoluteAppUrl(url)
       }

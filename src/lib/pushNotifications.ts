@@ -93,10 +93,12 @@ function attachForegroundListener(messaging: Messaging): void {
   onMessage(messaging, (payload) => {
     const title = payload.notification?.title || payload.data?.title || 'NurseryOS';
     const body = payload.notification?.body || payload.data?.body || '';
+    const tag = payload.data?.dedupeKey || payload.data?.type || 'nurseryos-alert';
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       const n = new Notification(title, {
         body,
         icon: '/favicon.png',
+        tag,
         data: payload.data
       });
       n.onclick = () => {

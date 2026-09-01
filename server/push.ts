@@ -33,7 +33,21 @@ const VALID_TYPES: PushEventType[] = [
   'plant_added'
 ];
 
+/** Public VAPID key — safe to expose; also readable at runtime on Railway without a rebuild. */
+function readVapidKey(): string {
+  return (
+    process.env.FIREBASE_VAPID_KEY?.trim() ||
+    process.env.VITE_FIREBASE_VAPID_KEY?.trim() ||
+    ''
+  );
+}
+
 export function registerPushRoutes(app: Express): void {
+  app.get('/api/push/config', (_req: Request, res: Response) => {
+    const vapidKey = readVapidKey();
+    res.json({ configured: Boolean(vapidKey), vapidKey: vapidKey || null });
+  });
+
   app.post('/api/push/register-token', async (req: Request, res: Response) => {
     try {
       if (!isFirebaseAdminConfigured()) {

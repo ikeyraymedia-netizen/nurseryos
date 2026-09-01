@@ -14,14 +14,41 @@ const ENABLED_KEY = 'nurseryos:pushEnabled';
 
 let messagingInstance: Messaging | null = null;
 let foregroundListenerAttached = false;
+let cachedVapidKey: string | null | undefined;
 
-function vapidKey(): string | null {
+function bakedVapidKey(): string | null {
   const key = import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim();
   return key || null;
 }
 
+/** Resolve the public VAPID key (build-time env or /api/push/config at runtime). */
+export async function resolveVapidKey(): Promise<string | null> {
+  const baked = bakedVapidKey();
+  if (baked) return baked;
+  if (cachedVapidKey !== undefined) return cachedVapidKey;
+  try {
+    const res = await fetch('/api/push/config');
+    if (!res.ok) {
+      cachedVapidKey = null;
+      return null;
+    }
+    const data = (await res.json()) as { vapidKey?: string | null };
+    cachedVapidKey = data.vapidKey?.trim() || null;
+  } catch {
+    cachedVapidKey = null;
+  }
+  return cachedVapidKey;
+}
+
 export function isPushConfigured(): boolean {
-  return Boolean(vapidKey());
+  if (bakedVapidKey()) return true;
+  if (cachedVapidKey !== undefined) return Boolean(cachedVapidKey);
+  return false;
+}
+
+export async function loadPushConfig(): Promise<boolean> {
+  const key = await resolveVapidKey();
+  return Boolean(key);
 }
 
 export function isPushEnabledLocally(): boolean {
@@ -104,7 +131,8 @@ async function unregisterTokenWithServer(): Promise<void> {
 }
 
 export async function enablePushNotifications(): Promise<'granted' | 'denied' | 'unsupported'> {
-  if (!isPushConfigured()) return 'unsupported';
+  const vapidKey = await resolveVapidKey();
+  if (!vapidKey) return 'unsupported';
   if (!(await isSupported())) return 'unsupported';
   if (typeof Notification === 'undefined') return 'unsupported';
 
@@ -123,7 +151,7 @@ export async function enablePushNotifications(): Promise<'granted' | 'denied' | 
   await navigator.serviceWorker.ready;
 
   const token = await getToken(messaging, {
-    vapidKey: vapidKey()!,
+    vapidKey,
     serviceWorkerRegistration: registration
   });
   if (!token) {
@@ -148,8 +176,9 @@ export async function disablePushNotifications(): Promise<void> {
 
 /** Re-register silently when permission was already granted. */
 export async function initPushNotifications(): Promise<void> {
-  if (!isPushConfigured() || !isPushEnabledLocally()) return;
+  if (!isPushEnabledLocally()) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (!(await resolveVapidKey())) return;
   try {
     await enablePushNotifications();
   } catch (err) {

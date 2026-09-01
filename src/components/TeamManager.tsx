@@ -45,8 +45,8 @@ import { AppLocale, useRoleLabel, useT } from '../lib/i18n';
 import {
   disablePushNotifications,
   enablePushNotifications,
-  isPushConfigured,
   isPushEnabledLocally,
+  loadPushConfig,
   pushPermissionState
 } from '../lib/pushNotifications';
 
@@ -85,6 +85,7 @@ export function TeamManager({
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushConfigured, setPushConfigured] = useState<boolean | null>(null);
   const [pushEnabled, setPushEnabled] = useState(() => isPushEnabledLocally());
   const [pushPermission, setPushPermission] = useState(() => pushPermissionState());
   const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
@@ -182,6 +183,10 @@ export function TeamManager({
       setStripeError(err?.message || t('teamExtra.loadStripeFailed'));
     }
   }
+
+  useEffect(() => {
+    void loadPushConfig().then(setPushConfigured);
+  }, []);
 
   useEffect(() => {
     refresh().catch((err) => setError(err?.message || t('teamExtra.loadTeamFailed')));
@@ -738,8 +743,10 @@ export function TeamManager({
               {t('teamExtra.pushNotifications')}
             </p>
             <p className="text-[11px] text-gray-600 mb-2 leading-relaxed">{t('teamExtra.pushNotificationsHint')}</p>
-            {!isPushConfigured() ? (
-              <p className="text-[11px] text-amber-700">{t('teamExtra.pushNotConfigured')}</p>
+            {!pushConfigured ? (
+              <p className="text-[11px] text-amber-700">
+                {pushConfigured === null ? t('common.loading') : t('teamExtra.pushNotConfigured')}
+              </p>
             ) : pushPermission === 'unsupported' ? (
               <p className="text-[11px] text-gray-500">{t('teamExtra.pushUnsupported')}</p>
             ) : (

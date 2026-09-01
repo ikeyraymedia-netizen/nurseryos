@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import { CustomerOrder, Truck } from '../types';
-import { truckCustomerOrders } from './loadSequence';
+import { loadNumber, truckCustomerOrders, truckOrderIds } from './loadSequence';
 import { orderRefLabel } from './orderLabels';
 
 const UNASSIGNED_VENDOR = 'Unassigned';
@@ -293,6 +293,66 @@ export function vendorItemsFullyPulled(params: {
   );
 }
 
+type PullSheetLine = {
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  pulled: number;
+  loaded: number;
+};
+
+function drawPullSheetTableHeader(
+  pdf: jsPDF,
+  col: { plant: number; size: number; qty: number; pulled: number; loaded: number },
+  margin: number,
+  contentWidth: number,
+  y: number
+): number {
+  pdf.setFillColor(236, 253, 245);
+  pdf.rect(margin, y - 12, contentWidth, 18, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(8);
+  pdf.setTextColor(6, 78, 59);
+  pdf.text('PLANT', col.plant + 2, y);
+  pdf.text('SIZE', col.size, y);
+  pdf.text('QTY', col.qty, y);
+  pdf.text('PULLED', col.pulled + 14, y);
+  pdf.text('LOADED', col.loaded + 14, y);
+  return y + 16;
+}
+
+function drawPullSheetLineRow(
+  pdf: jsPDF,
+  col: { plant: number; size: number; qty: number; pulled: number; loaded: number },
+  line: PullSheetLine,
+  baseline: number
+): number {
+  const nameLines = pdf.splitTextToSize(line.plantName, 240);
+  const rowH = Math.max(16, nameLines.length * 11 + 4);
+
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(9);
+  pdf.setTextColor(30, 30, 30);
+  pdf.text(nameLines[0], col.plant + 2, baseline);
+  for (let i = 1; i < nameLines.length; i++) {
+    pdf.text(nameLines[i], col.plant + 2, baseline + i * 11);
+  }
+  pdf.text(line.containerSize, col.size, baseline);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(String(line.quantity), col.qty, baseline);
+  pdf.setFont('helvetica', 'normal');
+
+  drawCheckbox(pdf, col.pulled, baseline, line.pulled >= line.quantity && line.quantity > 0);
+  pdf.setFontSize(7);
+  pdf.setTextColor(80, 80, 80);
+  pdf.text(`${line.pulled}/${line.quantity}`, col.pulled + 14, baseline);
+
+  drawCheckbox(pdf, col.loaded, baseline, line.loaded >= line.quantity && line.quantity > 0);
+  pdf.text(`${line.loaded}/${line.quantity}`, col.loaded + 14, baseline);
+
+  return rowH;
+}
+
 export function downloadTruckPullSheetPdf(params: {
   truck: Truck;
   orders: CustomerOrder[];
@@ -300,37 +360,7 @@ export function downloadTruckPullSheetPdf(params: {
 }): void {
   const { truck, orders, nurseryName = 'NurseryOS' } = params;
   const truckOrders = truckCustomerOrders(orders, truck);
-
-  // Consolidate by plant + size only (not by vendor).
-  const consolidated = new Map<
-    string,
-    { plantName: string; containerSize: string; quantity: number; pulled: number; loaded: number }
-  >();
-
-  for (const order of truckOrders) {
-    for (const item of order.items) {
-      const key = `${item.plantName.trim().toLowerCase()}::${item.containerSize.trim().toLowerCase()}`;
-      const existing = consolidated.get(key);
-      if (existing) {
-        existing.quantity += item.quantity;
-        existing.pulled += item.pulledQuantity ?? 0;
-        existing.loaded += item.loadedQuantity;
-      } else {
-        consolidated.set(key, {
-          plantName: item.plantName,
-          containerSize: item.containerSize,
-          quantity: item.quantity,
-          pulled: item.pulledQuantity ?? 0,
-          loaded: item.loadedQuantity
-        });
-      }
-    }
-  }
-
-  const lines = [...consolidated.values()].sort(
-    (a, b) =>
-      a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
-  );
+  const orderIds = truckOrderIds(truck);
 
   const pdf = new jsPDF('p', 'pt', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -387,52 +417,58 @@ export function downloadTruckPullSheetPdf(params: {
   });
   y += 4;
 
-  write('CONSOLIDATED PULL LIST', { size: 11, bold: true, color: [6, 78, 59] });
+  write('PULL LIST BY ORDER', { size: 11, bold: true, color: [6, 78, 59] });
   y += 2;
 
-  ensureSpace(20);
-  pdf.setFillColor(236, 253, 245);
-  pdf.rect(margin, y - 12, contentWidth, 18, 'F');
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(8);
-  pdf.setTextColor(6, 78, 59);
-  pdf.text('PLANT', col.plant + 2, y);
-  pdf.text('SIZE', col.size, y);
-  pdf.text('QTY', col.qty, y);
-  pdf.text('PULLED', col.pulled + 14, y);
-  pdf.text('LOADED', col.loaded + 14, y);
-  y += 16;
-
   let totalQty = 0;
-  for (const line of lines) {
-    const nameLines = pdf.splitTextToSize(line.plantName, 240);
-    const rowH = Math.max(16, nameLines.length * 11 + 4);
-    ensureSpace(rowH);
-    totalQty += line.quantity;
 
-    const baseline = y;
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(9);
-    pdf.setTextColor(30, 30, 30);
-    pdf.text(nameLines[0], col.plant + 2, baseline);
-    for (let i = 1; i < nameLines.length; i++) {
-      pdf.text(nameLines[i], col.plant + 2, baseline + i * 11);
+  truckOrders.forEach((order, orderIndex) => {
+    const ref = orderRefLabel(order);
+    const staged = String(order.stagedLocation || '').trim();
+    const loadNum = loadNumber(orderIds, order.id);
+    const titleParts = [order.customerName];
+    if (ref) titleParts.push(ref);
+
+    const items = [...order.items].sort(
+      (a, b) =>
+        a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
+    );
+    const orderQty = items.reduce((sum, item) => sum + item.quantity, 0);
+    const minBlockHeight = 52 + items.length * 16;
+
+    ensureSpace(minBlockHeight);
+    y += 6;
+    write(`Order ${orderIndex + 1}: ${titleParts.join(' · ')}`, { size: 10, bold: true });
+
+    const orderMeta = [
+      staged ? `Stage: ${staged}` : 'Stage: (not set)',
+      loadNum > 0 ? `Load #${loadNum}` : null
+    ].filter(Boolean) as string[];
+    write(orderMeta.join(' · '), { size: 8, color: [80, 80, 80] });
+    y += 2;
+
+    ensureSpace(20);
+    y = drawPullSheetTableHeader(pdf, col, margin, contentWidth, y);
+
+    for (const item of items) {
+      const line: PullSheetLine = {
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        quantity: item.quantity,
+        pulled: item.pulledQuantity ?? 0,
+        loaded: item.loadedQuantity
+      };
+      const nameLines = pdf.splitTextToSize(line.plantName, 240);
+      const rowH = Math.max(16, nameLines.length * 11 + 4);
+      ensureSpace(rowH);
+      const baseline = y;
+      y += drawPullSheetLineRow(pdf, col, line, baseline);
+      totalQty += line.quantity;
     }
-    pdf.text(line.containerSize, col.size, baseline);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(String(line.quantity), col.qty, baseline);
-    pdf.setFont('helvetica', 'normal');
 
-    drawCheckbox(pdf, col.pulled, baseline, line.pulled >= line.quantity && line.quantity > 0);
-    pdf.setFontSize(7);
-    pdf.setTextColor(80, 80, 80);
-    pdf.text(`${line.pulled}/${line.quantity}`, col.pulled + 14, baseline);
-
-    drawCheckbox(pdf, col.loaded, baseline, line.loaded >= line.quantity && line.quantity > 0);
-    pdf.text(`${line.loaded}/${line.quantity}`, col.loaded + 14, baseline);
-
-    y += rowH;
-  }
+    y += 2;
+    write(`Order total: ${orderQty} plants`, { size: 9, bold: true, color: [6, 78, 59] });
+  });
 
   y += 4;
   write(`Total plants to pull: ${totalQty}`, { size: 10, bold: true });

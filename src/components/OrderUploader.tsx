@@ -113,6 +113,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [uploadKind, setUploadKind] = useState<UploadKind | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [salesRep, setSalesRep] = useState('');
+  const [directShip, setDirectShip] = useState(false);
   const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
   const [savedEstimateCustomerId, setSavedEstimateCustomerId] = useState<string | null>(null);
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
@@ -206,6 +207,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setUploadKind(null);
     setSelectedCustomerId('');
     setSalesRep('');
+    setDirectShip(false);
     setLinkedInventoryByItemId({});
     setOriginalParsedByItemId({});
     setAutoLinkedItemIds({});
@@ -553,6 +555,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         status: 'pending',
         totalWeightLbs: orderWeightLbs(namedItems, containerWeights),
         owner: salesRep.trim() || undefined,
+        ...(directShip ? { directShip: true } : {}),
         ...(pendingDraft.poNumber
           ? { invoiceDetails: { poNumber: pendingDraft.poNumber } }
           : {})
@@ -561,16 +564,18 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       await logAuditEvent({
         action: 'order.created_from_upload',
         summary: `Created order for ${linked?.name || pendingDraft.customerName}`,
-        meta: { orderId, customerId: linked?.id || null }
+        meta: { orderId, customerId: linked?.id || null, directShip }
       });
 
-      void notifyPushEvent({
-        tenantId,
-        type: 'order_uploaded',
-        title: `New order · ${linked?.name || pendingDraft.customerName}`,
-        body: `${namedItems.length} line${namedItems.length === 1 ? '' : 's'}`,
-        url: `/?tab=orders&order=${orderId}`
-      });
+      if (!directShip) {
+        void notifyPushEvent({
+          tenantId,
+          type: 'order_uploaded',
+          title: `New order · ${linked?.name || pendingDraft.customerName}`,
+          body: `${namedItems.length} line${namedItems.length === 1 ? '' : 's'}`,
+          url: `/?tab=orders&order=${orderId}`
+        });
+      }
 
       resetDraftState();
       setSavedOrderId(orderId);
@@ -979,6 +984,24 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               })}
             </p>
           </div>
+
+          {uploadKind === 'order' && permissions.canViewDirectShipOrders ? (
+            <label className="flex items-start gap-2.5 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={directShip}
+                onChange={(e) => setDirectShip(e.target.checked)}
+                disabled={saving}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-700 focus:ring-sky-500"
+              />
+              <span>
+                <span className="block text-sm font-bold text-gray-900">{t('upload.directShipLabel')}</span>
+                <span className="block text-[10px] text-gray-600 leading-snug mt-0.5">
+                  {t('upload.directShipHint')}
+                </span>
+              </span>
+            </label>
+          ) : null}
 
           {(uploadKind === 'order' || uploadKind === 'estimate') && (
           <div className="border-t border-ink-200/80 pt-3 space-y-2">

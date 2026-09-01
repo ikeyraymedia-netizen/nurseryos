@@ -50,6 +50,7 @@ import { resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
 import { AppLocale, useT } from './lib/i18n';
 import { initPushNotifications } from './lib/pushNotifications';
+import { filterOrdersForPermissions } from './lib/orderVisibility';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -496,7 +497,7 @@ function NurseryApp({
   const { items: whatsNewItems, dismiss: dismissWhatsNew } = useWhatsNewDigest({
     tenantId: tenant.id,
     userId,
-    orders,
+    orders: filterOrdersForPermissions(orders, permissions),
     trucks,
     ready: whatsNewReady,
     canViewOrders: permissions.canViewOrders,
@@ -691,7 +692,20 @@ function NurseryApp({
     return { ...order, totalWeightLbs: computedWeight };
   });
 
-  const selectedOrder = dynamicOrders.find((o) => o.id === selectedOrderId);
+  const visibleOrders = useMemo(
+    () => filterOrdersForPermissions(dynamicOrders, permissions),
+    [dynamicOrders, permissions.canViewDirectShipOrders]
+  );
+
+  useEffect(() => {
+    if (!selectedOrderId) return;
+    const order = dynamicOrders.find((o) => o.id === selectedOrderId);
+    if (order?.directShip && !permissions.canViewDirectShipOrders) {
+      setSelectedOrderId(null);
+    }
+  }, [selectedOrderId, dynamicOrders, permissions.canViewDirectShipOrders]);
+
+  const selectedOrder = visibleOrders.find((o) => o.id === selectedOrderId);
   const documentModalOrder = useMemo(() => {
     if (!documentModal) return null;
     // Prefer the live order when it still exists; saved invoices must open even after
@@ -923,7 +937,7 @@ function NurseryApp({
               <InventoryWorkspace
                 permissions={permissions}
                 trucks={trucks}
-                orders={dynamicOrders}
+                orders={visibleOrders}
                 tenantId={tenant.id}
                 tenant={tenant}
                 nurseryName={tenant.name}
@@ -989,7 +1003,7 @@ function NurseryApp({
     >
     <div className="min-h-screen bg-slate-100/90 flex flex-col font-sans text-gray-900">
       <Header
-        orders={dynamicOrders}
+        orders={visibleOrders}
         nurseryName={tenant.name}
         userEmail={userEmail}
         role={memberState.role}
@@ -1023,7 +1037,7 @@ function NurseryApp({
                 }`}
               >
                 <FileText className="h-4 w-4" />
-                <span>{t('nav.orders')} ({dynamicOrders.length})</span>
+                <span>{t('nav.orders')} ({visibleOrders.length})</span>
               </button>
             )}
             {permissions.canViewTrucks && (
@@ -1137,7 +1151,7 @@ function NurseryApp({
             </div>
           ) : activeTab === 'orders' ? (
             <OrdersList
-              orders={dynamicOrders}
+              orders={visibleOrders}
               selectedOrderId={selectedOrderId}
               canDelete={permissions.canDeleteOrders}
               orderIdsNeedingInvoice={orderIdsNeedingInvoice}
@@ -1150,7 +1164,7 @@ function NurseryApp({
           ) : (
             <TrucksList
               trucks={trucks}
-              orders={dynamicOrders}
+              orders={visibleOrders}
               selectedTruckId={selectedTruckId}
               canDelete={permissions.canDeleteTrucks}
               canCreate={permissions.canBuildTrucks}
@@ -1190,7 +1204,7 @@ function NurseryApp({
             <InventoryWorkspace
               permissions={permissions}
               trucks={trucks}
-              orders={dynamicOrders}
+              orders={visibleOrders}
               tenantId={tenant.id}
               tenant={tenant}
               nurseryName={tenant.name}
@@ -1200,7 +1214,7 @@ function NurseryApp({
           ) : activeTab === 'customers' && permissions.canViewCustomers ? (
             <CustomersWorkspace
               customers={customers}
-              orders={dynamicOrders}
+              orders={visibleOrders}
               trucks={trucks}
               permissions={permissions}
               nurseryName={tenant.name}
@@ -1225,7 +1239,7 @@ function NurseryApp({
             />
           ) : activeTab === 'reports' ? (
             <ReportsWorkspace
-              orders={dynamicOrders}
+              orders={visibleOrders}
               trucks={trucks}
               customers={customers}
               permissions={permissions}
@@ -1240,7 +1254,7 @@ function NurseryApp({
             />
           ) : selectedTruckId === 'new' && permissions.canBuildTrucks ? (
             <TruckBuilder
-              orders={dynamicOrders}
+              orders={visibleOrders}
               tenantId={tenant.id}
               onCancel={() => {
                 setSelectedTruckId(null);
@@ -1255,7 +1269,7 @@ function NurseryApp({
           ) : isEditingTruck && activeTruck && permissions.canEditTrucks ? (
             <TruckBuilder
               truckToEdit={activeTruck}
-              orders={dynamicOrders}
+              orders={visibleOrders}
               tenantId={tenant.id}
               onCancel={() => setIsEditingTruck(false)}
               onSuccess={() => {
@@ -1267,7 +1281,7 @@ function NurseryApp({
             <TruckWorkspace
               truck={activeTruck}
               trucks={trucks}
-              orders={dynamicOrders}
+              orders={visibleOrders}
               containerWeights={containerWeights}
               permissions={permissions}
               customers={customers}
@@ -1290,7 +1304,7 @@ function NurseryApp({
           ) : selectedOrder ? (
             <LoaderWorkspace
               order={selectedOrder}
-              orders={dynamicOrders}
+              orders={visibleOrders}
               containerWeights={containerWeights}
               customers={customers}
               permissions={permissions}
@@ -1353,7 +1367,7 @@ function NurseryApp({
           existingDocument={documentModal.existingDocument || null}
           truckOrders={
             documentModalOrder.truckId
-              ? dynamicOrders.filter(
+              ? visibleOrders.filter(
                   (candidate) => candidate.truckId === documentModalOrder.truckId
                 )
               : []

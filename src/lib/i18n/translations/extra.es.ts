@@ -1556,6 +1556,10 @@ const extra = {
     salesRepRequiredLabel: 'Representante *',
     salesRepRequired:
       'Seleccione un representante antes de guardar. Los pedidos se rastrean por representante aunque aún no haya camión.',
+    directShipLabel: 'Envío directo',
+    directShipHint:
+      'El proveedor envía directo al cliente. Oculto para supervisores, cargadores y personal de patio — solo propietario/admin.',
+    directShipBadge: 'Envío directo',
     linkedTo: '✓ Vinculado a {{name}} ({{size}})',
     autoMatchedSuffix: ' — auto-vinculado',
     noInventoryLoaded: 'Aún no hay plantas de inventario cargadas.',

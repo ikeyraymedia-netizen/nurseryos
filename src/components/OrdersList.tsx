@@ -4,6 +4,7 @@ import { CustomerOrder } from '../types';
 import { deleteCustomerOrder } from '../lib/db';
 import { useT } from '../lib/i18n';
 import { orderRefLabel } from '../lib/orderLabels';
+import { isDirectShipOrder } from '../lib/orderVisibility';
 
 interface OrdersListProps {
   orders: CustomerOrder[];
@@ -176,6 +177,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                         {orderRefLabel(order)}
                       </p>
                     )}
+                    {isDirectShipOrder(order) ? (
+                      <span className="inline-flex mt-1 items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-sky-100 text-sky-800 border border-sky-200">
+                        {t('upload.directShipBadge')}
+                      </span>
+                    ) : null}
                   </div>
                   {canDelete &&
                     (deletingOrderId === order.id ? (

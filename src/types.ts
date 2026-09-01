@@ -153,6 +153,8 @@ export interface CustomerOrder {
   emailSentAt?: string; // Timestamp of when the last invoice was emailed
   stagedLocation?: string; // Where this order is staged out
   owner?: string; // Sales rep this order/invoice is credited to
+  /** Vendor ships straight to customer — hidden from yard roles (owner/admin only). */
+  directShip?: boolean;
 }
 
 export interface Customer {

@@ -1539,6 +1539,10 @@ const extra = {
       'Credits this {{type}} to a sales rep for reports — no truck required.',
     salesRepRequiredLabel: 'Sales rep *',
     salesRepRequired: 'Select a sales rep before saving. Orders are tracked by rep even when no truck is built yet.',
+    directShipLabel: 'Direct ship',
+    directShipHint:
+      'Vendor ships straight to the customer. Hidden from supervisors, loaders, and yard staff — owner/admin only.',
+    directShipBadge: 'Direct ship',
     linkedTo: '✓ Linked to {{name}} ({{size}})',
     autoMatchedSuffix: ' — auto-matched',
     noInventoryLoaded: 'No inventory plants loaded yet.',

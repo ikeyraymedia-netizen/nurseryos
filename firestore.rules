@@ -95,6 +95,19 @@ service cloud.firestore {
       return isAdminOrOwner(tenantId) || isSupervisor(tenantId) || isLoader(tenantId) || isSales(tenantId);
     }
 
+    function isDirectShipOrder(data) {
+      return data.keys().hasAny(['directShip']) && data.directShip == true;
+    }
+
+    function canReadOrder(tenantId, data) {
+      return canReadReportsData(tenantId)
+        && (isAdminOrOwner(tenantId) || !isDirectShipOrder(data));
+    }
+
+    function directShipUnchanged() {
+      return request.resource.data.get('directShip', false) == resource.data.get('directShip', false);
+    }
+
     function isPlatformAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -202,10 +215,12 @@ service cloud.firestore {
       }
 
       match /orders/{docId} {
-        allow read: if canReadReportsData(tenantId);
-        allow create: if canWriteOps(tenantId) || isSales(tenantId);
+        allow read: if canReadOrder(tenantId, resource.data);
+        allow create: if (canWriteOps(tenantId) || isSales(tenantId))
+          && (isAdminOrOwner(tenantId) || request.resource.data.get('directShip', false) != true);
         allow delete: if canWriteOps(tenantId);
-        allow update: if canWriteOps(tenantId) || canEditOrderLines(tenantId);
+        allow update: if (canWriteOps(tenantId) || canEditOrderLines(tenantId))
+          && (isAdminOrOwner(tenantId) || directShipUnchanged());
       }
 
       match /trucks/{docId} {

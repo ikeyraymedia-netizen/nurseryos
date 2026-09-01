@@ -9,6 +9,7 @@ import { dropNumber, loadNumber } from '../lib/loadSequence';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { useT } from '../lib/i18n';
 import { orderRefLabel } from '../lib/orderLabels';
+import { isDirectShipOrder } from '../lib/orderVisibility';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
@@ -62,6 +63,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   // Orders available for selection:
   // Show unassigned orders OR orders assigned to this active truck
   const selectableOrders = orders.filter((order) => {
+    if (isDirectShipOrder(order)) return false;
     if (!order.truckId) return true;
     if (truckToEdit && order.truckId === truckToEdit.id) return true;
     return false;

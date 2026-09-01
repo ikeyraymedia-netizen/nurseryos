@@ -1,6 +1,8 @@
 import { MemberRole, TenantMember } from '../types';
 
 export interface AppPermissions {
+  /** Yard / loading orders only — owner and admin. */
+  canViewDirectShipOrders: boolean;
   canViewOrders: boolean;
   canViewTrucks: boolean;
   canCheckOffLoading: boolean;
@@ -134,6 +136,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
     case 'owner':
     case 'admin':
       return {
+        canViewDirectShipOrders: true,
         canViewOrders: true,
         canViewTrucks: true,
         canCheckOffLoading: true,
@@ -176,6 +179,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
       // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
       // No pricing, invoices, customers, uploads, deletes, or team/billing admin.
       return {
+        canViewDirectShipOrders: false,
         canViewOrders: true,
         canViewTrucks: true,
         canCheckOffLoading: true,
@@ -217,6 +221,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
     case 'office':
       // Front office: customers, invoices, pricing, reports. No yard/ops tabs.
       return {
+        canViewDirectShipOrders: false,
         canViewOrders: false,
         canViewTrucks: false,
         canCheckOffLoading: false,
@@ -258,6 +263,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
     case 'sales':
       // Sales: customers, orders, trucks, invoices/pricing, reports; inventory view-only; no tasks.
       return {
+        canViewDirectShipOrders: false,
         canViewOrders: true,
         canViewTrucks: true,
         canCheckOffLoading: false,
@@ -298,6 +304,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
       };
     case 'loader':
       return {
+        canViewDirectShipOrders: false,
         canViewOrders: true,
         canViewTrucks: true,
         canCheckOffLoading: true,
@@ -338,6 +345,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
       };
     case 'inventory':
       return {
+        canViewDirectShipOrders: false,
         canViewOrders: false,
         canViewTrucks: false,
         canCheckOffLoading: false,

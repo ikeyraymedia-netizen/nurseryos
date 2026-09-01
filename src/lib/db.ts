@@ -17,6 +17,7 @@ import {
   describeInventorySyncResult,
   inventorySyncSucceeded
 } from './inventory';
+import { notifyPushEvent } from './pushNotifications';
 
 let activeTenantId: string | null = null;
 
@@ -469,7 +470,8 @@ export function subscribeToTrucks(callback: (trucks: Truck[]) => void) {
 
 function truckPlantLoadTotals(
   truck: Truck,
-  orders: CustomerOrder[]
+  orders: CustomerOrder[],
+  orderItemOverride?: { orderId: string; items: CustomerOrder['items'] }
 ): { total: number; loaded: number } {
   let total = 0;
   let loaded = 0;
@@ -477,12 +479,48 @@ function truckPlantLoadTotals(
   for (const orderId of truck.orderIds || []) {
     const order = byId.get(orderId);
     if (!order) continue;
-    for (const item of order.items) {
+    const items =
+      orderItemOverride?.orderId === orderId ? orderItemOverride.items : order.items;
+    for (const item of items) {
       total += item.quantity;
       loaded += item.loadedQuantity;
     }
   }
   return { total, loaded };
+}
+
+function formatTruckLoadingDate(dateKey?: string): string | null {
+  const key = String(dateKey || '').trim();
+  if (!key) return null;
+  try {
+    return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch {
+    return key;
+  }
+}
+
+function notifyTruckLoadingEvents(
+  events: Array<{ type: 'truck_loading_started' | 'truck_loading_finished'; truck: Truck; body: string }>
+): void {
+  const tenantId = activeTenantId;
+  if (!tenantId || events.length === 0) return;
+
+  for (const event of events) {
+    const title =
+      event.type === 'truck_loading_started'
+        ? `Loading started · ${event.truck.name}`
+        : `Loading complete · ${event.truck.name}`;
+    void notifyPushEvent({
+      tenantId,
+      type: event.type,
+      title,
+      body: event.body,
+      url: `/?tab=trucks&truck=${event.truck.id}`
+    });
+  }
 }
 
 /**
@@ -491,20 +529,56 @@ function truckPlantLoadTotals(
  */
 async function syncTruckLoadingTimestampsForOrder(
   orderId: string,
-  opts: { loadIncreased: boolean }
+  opts: { loadIncreased: boolean; previousOrderItems?: CustomerOrder['items'] }
 ): Promise<void> {
   const orders = getLocalOrders();
   const trucks = getLocalTrucks();
   const now = new Date().toISOString();
   const changed: Truck[] = [];
+  const loadingEvents: Array<{
+    type: 'truck_loading_started' | 'truck_loading_finished';
+    truck: Truck;
+    body: string;
+  }> = [];
 
   const next = trucks.map((t) => {
     if (!(t.orderIds || []).includes(orderId)) return t;
-    const { loaded } = truckPlantLoadTotals(t, orders);
+
+    const previousTotals = opts.previousOrderItems
+      ? truckPlantLoadTotals(t, orders, { orderId, items: opts.previousOrderItems })
+      : truckPlantLoadTotals(t, orders);
+    const newTotals = truckPlantLoadTotals(t, orders);
     let loadingStartedAt = t.loadingStartedAt;
     let loadingFinishedAt = t.loadingFinishedAt;
 
-    if (loaded <= 0) {
+    const loadingDate = formatTruckLoadingDate(t.loadingDate);
+    const orderCount = (t.orderIds || []).length;
+
+    if (!t.loadingStartedAt && newTotals.loaded > 0 && opts.loadIncreased) {
+      loadingEvents.push({
+        type: 'truck_loading_started',
+        truck: t,
+        body: `${newTotals.loaded}/${newTotals.total} plants · ${orderCount} order${
+          orderCount === 1 ? '' : 's'
+        }${loadingDate ? ` · ${loadingDate}` : ''}`
+      });
+    }
+
+    if (
+      previousTotals.total > 0 &&
+      previousTotals.loaded < previousTotals.total &&
+      newTotals.loaded >= newTotals.total
+    ) {
+      loadingEvents.push({
+        type: 'truck_loading_finished',
+        truck: t,
+        body: `${newTotals.total} plants loaded · ${orderCount} order${
+          orderCount === 1 ? '' : 's'
+        }${loadingDate ? ` · ${loadingDate}` : ''}`
+      });
+    }
+
+    if (newTotals.loaded <= 0) {
       loadingStartedAt = undefined;
       loadingFinishedAt = undefined;
     } else if (opts.loadIncreased) {
@@ -524,11 +598,15 @@ async function syncTruckLoadingTimestampsForOrder(
     return updated;
   });
 
-  if (changed.length === 0) return;
+  if (changed.length === 0 && loadingEvents.length === 0) return;
 
-  saveLocalTrucks(next);
+  if (changed.length > 0) {
+    saveLocalTrucks(next);
+  }
 
-  if (fallbackActive || !activeTenantId) return;
+  notifyTruckLoadingEvents(loadingEvents);
+
+  if (changed.length === 0 || fallbackActive || !activeTenantId) return;
 
   try {
     const batch = writeBatch(db);
@@ -662,7 +740,10 @@ export async function updateOrderItemProgress(
     return o;
   });
   saveLocalOrders(optimisticOrders);
-  await syncTruckLoadingTimestampsForOrder(orderId, { loadIncreased });
+  await syncTruckLoadingTimestampsForOrder(orderId, {
+    loadIncreased,
+    previousOrderItems: orderItems
+  });
 
   if (fallbackActive) return 'Saved locally (offline mode).';
 
@@ -846,7 +927,10 @@ export async function markAllItemsAsLoaded(orderId: string, orderItems: any[]): 
     return o;
   });
   saveLocalOrders(updatedOrders);
-  await syncTruckLoadingTimestampsForOrder(orderId, { loadIncreased });
+  await syncTruckLoadingTimestampsForOrder(orderId, {
+    loadIncreased,
+    previousOrderItems: orderItems
+  });
 
   if (fallbackActive) return 'Saved locally (offline mode).';
 

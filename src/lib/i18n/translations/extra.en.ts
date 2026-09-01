@@ -1703,7 +1703,7 @@ const extra = {
     editWeights: 'Edit weights',
     pushNotifications: 'Push notifications',
     pushNotificationsHint:
-      'Get alerts when plants are added to orders, invoices are paid, trucks are built, and more. On iPhone, add NurseryOS to your Home Screen first.',
+      'Get alerts when plants are added to orders, trucks start or finish loading, invoices are paid, and more. On iPhone, add NurseryOS to your Home Screen first.',
     pushEnable: 'Enable notifications',
     pushDisable: 'Disable notifications',
     pushEnabled: 'Notifications enabled on this device.',

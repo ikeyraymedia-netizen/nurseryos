@@ -10,6 +10,8 @@ export type PushEventType =
   | 'invoice_paid'
   | 'order_uploaded'
   | 'truck_built'
+  | 'truck_loading_started'
+  | 'truck_loading_finished'
   | 'task_assigned'
   | 'plant_added';
 
@@ -17,6 +19,8 @@ const RECIPIENT_ROLES: Record<Exclude<PushEventType, 'task_assigned'>, MemberRol
   invoice_paid: ['owner', 'admin', 'office', 'sales'],
   order_uploaded: ['owner', 'admin', 'supervisor', 'office', 'sales', 'loader'],
   truck_built: ['owner', 'admin', 'supervisor', 'loader'],
+  truck_loading_started: ['owner', 'admin', 'supervisor', 'loader'],
+  truck_loading_finished: ['owner', 'admin', 'supervisor', 'loader'],
   plant_added: ['owner', 'admin', 'supervisor', 'loader', 'sales']
 };
 

@@ -1722,7 +1722,7 @@ const extra = {
     editWeights: 'Editar pesos',
     pushNotifications: 'Notificaciones push',
     pushNotificationsHint:
-      'Reciba alertas cuando se agreguen plantas a pedidos, se paguen facturas, se armen camiones y más. En iPhone, agregue NurseryOS a la pantalla de inicio primero.',
+      'Reciba alertas cuando se agreguen plantas a pedidos, los camiones empiecen o terminen de cargar, se paguen facturas y más. En iPhone, agregue NurseryOS a la pantalla de inicio primero.',
     pushEnable: 'Activar notificaciones',
     pushDisable: 'Desactivar notificaciones',
     pushEnabled: 'Notificaciones activadas en este dispositivo.',

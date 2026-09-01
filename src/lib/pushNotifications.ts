@@ -6,6 +6,8 @@ export type PushEventType =
   | 'invoice_paid'
   | 'order_uploaded'
   | 'truck_built'
+  | 'truck_loading_started'
+  | 'truck_loading_finished'
   | 'task_assigned'
   | 'plant_added';
 

@@ -38,7 +38,8 @@ function readVapidKey(): string {
   return (
     process.env.FIREBASE_VAPID_KEY?.trim() ||
     process.env.VITE_FIREBASE_VAPID_KEY?.trim() ||
-    ''
+    // NurseryOS project default (public key from Firebase Console → Cloud Messaging).
+    'BOoizgueN05OYhnk0sbH8TZabP0v6pIf_A4qtqjxV-dJpOU-fI1WUeR42BR2znCGHpqHyP42ncvVau5EPkJ7mhw'
   );
 }
 

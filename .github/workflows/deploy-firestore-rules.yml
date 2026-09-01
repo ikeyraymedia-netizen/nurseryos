@@ -1,10 +1,11 @@
-name: Deploy Firestore rules
+name: Deploy Firebase rules
 
 on:
   push:
     branches: [main]
     paths:
       - firestore.rules
+      - storage.rules
       - firebase.json
       - .firebaserc
       - .github/workflows/deploy-firestore-rules.yml
@@ -22,7 +23,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Deploy Firestore rules
+      - name: Deploy Firestore and Storage rules
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
@@ -33,6 +34,6 @@ jobs:
             exit 1
           fi
           npx --yes firebase-tools@latest deploy \
-            --only firestore:rules \
-            --project gen-lang-client-0852672677 \
+            --only firestore:rules,storage \
+            --project nurseryos-54c15 \
             --non-interactive

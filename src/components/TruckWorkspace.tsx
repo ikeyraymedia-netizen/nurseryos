@@ -14,6 +14,7 @@ import {
 } from '../lib/db';
 import { getTruckWeightCapacity, calculateWeightPercentage, getCapacitySeverity } from '../lib/capacity';
 import { orderRefLabel } from '../lib/orderLabels';
+import { notifyPushEvent } from '../lib/pushNotifications';
 import { 
   Truck as TruckIcon, 
   Weight, 
@@ -546,6 +547,18 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         status
       });
 
+      if (tenantId) {
+        void notifyPushEvent({
+          tenantId,
+          type: 'plant_added',
+          title: `Plant added · ${order.customerName}`,
+          body: `${newItem.plantName} (${newItem.containerSize}) × ${newItem.quantity}${
+            newItem.isAddition ? ' · addition' : ''
+          }`,
+          url: `/?tab=orders&order=${order.id}`
+        });
+      }
+
       // Reset form on success
       setNewPlantName('');
       setNewContainerSize('');
@@ -613,6 +626,16 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         orderIds: [...(truck.orderIds || []), newOrderId]
       };
       await updateTruck(updatedTruck);
+
+      if (tenantId) {
+        void notifyPushEvent({
+          tenantId,
+          type: 'plant_added',
+          title: `Plant added · ${standaloneCustomerName.trim()}`,
+          body: `${newItem.plantName} (${newItem.containerSize}) × ${newItem.quantity} · addition`,
+          url: `/?tab=orders&order=${newOrderId}`
+        });
+      }
 
       // Reset form states
       setStandaloneCustomerName('');

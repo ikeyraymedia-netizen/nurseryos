@@ -13,6 +13,7 @@ import {
   Search
 } from 'lucide-react';
 import { addCustomerOrder } from '../lib/db';
+import { notifyPushEvent } from '../lib/pushNotifications';
 import { findMatchingCustomers } from '../lib/customerMatch';
 import {
   getInventoryMatchSuggestions,
@@ -561,6 +562,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         action: 'order.created_from_upload',
         summary: `Created order for ${linked?.name || pendingDraft.customerName}`,
         meta: { orderId, customerId: linked?.id || null }
+      });
+
+      void notifyPushEvent({
+        tenantId,
+        type: 'order_uploaded',
+        title: `New order · ${linked?.name || pendingDraft.customerName}`,
+        body: `${namedItems.length} line${namedItems.length === 1 ? '' : 's'}`,
+        url: `/?tab=orders&order=${orderId}`
       });
 
       resetDraftState();

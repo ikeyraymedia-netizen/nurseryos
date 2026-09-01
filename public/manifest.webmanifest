@@ -1,0 +1,17 @@
+{
+  "name": "NurseryOS",
+  "short_name": "NurseryOS",
+  "description": "Nursery orders, loading, invoicing, and inventory",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#166534",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

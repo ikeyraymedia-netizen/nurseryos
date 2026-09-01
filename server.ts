@@ -10,6 +10,7 @@ import {
   isStripeConfigured
 } from './server/stripe';
 import { registerEmailRoutes } from './server/email';
+import { registerPushRoutes } from './server/push';
 import { registerPlatformRoutes } from './server/platform';
 import { registerPublicAvailabilityRoutes } from './server/publicAvailability';
 import {
@@ -44,6 +45,7 @@ const PORT = Number(process.env.PORT) || 3000;
 registerQuickbooksRoutes(app);
 registerStripeRoutes(app);
 registerEmailRoutes(app);
+registerPushRoutes(app);
 registerPlatformRoutes(app);
 registerPublicAvailabilityRoutes(app);
 

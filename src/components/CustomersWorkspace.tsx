@@ -30,6 +30,7 @@ import {
     deleteCustomerDocument
 } from '../lib/documents';
 import { addCustomerOrder } from '../lib/db';
+import { notifyPushEvent } from '../lib/pushNotifications';
 import { logAuditEvent } from '../lib/audit';
 import { orderRefLabel } from '../lib/orderLabels';
 import { exportNurseryBackup } from '../lib/backup';
@@ -871,6 +872,16 @@ export function CustomersWorkspace({
         summary: `Converted ${doc.documentNumber} to order for ${selectedCustomer.name}`,
         meta: { documentId: doc.id, orderId, customerId: selectedCustomer.id }
       });
+
+      if (tenantId) {
+        void notifyPushEvent({
+          tenantId,
+          type: 'order_uploaded',
+          title: `New order · ${selectedCustomer.name}`,
+          body: `${items.length} line${items.length === 1 ? '' : 's'}`,
+          url: `/?tab=orders&order=${orderId}`
+        });
+      }
 
       setMessage(t('customers.convertSuccess'));
       onOpenOrder?.(orderId);

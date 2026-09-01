@@ -68,6 +68,15 @@ export interface UserProfile {
   locale?: 'en' | 'es';
   /** Platform operator — can manage modules for any nursery. Set in Firestore. */
   isPlatformAdmin?: boolean;
+  /** Web push tokens keyed by device id. */
+  fcmTokens?: Record<
+    string,
+    {
+      token: string;
+      updatedAt: string;
+      userAgent?: string;
+    }
+  >;
 }
 
 export interface ContainerWeight {

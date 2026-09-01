@@ -1685,6 +1685,17 @@ const extra = {
     containerWeightsHint:
       'Default pounds per pot size used for truck load estimates. Rarely needs changing.',
     editWeights: 'Edit weights',
+    pushNotifications: 'Push notifications',
+    pushNotificationsHint:
+      'Get alerts when plants are added to orders, invoices are paid, trucks are built, and more. On iPhone, add NurseryOS to your Home Screen first.',
+    pushEnable: 'Enable notifications',
+    pushDisable: 'Disable notifications',
+    pushEnabled: 'Notifications enabled on this device.',
+    pushDenied: 'Notifications blocked — allow them in browser settings.',
+    pushUnsupported: 'Push notifications are not available in this browser.',
+    pushNotConfigured: 'Push is not configured on the server yet (VAPID key missing).',
+    pushEnableFailed: 'Could not enable notifications.',
+    pushDisableFailed: 'Could not disable notifications.',
     qbo: 'QuickBooks Online',
     qboIntro:
       'Connect this nursery to push invoices/estimates and vendor bills into the same QuickBooks company. Payments on invoices sync as Receive Payment. Owner/admin only.',

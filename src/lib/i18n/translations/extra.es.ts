@@ -1704,6 +1704,17 @@ const extra = {
     containerWeightsHint:
       'Libras por tamaño de maceta para estimar el peso del camión. Casi no hace falta cambiarlas.',
     editWeights: 'Editar pesos',
+    pushNotifications: 'Notificaciones push',
+    pushNotificationsHint:
+      'Reciba alertas cuando se agreguen plantas a pedidos, se paguen facturas, se armen camiones y más. En iPhone, agregue NurseryOS a la pantalla de inicio primero.',
+    pushEnable: 'Activar notificaciones',
+    pushDisable: 'Desactivar notificaciones',
+    pushEnabled: 'Notificaciones activadas en este dispositivo.',
+    pushDenied: 'Notificaciones bloqueadas — permítalas en la configuración del navegador.',
+    pushUnsupported: 'Las notificaciones push no están disponibles en este navegador.',
+    pushNotConfigured: 'Las notificaciones push aún no están configuradas en el servidor (falta clave VAPID).',
+    pushEnableFailed: 'No se pudieron activar las notificaciones.',
+    pushDisableFailed: 'No se pudieron desactivar las notificaciones.',
     qbo: 'QuickBooks Online',
     qboIntro:
       'Conecte este vivero para enviar facturas/presupuestos y facturas de proveedores a la misma compañía QuickBooks. Los pagos de facturas se sincronizan como Receive Payment. Solo dueño/admin.',

@@ -48,6 +48,7 @@ import { PlatformDashboard } from './components/PlatformDashboard';
 import { resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
 import { AppLocale, useT } from './lib/i18n';
+import { initPushNotifications } from './lib/pushNotifications';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -339,6 +340,10 @@ function NurseryApp({
   useEffect(() => {
     setMemberState(member);
   }, [member]);
+
+  useEffect(() => {
+    void initPushNotifications();
+  }, [userId, tenant.id]);
 
   const permissions = useMemo(
     () => applyModuleGates(getPermissionsForMember(memberState), tenant),

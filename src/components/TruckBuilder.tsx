@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, CustomerOrder } from '../types';
 import { addTruck, updateTruck } from '../lib/db';
+import { notifyPushEvent } from '../lib/pushNotifications';
 import { X, Check, Save, Truck as TruckIcon, HelpCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getTruckWeightCapacity, calculateWeightPercentage } from '../lib/capacity';
 import { toDateKey } from '../lib/dates';
@@ -136,6 +137,15 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           owner: owner,
           orderIds: selectedOrderIds
         });
+        if (tenantId) {
+          void notifyPushEvent({
+            tenantId,
+            type: 'truck_built',
+            title: `New truck · ${name.trim()}`,
+            body: `${selectedOrderIds.length} order${selectedOrderIds.length === 1 ? '' : 's'}`,
+            url: `/?tab=trucks&truck=${newTruckId}`
+          });
+        }
         onSuccess(newTruckId);
       }
     } catch (err: any) {

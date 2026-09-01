@@ -475,6 +475,26 @@ async function markDocumentPaid(params: {
     { merge: true }
   );
 
+  try {
+    const data = snap.data();
+    const docNumber = String(data?.documentNumber || 'Invoice');
+    const customerName = String(data?.billToName || data?.customerName || 'Customer');
+    const amount =
+      typeof params.amountTotal === 'number'
+        ? params.amountTotal / 100
+        : Number(data?.grandTotal || 0);
+    const { sendTenantPush } = await import('./pushNotifications');
+    await sendTenantPush({
+      tenantId: params.tenantId,
+      type: 'invoice_paid',
+      title: `Payment received · ${docNumber}`,
+      body: `${customerName} · $${amount.toFixed(2)}`,
+      url: '/?tab=customers'
+    });
+  } catch (err) {
+    console.warn('[stripe] push notification failed', params.documentId, err);
+  }
+
   // Best-effort: close the matching QBO invoice if it was pushed earlier.
   try {
     const { syncPaidInvoicePaymentToQbo } = await import('./quickbooks');

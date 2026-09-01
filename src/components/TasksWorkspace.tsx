@@ -24,6 +24,7 @@ import {
   weekDateKeys,
   addDaysToDateKey
 } from '../lib/tasks';
+import { notifyPushEvent } from '../lib/pushNotifications';
 import { logAuditEvent } from '../lib/audit';
 
 interface TasksWorkspaceProps {
@@ -126,6 +127,14 @@ export function TasksWorkspace({ tenant, member, userId, permissions }: TasksWor
         assigneeEmail: assignee.email,
         createdByUserId: userId,
         createdByName: member.displayName || member.email || 'Owner'
+      });
+      void notifyPushEvent({
+        tenantId: tenant.id,
+        type: 'task_assigned',
+        title: `New task · ${trimmed}`,
+        body: `Due ${dueDate}`,
+        url: '/?tab=tasks',
+        targetUserId: assignee.userId
       });
       await logAuditEvent({
         action: 'task.created',

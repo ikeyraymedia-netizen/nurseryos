@@ -32,7 +32,14 @@ async function hardReloadApp(): Promise<void> {
   try {
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((reg) => reg.unregister()));
+      await Promise.all(
+        regs.map((reg) => {
+          const scriptUrl =
+            reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || '';
+          if (scriptUrl.includes('firebase-messaging-sw')) return Promise.resolve(false);
+          return reg.unregister();
+        })
+      );
     }
   } catch {
     // ignore

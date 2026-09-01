@@ -13,6 +13,7 @@ import {
 import { db } from '../firebase';
 import { CustomerDocument, CustomerDocumentType } from '../types';
 import { deleteLinkedQuickbooksDocument, fetchHighestQuickbooksDocNumber } from './quickbooks';
+import { notifyPushEvent } from './pushNotifications';
 
 let activeTenantId: string | null = null;
 
@@ -142,6 +143,19 @@ export async function markCustomerInvoicePaid(
       typeof document.stripePaidAmountCents === 'number'
         ? document.stripePaidAmountCents
         : Math.round((document.grandTotal || 0) * 100)
+  });
+
+  const tenantId = requireTenantId();
+  const amount =
+    typeof document.stripePaidAmountCents === 'number'
+      ? document.stripePaidAmountCents / 100
+      : document.grandTotal || 0;
+  void notifyPushEvent({
+    tenantId,
+    type: 'invoice_paid',
+    title: `Payment received · ${document.documentNumber}`,
+    body: `${document.billToName || document.customerName || 'Customer'} · $${amount.toFixed(2)}`,
+    url: '/?tab=customers'
   });
 }
 

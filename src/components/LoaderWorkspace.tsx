@@ -40,6 +40,7 @@ import { useSalesRepOptions } from '../lib/salesReps';
 import { InvoiceModal } from './InvoiceModal';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
+import { notifyPushEvent } from '../lib/pushNotifications';
 
 interface LoaderWorkspaceProps {
   order: CustomerOrder;
@@ -247,6 +248,18 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         items: updatedItems,
         status
       });
+
+      if (tenantId) {
+        void notifyPushEvent({
+          tenantId,
+          type: 'plant_added',
+          title: `Plant added · ${order.customerName}`,
+          body: `${newItem.plantName} (${newItem.containerSize}) × ${newItem.quantity}${
+            newItem.isAddition ? ' · addition' : ''
+          }`,
+          url: `/?tab=orders&order=${order.id}`
+        });
+      }
 
       // Reset form on success
       setNewPlantName('');

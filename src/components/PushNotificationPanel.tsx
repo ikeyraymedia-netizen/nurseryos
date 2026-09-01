@@ -5,11 +5,10 @@ import {
   disablePushNotifications,
   enablePushNotifications,
   isIosDevice,
-  isPushEnabledLocally,
   isStandalonePwa,
-  loadPushConfig,
   pushPermissionState,
-  sendTestPushNotification
+  sendTestPushNotification,
+  syncPushNotificationState
 } from '../lib/pushNotifications';
 
 interface PushNotificationPanelProps {
@@ -27,14 +26,23 @@ export function PushNotificationPanel({
   const t = useT();
   const [pushBusy, setPushBusy] = useState(false);
   const [pushConfigured, setPushConfigured] = useState<boolean | null>(null);
-  const [pushEnabled, setPushEnabled] = useState(() => isPushEnabledLocally());
+  const [pushEnabled, setPushEnabled] = useState(false);
   const [pushPermission, setPushPermission] = useState(() => pushPermissionState());
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadPushConfig().then(setPushConfigured);
-  }, []);
+    let active = true;
+    void syncPushNotificationState().then((state) => {
+      if (!active) return;
+      setPushConfigured(state.configured);
+      setPushPermission(state.permission);
+      setPushEnabled(state.active);
+    });
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
 
   const boxClass = compact
     ? 'space-y-2'
@@ -116,6 +124,8 @@ export function PushNotificationPanel({
           )}
           {pushPermission === 'denied' && !pushEnabled ? (
             <span className="text-[11px] text-amber-700">{t('teamExtra.pushDenied')}</span>
+          ) : pushPermission === 'granted' && !pushEnabled ? (
+            <span className="text-[11px] text-amber-700">{t('teamExtra.pushResyncNeeded')}</span>
           ) : null}
           {pushEnabled && pushPermission === 'granted' ? (
             <button
@@ -142,7 +152,9 @@ export function PushNotificationPanel({
         </div>
       )}
       {pushConfigured ? (
-        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">{t('teamExtra.pushSelfActionHint')}</p>
+        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+          {t('teamExtra.pushPerDeviceHint')} {t('teamExtra.pushSelfActionHint')}
+        </p>
       ) : null}
     </div>
   );

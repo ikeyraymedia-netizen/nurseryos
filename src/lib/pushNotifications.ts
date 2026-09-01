@@ -61,6 +61,42 @@ export function isPushEnabledLocally(): boolean {
   }
 }
 
+export type PushRegistrationState = {
+  permission: NotificationPermission | 'unsupported';
+  savedLocally: boolean;
+  configured: boolean;
+  active: boolean;
+};
+
+/** Reconcile browser permission, local opt-in, and FCM token registration. */
+export async function syncPushNotificationState(): Promise<PushRegistrationState> {
+  const configured = Boolean(await resolveVapidKey());
+  const permission = pushPermissionState();
+  let savedLocally = isPushEnabledLocally();
+
+  if (permission !== 'granted' && savedLocally) {
+    setPushEnabledLocally(false);
+    savedLocally = false;
+  }
+
+  if (permission === 'granted' && !savedLocally && configured) {
+    try {
+      const result = await enablePushNotifications();
+      savedLocally = result === 'granted';
+    } catch (err) {
+      console.warn('[push] resync failed', err);
+      savedLocally = false;
+    }
+  }
+
+  return {
+    permission,
+    savedLocally,
+    configured,
+    active: permission === 'granted' && savedLocally
+  };
+}
+
 function setPushEnabledLocally(enabled: boolean): void {
   try {
     if (enabled) localStorage.setItem(ENABLED_KEY, '1');
@@ -180,9 +216,9 @@ export async function disablePushNotifications(): Promise<void> {
 
 /** Re-register silently when permission was already granted. */
 export async function initPushNotifications(): Promise<void> {
-  if (!isPushEnabledLocally()) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   if (!(await resolveVapidKey())) return;
+  if (!isPushEnabledLocally()) return;
   try {
     await enablePushNotifications();
   } catch (err) {

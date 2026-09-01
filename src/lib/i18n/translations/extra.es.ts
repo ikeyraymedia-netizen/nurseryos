@@ -1727,6 +1727,10 @@ const extra = {
     pushDisable: 'Desactivar notificaciones',
     pushEnabled: 'Notificaciones activadas en este dispositivo.',
     pushDenied: 'Notificaciones bloqueadas — permítalas en la configuración del navegador.',
+    pushResyncNeeded:
+      'El navegador permite alertas, pero este dispositivo aún no está registrado — toque Activar notificaciones una vez.',
+    pushPerDeviceHint:
+      'Actívelas una vez por teléfono o navegador. Safari y la app de pantalla de inicio cuentan como dispositivos distintos.',
     pushUnsupported: 'Las notificaciones push no están disponibles en este navegador.',
     pushNotConfigured: 'Las notificaciones push aún no están configuradas en el servidor (falta clave VAPID).',
     pushEnableFailed: 'No se pudieron activar las notificaciones.',

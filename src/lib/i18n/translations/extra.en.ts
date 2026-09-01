@@ -1708,6 +1708,9 @@ const extra = {
     pushDisable: 'Disable notifications',
     pushEnabled: 'Notifications enabled on this device.',
     pushDenied: 'Notifications blocked — allow them in browser settings.',
+    pushResyncNeeded:
+      'Browser allows alerts but this device is not registered yet — tap Enable notifications once.',
+    pushPerDeviceHint: 'Enable once per phone or browser. Safari and the Home Screen app count as separate devices.',
     pushUnsupported: 'Push notifications are not available in this browser.',
     pushNotConfigured: 'Push is not configured on the server yet (VAPID key missing).',
     pushEnableFailed: 'Could not enable notifications.',

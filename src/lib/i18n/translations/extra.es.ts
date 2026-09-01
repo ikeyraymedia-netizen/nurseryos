@@ -420,6 +420,22 @@ const extra = {
     dedupeResult:
       'Eliminados {{removed}} duplicado(s) en {{groups}} nombre(s). Revinculados {{orders}} pedido(s) y {{documents}} documento(s).',
     dedupeFailed: 'No se pudieron eliminar clientes duplicados.',
+    mergeCustomer: 'Combinar con otro cliente',
+    mergeTitle: 'Combinar clientes',
+    mergeIntro:
+      'Combine otro cliente en {{name}}. Pedidos, presupuestos y facturas se mueven; se conserva la información de contacto de ambos cuando sea posible.',
+    mergeSearch: 'Buscar clientes…',
+    mergeSelect: 'Seleccione el cliente a combinar…',
+    mergePreview: 'Vista previa del perfil combinado',
+    mergeWillRelink: 'Todos los pedidos y documentos del otro cliente se vincularán aquí.',
+    mergeAction: 'Combinar clientes',
+    mergePickOther: 'Seleccione el cliente a combinar.',
+    mergeConfirm:
+      '¿Combinar "{{remove}}" en "{{keep}}"?\n\nEl perfil combinado conserva el nombre de {{keep}}. Los pedidos y documentos se mueven; se elimina el otro registro de cliente.',
+    mergeSuccess: 'Clientes combinados. Pedidos y documentos re-vinculados.',
+    mergeResult:
+      'Clientes combinados. {{orders}} pedido(s) y {{documents}} presupuesto(s)/factura(s) re-vinculados.',
+    mergeFailed: 'No se pudieron combinar los clientes.',
     backupDownloaded: 'Respaldo descargado (archivos JSON + CSV).',
     backupFailed: 'Error al exportar respaldo.',
     noCustomersToDelete: 'No hay clientes para eliminar.',

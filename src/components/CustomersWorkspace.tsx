@@ -10,7 +10,8 @@ import {
   X,
   ClipboardList,
   Download,
-  Mail
+  Mail,
+  GitMerge
 } from 'lucide-react';
 import {
   Customer,
@@ -46,6 +47,7 @@ import {
   defaultCustomerStatementSubject
 } from '../lib/customerStatementEmail';
 import { formatPaymentRecord } from './MarkPaidModal';
+import { MergeCustomersModal } from './MergeCustomersModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 type CustomersView = 'customers' | 'invoices';
@@ -142,6 +144,7 @@ export function CustomersWorkspace({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<CustomersView>('customers');
   const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod>('month');
@@ -1218,6 +1221,15 @@ export function CustomersWorkspace({
                 >
                   {t('customers.saveChanges')}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMergeModal(true)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <GitMerge className="h-3.5 w-3.5" />
+                  {t('customers.mergeCustomer')}
+                </button>
               </div>
             )}
 
@@ -1867,6 +1879,32 @@ export function CustomersWorkspace({
             )}
           </div>
         </div>
+      )}
+      {showMergeModal && selectedCustomer && (
+        <MergeCustomersModal
+          keeper={selectedCustomer}
+          customers={customers}
+          onClose={() => setShowMergeModal(false)}
+          onMerged={(result) => {
+            setShowMergeModal(false);
+            setSelectedCustomerId(result.keeperId);
+            void logAuditEvent({
+              action: 'customer.merged',
+              summary: `Merged "${result.removedName}" into "${selectedCustomer.name}"`,
+              meta: {
+                keeperId: result.keeperId,
+                remappedOrders: result.remappedOrders,
+                remappedDocuments: result.remappedDocuments
+              }
+            });
+            setMessage(
+              t('customers.mergeResult', {
+                orders: result.remappedOrders,
+                documents: result.remappedDocuments
+              })
+            );
+          }}
+        />
       )}
     </div>
   );

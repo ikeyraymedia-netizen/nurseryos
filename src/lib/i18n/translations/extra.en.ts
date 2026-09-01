@@ -416,6 +416,22 @@ const extra = {
     dedupeResult:
       'Removed {{removed}} duplicate(s) across {{groups}} name(s). Relinked {{orders}} order(s) and {{documents}} document(s).',
     dedupeFailed: 'Failed to remove duplicate customers.',
+    mergeCustomer: 'Merge with another customer',
+    mergeTitle: 'Merge customers',
+    mergeIntro:
+      'Combine another customer into {{name}}. Orders, estimates, and invoices move over; contact info from both is kept when possible.',
+    mergeSearch: 'Search customers…',
+    mergeSelect: 'Select customer to merge in…',
+    mergePreview: 'Combined profile preview',
+    mergeWillRelink: 'All orders and documents from the other customer will be re-linked here.',
+    mergeAction: 'Merge customers',
+    mergePickOther: 'Select the customer to merge in.',
+    mergeConfirm:
+      'Merge "{{remove}}" into "{{keep}}"?\n\nThe combined profile keeps {{keep}}\'s name. Orders and documents move over; the other customer record is removed.',
+    mergeSuccess: 'Customers merged. Orders and documents were re-linked.',
+    mergeResult:
+      'Customers merged. Re-linked {{orders}} order(s) and {{documents}} estimate/invoice(s).',
+    mergeFailed: 'Failed to merge customers.',
     backupDownloaded: 'Backup downloaded (JSON + CSV files).',
     backupFailed: 'Backup export failed.',
     noCustomersToDelete: 'No customers to delete.',

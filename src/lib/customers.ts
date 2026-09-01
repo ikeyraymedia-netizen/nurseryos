@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  deleteDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -11,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Customer } from '../types';
+import { parseCcEmails } from './email';
 
 let activeTenantId: string | null = null;
 
@@ -199,6 +201,150 @@ function pickKeeper(group: Customer[]): Customer {
     if (scoreDiff !== 0) return scoreDiff;
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   })[0];
+}
+
+function mergeEmailCc(a?: string, b?: string, primaryEmail?: string): string | undefined {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of [a, b]) {
+    const { cc } = parseCcEmails(raw, primaryEmail);
+    for (const email of cc) {
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(email);
+    }
+  }
+  return out.length ? out.join(', ') : undefined;
+}
+
+function mergeScalarField(
+  keeper: Customer,
+  other: Customer,
+  field: keyof Customer,
+  label: string,
+  conflicts: string[]
+): string | undefined {
+  const a = String(keeper[field] || '').trim();
+  const b = String(other[field] || '').trim();
+  if (a && b && a !== b) {
+    conflicts.push(`${label}: kept "${a}" (also had "${b}" on ${other.name})`);
+  }
+  return a || b || undefined;
+}
+
+/** Build merged customer profile — keeper id wins; fills blanks from other; conflicts go to notes. */
+export function buildMergedCustomer(keeper: Customer, other: Customer): Customer {
+  const conflicts: string[] = [];
+  const contactEmail = mergeScalarField(keeper, other, 'contactEmail', 'Email', conflicts);
+  const phone = mergeScalarField(keeper, other, 'phone', 'Phone', conflicts);
+  const billingName = mergeScalarField(keeper, other, 'billingName', 'Bill-to name', conflicts);
+  const billingAddress = mergeScalarField(keeper, other, 'billingAddress', 'Bill-to address', conflicts);
+  const shippingName = mergeScalarField(keeper, other, 'shippingName', 'Ship-to name', conflicts);
+  const shippingAddress =
+    mergeScalarField(keeper, other, 'shippingAddress', 'Ship-to address', conflicts) ||
+    mergeScalarField(keeper, other, 'receiverAddress', 'Ship-to address', conflicts);
+  const pointOfContact = mergeScalarField(keeper, other, 'pointOfContact', 'Contact', conflicts);
+  const paymentTerms = mergeScalarField(keeper, other, 'paymentTerms', 'Payment terms', conflicts);
+
+  const noteParts: string[] = [];
+  if (keeper.notes?.trim()) noteParts.push(keeper.notes.trim());
+  if (other.notes?.trim() && other.notes.trim() !== keeper.notes?.trim()) {
+    noteParts.push(`[${other.name}] ${other.notes.trim()}`);
+  }
+  if (conflicts.length) {
+    noteParts.push(`Merged from ${other.name}:\n${conflicts.map((c) => `• ${c}`).join('\n')}`);
+  }
+
+  return {
+    ...keeper,
+    name: keeper.name.trim() || other.name.trim(),
+    contactEmail,
+    contactEmailCc: mergeEmailCc(keeper.contactEmailCc, other.contactEmailCc, contactEmail),
+    phone,
+    billingName,
+    billingAddress,
+    shippingName,
+    shippingAddress,
+    receiverAddress: undefined,
+    pointOfContact,
+    paymentTerms,
+    notes: noteParts.length ? noteParts.join('\n\n') : undefined,
+    createdAt:
+      [keeper.createdAt, other.createdAt].filter(Boolean).sort()[0] || keeper.createdAt,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Merge `mergeId` into `keeperId`: combine profiles, re-link orders/documents, delete the extra record.
+ */
+export async function mergeCustomers(params: {
+  keeperId: string;
+  mergeId: string;
+}): Promise<{
+  remappedOrders: number;
+  remappedDocuments: number;
+  mergedCustomer: Customer;
+}> {
+  const tenantId = requireTenantId();
+  if (params.keeperId === params.mergeId) {
+    throw new Error('Pick two different customers to merge.');
+  }
+
+  const keeperSnap = await getDocs(customersCol(tenantId));
+  const customers: Customer[] = keeperSnap.docs.map((snap) => ({
+    id: snap.id,
+    ...(snap.data() as Omit<Customer, 'id'>)
+  }));
+  const keeper = customers.find((c) => c.id === params.keeperId);
+  const other = customers.find((c) => c.id === params.mergeId);
+  if (!keeper || !other) {
+    throw new Error('Customer not found.');
+  }
+
+  const merged = buildMergedCustomer(keeper, other);
+  const mergedName = merged.name;
+  const otherNameNorm = normalizeCustomerName(other.name);
+
+  let remappedOrders = 0;
+  const ordersSnap = await getDocs(ordersCol(tenantId));
+  for (const orderSnap of ordersSnap.docs) {
+    const data = orderSnap.data() as {
+      customerId?: string;
+      customerName?: string;
+    };
+    const byId = data.customerId === params.mergeId;
+    const byName =
+      !data.customerId &&
+      otherNameNorm &&
+      normalizeCustomerName(data.customerName || '') === otherNameNorm;
+    if (!byId && !byName) continue;
+    await updateDoc(orderSnap.ref, {
+      customerId: params.keeperId,
+      customerName: mergedName,
+      updatedAt: new Date().toISOString()
+    });
+    remappedOrders += 1;
+  }
+
+  let remappedDocuments = 0;
+  const docsSnap = await getDocs(documentsCol(tenantId));
+  for (const docSnap of docsSnap.docs) {
+    const data = docSnap.data() as { customerId?: string; customerName?: string };
+    if (data.customerId !== params.mergeId) continue;
+    await updateDoc(docSnap.ref, {
+      customerId: params.keeperId,
+      customerName: mergedName,
+      updatedAt: new Date().toISOString()
+    });
+    remappedDocuments += 1;
+  }
+
+  await updateCustomer(merged);
+  await deleteDoc(customerDoc(tenantId, params.mergeId));
+
+  return { remappedOrders, remappedDocuments, mergedCustomer: merged };
 }
 
 export function subscribeToCustomers(callback: (customers: Customer[]) => void) {

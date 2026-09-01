@@ -779,6 +779,7 @@ export function CustomersWorkspace({
 
   function estimateWeightLbs(doc: CustomerDocument): number {
     return (doc.items || []).reduce((total, item) => {
+      if (item.unavailable) return total;
       const match = containerWeights.find(
         (w) =>
           w.id.toLowerCase() === item.containerSize.toLowerCase() ||
@@ -822,18 +823,20 @@ export function CustomersWorkspace({
     setConvertingDocId(doc.id);
     setMessage(null);
     try {
-      const items: PlantOrderItem[] = (doc.items || []).map((item, index) => ({
-        id: item.id || `item-${Date.now()}-${index}`,
-        plantName: item.plantName,
-        containerSize: item.containerSize,
-        quantity: item.quantity,
-        loadedQuantity: 0,
-        unitPrice: item.unitPrice,
-        unitCost: item.unitCost,
-        notes: item.notes,
-        substitutes: item.substitutes,
-        vendor: item.vendor
-      }));
+      const items: PlantOrderItem[] = (doc.items || [])
+        .filter((item) => !item.unavailable)
+        .map((item, index) => ({
+          id: item.id || `item-${Date.now()}-${index}`,
+          plantName: item.plantName,
+          containerSize: item.containerSize,
+          quantity: item.quantity,
+          loadedQuantity: 0,
+          unitPrice: item.unitPrice,
+          unitCost: item.unitCost,
+          notes: item.notes,
+          substitutes: item.substitutes,
+          vendor: item.vendor
+        }));
 
       if (items.length === 0) {
         throw new Error(t('customers.noLineItems'));

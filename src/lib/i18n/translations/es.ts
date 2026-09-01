@@ -238,6 +238,9 @@ const es: TranslationDict = {
     invoiceNotSaved:
       'Factura no guardada al cliente. Los precios están en este pedido — abra la factura y toque Guardar en Cliente.',
     selectSalesRep: 'Seleccionar representante…',
+    directShipToggleHint:
+      'El proveedor envía directo al cliente. Oculto para supervisores, cargadores y personal de patio.',
+    directShipRemovingFromTruck: 'Al guardar se quitará este pedido del camión.',
     stagingLocation: 'Ubicación de preparación',
     stagingHint: 'Dónde se prepara este pedido en el patio',
     saving: 'GUARDANDO…',

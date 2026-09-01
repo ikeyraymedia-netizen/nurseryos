@@ -232,6 +232,9 @@ const en = {
     invoiceNotSaved:
       'Invoice not saved to customer. Pricing is on this order — open invoice and tap Save to Customer.',
     selectSalesRep: 'Select sales rep…',
+    directShipToggleHint:
+      'Vendor ships straight to the customer. Hidden from supervisors, loaders, and yard staff.',
+    directShipRemovingFromTruck: 'Saving will remove this order from its truck.',
     stagingLocation: 'Order Staging Location',
     stagingHint: 'Where this plant order is staged out in the yard',
     saving: 'SAVING…',

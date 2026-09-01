@@ -1026,6 +1026,52 @@ export async function updateCustomerOrder(order: CustomerOrder): Promise<void> {
   }
 }
 
+/** Mark/unmark direct ship; removes the order from any truck when enabled. */
+export async function setOrderDirectShip(order: CustomerOrder, directShip: boolean): Promise<void> {
+  const tenantId = requireTenantId();
+  const trucks = getLocalTrucks();
+  const affectedTrucks: Truck[] = [];
+  const updatedTrucks = directShip
+    ? trucks.map((t) => {
+        if (!(t.orderIds || []).includes(order.id)) return t;
+        const next = { ...t, orderIds: t.orderIds.filter((id) => id !== order.id) };
+        affectedTrucks.push(next);
+        return next;
+      })
+    : trucks;
+
+  const updatedOrder: CustomerOrder = {
+    ...order,
+    directShip: directShip ? true : undefined,
+    truckId: directShip ? null : order.truckId
+  };
+
+  const orders = getLocalOrders();
+  saveLocalOrders(orders.map((o) => (o.id === order.id ? updatedOrder : o)));
+  if (affectedTrucks.length > 0) saveLocalTrucks(updatedTrucks);
+
+  if (fallbackActive) return;
+
+  try {
+    const batch = writeBatch(db);
+    batch.set(
+      orderDoc(tenantId, order.id),
+      {
+        directShip: directShip ? true : null,
+        truckId: directShip ? null : order.truckId || null
+      },
+      { merge: true }
+    );
+    for (const truck of affectedTrucks) {
+      batch.update(truckDoc(tenantId, truck.id), { orderIds: truck.orderIds });
+    }
+    await batch.commit();
+  } catch (error: any) {
+    console.error('Error updating direct ship on Firestore:', error);
+    activateLocalFallback(error.message || 'Firestore update failed');
+  }
+}
+
 export async function deleteCustomerOrder(orderId: string): Promise<void> {
   const tenantId = requireTenantId();
   const orders = getLocalOrders();

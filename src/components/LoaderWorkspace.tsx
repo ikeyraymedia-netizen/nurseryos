@@ -30,8 +30,10 @@ import {
   updateOrderItemCost,
   markAllItemsAsLoaded,
   resetOrderProgress,
+  setOrderDirectShip,
   updateCustomerOrder
 } from '../lib/db';
+import { isDirectShipOrder } from '../lib/orderVisibility';
 import { notifyInventorySyncIssue } from '../lib/inventory';
 import { orderNeedsInvoiceSave } from '../lib/invoicing';
 import { listAllDocuments } from '../lib/documents';
@@ -137,6 +139,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
 
   const [stagedLocation, setStagedLocation] = useState(order.stagedLocation || '');
   const [savingStagedLocation, setSavingStagedLocation] = useState(false);
+  const [directShipBusy, setDirectShipBusy] = useState(false);
   const saveTimeoutRef = React.useRef<any>(null);
 
   React.useEffect(() => {
@@ -171,6 +174,19 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         setSavingStagedLocation(false);
       }
     }, 800);
+  };
+
+  const handleDirectShipToggle = async (enabled: boolean) => {
+    if (!permissions.canViewDirectShipOrders || directShipBusy) return;
+    if (enabled === isDirectShipOrder(order)) return;
+    setDirectShipBusy(true);
+    try {
+      await setOrderDirectShip(order, enabled);
+    } catch (err) {
+      console.error('Failed to update direct ship:', err);
+    } finally {
+      setDirectShipBusy(false);
+    }
   };
 
   // Form states for adding a plant to existing order
@@ -645,6 +661,31 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           </p>
         </div>
       )}
+
+      {permissions.canViewDirectShipOrders ? (
+        <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-3 mb-5 shadow-sm">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isDirectShipOrder(order)}
+              disabled={directShipBusy}
+              onChange={(e) => void handleDirectShipToggle(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-700 focus:ring-sky-500 disabled:opacity-50"
+            />
+            <span>
+              <span className="block text-sm font-bold text-gray-900">{t('upload.directShipLabel')}</span>
+              <span className="block text-[10px] text-gray-600 leading-snug mt-0.5">
+                {t('loader.directShipToggleHint')}
+              </span>
+              {order.truckId && !isDirectShipOrder(order) ? (
+                <span className="block text-[10px] text-amber-700 leading-snug mt-1">
+                  {t('loader.directShipRemovingFromTruck')}
+                </span>
+              ) : null}
+            </span>
+          </label>
+        </div>
+      ) : null}
 
       {/* Staging Location Card */}
       <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">

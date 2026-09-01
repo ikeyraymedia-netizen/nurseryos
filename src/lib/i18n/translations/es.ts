@@ -124,6 +124,7 @@ const es: TranslationDict = {
     localActive: 'Modo local',
     weights: 'Pesos',
     team: 'Equipo',
+    notifications: 'Alertas',
     sellerHome: 'Consola vendedor',
     packages: 'Paquetes',
     pendingOrders: 'Pedidos pendientes',

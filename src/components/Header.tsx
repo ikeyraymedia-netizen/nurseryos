@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, CheckCircle2, LogOut, CloudUpload, RefreshCw } from 'lucide-react';
+import { Clock, CheckCircle2, LogOut, CloudUpload, RefreshCw, Bell } from 'lucide-react';
 import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
@@ -14,6 +14,7 @@ interface HeaderProps {
   member?: Pick<TenantMember, 'role' | 'roles'> | null;
   onSignOut?: () => Promise<void> | void;
   onManageTeam?: () => void;
+  onNotificationSettings?: () => void;
   onManagePackages?: () => void;
   onBackToSeller?: () => void;
   onSelectOrder?: (orderId: string) => void;
@@ -55,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   member,
   onSignOut,
   onManageTeam,
+  onNotificationSettings,
   onManagePackages,
   onBackToSeller,
   onSelectOrder
@@ -134,6 +136,16 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
+              {onNotificationSettings && (
+                <button
+                  type="button"
+                  onClick={onNotificationSettings}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300/50 bg-emerald-400/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 hover:bg-emerald-400/25"
+                >
+                  <Bell className="h-3.5 w-3.5 shrink-0" />
+                  {t('header.notifications')}
+                </button>
+              )}
               {onManageTeam && (
                 <button
                   type="button"

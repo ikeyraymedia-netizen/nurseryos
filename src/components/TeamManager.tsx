@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight, Plus, Bell } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight, Plus } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
 import {
   createTeamInvite,
@@ -42,16 +42,7 @@ import {
 } from '../lib/email';
 import { tenantHasModule } from '../lib/modules';
 import { AppLocale, useRoleLabel, useT } from '../lib/i18n';
-import {
-  disablePushNotifications,
-  enablePushNotifications,
-  isPushEnabledLocally,
-  loadPushConfig,
-  pushPermissionState,
-  sendTestPushNotification,
-  isStandalonePwa,
-  isIosDevice
-} from '../lib/pushNotifications';
+import { PushNotificationPanel } from './PushNotificationPanel';
 
 interface TeamManagerProps {
   tenant: Tenant;
@@ -87,10 +78,6 @@ export function TeamManager({
   const [message, setMessage] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushConfigured, setPushConfigured] = useState<boolean | null>(null);
-  const [pushEnabled, setPushEnabled] = useState(() => isPushEnabledLocally());
-  const [pushPermission, setPushPermission] = useState(() => pushPermissionState());
   const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
   const [qbBusy, setQbBusy] = useState(false);
   const [qbError, setQbError] = useState<string | null>(null);
@@ -186,10 +173,6 @@ export function TeamManager({
       setStripeError(err?.message || t('teamExtra.loadStripeFailed'));
     }
   }
-
-  useEffect(() => {
-    void loadPushConfig().then(setPushConfigured);
-  }, []);
 
   useEffect(() => {
     refresh().catch((err) => setError(err?.message || t('teamExtra.loadTeamFailed')));
@@ -740,104 +723,7 @@ export function TeamManager({
             </select>
           </div>
 
-          <div className="rounded-xl border border-ink-100 bg-ink-50/50 px-3 py-3">
-            <p className="text-xs font-bold uppercase text-ink-800 flex items-center gap-1.5">
-              <Bell className="h-3.5 w-3.5" />
-              {t('teamExtra.pushNotifications')}
-            </p>
-            <p className="text-[11px] text-gray-600 mb-2 leading-relaxed">{t('teamExtra.pushNotificationsHint')}</p>
-            {isIosDevice() && !isStandalonePwa() ? (
-              <p className="text-[11px] text-amber-700 mb-2 leading-relaxed">{t('teamExtra.pushIosHomeScreen')}</p>
-            ) : null}
-            {!pushConfigured ? (
-              <p className="text-[11px] text-amber-700">
-                {pushConfigured === null ? t('common.loading') : t('teamExtra.pushNotConfigured')}
-              </p>
-            ) : pushPermission === 'unsupported' ? (
-              <p className="text-[11px] text-gray-500">{t('teamExtra.pushUnsupported')}</p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                {pushEnabled && pushPermission === 'granted' ? (
-                  <>
-                    <span className="text-[11px] text-emerald-700 font-medium">{t('teamExtra.pushEnabled')}</span>
-                    <button
-                      type="button"
-                      disabled={pushBusy || busy}
-                      onClick={() => {
-                        setPushBusy(true);
-                        setError(null);
-                        void disablePushNotifications()
-                          .then(() => {
-                            setPushEnabled(false);
-                            setMessage(t('teamExtra.pushDisable'));
-                          })
-                          .catch(() => setError(t('teamExtra.pushDisableFailed')))
-                          .finally(() => setPushBusy(false));
-                      }}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      {t('teamExtra.pushDisable')}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={pushBusy || busy}
-                    onClick={() => {
-                      setPushBusy(true);
-                      setError(null);
-                      void enablePushNotifications()
-                        .then((result) => {
-                          setPushPermission(pushPermissionState());
-                          if (result === 'granted') {
-                            setPushEnabled(true);
-                            setMessage(t('teamExtra.pushEnabled'));
-                          } else if (result === 'denied') {
-                            setPushEnabled(false);
-                            setError(t('teamExtra.pushDenied'));
-                          } else {
-                            setError(t('teamExtra.pushUnsupported'));
-                          }
-                        })
-                        .catch(() => setError(t('teamExtra.pushEnableFailed')))
-                        .finally(() => setPushBusy(false));
-                    }}
-                    className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-                  >
-                    {t('teamExtra.pushEnable')}
-                  </button>
-                )}
-                {pushPermission === 'denied' && !pushEnabled ? (
-                  <span className="text-[11px] text-amber-700">{t('teamExtra.pushDenied')}</span>
-                ) : null}
-                {pushEnabled && pushPermission === 'granted' ? (
-                  <button
-                    type="button"
-                    disabled={pushBusy || busy}
-                    onClick={() => {
-                      setPushBusy(true);
-                      setError(null);
-                      void sendTestPushNotification(tenant.id)
-                        .then((result) => {
-                          if (result.ok) {
-                            setMessage(t('teamExtra.pushTestSent'));
-                          } else {
-                            setError(result.error || t('teamExtra.pushTestFailed'));
-                          }
-                        })
-                        .finally(() => setPushBusy(false));
-                    }}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    {t('teamExtra.pushTest')}
-                  </button>
-                ) : null}
-              </div>
-            )}
-            {pushConfigured ? (
-              <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">{t('teamExtra.pushSelfActionHint')}</p>
-            ) : null}
-          </div>
+          <PushNotificationPanel tenantId={tenant.id} disabled={busy} />
 
           {onOpenWeights && (
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">

@@ -118,6 +118,7 @@ const en = {
     localActive: 'Local Active',
     weights: 'Weights',
     team: 'Team',
+    notifications: 'Alerts',
     sellerHome: 'Seller home',
     packages: 'Packages',
     pendingOrders: 'Pending Orders',

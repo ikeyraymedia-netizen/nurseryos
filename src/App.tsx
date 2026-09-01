@@ -12,6 +12,7 @@ import { AuthGate } from './components/AuthGate';
 import { InventoryWorkspace } from './components/InventoryWorkspace';
 import { InventoryMatchProvider } from './components/InventoryMatchProvider';
 import { TeamManager } from './components/TeamManager';
+import { PushNotificationModal } from './components/PushNotificationModal';
 import { CustomersWorkspace } from './components/CustomersWorkspace';
 import { ReportsWorkspace } from './components/ReportsWorkspace';
 import { TasksWorkspace } from './components/TasksWorkspace';
@@ -390,6 +391,7 @@ function NurseryApp({
   const [isEditingTruck, setIsEditingTruck] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showTeamManager, setShowTeamManager] = useState(false);
+  const [showPushSettings, setShowPushSettings] = useState(false);
   const [showWeightsEditor, setShowWeightsEditor] = useState(false);
 
   useEffect(() => {
@@ -812,6 +814,7 @@ function NurseryApp({
           role={memberState.role}
           member={memberState}
           onSignOut={onSignOut}
+          onNotificationSettings={() => setShowPushSettings(true)}
           onManageTeam={
             permissions.canManageTeam ? () => setShowTeamManager(true) : undefined
           }
@@ -847,6 +850,12 @@ function NurseryApp({
             }
           />
         )}
+        {showPushSettings && (
+          <PushNotificationModal
+            tenantId={tenant.id}
+            onClose={() => setShowPushSettings(false)}
+          />
+        )}
         {showWeightsEditor && (
           <WeightsEditor
             containerWeights={containerWeights}
@@ -871,6 +880,7 @@ function NurseryApp({
             role={memberState.role}
             member={memberState}
             onSignOut={onSignOut}
+            onNotificationSettings={() => setShowPushSettings(true)}
             onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
             onManagePackages={undefined}
             onBackToSeller={onBackToSeller}
@@ -956,6 +966,12 @@ function NurseryApp({
             }
           />
         )}
+        {showPushSettings && (
+          <PushNotificationModal
+            tenantId={tenant.id}
+            onClose={() => setShowPushSettings(false)}
+          />
+        )}
         {showWeightsEditor && (
           <WeightsEditor
             containerWeights={containerWeights}
@@ -979,6 +995,7 @@ function NurseryApp({
         role={memberState.role}
         member={memberState}
         onSignOut={onSignOut}
+        onNotificationSettings={() => setShowPushSettings(true)}
         onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
         onManagePackages={undefined}
         onBackToSeller={onBackToSeller}
@@ -1367,6 +1384,13 @@ function NurseryApp({
                 }
               : undefined
           }
+        />
+      )}
+
+      {showPushSettings && (
+        <PushNotificationModal
+          tenantId={tenant.id}
+          onClose={() => setShowPushSettings(false)}
         />
       )}
 

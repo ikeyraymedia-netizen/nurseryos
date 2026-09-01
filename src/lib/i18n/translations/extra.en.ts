@@ -879,7 +879,13 @@ const extra = {
     splitOpen: 'Split into invoices…',
     splitRemainingBanner: '{{invoiced}} of {{total}} plants invoiced · {{remaining}} remaining',
     splitFullyInvoiced: 'This order is fully invoiced.',
-    splitEven: 'Split evenly',
+    splitFullyInvoicedHint:
+      'To split this order into multiple invoices, delete the full invoice under Customers first (or use Split before saving).',
+    fullSaveConfirm:
+      'Save one invoice for all {{n}} remaining plants?\n\nUse “Split into invoices” if you only want to bill part of this order now.',
+    saveFullInvoice: 'Save full invoice',
+    savePricingOnly: 'Save pricing only',
+    pricingSaved: 'Pricing saved to order',
     splitPct: 'Split by % of truck used',
     keepFreight: 'Keep all freight on this invoice',
     billTo: 'BILL TO',

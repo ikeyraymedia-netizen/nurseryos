@@ -891,6 +891,13 @@ const extra = {
     splitOpen: 'Dividir en facturas…',
     splitRemainingBanner: '{{invoiced}} de {{total}} plantas facturadas · {{remaining}} restantes',
     splitFullyInvoiced: 'Este pedido está totalmente facturado.',
+    splitFullyInvoicedHint:
+      'Para dividir en varias facturas, elimine la factura completa en Clientes primero (o use Dividir antes de guardar).',
+    fullSaveConfirm:
+      '¿Guardar una factura por las {{n}} plantas restantes?\n\nUse “Dividir en facturas” si solo quiere facturar parte de este pedido ahora.',
+    saveFullInvoice: 'Guardar factura completa',
+    savePricingOnly: 'Solo guardar precios',
+    pricingSaved: 'Precios guardados en el pedido',
     splitEven: 'Dividir equitativamente',
     splitPct: 'Dividir por % de camión usado',
     keepFreight: 'Mantener todo el flete en esta factura',

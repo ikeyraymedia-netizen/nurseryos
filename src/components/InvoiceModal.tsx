@@ -1271,7 +1271,74 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       setShowFreightAllocation(true);
       return;
     }
+    if (
+      documentType === 'invoice' &&
+      !isCreditMemo &&
+      !savedDocumentId &&
+      !order.id.startsWith('preview-') &&
+      remainingPlantCount > 0
+    ) {
+      const ok = window.confirm(
+        t('invoice.fullSaveConfirm', { n: remainingPlantCount })
+      );
+      if (!ok) return;
+    }
     void saveInvoice();
+  };
+
+  const savePricingOnly = async () => {
+    if (order.id.startsWith('preview-') || isCreditMemo) return;
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      const updatedItems = workingItems.map((item) => ({
+        ...item,
+        unitPrice:
+          itemPrices[item.id] !== undefined
+            ? itemPrices[item.id]
+            : getDefaultPriceForSize(item.containerSize),
+        unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost
+      }));
+
+      const invoiceDetailsPayload: InvoiceDetails = {
+        invoiceNumber,
+        invoiceDate,
+        dueDate,
+        poNumber: poNumber.trim() || undefined,
+        paymentTerms,
+        taxRate,
+        freightCharge,
+        discount,
+        notes: invoiceNotes
+      };
+
+      const mergedItems = order.items.map((item) => {
+        const fromWorking = updatedItems.find((w) => w.id === item.id);
+        if (!fromWorking) return item;
+        return {
+          ...item,
+          unitPrice: fromWorking.unitPrice,
+          unitCost: fromWorking.unitCost,
+          notes: fromWorking.notes,
+          vendor: fromWorking.vendor
+        };
+      });
+
+      await updateCustomerOrder({
+        ...order,
+        items: mergedItems,
+        invoiceDetails: invoiceDetailsPayload,
+        customerEmail: customerEmail || order.customerEmail,
+        customerEmailCc: parseCcEmails(ccEmails, customerEmail).cc.join(', ') || undefined,
+        owner: salesRep.trim() || order.owner || undefined
+      });
+      setSaveSuccess(true);
+      window.setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : t('invoice.saveFailedGeneric', { message: '' }));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteDocument = async () => {
@@ -1326,6 +1393,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   ) => {
     setIsSaving(true);
     setSaveSuccess(false);
+
+    const creatingNewDocument = !savedDocumentId;
 
     try {
       const currentFreight =
@@ -1463,29 +1532,38 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       }
 
       if (!order.id.startsWith('preview-') && !isCreditOnly && plantOrderId === order.id) {
-        if (documentType === 'invoice') {
-          const invoicedLines = updatedItems.map((item) => ({
-            id: item.id,
-            quantity: getItemQty(item)
-          }));
-          const mergedItems = order.items.map((item) => {
-            const fromWorking = updatedItems.find((w) => w.id === item.id);
-            if (!fromWorking) return item;
-            return {
-              ...item,
-              unitPrice: fromWorking.unitPrice,
-              unitCost: fromWorking.unitCost,
-              notes: fromWorking.notes,
-              vendor: fromWorking.vendor
-            };
-          });
-          await updateCustomerOrder({
-            ...updatedOrder,
-            items: bumpInvoicedQuantities(mergedItems, invoicedLines)
-          });
-        } else {
-          await updateCustomerOrder(updatedOrder);
-        }
+        const mergedItems = order.items.map((item) => {
+          const fromWorking = updatedItems.find((w) => w.id === item.id);
+          if (!fromWorking) return item;
+          return {
+            ...item,
+            unitPrice: fromWorking.unitPrice,
+            unitCost: fromWorking.unitCost,
+            notes: fromWorking.notes,
+            vendor: fromWorking.vendor
+          };
+        });
+        const itemsForOrder =
+          documentType === 'invoice' && creatingNewDocument
+            ? bumpInvoicedQuantities(
+                mergedItems,
+                updatedItems.map((item) => ({
+                  id: item.id,
+                  quantity: getItemQty(item)
+                }))
+              )
+            : mergedItems;
+        await updateCustomerOrder({
+          ...updatedOrder,
+          items: itemsForOrder
+        });
+      } else if (
+        documentType !== 'invoice' &&
+        !order.id.startsWith('preview-') &&
+        !isCreditOnly &&
+        plantOrderId === order.id
+      ) {
+        await updateCustomerOrder(updatedOrder);
       }
 
       const lineItems = updatedItems.map((item) => ({
@@ -2875,7 +2953,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               totalOrderPlants > 0 && (
                 <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2.5 text-[11px] text-sky-950">
                   {orderFullyBilled ? (
-                    <p className="font-semibold">{t('invoice.splitFullyInvoiced')}</p>
+                    <div>
+                      <p className="font-semibold">{t('invoice.splitFullyInvoiced')}</p>
+                      <p className="text-sky-800/80 mt-1">{t('invoice.splitFullyInvoicedHint')}</p>
+                    </div>
                   ) : (
                     <p className="font-semibold">
                       {t('invoice.splitRemainingBanner', {
@@ -2908,6 +2989,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 </button>
               )}
 
+            {documentType === 'invoice' &&
+              !isCreditMemo &&
+              !order.id.startsWith('preview-') &&
+              !savedDocumentId && (
+                <button
+                  type="button"
+                  onClick={() => void savePricingOnly()}
+                  disabled={isSaving}
+                  className="w-full py-2.5 px-4 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center space-x-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>
+                    {isSaving ? t('invoice.saving') : t('invoice.savePricingOnly')}
+                  </span>
+                </button>
+              )}
+
             <button
               onClick={handleSaveInvoice}
               disabled={isSaving || (documentType === 'invoice' && orderFullyBilled && !savedDocumentId)}
@@ -2920,7 +3018,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               {saveSuccess ? (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>{t('invoice.savedToCustomer')}</span>
+                  <span>
+                    {savedDocumentId
+                      ? t('invoice.savedToCustomer')
+                      : t('invoice.pricingSaved')}
+                  </span>
                 </>
               ) : (
                 <>
@@ -2931,7 +3033,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       : savedDocumentId
                         ? t('invoice.updateDoc', { docLabel })
                         : customer?.id || order.customerId
-                          ? `Save ${docLabel} to Customer`
+                          ? documentType === 'invoice'
+                            ? t('invoice.saveFullInvoice')
+                            : `Save ${docLabel} to Customer`
                           : t('invoice.savePricing')}
                   </span>
                 </>

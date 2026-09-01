@@ -225,6 +225,7 @@ const en = {
   loader: {
     createEstimate: 'Create Estimate',
     createInvoice: 'Create Invoice',
+    generateBol: 'Generate Bill of Lading',
     resetCounts: 'Reset counts?',
     loadAllPlants: 'Load all plants?',
     resetTruck: 'Reset Truck',

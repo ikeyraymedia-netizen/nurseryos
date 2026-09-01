@@ -231,6 +231,7 @@ const es: TranslationDict = {
   loader: {
     createEstimate: 'Crear presupuesto',
     createInvoice: 'Crear factura',
+    generateBol: 'Generar conocimiento de embarque',
     resetCounts: '¿Restablecer conteos?',
     loadAllPlants: '¿Cargar todas las plantas?',
     resetTruck: 'Restablecer camión',

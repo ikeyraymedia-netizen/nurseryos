@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FileText,
   ListTodo,
@@ -33,13 +33,18 @@ import {
   setOrderDirectShip,
   updateCustomerOrder
 } from '../lib/db';
-import { isDirectShipOrder } from '../lib/orderVisibility';
+import {
+  buildStandaloneBolTruck,
+  canGenerateStandaloneBol,
+  isDirectShipOrder
+} from '../lib/orderVisibility';
 import { notifyInventorySyncIssue } from '../lib/inventory';
 import { orderNeedsInvoiceSave } from '../lib/invoicing';
 import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { InvoiceModal } from './InvoiceModal';
+import { BillOfLadingModal } from './BillOfLadingModal';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { notifyPushEvent } from '../lib/pushNotifications';
@@ -75,6 +80,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showLoadAllConfirm, setShowLoadAllConfirm] = useState(false);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [isBOLOpen, setIsBOLOpen] = useState(false);
+  const standaloneBolTruck = useMemo(
+    () => (canGenerateStandaloneBol(order) ? buildStandaloneBolTruck(order) : null),
+    [order]
+  );
   const [documentType, setDocumentType] = useState<CustomerDocumentType>('invoice');
   const [editingVendorItemId, setEditingVendorItemId] = useState<string | null>(null);
   const [tempVendorName, setTempVendorName] = useState('');
@@ -557,6 +567,17 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 <span>{t('loader.createInvoice')}</span>
               </button>
             </>
+          )}
+
+          {permissions.canViewBOL && standaloneBolTruck && (
+            <button
+              type="button"
+              onClick={() => setIsBOLOpen(true)}
+              className="px-3 py-1.5 bg-coral-400 hover:bg-coral-300 text-slate-950 border border-white/50 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>{t('loader.generateBol')}</span>
+            </button>
           )}
 
           {permissions.canEditOrders && showResetConfirm ? (
@@ -1366,6 +1387,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             <option key={vendor} value={vendor} />
           ))}
       </datalist>
+
+      {permissions.canViewBOL && standaloneBolTruck && (
+        <BillOfLadingModal
+          isOpen={isBOLOpen}
+          onClose={() => setIsBOLOpen(false)}
+          truck={standaloneBolTruck}
+          orders={[order]}
+          customers={customers}
+          containerWeights={containerWeights}
+          nurseryName={nurseryName}
+          nurseryAddress={nurseryAddress}
+          nurseryLogoSrc={nurseryLogoSrc}
+          directShipMode
+        />
+      )}
 
       {permissions.canViewInvoices && (
       <InvoiceModal

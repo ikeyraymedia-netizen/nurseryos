@@ -24,6 +24,8 @@ interface BillOfLadingModalProps {
   nurseryLogoSrc?: string | null;
   /** Persist BOL form fields onto the truck so addresses survive closing. */
   onSaveBolDraft?: (draft: TruckBolDraft) => Promise<void>;
+  /** Single-order direct ship — no consolidated BOL or draft save. */
+  directShipMode?: boolean;
 }
 
 function defaultShipperAddress(nurseryName: string, nurseryAddress: string, fallback: string) {
@@ -41,12 +43,14 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
   nurseryLogoSrc = null,
-  onSaveBolDraft
+  onSaveBolDraft,
+  directShipMode = false
 }) => {
   const t = useT();
   const { locale } = useLocale();
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const truckName = String(truck?.name || t('bol.defaultTruckName'));
+  const directShipBol = Boolean(directShipMode);
   const safeOrders = Array.isArray(orders) ? orders : [];
 
   // Delivery / drop sequence: last loaded is Stop 1
@@ -200,7 +204,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       (draft.selectedBOLType === 'consolidated' ||
         sortedOrders.some((o) => o.id === draft.selectedBOLType))
         ? draft.selectedBOLType
-        : 'consolidated';
+        : directShipBol && sortedOrders.length === 1
+          ? sortedOrders[0].id
+          : 'consolidated';
 
     setSelectedBOLType(nextType);
     setBlindBol(Boolean(draft?.blindBol));
@@ -755,27 +761,29 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             </button>
 
             {/* BOL Type Selection */}
-            <div>
-              <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
-                {t('bol.selection')}
-              </label>
-              <select
-                value={selectedBOLType}
-                onChange={(e) => handleBolTypeChange(e.target.value)}
-                className="w-full px-3 py-2 border border-ink-200 rounded-xl focus:outline-none focus:border-ink-500 bg-ink-50/40 font-semibold text-gray-800 text-xs"
-              >
-                <option value="consolidated">{t('bol.consolidated')}</option>
-                {sortedOrders.map((order, idx) => (
-                  <option key={order.id} value={order.id}>
-                    {t('bol.stopOrder', {
-                      n: idx + 1,
-                      num: orderStopRef(order),
-                      customer: String(order.customerName || t('reports.customer')).slice(0, 25)
-                    })}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!directShipBol && (
+              <div>
+                <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
+                  {t('bol.selection')}
+                </label>
+                <select
+                  value={selectedBOLType}
+                  onChange={(e) => handleBolTypeChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-ink-200 rounded-xl focus:outline-none focus:border-ink-500 bg-ink-50/40 font-semibold text-gray-800 text-xs"
+                >
+                  <option value="consolidated">{t('bol.consolidated')}</option>
+                  {sortedOrders.map((order, idx) => (
+                    <option key={order.id} value={order.id}>
+                      {t('bol.stopOrder', {
+                        n: idx + 1,
+                        num: orderStopRef(order),
+                        customer: String(order.customerName || t('reports.customer')).slice(0, 25)
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">

@@ -860,8 +860,8 @@ const extra = {
     deletePaidConfirm:
       '¿Eliminar la factura pagada {{doc}}? Esto elimina el registro aquí y en QuickBooks si está sincronizado. Se perderá el historial de pago.',
     saving: 'Guardando...',
+    saveInvoice: 'Guardar factura',
     saveToCustomer: 'Guardar {{docLabel}} en cliente',
-    savePricing: 'Guardar precios en pedido',
     hideEmail: 'Ocultar opciones de correo',
     emailCustomer: 'Enviar {{docLabel}} al cliente por correo',
     customerEmail: 'Correo del cliente',

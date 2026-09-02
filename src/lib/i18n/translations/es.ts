@@ -237,7 +237,7 @@ const es: TranslationDict = {
     resetTruck: 'Restablecer camión',
     loadAll: 'Cargar todo',
     invoiceNotSaved:
-      'Factura no guardada al cliente. Los precios están en este pedido — abra la factura y toque Guardar en Cliente.',
+      'Factura no guardada al cliente. Abra la factura y toque Guardar factura.',
     selectSalesRep: 'Seleccionar representante…',
     directShipToggleHint:
       'El proveedor envía directo al cliente. Oculto para supervisores, cargadores y personal de patio.',

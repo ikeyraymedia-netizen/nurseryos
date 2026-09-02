@@ -54,12 +54,12 @@ export function orderHasSavedInvoice(
   return documents.some((d) => d.type === 'invoice' && d.orderId === orderId);
 }
 
-/** Priced order that still has plants not yet on a saved invoice. */
+/** Priced order that does not yet have a saved invoice on the customer record. */
 export function orderNeedsInvoiceSave(
   order: CustomerOrder,
   documents: Array<Pick<CustomerDocument, 'type' | 'orderId'>>
 ): boolean {
-  return orderHasPricing(order) && !orderFullyInvoiced(order);
+  return orderHasPricing(order) && !orderHasSavedInvoice(order.id, documents);
 }
 
 export function buildOrdersNeedingInvoiceSet(

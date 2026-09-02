@@ -231,7 +231,7 @@ const en = {
     resetTruck: 'Reset Truck',
     loadAll: 'Load All',
     invoiceNotSaved:
-      'Invoice not saved to customer. Pricing is on this order — open invoice and tap Save to Customer.',
+      'Invoice not saved to customer. Open invoice and tap Save Invoice.',
     selectSalesRep: 'Select sales rep…',
     directShipToggleHint:
       'Vendor ships straight to the customer. Hidden from supervisors, loaders, and yard staff.',

@@ -849,8 +849,8 @@ const extra = {
     deletePaidConfirm:
       'Delete paid invoice {{doc}}? This removes the record here and in QuickBooks if synced. Payment history will be lost.',
     saving: 'Saving...',
+    saveInvoice: 'Save Invoice',
     saveToCustomer: 'Save {{docLabel}} to Customer',
-    savePricing: 'Save Pricing to Order',
     hideEmail: 'Hide Email Options',
     emailCustomer: 'Email {{docLabel}} to Customer',
     customerEmail: 'Customer Email',

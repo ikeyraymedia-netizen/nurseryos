@@ -1658,17 +1658,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             tenantId,
             documentId: persistedId
           });
-          setLiveDocument((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  qboInvoiceId: result.qboInvoiceId,
-                  qboInvoiceLink: result.qboInvoiceLink || prev.qboInvoiceLink,
-                  qboSyncedAt: new Date().toISOString()
-                }
-              : prev
-          );
-          if (result.qboInvoiceLink) setPayLinkUrl(result.qboInvoiceLink);
+          await applyQboPushResult(result);
           setQbPushMessage(
             result.updated ? t('invoice.qbSaveUpdated') : t('invoice.emailAlsoSyncedQb')
           );

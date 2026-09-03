@@ -293,6 +293,130 @@ function formatNurseryDocNumber(
   return String(n);
 }
 
+function qboDocNumbersEqual(a: unknown, b: unknown): boolean {
+  const x = sanitizeQbString(a, 21);
+  const y = sanitizeQbString(b, 21);
+  if (!x || !y) return !x && !y;
+  if (x === y) return true;
+  const strip = (s: string) => s.replace(/^(?:INV|EST|CM)[- ]?/i, '');
+  return strip(x) === strip(y);
+}
+
+async function qboAllowsCustomDocNumbers(tenantId: string): Promise<boolean | null> {
+  try {
+    const result = await qboRequest<any>(
+      tenantId,
+      'GET',
+      '/preferences?minorversion=65'
+    );
+    const flag = result?.Preferences?.SalesFormsPrefs?.CustomTxnNumbers;
+    return typeof flag === 'boolean' ? flag : null;
+  } catch (err: any) {
+    console.warn('[quickbooks] could not read CustomTxnNumbers preference', err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * Sparse invoice/estimate updates often leave DocNumber unchanged.
+ * Write the number in a dedicated follow-up (sparse, then full object).
+ */
+async function persistQboDocNumber(
+  tenantId: string,
+  kind: 'invoice' | 'estimate' | 'credit_memo',
+  qboId: string,
+  requestedRaw: string
+): Promise<{ entity: any; docNumber: string | null }> {
+  const requested = sanitizeQbString(requestedRaw, 21);
+  const spec = qboTxnSpec(kind);
+  const latest = await getQboSalesTxn(tenantId, kind, qboId);
+  if (!latest?.Id) {
+    return { entity: null, docNumber: null };
+  }
+  if (!requested || qboDocNumbersEqual(latest.DocNumber, requested)) {
+    return { entity: latest, docNumber: latest.DocNumber ? String(latest.DocNumber) : requested };
+  }
+
+  const attempt = async (body: Record<string, any>) =>
+    qboRequest<any>(tenantId, 'POST', `/${spec.path}?minorversion=65`, body);
+
+  const applyFromWrite = (written: any, fallback: any) => {
+    const entity = written?.[spec.entity] || fallback;
+    return {
+      entity,
+      docNumber: entity?.DocNumber ? String(entity.DocNumber) : requested
+    };
+  };
+
+  try {
+    const sparseWrite = await attempt({
+      Id: String(latest.Id),
+      SyncToken: String(latest.SyncToken ?? '0'),
+      sparse: true,
+      DocNumber: requested
+    });
+    const sparseEntity = sparseWrite?.[spec.entity];
+    if (qboDocNumbersEqual(sparseEntity?.DocNumber ?? latest.DocNumber, requested)) {
+      return applyFromWrite(sparseWrite, latest);
+    }
+  } catch (err) {
+    if (isDuplicateDocNumberError(err)) {
+      throw Object.assign(
+        new Error(
+          `QuickBooks already has a document numbered ${requested}. Pick a different invoice number.`
+        ),
+        { status: 409 }
+      );
+    }
+    console.warn('[quickbooks] sparse DocNumber update failed; trying full update', (err as any)?.message);
+  }
+
+  const fresh = (await getQboSalesTxn(tenantId, kind, qboId)) || latest;
+  const fullBody = { ...fresh, DocNumber: requested };
+  delete fullBody.MetaData;
+  delete fullBody.InvoiceLink;
+  delete fullBody.time;
+  try {
+    const fullWrite = await attempt(fullBody);
+    const fullEntity = fullWrite?.[spec.entity];
+    if (qboDocNumbersEqual(fullEntity?.DocNumber ?? fresh.DocNumber, requested)) {
+      return applyFromWrite(fullWrite, fresh);
+    }
+  } catch (err) {
+    if (isDuplicateDocNumberError(err)) {
+      throw Object.assign(
+        new Error(
+          `QuickBooks already has a document numbered ${requested}. Pick a different invoice number.`
+        ),
+        { status: 409 }
+      );
+    }
+    console.warn('[quickbooks] full DocNumber update failed', (err as any)?.message);
+  }
+
+  const after = await getQboSalesTxn(tenantId, kind, qboId);
+  if (after && qboDocNumbersEqual(after.DocNumber, requested)) {
+    return { entity: after, docNumber: String(after.DocNumber) };
+  }
+
+  const custom = await qboAllowsCustomDocNumbers(tenantId);
+  if (custom === false) {
+    throw Object.assign(
+      new Error(
+        'QuickBooks is assigning invoice numbers automatically. In QuickBooks: Settings → Account and settings → Sales → Sales form content → turn on Custom transaction numbers, then save the invoice again.'
+      ),
+      { status: 400 }
+    );
+  }
+
+  throw Object.assign(
+    new Error(
+      `QuickBooks kept invoice number ${after?.DocNumber || fresh.DocNumber || '(blank)'} instead of ${requested}. If the invoice is paid or closed in QuickBooks, reopen it and try again.`
+    ),
+    { status: 400 }
+  );
+}
+
 /**
  * Highest numeric DocNumber currently used in QuickBooks for this txn type.
  * Used so NurseryOS does not reuse numbers that were issued only in QBO.
@@ -1654,27 +1778,25 @@ async function pushDocumentToQboInternal(
       throw err;
     }
   }
-  const entity = written?.[spec.entity];
+  let entity = written?.[spec.entity];
   const qboId = entity?.Id ? String(entity.Id) : existing ? String(existing.Id) : null;
   if (!qboId) {
     throw new Error('QuickBooks did not return a document id.');
   }
 
+  const requestedDocNumber = sanitizeQbString(
+    documentNumberOverride || doc.documentNumber,
+    21
+  );
+  if (requestedDocNumber) {
+    const persisted = await persistQboDocNumber(tenantId, kind, qboId, requestedDocNumber);
+    if (persisted.entity) entity = persisted.entity;
+  }
+
   const qboRawDocNumber = entity?.DocNumber
     ? String(entity.DocNumber)
-    : existing?.DocNumber
-      ? String(existing.DocNumber)
-      : documentNumberOverride;
-  // Keep NurseryOS invoice # in sync when QBO assigned / we bumped the number.
-  const resolvedNumeric =
-    parseLooseNumericDocNumber(qboRawDocNumber) ??
-    parseLooseNumericDocNumber(documentNumberOverride);
-  if (resolvedNumeric != null) {
-    const formatted = formatNurseryDocNumber(kind, resolvedNumeric);
-    if (String(doc.documentNumber || '').trim() !== formatted) {
-      documentNumberOverride = formatted;
-    }
-  }
+    : requestedDocNumber ||
+      (existing?.DocNumber ? String(existing.DocNumber) : documentNumberOverride);
 
   const integration = await loadIntegration(tenantId);
   const env = integration?.environment || qbEnv();

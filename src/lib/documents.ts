@@ -188,8 +188,9 @@ export async function listDocumentsForOrder(orderId: string): Promise<CustomerDo
 }
 
 /**
- * Reports must stay factual: drop saved invoices/estimates whose plant order
- * was deleted. Standalone customer docs (no orderId) are kept.
+ * For ops views: drop estimates whose plant order was deleted.
+ * Invoices and credit memos are always kept — they are the sales ledger
+ * even after the plant order is removed or hidden from the yard list.
  */
 export function filterDocumentsForLiveOrders(
   documents: CustomerDocument[],
@@ -198,10 +199,18 @@ export function filterDocumentsForLiveOrders(
   const liveIds =
     liveOrders instanceof Set ? liveOrders : new Set(liveOrders.map((o) => o.id));
   return documents.filter((d) => {
+    if (d.type === 'invoice' || d.type === 'credit_memo') return true;
     const orderId = String(d.orderId || '').trim();
     if (!orderId) return true;
     return liveIds.has(orderId);
   });
+}
+
+/** All invoices + credit memos for sales totals (never drop by order lifecycle). */
+export function salesLedgerDocuments(
+  documents: CustomerDocument[]
+): CustomerDocument[] {
+  return documents.filter((d) => d.type === 'invoice' || d.type === 'credit_memo');
 }
 
 export async function listAllDocuments(): Promise<CustomerDocument[]> {
@@ -226,6 +235,13 @@ export async function listAllDocuments(): Promise<CustomerDocument[]> {
 }
 
 export const DOCUMENT_NUMBER_START = 1000;
+
+/** True when a number is an estimate sequence (EST-1234), not an invoice. */
+export function isEstimateDocumentNumber(
+  documentNumber: string | undefined | null
+): boolean {
+  return /^EST[- ]?\d+/i.test(String(documentNumber || '').trim());
+}
 
 /** Extract a sequential integer from a document number, if it looks sequential. */
 export function parseSequentialDocumentNumber(

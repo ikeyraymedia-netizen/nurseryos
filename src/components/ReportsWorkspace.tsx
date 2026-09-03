@@ -279,6 +279,24 @@ function buildPeriodSalesOverview(
     }
   }
 
+  const creditMemos = documents.filter((d) => d.type === 'credit_memo');
+  for (const cm of creditMemos) {
+    const dt = invoiceDate(cm);
+    if (!dt) continue;
+    const day = startOfLocalDay(dt);
+    const amount = -(cm.grandTotal || 0);
+    if (day >= yearStart) {
+      year.salesTotal += amount;
+      const rep = resolveInvoiceRep(cm, ownerByOrderId);
+      const row = repYearMap.get(rep) || { rep, salesTotal: 0, invoiceCount: 0 };
+      row.salesTotal += amount;
+      repYearMap.set(rep, row);
+    }
+    if (day >= quarterStart) quarter.salesTotal += amount;
+    if (day >= monthStart) month.salesTotal += amount;
+    if (day >= weekStart) week.salesTotal += amount;
+  }
+
   const repYear = [...repYearMap.values()].sort((a, b) => {
     if (a.rep === NO_SALES_REP_LABEL && b.rep !== NO_SALES_REP_LABEL) return 1;
     if (b.rep === NO_SALES_REP_LABEL && a.rep !== NO_SALES_REP_LABEL) return -1;
@@ -299,37 +317,74 @@ function buildDataSnapshot(params: {
 
   const invoices = documents.filter((d) => d.type === 'invoice');
   const estimates = documents.filter((d) => d.type === 'estimate');
-  const invoiceSalesTotal = invoices.reduce((s, d) => s + (d.grandTotal || 0), 0);
+  const creditMemos = documents.filter((d) => d.type === 'credit_memo');
+  const invoiceSalesGross = invoices.reduce((s, d) => s + (d.grandTotal || 0), 0);
+  const creditMemoTotal = creditMemos.reduce((s, d) => s + (d.grandTotal || 0), 0);
+  /** Net sales = invoice grand totals minus credit memo grand totals. */
+  const invoiceSalesTotal = invoiceSalesGross - creditMemoTotal;
   const estimateTotal = estimates.reduce((s, d) => s + (d.grandTotal || 0), 0);
+  const paymentStatus = buildPaymentStatus(documents);
+  const periodSales = buildPeriodSalesOverview(documents, orders);
 
   const now = new Date();
   const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const lastMonthKey = shiftMonthKey(thisMonthKey, -1);
 
-  const salesByCustomer = new Map<string, { customerName: string; invoiceCount: number; salesTotal: number }>();
-  const salesByMonth = new Map<string, { month: string; label: string; invoiceCount: number; salesTotal: number }>();
+  const salesByCustomer = new Map<
+    string,
+    { customerName: string; invoiceCount: number; creditMemoCount: number; salesTotal: number }
+  >();
+  const salesByMonth = new Map<
+    string,
+    { month: string; label: string; invoiceCount: number; creditMemoCount: number; salesTotal: number }
+  >();
 
-  for (const inv of invoices) {
-    const key = inv.customerId || inv.customerName;
+  const bumpCustomer = (
+    doc: CustomerDocument,
+    signedAmount: number,
+    kind: 'invoice' | 'credit_memo'
+  ) => {
+    const key = doc.customerId || doc.customerName;
     const row = salesByCustomer.get(key) || {
-      customerName: inv.customerName,
+      customerName: doc.customerName,
       invoiceCount: 0,
+      creditMemoCount: 0,
       salesTotal: 0
     };
-    row.invoiceCount += 1;
-    row.salesTotal += inv.grandTotal || 0;
+    if (kind === 'invoice') row.invoiceCount += 1;
+    else row.creditMemoCount += 1;
+    row.salesTotal += signedAmount;
     salesByCustomer.set(key, row);
+  };
 
-    const month = invoiceMonthKey(inv);
+  const bumpMonth = (
+    doc: CustomerDocument,
+    signedAmount: number,
+    kind: 'invoice' | 'credit_memo'
+  ) => {
+    const month = invoiceMonthKey(doc);
     const monthRow = salesByMonth.get(month) || {
       month,
       label: month === 'unknown' ? 'Unknown date' : monthLabel(month),
       invoiceCount: 0,
+      creditMemoCount: 0,
       salesTotal: 0
     };
-    monthRow.invoiceCount += 1;
-    monthRow.salesTotal += inv.grandTotal || 0;
+    if (kind === 'invoice') monthRow.invoiceCount += 1;
+    else monthRow.creditMemoCount += 1;
+    monthRow.salesTotal += signedAmount;
     salesByMonth.set(month, monthRow);
+  };
+
+  for (const inv of invoices) {
+    const amount = inv.grandTotal || 0;
+    bumpCustomer(inv, amount, 'invoice');
+    bumpMonth(inv, amount, 'invoice');
+  }
+  for (const cm of creditMemos) {
+    const amount = -(cm.grandTotal || 0);
+    bumpCustomer(cm, amount, 'credit_memo');
+    bumpMonth(cm, amount, 'credit_memo');
   }
 
   const thisMonthRow = salesByMonth.get(thisMonthKey);
@@ -353,9 +408,32 @@ function buildDataSnapshot(params: {
       plantSales.set(key, row);
     }
   }
+  for (const cm of creditMemos) {
+    for (const item of cm.items || []) {
+      const key = `${item.plantName}||${item.containerSize}`;
+      const row = plantSales.get(key) || {
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        qty: 0,
+        revenue: 0
+      };
+      row.qty -= item.quantity || 0;
+      row.revenue -= (item.quantity || 0) * (item.unitPrice || 0);
+      plantSales.set(key, row);
+    }
+  }
+
+  const INVOICE_SAMPLE_LIMIT = 300;
+  const ESTIMATE_SAMPLE_LIMIT = 100;
 
   return {
     generatedAt: new Date().toISOString(),
+    accuracyNotes: [
+      'Sales totals (summary.*, sales.*) include EVERY saved invoice and subtract credit memos.',
+      'The invoices[] / estimates[] arrays may be truncated samples — never re-sum them for totals; use sales.* / summary.* instead.',
+      'Invoice month uses documentDate (YYYY-MM-DD local). If missing, uses createdAt.',
+      'Direct-ship and deleted plant orders still count toward sales when an invoice exists.'
+    ],
     summary: {
       orderCount: orders.length,
       truckCount: trucks.length,
@@ -364,16 +442,22 @@ function buildDataSnapshot(params: {
       documentCount: documents.length,
       invoiceCount: invoices.length,
       estimateCount: estimates.length,
+      creditMemoCount: creditMemos.length,
+      invoiceSalesGross,
+      creditMemoTotal,
       invoiceSalesTotal,
       estimateTotal,
       thisMonthSalesTotal: thisMonthRow?.salesTotal || 0,
       thisMonthInvoiceCount: thisMonthRow?.invoiceCount || 0,
       thisMonthKey,
-      thisMonthLabel: monthLabel(thisMonthKey)
+      thisMonthLabel: monthLabel(thisMonthKey),
+      paidInvoiceTotal: paymentStatus.paidTotal,
+      outstandingInvoiceTotal: paymentStatus.outstandingTotal
     },
     /** Pre-aggregated sales from saved invoices — prefer this for sales questions. */
     sales: {
-      source: 'Saved invoices (CustomerDocument type=invoice). Estimates are not counted as sales.',
+      source:
+        'Saved invoices (type=invoice) minus credit memos (type=credit_memo). Estimates are not counted as sales.',
       dateRule:
         'Invoice month uses documentDate (YYYY-MM-DD). If missing, uses createdAt. Periods are local calendar months.',
       today: now.toISOString().slice(0, 10),
@@ -381,18 +465,28 @@ function buildDataSnapshot(params: {
         month: thisMonthKey,
         label: monthLabel(thisMonthKey),
         invoiceCount: thisMonthRow?.invoiceCount || 0,
+        creditMemoCount: thisMonthRow?.creditMemoCount || 0,
         salesTotal: thisMonthRow?.salesTotal || 0
       },
       lastMonth: {
         month: lastMonthKey,
         label: monthLabel(lastMonthKey),
         invoiceCount: lastMonthRow?.invoiceCount || 0,
+        creditMemoCount: lastMonthRow?.creditMemoCount || 0,
         salesTotal: lastMonthRow?.salesTotal || 0
       },
+      thisYear: periodSales.year,
+      thisQuarter: periodSales.quarter,
+      thisWeek: periodSales.week,
+      salesByRepYear: periodSales.repYear,
+      invoiceSalesGross,
+      creditMemoTotal,
       invoiceSalesTotal,
       estimateTotal,
       invoiceCount: invoices.length,
+      creditMemoCount: creditMemos.length,
       estimateCount: estimates.length,
+      paymentStatus,
       byMonth: [...salesByMonth.values()].sort((a, b) => b.month.localeCompare(a.month)),
       byCustomer: [...salesByCustomer.values()]
         .sort((a, b) => b.salesTotal - a.salesTotal)
@@ -411,6 +505,9 @@ function buildDataSnapshot(params: {
       dateCreated: o.dateCreated,
       truckId: o.truckId || null,
       totalWeightLbs: o.totalWeightLbs,
+      directShip: Boolean(o.directShip),
+      source: o.source || null,
+      owner: o.owner || null,
       itemCount: o.items.length,
       totalQty: o.items.reduce((s, i) => s + i.quantity, 0),
       loadedQty: o.items.reduce((s, i) => s + i.loadedQuantity, 0),
@@ -448,38 +545,58 @@ function buildDataSnapshot(params: {
       plantedDate: p.plantedDate || null,
       readyDate: p.readyDate || null
     })),
-    invoices: invoices.slice(0, 200).map((d) => ({
-      documentNumber: d.documentNumber,
-      customerName: d.customerName,
-      customerId: d.customerId,
-      documentDate: d.documentDate,
-      month: invoiceMonthKey(d),
-      createdAt: d.createdAt || null,
-      dueDate: d.dueDate || null,
-      orderNumber: d.orderNumber || null,
-      subtotal: d.subtotal,
-      salesTax: d.salesTax,
-      freightCharge: d.freightCharge ?? 0,
-      discount: d.discount ?? 0,
-      grandTotal: d.grandTotal,
-      owner: d.owner || null,
-      lineItems: (d.items || []).slice(0, 40).map((i) => ({
-        plantName: i.plantName,
-        containerSize: i.containerSize,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        unitCost: i.unitCost ?? null,
-        lineTotal: (i.quantity || 0) * (i.unitPrice || 0)
+    invoices: {
+      totalCount: invoices.length,
+      sampleTruncated: invoices.length > INVOICE_SAMPLE_LIMIT,
+      sample: invoices.slice(0, INVOICE_SAMPLE_LIMIT).map((d) => ({
+        documentNumber: d.documentNumber,
+        customerName: d.customerName,
+        customerId: d.customerId,
+        documentDate: d.documentDate,
+        month: invoiceMonthKey(d),
+        createdAt: d.createdAt || null,
+        dueDate: d.dueDate || null,
+        orderNumber: d.orderNumber || null,
+        paymentStatus: d.paymentStatus || 'unpaid',
+        subtotal: d.subtotal,
+        salesTax: d.salesTax,
+        freightCharge: d.freightCharge ?? 0,
+        discount: d.discount ?? 0,
+        grandTotal: d.grandTotal,
+        owner: d.owner || null,
+        lineItems: (d.items || []).slice(0, 40).map((i) => ({
+          plantName: i.plantName,
+          containerSize: i.containerSize,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          unitCost: i.unitCost ?? null,
+          lineTotal: (i.quantity || 0) * (i.unitPrice || 0)
+        }))
       }))
-    })),
-    estimates: estimates.slice(0, 100).map((d) => ({
-      documentNumber: d.documentNumber,
-      customerName: d.customerName,
-      documentDate: d.documentDate,
-      month: invoiceMonthKey(d),
-      orderNumber: d.orderNumber || null,
-      grandTotal: d.grandTotal
-    }))
+    },
+    creditMemos: {
+      totalCount: creditMemos.length,
+      sample: creditMemos.slice(0, 100).map((d) => ({
+        documentNumber: d.documentNumber,
+        customerName: d.customerName,
+        documentDate: d.documentDate,
+        month: invoiceMonthKey(d),
+        grandTotal: d.grandTotal,
+        referencedInvoiceNumber: d.referencedInvoiceNumber || null
+      }))
+    },
+    estimates: {
+      totalCount: estimates.length,
+      sampleTruncated: estimates.length > ESTIMATE_SAMPLE_LIMIT,
+      sample: estimates.slice(0, ESTIMATE_SAMPLE_LIMIT).map((d) => ({
+        documentNumber: d.documentNumber,
+        customerName: d.customerName,
+        documentDate: d.documentDate,
+        month: invoiceMonthKey(d),
+        orderNumber: d.orderNumber || null,
+        grandTotal: d.grandTotal
+      }))
+    }
   };
 }
 
@@ -561,7 +678,7 @@ export function ReportsWorkspace({
     void refreshAudit();
   }, []);
 
-  /** Exclude invoices/estimates whose plant order was deleted — reports stay factual. */
+  /** Sales ledger keeps all invoices/CMs; estimates without a live order are dropped. */
   const reportDocuments = useMemo(
     () => filterDocumentsForLiveOrders(documents, orders),
     [documents, orders]
@@ -645,6 +762,7 @@ export function ReportsWorkspace({
 
     try {
       const freshDocuments = await refreshDocuments();
+      // Always include every invoice/credit memo for sales accuracy (filter only drops orphan estimates).
       const data = buildDataSnapshot({
         orders,
         trucks,

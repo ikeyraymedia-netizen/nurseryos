@@ -47,6 +47,7 @@ import {
   markCustomerInvoicePaid,
   defaultDocumentNumber,
   nextDocumentNumber,
+  isEstimateDocumentNumber,
   listAllDocuments,
   subscribeToDocument
 } from '../lib/documents';
@@ -267,9 +268,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const details = order.invoiceDetails;
     const existingNumber =
       doc?.documentNumber || details?.invoiceNumber || null;
+    // Estimates use EST-####. When invoicing a converted estimate order, allocate
+    // the next real invoice number instead of carrying EST-#### forward.
+    const reuseExisting =
+      Boolean(existingNumber) &&
+      !(type === 'invoice' && isEstimateDocumentNumber(existingNumber));
     let cancelled = false;
-    if (existingNumber) {
-      setInvoiceNumber(existingNumber);
+    if (reuseExisting) {
+      setInvoiceNumber(existingNumber!);
     } else {
       setInvoiceNumber(defaultDocumentNumber(type));
       void nextDocumentNumber(type, {

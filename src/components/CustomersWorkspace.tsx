@@ -25,6 +25,7 @@ import {
 import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, repairCombinedCustomerAddresses, updateCustomer, withSplitCustomerAddresses } from '../lib/customers';
 import {
     listAllDocuments,
+    nextDocumentNumber,
     subscribeToCustomerDocuments,
     subscribeToDocuments,
     updateCustomerDocument,
@@ -842,6 +843,14 @@ export function CustomersWorkspace({
         throw new Error(t('customers.noLineItems'));
       }
 
+      const invoiceNumber =
+        doc.type === 'estimate'
+          ? await nextDocumentNumber('invoice', {
+              considerQuickbooks: permissions.canUseQuickbooks,
+              tenantId
+            })
+          : doc.documentNumber;
+
       const orderId = await addCustomerOrder({
         customerName: selectedCustomer.name,
         customerId: selectedCustomer.id,
@@ -856,7 +865,7 @@ export function CustomersWorkspace({
         customerEmail: doc.customerEmail || selectedCustomer.contactEmail,
         customerEmailCc: doc.customerEmailCc || selectedCustomer.contactEmailCc,
         invoiceDetails: {
-          invoiceNumber: doc.documentNumber,
+          invoiceNumber,
           invoiceDate: doc.documentDate,
           dueDate: doc.dueDate,
           paymentTerms: doc.paymentTerms,

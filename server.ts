@@ -1293,15 +1293,17 @@ ${question.trim()}
 
 Use ONLY the JSON nursery data below. Do not invent plants, customers, invoices, or dollar amounts. If data is missing, say so clearly.
 
-Sales rules (important):
-- Saved invoices (data.sales, data.invoices, summary.invoiceSalesTotal) are the source of truth for SALES.
+CRITICAL accuracy rules:
+- For ANY sales total, dollar figure, invoice count, or ranking, use the pre-aggregated fields in data.summary and data.sales EXACTLY. Do not re-add invoices[] samples.
+- data.invoices and data.estimates are SAMPLE arrays and may be truncated (see sampleTruncated / totalCount). Never sum the sample for totals.
+- Net sales = invoices minus credit memos. Prefer data.sales.invoiceSalesTotal (and thisMonth/lastMonth/thisYear/thisQuarter/thisWeek salesTotal).
 - Estimates are quotes only — do NOT count them as sales unless the user explicitly asks about estimates.
-- If there are zero invoices, say that no invoices have been saved yet and remind them: open an order → Create Invoice → Save to Customer.
-- For "this month" / "sales this month" / current-month questions, use data.sales.thisMonth.salesTotal and data.sales.thisMonth.invoiceCount EXACTLY. Do not recompute from scratch.
-- For "last month", use data.sales.lastMonth. For other months, use data.sales.byMonth.
-- Prefer the pre-aggregated data.sales.byCustomer, data.sales.byMonth, and data.sales.topPlantsByRevenue when answering sales questions.
-- Use invoice grandTotal for sales dollars unless asked for subtotal-only.
-- If thisMonth.salesTotal is 0 but invoiceSalesTotal > 0, say sales this month are $0 and also mention all-time invoice sales + which months have sales in data.sales.byMonth.
+- If invoiceCount is 0, say no invoices have been saved yet and remind them: open an order → Create Invoice → Save to Customer.
+- For "this month" use data.sales.thisMonth. For "last month" use data.sales.lastMonth. For year/quarter/week use data.sales.thisYear / thisQuarter / thisWeek.
+- Prefer data.sales.byCustomer, data.sales.byMonth, data.sales.topPlantsByRevenue, data.sales.salesByRepYear, and data.sales.paymentStatus when relevant.
+- Use invoice grandTotal (already baked into sales.*) unless asked for subtotal-only.
+- If thisMonth.salesTotal is 0 but invoiceSalesTotal > 0, say sales this month are $0 and also mention all-time net sales + which months appear in data.sales.byMonth.
+- Read data.accuracyNotes if present and follow them.
 
 Write a clear, practical report for nursery owners and managers:
 - Start with a short title line
@@ -1309,6 +1311,7 @@ Write a clear, practical report for nursery owners and managers:
 - Prefer short sections, bullet lists, and totals with $ amounts when relevant
 - Call out risks, shortages, unfinished loads, and follow-ups when relevant
 - Keep it concise but useful
+- When stating a total, quote the exact figure from sales.* / summary.* (do not round differently)
 
 NURSERY DATA JSON:
 ${snapshot}`;

@@ -94,6 +94,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 const GEMINI_REQUEST_TIMEOUT_MS = 55_000;
+const ORDER_TEXT_GEMINI_TIMEOUT_MS = 120_000;
 const INVENTORY_GEMINI_TIMEOUT_MS = 240_000;
 
 async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = GEMINI_REQUEST_TIMEOUT_MS): Promise<T> {
@@ -311,6 +312,62 @@ function parseInventoryItemsJson(responseText: string): any[] {
   }
 }
 
+function parseOrderJson(responseText: string): any | null {
+  const cleaned = String(responseText || '')
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (!cleaned) return null;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function mergeOrderParseResults(chunks: any[]): any {
+  let customerName = 'Unknown Customer';
+  let poNumber = '';
+  let plainText = '';
+  const seen = new Set<string>();
+  const items: any[] = [];
+
+  for (const chunk of chunks) {
+    if (!chunk || typeof chunk !== 'object') continue;
+    const name = String(chunk.customerName || '').trim();
+    if (name && name !== 'Unknown Customer' && customerName === 'Unknown Customer') {
+      customerName = name;
+    }
+    const po = String(chunk.poNumber || '').trim();
+    if (po && !/^n\/?a$/i.test(po) && !poNumber) poNumber = po;
+    const pt = String(chunk.plainText || '').trim();
+    if (pt.length > plainText.length) plainText = pt;
+
+    for (const item of Array.isArray(chunk.items) ? chunk.items : []) {
+      const plantName = String(item?.plantName || '').trim();
+      if (!plantName) continue;
+      const size = String(item?.containerSize || 'Other').trim() || 'Other';
+      const qty = Number(item?.quantity) || 0;
+      const notes = String(item?.notes || '').trim();
+      const key = `${plantName.toLowerCase()}|${size.toLowerCase()}|${qty}|${notes.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(item);
+    }
+  }
+
+  return { customerName, poNumber, items, plainText };
+}
+
 function mergeInventoryItems(chunks: any[][]): any[] {
   const seen = new Set<string>();
   const out: any[] = [];
@@ -349,10 +406,11 @@ async function generateOrderParseResponse(
   mimeType: string,
   cleanBase64: string,
   prompt: string,
-  orderText?: string
+  orderText?: string,
+  timeoutMs = GEMINI_REQUEST_TIMEOUT_MS
 ) {
   const contents = orderText
-    ? [`${prompt}\n\n--- PASTED ORDER TEXT ---\n${orderText}`]
+    ? [`${prompt}\n\n--- ORDER DOCUMENT TEXT ---\n${orderText}`]
     : [
         {
           inlineData: {
@@ -369,7 +427,8 @@ async function generateOrderParseResponse(
       contents,
       config: getOrderParseSchema()
     }),
-    `Order parse (${model})`
+    `Order parse (${model})`,
+    timeoutMs
   );
 }
 
@@ -378,7 +437,8 @@ async function parseOrderWithFallback(
   mimeType: string,
   cleanBase64: string,
   prompt: string,
-  orderText?: string
+  orderText?: string,
+  timeoutMs = GEMINI_REQUEST_TIMEOUT_MS
 ) {
   let lastError: any = null;
   const maxAttemptsPerModel = 2;
@@ -393,7 +453,8 @@ async function parseOrderWithFallback(
           mimeType,
           cleanBase64,
           prompt,
-          orderText
+          orderText,
+          timeoutMs
         );
         console.log(`Order parsed successfully with ${model}`);
         return response;
@@ -548,8 +609,54 @@ async function parseInventoryTextChunks(
   return mergeInventoryItems(parsedChunks);
 }
 
+async function parseOrderTextChunks(
+  ai: GoogleGenAI,
+  prompt: string,
+  fullText: string
+): Promise<any | null> {
+  const chunks = chunkPdfText(fullText);
+  console.log(`Order PDF text: ${fullText.length} chars → ${chunks.length} chunk(s)`);
+  const parsedChunks: any[] = [];
+  for (let i = 0; i < chunks.length; i += 1) {
+    const chunkPrompt =
+      chunks.length === 1
+        ? prompt
+        : `${prompt}\n\nThis is part ${i + 1} of ${chunks.length} of the same order. Extract every plant line in THIS part only. Reuse customerName and poNumber if they appear in this section.`;
+    const response = await parseOrderWithFallback(
+      ai,
+      'text/plain',
+      '',
+      chunkPrompt,
+      chunks[i],
+      ORDER_TEXT_GEMINI_TIMEOUT_MS
+    );
+    const data = parseOrderJson(response.text || '');
+    if (data) parsedChunks.push(data);
+    console.log(
+      `Order chunk ${i + 1}/${chunks.length}: ${Array.isArray(data?.items) ? data.items.length : 0} items`
+    );
+  }
+  if (!parsedChunks.length) return null;
+  return mergeOrderParseResults(parsedChunks);
+}
+
+function pickStrongerOrderParse(
+  local: ReturnType<typeof parseOrderTextLocally> | null,
+  aiParsed: any | null
+): any | null {
+  const aiItems = Array.isArray(aiParsed?.items) ? aiParsed.items : [];
+  if (local && local.items.length > aiItems.length) {
+    console.log(
+      `AI returned ${aiItems.length} items; keeping stronger local parse (${local.items.length}).`
+    );
+    return local;
+  }
+  return aiParsed;
+}
+
 // API endpoint to parse the order
 app.post('/api/parse-order', async (req, res) => {
+  let extractedPdfText = '';
   try {
     await requireAuthUid(req);
     const { base64Data, mimeType, fileName, orderText: rawOrderText } = req.body;
@@ -599,6 +706,40 @@ app.post('/api/parse-order', async (req, res) => {
       providedText ||
       (looksLikeText && cleanBase64 ? decodeBase64Text(base64Data) : undefined);
 
+    // PDF text extraction is faster and more reliable than raw multi-page PDF vision.
+    if (resolvedMime === 'application/pdf' && cleanBase64) {
+      try {
+        const pdfBuffer = Buffer.from(cleanBase64, 'base64');
+        const { text, totalPages } = await extractPdfText(pdfBuffer);
+        extractedPdfText = text;
+        console.log(
+          `Order PDF extract for ${fileName || 'upload'}: pages=${totalPages}, chars=${text.length}`
+        );
+        if (text.length >= 40) {
+          const localFromPdf = parseOrderTextLocally(text);
+          if (localFromPdf) {
+            localFallback =
+              !localFallback || localFromPdf.items.length > localFallback.items.length
+                ? localFromPdf
+                : localFallback;
+            if (!localParseLooksIncomplete(text, localFromPdf)) {
+              console.log(`Parsed order PDF locally (${localFromPdf.items.length} items).`);
+              res.json(normalizeParsedOrderPayload(localFromPdf));
+              return;
+            }
+            console.log(
+              `Local PDF parse looks incomplete (${localFromPdf.items.length} items) — trying AI on extracted text.`
+            );
+          }
+        }
+      } catch (extractErr: any) {
+        console.warn(
+          'Order PDF text extraction failed, falling back to vision:',
+          extractErr?.message || extractErr
+        );
+      }
+    }
+
     const prompt = `Analyze this plant order document (${fileName || 'document'}).
 It is a customer plant order list/invoice from a nursery. Extract:
 1. Customer Name (look for Bill To, Ship To, Client, or main header name).
@@ -625,53 +766,58 @@ This text is meant for nursery workers loading trucks, so make it incredibly cle
 
 Return your response in structured JSON format matching the schema provided.`;
 
-    let response: any = null;
-    response = await parseOrderWithFallback(
-      ai,
-      resolvedMime,
-      cleanBase64,
-      prompt,
-      orderTextForAi
-    );
+    let parsedData: any | null = null;
 
-    const responseText = response.text;
-    if (!responseText) {
-      throw new Error('Gemini model returned empty response.');
+    const textForChunkedAi = extractedPdfText || orderTextForAi;
+    if (textForChunkedAi && textForChunkedAi.length >= 80) {
+      try {
+        parsedData = await parseOrderTextChunks(ai, prompt, textForChunkedAi);
+      } catch (chunkErr: any) {
+        console.warn(
+          'Chunked order text parse failed, falling back to single AI call:',
+          chunkErr?.message || chunkErr
+        );
+      }
     }
 
-    const cleanedJson = responseText
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim();
-
-    let parsedData: any;
-    try {
-      parsedData = JSON.parse(cleanedJson);
-    } catch {
-      throw new Error('AI returned invalid JSON. Please try uploading again.');
-    }
-    const aiItems = Array.isArray(parsedData?.items) ? parsedData.items : [];
-    if (
-      localFallback &&
-      localFallback.items.length > aiItems.length
-    ) {
-      console.log(
-        `AI returned ${aiItems.length} items; keeping stronger local parse (${localFallback.items.length}).`
+    if (!parsedData || !Array.isArray(parsedData.items) || parsedData.items.length === 0) {
+      const response = await parseOrderWithFallback(
+        ai,
+        resolvedMime,
+        cleanBase64,
+        prompt,
+        textForChunkedAi,
+        textForChunkedAi ? ORDER_TEXT_GEMINI_TIMEOUT_MS : GEMINI_REQUEST_TIMEOUT_MS
       );
-      res.json(normalizeParsedOrderPayload(localFallback));
-      return;
+
+      const responseText = response.text;
+      if (!responseText) {
+        throw new Error('Gemini model returned empty response.');
+      }
+
+      parsedData = parseOrderJson(responseText);
+      if (!parsedData) {
+        throw new Error('AI returned invalid JSON. Please try uploading again.');
+      }
     }
-    res.json(normalizeParsedOrderPayload(parsedData));
+
+    const chosen = pickStrongerOrderParse(localFallback, parsedData);
+    if (!chosen || !Array.isArray(chosen.items) || chosen.items.length === 0) {
+      throw new Error('No plant lines found in that document.');
+    }
+    res.json(normalizeParsedOrderPayload(chosen));
   } catch (error: any) {
     if (authErrorResponse(res, error)) return;
     console.error('Error parsing order with Gemini:', error);
-    // Prefer any local paste parse over a hard failure.
+    // Prefer any local parse over a hard failure.
     try {
       const raw =
-        typeof req.body?.orderText === 'string' ? req.body.orderText : '';
+        typeof req.body?.orderText === 'string' && req.body.orderText.trim()
+          ? req.body.orderText
+          : extractedPdfText;
       const local = raw.trim() ? parseOrderTextLocally(raw) : null;
       if (local && local.items.length > 0) {
-        console.log(`Gemini failed; returning local paste parse (${local.items.length} items).`);
+        console.log(`Gemini failed; returning local parse (${local.items.length} items).`);
         res.json(normalizeParsedOrderPayload(local));
         return;
       }

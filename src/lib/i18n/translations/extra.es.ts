@@ -162,9 +162,6 @@ const extra = {
     customSource: 'Personalizado / otro',
     customSourcePlaceholder: 'Nombre del vivero o productor',
     sourceLabel: 'Origen: {{name}}',
-    goodLiners: 'Buenos liners',
-    goodLinersHint: 'Active si este lote fue bueno para empezar.',
-    goodLinersShort: 'Buenos liners',
     lowStock: 'Stock bajo para camiones próximos',
     lowStockHint:
       'Compare el inventario en mano con las plantas necesarias en camiones que cargan en los próximos 14 días.',

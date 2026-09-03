@@ -336,7 +336,6 @@ export async function updateInventoryPlant(plant: InventoryPlant): Promise<void>
       ...rest,
       sourceVendorId: rest.sourceVendorId || null,
       sourceName: rest.sourceName?.trim() || null,
-      goodLiners: rest.goodLiners === true ? true : null,
       plantedDate: rest.plantedDate?.trim() || null,
       readyDate: rest.readyDate?.trim() || null,
       dateUpdated: new Date().toISOString()

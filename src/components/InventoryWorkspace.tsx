@@ -1305,13 +1305,9 @@ export function InventoryWorkspace({
                     {plant.plantedDate ? ` · ${t('inventory.plantedShort')} ${plant.plantedDate}` : ''}
                     {plant.readyDate ? ` · ${t('inventory.readyShort')} ${plant.readyDate}` : ''}
                   </p>
-                  {(plant.sourceName || plant.goodLiners) && (
+                  {plant.sourceName && (
                     <p className="text-[11px] text-ink-700 mt-0.5">
-                      {plant.sourceName
-                        ? t('inventory.sourceLabel', { name: plant.sourceName })
-                        : null}
-                      {plant.sourceName && plant.goodLiners ? ' · ' : null}
-                      {plant.goodLiners ? t('inventory.goodLinersShort') : null}
+                      {t('inventory.sourceLabel', { name: plant.sourceName })}
                     </p>
                   )}
                 </button>
@@ -1553,35 +1549,6 @@ export function InventoryWorkspace({
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                   />
                 )}
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold text-slate-700">{t('inventory.goodLiners')}</p>
-                    <p className="text-[11px] text-slate-500">{t('inventory.goodLinersHint')}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-bold text-slate-600">
-                      {selected.goodLiners ? t('inventory.on') : t('inventory.off')}
-                    </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={!!selected.goodLiners}
-                      disabled={!permissions.canEditInventory || busy}
-                      onClick={() =>
-                        void saveSelected({ goodLiners: selected.goodLiners ? null : true })
-                      }
-                      className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${
-                        selected.goodLiners ? 'bg-emerald-600' : 'bg-slate-300'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${
-                          selected.goodLiners ? 'left-5' : 'left-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
               </div>
 
               <div>

@@ -7,7 +7,8 @@ export type WorkspaceTab =
   | 'customers'
   | 'reports'
   | 'tasks'
-  | 'purchasing';
+  | 'purchasing'
+  | 'retail';
 
 export const WORKSPACE_TABS: WorkspaceTab[] = [
   'orders',
@@ -16,7 +17,8 @@ export const WORKSPACE_TABS: WorkspaceTab[] = [
   'customers',
   'reports',
   'tasks',
-  'purchasing'
+  'purchasing',
+  'retail'
 ];
 
 const WORKSPACE_URL_STORAGE_KEY = 'nurseryos:workspaceUrl';

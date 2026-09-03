@@ -16,7 +16,8 @@ export type TenantModuleId =
   | 'payments'
   | 'quickbooks'
   | 'purchasing'
-  | 'billPay';
+  | 'billPay'
+  | 'retailPos';
 
 export interface Tenant {
   id: string;
@@ -155,6 +156,8 @@ export interface CustomerOrder {
   owner?: string; // Sales rep this order/invoice is credited to
   /** Vendor ships straight to customer — hidden from yard roles (owner/admin only). */
   directShip?: boolean;
+  /** How this order was created. */
+  source?: 'upload' | 'manual' | 'retail' | 'converted';
 }
 
 export interface Customer {

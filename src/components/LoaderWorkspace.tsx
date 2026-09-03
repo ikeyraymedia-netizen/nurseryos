@@ -494,8 +494,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             </span>
             <span className="text-xs text-slate-500 font-mono font-bold">ID: {order.id.slice(0, 6)}</span>
           </div>
-          <h2 className="text-2xl font-black text-gray-900 tracking-tight font-sans mt-1">
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight font-sans mt-1 flex items-center gap-2">
             {order.customerName}
+            {order.source === 'retail' && (
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">{t('retail.retailBadge')}</span>
+            )}
           </h2>
           <p className="text-sm text-slate-600 font-mono flex items-center mt-0.5">
             <Building className="h-4 w-4 mr-1 text-slate-500" />

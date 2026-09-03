@@ -1886,6 +1886,29 @@ const extra = {
     price: 'Precio',
     ready: 'Listo',
     poweredBy: 'Con tecnología de NurseryOS'
+  },
+  retail: {
+    connectReader: 'Conectar lector',
+    connecting: 'Conectando…',
+    searchPlants: 'Buscar plantas…',
+    avail: 'disp',
+    noResults: 'No se encontraron plantas.',
+    cart: 'Carrito',
+    emptyCart: 'Toque una planta para agregarla al carrito.',
+    subtotal: 'Subtotal',
+    tax: 'Impuesto',
+    total: 'Total',
+    charge: 'Cobrar',
+    creatingPayment: 'Creando pago…',
+    collecting: 'Cobrando pago…',
+    processing: 'Procesando…',
+    waitingForCard: 'Toque, inserte o deslice la tarjeta…',
+    cancel: 'Cancelar',
+    paymentSuccess: '¡Pago exitoso!',
+    paymentFailed: 'Pago fallido.',
+    tryAgain: 'Reintentar',
+    connectReaderHint: 'Conecte un lector de tarjetas para cobrar.',
+    retailBadge: 'Venta'
   }
 } as const;
 

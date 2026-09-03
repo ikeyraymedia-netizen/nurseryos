@@ -17,6 +17,7 @@ import { CustomersWorkspace } from './components/CustomersWorkspace';
 import { ReportsWorkspace } from './components/ReportsWorkspace';
 import { TasksWorkspace } from './components/TasksWorkspace';
 import { PurchasingWorkspace } from './components/PurchasingWorkspace';
+import { RetailWorkspace } from './components/RetailWorkspace';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import {
@@ -61,7 +62,7 @@ import {
   CustomerDocumentType,
   CustomerDocument
 } from './types';
-import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList, PackagePlus } from 'lucide-react';
+import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList, PackagePlus, ShoppingCart } from 'lucide-react';
 import {
   type WorkspaceTab,
   readPersistedWorkspaceTab,
@@ -102,6 +103,8 @@ function canAccessWorkspaceTab(
       return permissions.canViewTasks;
     case 'purchasing':
       return permissions.canViewPurchasing;
+    case 'retail':
+      return permissions.canUseRetailPOS;
   }
 }
 
@@ -1127,6 +1130,23 @@ function NurseryApp({
                 <span>{t('nav.tasks')}</span>
               </button>
             )}
+            {permissions.canUseRetailPOS && (
+              <button
+                onClick={() => {
+                  if (!leaveTruckBuilderIfNeeded()) return;
+                  setActiveTab('retail');
+                  setSelectedTruckId(null);
+                  setSelectedOrderId(null);
+                  setIsEditingTruck(false);
+                }}
+                className={`flex-1 min-w-[100px] flex items-center justify-center space-x-1.5 py-2.5 text-xs font-bold rounded-xl transition-all ${
+                  activeTab === 'retail' ? 'bg-ink-700 text-white shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                <ShoppingCart className="h-4 w-4" />
+                <span>{t('nav.retail')}</span>
+              </button>
+            )}
           </div>
 
           {activeTab === 'inventory' ? (
@@ -1236,6 +1256,12 @@ function NurseryApp({
               permissions={permissions}
               tenantId={tenant.id}
               nurseryName={tenant.name}
+            />
+          ) : activeTab === 'retail' && permissions.canUseRetailPOS ? (
+            <RetailWorkspace
+              tenantId={tenant.id}
+              permissions={permissions}
+              userId={userId}
             />
           ) : activeTab === 'reports' ? (
             <ReportsWorkspace

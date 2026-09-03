@@ -1866,6 +1866,29 @@ const extra = {
     price: 'Price',
     ready: 'Ready',
     poweredBy: 'Powered by NurseryOS'
+  },
+  retail: {
+    connectReader: 'Connect Reader',
+    connecting: 'Connecting…',
+    searchPlants: 'Search plants…',
+    avail: 'avail',
+    noResults: 'No plants found.',
+    cart: 'Cart',
+    emptyCart: 'Tap a plant to add it to the cart.',
+    subtotal: 'Subtotal',
+    tax: 'Tax',
+    total: 'Total',
+    charge: 'Charge',
+    creatingPayment: 'Creating payment…',
+    collecting: 'Collecting payment…',
+    processing: 'Processing…',
+    waitingForCard: 'Tap, dip, or swipe card…',
+    cancel: 'Cancel',
+    paymentSuccess: 'Payment successful!',
+    paymentFailed: 'Payment failed.',
+    tryAgain: 'Try again',
+    connectReaderHint: 'Connect a card reader to charge.',
+    retailBadge: 'Retail'
   }
 } as const;
 

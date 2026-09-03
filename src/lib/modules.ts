@@ -104,6 +104,13 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     description:
       'Pay vendor bills by ACH via Stripe Treasury from Purchasing. Requires Purchasing and Stripe Connect with Treasury.',
     group: 'addon'
+  },
+  {
+    id: 'retailPos',
+    label: 'Retail POS',
+    description:
+      'In-person retail checkout with Stripe Terminal card reader. Search inventory, build a cart, and charge walk-in customers.',
+    group: 'workspace'
   }
 ];
 
@@ -120,7 +127,8 @@ export const OPT_IN_MODULE_IDS: TenantModuleId[] = [
   'payments',
   'quickbooks',
   'purchasing',
-  'billPay'
+  'billPay',
+  'retailPos'
 ];
 
 /**
@@ -199,6 +207,7 @@ export function applyModuleGates(
   const quickbooks = mods.has('quickbooks');
   const purchasing = mods.has('purchasing');
   const billPay = mods.has('billPay') && purchasing;
+  const retailPos = mods.has('retailPos');
   const ops = orders || trucks;
 
   return {
@@ -243,7 +252,8 @@ export function applyModuleGates(
     canReceivePurchases: permissions.canReceivePurchases && purchasing,
     canManageVendorBills: permissions.canManageVendorBills && purchasing,
     canManageBillPay: permissions.canManageBillPay && billPay,
-    canPayVendorBills: permissions.canPayVendorBills && billPay
+    canPayVendorBills: permissions.canPayVendorBills && billPay,
+    canUseRetailPOS: permissions.canUseRetailPOS && retailPos
   };
 }
 

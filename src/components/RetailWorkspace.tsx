@@ -258,9 +258,9 @@ export function RetailWorkspace({ tenantId, permissions, userId }: Props) {
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-full">
+    <div className="flex flex-col lg:flex-row gap-4 h-full max-h-[calc(100vh-10rem)] overflow-hidden">
       {/* Left panel — inventory search */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Reader status bar */}
         <div className="flex items-center gap-2 mb-3 px-1">
           {readerStatus === 'connected' ? (
@@ -339,7 +339,7 @@ export function RetailWorkspace({ tenantId, permissions, userId }: Props) {
       </div>
 
       {/* Right panel — cart */}
-      <div className="w-full lg:w-96 flex-shrink-0 flex flex-col bg-white border border-gray-150 rounded-2xl p-4">
+      <div className="w-full lg:w-96 flex-shrink-0 flex flex-col overflow-hidden bg-white border border-gray-150 rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <ShoppingCart className="h-4 w-4 text-gray-500" />
           <span className="text-sm font-bold text-gray-700">{t('retail.cart')}</span>

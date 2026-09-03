@@ -792,7 +792,7 @@ function NurseryApp({
     isBuildingTruck || (!!selectedTruckId && !!activeTruck);
   const showingOrderPanel = !!selectedOrder && activeTab === 'orders' && !isBuildingTruck;
   const hideLeftSidebar =
-    isBuildingTruck || (activeTab === 'trucks' && showingTruckPanel) || showingOrderPanel;
+    isBuildingTruck || (activeTab === 'trucks' && showingTruckPanel) || showingOrderPanel || activeTab === 'retail';
 
   function leaveTruckBuilderIfNeeded(): boolean {
     if (!isBuildingTruck) return true;
@@ -1169,6 +1169,8 @@ function NurseryApp({
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
               {t('nav.tasksHint')}
             </div>
+          ) : activeTab === 'retail' ? (
+            null
           ) : activeTab === 'orders' ? (
             <OrdersList
               orders={visibleOrders}

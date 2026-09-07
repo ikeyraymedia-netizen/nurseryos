@@ -1243,6 +1243,12 @@ const extra = {
     deletePoReceivedBlocked: 'No se pueden eliminar OC totalmente recibidas.',
     deleteBillConfirm:
       '¿Eliminar {{billNumber}}? Si estaba sincronizada con QuickBooks, también se eliminará (o anulará) allí.',
+    deleteSelectedBills: 'Eliminar {{n}} seleccionadas',
+    deleteSelectedBillsConfirm:
+      '¿Eliminar {{n}} facturas seleccionadas? Las que estén en QuickBooks también se eliminarán (o anularán) allí.',
+    deleteSelectedBillsDone: 'Se eliminaron {{n}} facturas.',
+    selectBill: 'Seleccionar factura',
+    billsSelected: 'Facturas seleccionadas',
     receiveTitle: 'Recibir {{poNumber}}',
     receiveHint: 'Ingrese la cantidad recibida ahora. El inventario se actualiza solo por estos montos.',
     receivedProgress: 'Recibido {{received}}/{{ordered}} · restante {{remaining}}',

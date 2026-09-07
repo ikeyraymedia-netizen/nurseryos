@@ -1228,6 +1228,12 @@ const extra = {
     deletePoReceivedBlocked: 'Fully received POs cannot be deleted.',
     deleteBillConfirm:
       'Delete {{billNumber}}? If it was synced to QuickBooks, it will be deleted (or voided) there too.',
+    deleteSelectedBills: 'Delete {{n}} selected',
+    deleteSelectedBillsConfirm:
+      'Delete {{n}} selected bills? Any that were synced to QuickBooks will be deleted (or voided) there too.',
+    deleteSelectedBillsDone: 'Deleted {{n}} bills.',
+    selectBill: 'Select bill',
+    billsSelected: 'Bills selected',
     receiveTitle: 'Receive {{poNumber}}',
     receiveHint: 'Enter qty received now. Inventory is updated only for these amounts.',
     receivedProgress: 'Received {{received}}/{{ordered}} · remaining {{remaining}}',

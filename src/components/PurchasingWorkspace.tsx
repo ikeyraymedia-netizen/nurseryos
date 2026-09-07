@@ -1003,14 +1003,16 @@ export function PurchasingWorkspace({
   }
 
   function renderBillSelectionBar() {
-    if (!permissions.canPayVendorBills || selectedBills.length === 0) return null;
+    const canPay = permissions.canPayVendorBills;
+    const canDelete = permissions.canManageVendorBills;
+    if ((!canPay && !canDelete) || selectedBills.length === 0) return null;
+    const unpaidSelected = selectedBills.filter((b) => b.status === 'unpaid');
+    const unpaidTotal = unpaidSelected.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
     return (
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 mb-2">
         <p className="text-[11px] font-bold text-ink-800">
-          {t('purchasing.selectBillsToPay')}
-          {selectedBills.length > 0
-            ? ` · ${selectedBills.length} · ${money(selectedBillsTotal)}`
-            : ''}
+          {canPay ? t('purchasing.selectBillsToPay') : t('purchasing.billsSelected')}
+          {` · ${selectedBills.length} · ${money(selectedBillsTotal)}`}
         </p>
         <div className="flex flex-wrap gap-2">
           <button
@@ -1021,17 +1023,48 @@ export function PurchasingWorkspace({
           >
             {t('purchasing.clearSelection')}
           </button>
-          <button
-            type="button"
-            disabled={busy || selectedBills.length === 0}
-            onClick={() => void run(async () => payBillsAch(selectedBills))}
-            className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white disabled:opacity-50"
-          >
-            {t('purchasing.paySelectedAch', {
-              n: selectedBills.length,
-              amount: money(selectedBillsTotal)
-            })}
-          </button>
+          {canDelete && (
+            <button
+              type="button"
+              disabled={busy || selectedBills.length === 0}
+              onClick={() =>
+                void run(async () => {
+                  if (
+                    !confirm(
+                      t('purchasing.deleteSelectedBillsConfirm', {
+                        n: selectedBills.length
+                      })
+                    )
+                  ) {
+                    return;
+                  }
+                  const ids = selectedBills.map((b) => b.id);
+                  for (const id of ids) {
+                    if (editingBill?.id === id) setEditingBill(null);
+                    await deleteVendorBill(id);
+                  }
+                  setSelectedBillIds([]);
+                  setStatus(t('purchasing.deleteSelectedBillsDone', { n: ids.length }));
+                })
+              }
+              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 disabled:opacity-50"
+            >
+              {t('purchasing.deleteSelectedBills', { n: selectedBills.length })}
+            </button>
+          )}
+          {canPay && (
+            <button
+              type="button"
+              disabled={busy || unpaidSelected.length === 0}
+              onClick={() => void run(async () => payBillsAch(unpaidSelected))}
+              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white disabled:opacity-50"
+            >
+              {t('purchasing.paySelectedAch', {
+                n: unpaidSelected.length,
+                amount: money(unpaidTotal)
+              })}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1039,7 +1072,9 @@ export function PurchasingWorkspace({
 
   function renderBillCard(bill: VendorBill) {
     const isSelected = selectedBillIds.includes(bill.id);
-    const canSelect = bill.status === 'unpaid' && permissions.canPayVendorBills;
+    const canSelect =
+      permissions.canManageVendorBills ||
+      (bill.status === 'unpaid' && permissions.canPayVendorBills);
     return (
       <div
         key={bill.id}
@@ -1071,7 +1106,7 @@ export function PurchasingWorkspace({
                 onChange={() => toggleBillSelection(bill.id)}
                 onClick={(e) => e.stopPropagation()}
                 className="mt-1 h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
-                aria-label={t('purchasing.selectBillsToPay')}
+                aria-label={t('purchasing.selectBill')}
               />
             )}
             <div className="min-w-0">

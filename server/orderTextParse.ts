@@ -450,15 +450,23 @@ export function coalesceOrderItems(items: ParsedOrderItem[]): ParsedOrderItem[] 
     if (quantity <= 0 || quantity > 9999) continue;
 
     const containerSize = String(raw?.containerSize || 'Other').trim() || 'Other';
-    let plantName = cleanPlantName(String(raw?.plantName || ''));
+    const rawName = String(raw?.plantName || '').trim();
+    const rawNotes = String(raw?.notes || '').trim();
+    // Harvest caliper/paren specs from the name before stripping them off.
+    const harvested = extractNotes([rawName, rawNotes].filter(Boolean).join(' '));
+    let plantName = cleanPlantName(rawName);
     if (!plantName) continue;
     if (looksLikeAddressOrNonPlant(plantName, quantity)) continue;
 
-    let notes = String(raw?.notes || '').trim();
+    let notes = harvested || rawNotes;
     notes = notes
       .replace(priceTokenPattern(), ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
+    // Drop notes that are only leftover size tokens identical to container
+    if (notes && normalizeLoose(notes) === normalizeLoose(containerSize)) {
+      notes = '';
+    }
 
     const key = `${plantName.toLowerCase()}|${containerSize.toLowerCase()}|${notes.toLowerCase()}`;
     const existing = map.get(key);
@@ -475,6 +483,10 @@ export function coalesceOrderItems(items: ParsedOrderItem[]): ParsedOrderItem[] 
     existing.quantity = Math.max(existing.quantity, quantity);
   }
   return [...map.values()];
+}
+
+function normalizeLoose(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function parseLineItem(line: string): ParsedOrderItem | null {

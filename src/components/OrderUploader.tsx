@@ -1088,6 +1088,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                           {' '}
                           • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
                         </span>
+                        {item.notes?.trim() ? (
+                          <p className="mt-1 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-100/60 rounded px-1.5 py-0.5 inline-block">
+                            {t('loader.notePrefix', { text: item.notes.trim() })}
+                          </p>
+                        ) : null}
                       </div>
                       <button
                         type="button"

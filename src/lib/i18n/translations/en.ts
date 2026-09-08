@@ -292,6 +292,7 @@ const en = {
     assignVendor: '+ Assign vendor',
     estimatedWeight: 'ESTIMATED SHIPPING WEIGHT: {{weight}} LBS',
     optionalNotes: 'Optional notes',
+    notePrefix: 'Note: {{text}}',
     editItem: 'Edit item details',
     deleteItem: 'Delete item',
     saveInvoice: 'Save invoice',

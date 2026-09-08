@@ -43,6 +43,15 @@ function noteSizePattern(): RegExp {
   return /\b(\d+(?:\.\d+)?)\s*(?:["”]|''|in(?:ch(?:es)?)?|cal(?:iper)?\.?)(?=\s|$|[^a-z0-9])/gi;
 }
 
+/** Height ranges / feet notes: 6-7', 5-6 ft, 8'. */
+function heightNotePattern(): RegExp {
+  return /\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*(?:'|''|"|ft|feet|foot|′|″)?(?=\s|$|[^a-z0-9])|\b\d+(?:\.\d+)?\s*(?:'|ft|feet|foot|′)(?=\s|$|[^a-z0-9])/gi;
+}
+
+function sizeTokenPattern(): RegExp {
+  return /#\s*\d{1,3}\b|\b(?:b\s*&\s*b|b\.?\s*&?\s*b\.?)\b|\b(?:\d+\s*)?(?:gallon|gal|g)\b|\b(?:4|6)\s*(?:inch|in|"|'')\b|\b(?:tray|flat)\b/i;
+}
+
 function priceTokenPattern(): RegExp {
   return /\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\b\d+\.\d{2}\b/g;
 }
@@ -70,6 +79,13 @@ function extractNotes(raw: string): string | undefined {
       if (cleaned && !notes.includes(cleaned)) notes.push(cleaned);
     }
   }
+  const heightMatches = raw.match(heightNotePattern());
+  if (heightMatches) {
+    for (const m of heightMatches) {
+      const cleaned = m.replace(/\s+/g, ' ').trim();
+      if (cleaned && !notes.includes(cleaned)) notes.push(cleaned);
+    }
+  }
   // Parenthetical notes: (special grade) — skip pure prices
   const paren = raw.match(/\(([^)]+)\)/g);
   if (paren) {
@@ -90,6 +106,7 @@ function cleanPlantName(raw: string): string {
     name = name.replace(rule.re, ' ');
   }
   name = name.replace(noteSizePattern(), ' ');
+  name = name.replace(heightNotePattern(), ' ');
   name = name.replace(/\([^)]*\)/g, ' ');
   name = name.replace(priceTokenPattern(), ' ');
   // Leftover caliper / unit / invoice column words
@@ -98,6 +115,8 @@ function cleanPlantName(raw: string): string {
     ' '
   );
   name = name.replace(/[@=]/g, ' ');
+  // Orphan leading numbers left from mis-read line# / qty columns
+  name = name.replace(/^\d+\s+/, '');
   name = name
     .replace(/\s{2,}/g, ' ')
     .replace(/^[-–—,.:#/"'\s]+|[-–—,.:#/"'\s]+$/g, '')
@@ -496,6 +515,9 @@ function parseLineItem(line: string): ParsedOrderItem | null {
   // Pure money / total lines
   if (/^(?:\$?\d[\d,]*\.?\d*\s*)+$/.test(cleaned)) return null;
 
+  const structured = parseStructuredColumns(cleaned);
+  if (structured) return structured;
+
   const tabular = parseTabularLine(cleaned);
   if (tabular) return tabular;
 
@@ -535,6 +557,42 @@ function parseLineItem(line: string): ParsedOrderItem | null {
 
     const item = buildItem(quantity, rest);
     if (item) return item;
+  }
+
+  return null;
+}
+
+/**
+ * Handle common nursery columns:
+ * - "25 #3 Itea Little Henry" (qty size name)
+ * - "1 25 #3 Itea Little Henry" (line# qty size name)
+ * - "25 Itea Little Henry #3" already covered by generic qty-first
+ */
+function parseStructuredColumns(line: string): ParsedOrderItem | null {
+  // line# qty size name
+  const withLine = line.match(
+    /^(\d{1,3})\s+(\d{1,5})\s+(#\s*\d{1,3}|B\s*&\s*B|B\.?\s*&?\s*B\.?|\d+\s*g(?:al(?:lon)?)?|(?:4|6)\s*(?:inch|in|"|'')|tray|flat)\s+(.+)$/i
+  );
+  if (withLine) {
+    const lineNo = parseInt(withLine[1], 10);
+    const qty = parseInt(withLine[2], 10);
+    // Line numbers are usually small; if "line" looks like a real qty and second is size-ish, skip.
+    if (lineNo <= 200 && qty >= 1 && qty <= 9999 && lineNo !== qty) {
+      const sizeRaw = withLine[3];
+      const nameRaw = withLine[4];
+      if (sizeTokenPattern().test(sizeRaw) || /^#/.test(sizeRaw) || /b\s*&\s*b/i.test(sizeRaw)) {
+        return buildItem(qty, `${nameRaw} ${sizeRaw}`);
+      }
+    }
+  }
+
+  // qty size name (no line number)
+  const qtySizeName = line.match(
+    /^(\d{1,5})\s+(#\s*\d{1,3}|B\s*&\s*B|B\.?\s*&?\s*B\.?|\d+\s*g(?:al(?:lon)?)?|(?:4|6)\s*(?:inch|in|"|'')|tray|flat)\s+(.+)$/i
+  );
+  if (qtySizeName) {
+    const qty = parseInt(qtySizeName[1], 10);
+    return buildItem(qty, `${qtySizeName[3]} ${qtySizeName[2]}`);
   }
 
   return null;
@@ -633,6 +691,9 @@ export function localParseLooksIncomplete(
   const pricedNames = local.items.filter((i) => /\$/.test(i.plantName)).length;
   if (pricedNames > 0) return true;
 
+  // Leading digits in a plant name usually means line#/qty columns were misread.
+  if (local.items.some((i) => /^\d+/.test(i.plantName.trim()))) return true;
+
   const otherHeavy = local.items.filter((i) => i.containerSize === 'Other').length;
   if (otherHeavy >= Math.max(2, Math.ceil(local.items.length * 0.4))) return true;
 
@@ -652,6 +713,40 @@ export function localParseLooksIncomplete(
   if (plantLikeLines >= local.items.length + 2) return true;
   if (lines.length >= 4 && local.items.length === 1) return true;
   return false;
+}
+
+/**
+ * Only short-circuit to local parse when the paste is clearly simple and trustworthy.
+ * Invoice/table layouts should go through AI.
+ */
+export function localParseLooksReliable(
+  rawText: string,
+  local: ParsedOrderFromText | null
+): boolean {
+  if (localParseLooksIncomplete(rawText, local)) return false;
+  if (!local) return false;
+
+  const text = String(rawText || '');
+  // Columnar invoices / packing lists — prefer AI.
+  if (
+    /\bitem\b.+\bqty\b|\bqty\b.+\bsize\b.+\bdesc|\bdescription\b.+\bquantity\b|\bline\s*#?\b.+\bqty\b/i.test(
+      text
+    )
+  ) {
+    return false;
+  }
+  if (local.items.some((i) => /^\d+/.test(i.plantName.trim()))) return false;
+  if (local.items.some((i) => heightNotePattern().test(i.plantName))) {
+    heightNotePattern().lastIndex = 0;
+    return false;
+  }
+  heightNotePattern().lastIndex = 0;
+
+  // Every line should have a recognized container size for a confident local-only result.
+  const sized = local.items.filter((i) => i.containerSize && i.containerSize !== 'Other').length;
+  if (sized < local.items.length) return false;
+
+  return true;
 }
 
 export function decodeBase64Text(base64Data: string): string {

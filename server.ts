@@ -28,6 +28,7 @@ import {
   isPlainTextMime,
   parseOrderTextLocally,
   localParseLooksIncomplete,
+  localParseLooksReliable,
   coalesceOrderItems
 } from './server/orderTextParse';
 import { chunkPdfText, extractPdfText } from './server/pdfTextExtract';
@@ -719,6 +720,7 @@ function orderParseQualityScore(parsed: any | null): number {
     if (size && size !== 'other') score += 4;
     else score -= 2;
     if (/\$|\d+\.\d{2}/.test(name)) score -= 12;
+    if (/^\d+/.test(name)) score -= 30;
     if (
       /\b(?:freight|tax|delivery|labor|fee|surcharge|subtotal|total|phone|fax)\b/i.test(name)
     ) {
@@ -743,8 +745,9 @@ function pickStrongerOrderParse(
 ): any | null {
   const localScore = orderParseQualityScore(local);
   const aiScore = orderParseQualityScore(aiParsed);
-  // Prefer quality over raw line count — local parse used to win by inventing address junk.
-  const preferLocal = localScore > aiScore;
+  // Prefer quality over raw line count. Bias toward AI when scores are close —
+  // local used to win by inventing address/line-number junk.
+  const preferLocal = localScore > aiScore + 12;
   if (preferLocal && local) {
     console.log(
       `Keeping local parse (score ${localScore} vs AI ${aiScore}; ${local.items.length} vs ${Array.isArray(aiParsed?.items) ? aiParsed.items.length : 0} items).`
@@ -790,21 +793,21 @@ app.post('/api/parse-order', async (req, res) => {
       return;
     }
 
-    // Pasted plain text: parse locally first so upload works even when Gemini is slow/down.
-    // If local parse looks incomplete (e.g. one merged line), fall through to AI.
+    // Pasted plain text: only skip AI for clearly simple, reliable local parses.
+    // Invoice/table layouts fall through to Gemini.
     let localFallback: ReturnType<typeof parseOrderTextLocally> = null;
     if (looksLikeText) {
       const textBody = providedText || (base64Data ? decodeBase64Text(base64Data) : '');
       const local = parseOrderTextLocally(textBody);
       localFallback = local;
-      if (local && !localParseLooksIncomplete(textBody, local)) {
+      if (local && localParseLooksReliable(textBody, local)) {
         console.log(`Parsed pasted order locally (${local.items.length} items).`);
         res.json(normalizeParsedOrderPayload(local));
         return;
       }
       if (local) {
         console.log(
-          `Local paste parse looks incomplete (${local.items.length} items) — trying AI.`
+          `Local paste parse not trusted (${local.items.length} items) — trying AI.`
         );
       }
     }
@@ -824,6 +827,7 @@ app.post('/api/parse-order', async (req, res) => {
       (looksLikeText && cleanBase64 ? decodeBase64Text(base64Data) : undefined);
 
     // PDF text extraction is faster and more reliable than raw multi-page PDF vision.
+    // Always continue to AI for PDFs — local parse is fallback / comparison only.
     if (resolvedMime === 'application/pdf' && cleanBase64) {
       try {
         const pdfBuffer = Buffer.from(cleanBase64, 'base64');
@@ -836,16 +840,12 @@ app.post('/api/parse-order', async (req, res) => {
           const localFromPdf = parseOrderTextLocally(text);
           if (localFromPdf) {
             localFallback =
-              !localFallback || localFromPdf.items.length > localFallback.items.length
+              !localFallback ||
+              orderParseQualityScore(localFromPdf) > orderParseQualityScore(localFallback)
                 ? localFromPdf
                 : localFallback;
-            if (!localParseLooksIncomplete(text, localFromPdf)) {
-              console.log(`Parsed order PDF locally (${localFromPdf.items.length} items).`);
-              res.json(normalizeParsedOrderPayload(localFromPdf));
-              return;
-            }
             console.log(
-              `Local PDF parse looks incomplete (${localFromPdf.items.length} items) — trying AI on extracted text.`
+              `Local PDF parse ready as fallback (${localFromPdf.items.length} items); continuing to AI.`
             );
           }
         }
@@ -868,8 +868,9 @@ It is a customer plant order list/invoice from a nursery. Extract:
    - Do NOT invent addresses. Use "" when a field is missing. If only one address block exists and it is clearly delivery, put it in shippingAddress.
 4. Structured list of plant items. CRITICAL RULES for items:
    - ONLY extract plant/tree/shrub lines that are clearly present in THIS document. NEVER invent, guess, or add plants that are not written on the page.
+   - If the document has columns like Item # / Line / Qty / Size / Description, use Qty as quantity — never the line/item number.
    - plantName must be ONLY the plant name (e.g. "Nellie Stevens Holly"). Strip unit prices, extended prices, SKUs, column headers, and sizes from the name.
-   - Put caliper/height like 24" into notes, not plantName.
+   - Put caliper/height like 24" or 6-7' into notes, not plantName.
    - Do NOT create items for freight, delivery, tax, labor, fees, discounts, payments, phone numbers, addresses, page numbers, or totals.
    - Do NOT turn street addresses, ZIP codes, page headers, footers, or watermarks into plant lines.
    - Do NOT repeat the same plant line multiple times unless the document itself lists it multiple times with clear separate quantities.

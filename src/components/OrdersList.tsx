@@ -1,8 +1,20 @@
-import React, { useState } from 'react';
-import { Search, Calendar, Weight, Trash2, CheckCircle2, CircleDot, PlayCircle, MapPin, DollarSign } from 'lucide-react';
-import { CustomerOrder } from '../types';
+import React, { useMemo, useState } from 'react';
+import {
+  Search,
+  Calendar,
+  Weight,
+  Trash2,
+  CheckCircle2,
+  CircleDot,
+  PlayCircle,
+  MapPin,
+  DollarSign,
+  Sprout
+} from 'lucide-react';
+import { CustomerOrder, PlantOrderItem } from '../types';
 import { deleteCustomerOrder } from '../lib/db';
 import { useT } from '../lib/i18n';
+import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { orderRefLabel } from '../lib/orderLabels';
 import { isDirectShipOrder } from '../lib/orderVisibility';
 
@@ -14,6 +26,31 @@ interface OrdersListProps {
   onSelectOrder: (orderId: string) => void;
 }
 
+type PlantSearchHit = {
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  notes?: string;
+};
+
+function plantHitsForQuery(items: PlantOrderItem[], q: string): PlantSearchHit[] {
+  if (!q) return [];
+  const hits: PlantSearchHit[] = [];
+  for (const item of items) {
+    const hay = [item.plantName, item.containerSize, item.notes || '']
+      .join(' ')
+      .toLowerCase();
+    if (!hay.includes(q)) continue;
+    hits.push({
+      plantName: item.plantName,
+      containerSize: item.containerSize,
+      quantity: item.quantity,
+      ...(item.notes?.trim() ? { notes: item.notes.trim() } : {})
+    });
+  }
+  return hits;
+}
+
 export const OrdersList: React.FC<OrdersListProps> = ({
   orders,
   selectedOrderId,
@@ -22,6 +59,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   onSelectOrder
 }) => {
   const t = useT();
+  const dp = usePlantDisplay();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'loading' | 'completed'>('all');
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
@@ -35,18 +73,31 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     }
   };
 
-  // Filter orders based on search query and status filter
-  const filteredOrders = orders.filter((order) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      order.customerName.toLowerCase().includes(q) ||
-      (order.orderNumber || '').toLowerCase().includes(q) ||
-      (order.invoiceDetails?.poNumber || '').toLowerCase().includes(q);
+  const filteredOrders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return orders
+      .map((order) => {
+        const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+        if (!matchesStatus) return null;
 
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+        if (!q) {
+          return { order, plantHits: [] as PlantSearchHit[] };
+        }
 
-    return matchesSearch && matchesStatus;
-  });
+        const matchesMeta =
+          order.customerName.toLowerCase().includes(q) ||
+          (order.orderNumber || '').toLowerCase().includes(q) ||
+          (order.invoiceDetails?.poNumber || '').toLowerCase().includes(q) ||
+          (order.owner || '').toLowerCase().includes(q) ||
+          (order.stagedLocation || '').toLowerCase().includes(q);
+
+        const plantHits = plantHitsForQuery(order.items, q);
+        if (!matchesMeta && plantHits.length === 0) return null;
+
+        return { order, plantHits };
+      })
+      .filter(Boolean) as Array<{ order: CustomerOrder; plantHits: PlantSearchHit[] }>;
+  }, [orders, searchQuery, statusFilter]);
 
   const getStatusBadge = (status: CustomerOrder['status']) => {
     switch (status) {
@@ -96,8 +147,13 @@ export const OrdersList: React.FC<OrdersListProps> = ({
     }
   };
 
+  const searching = searchQuery.trim().length > 0;
+
   return (
-    <div id="orders-list-card" className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full">
+    <div
+      id="orders-list-card"
+      className="bg-white rounded-2xl shadow-md border-t-4 border-t-ink-700 border-x border-b border-slate-200/95 p-6 flex flex-col h-full"
+    >
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-gray-900 font-sans">{t('orders.title')}</h3>
         <span className="text-xs font-mono bg-ink-100 text-ink-950 border border-ink-300 px-2.5 py-1 rounded-lg font-bold">
@@ -106,7 +162,6 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         </span>
       </div>
 
-      {/* Search Input */}
       <div className="relative mb-4">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <Search className="h-4 w-4 text-slate-500" />
@@ -120,7 +175,6 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         />
       </div>
 
-      {/* Filter Tabs */}
       <div className="flex border-b border-slate-300/80 pb-2 mb-4 overflow-x-auto gap-1">
         {(['all', 'pending', 'loading', 'completed'] as const).map((tab) => (
           <button
@@ -143,19 +197,21 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         ))}
       </div>
 
-      {/* Orders Scroller */}
       <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[500px] lg:max-h-[600px] min-h-[300px]">
         {filteredOrders.length === 0 ? (
           <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-300">
-            <p className="text-sm font-semibold text-gray-700">{t('orders.noOrders')}</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-[200px] mx-auto leading-normal">
-              {t('orders.noOrdersHint')}
+            <p className="text-sm font-semibold text-gray-700">
+              {searching ? t('orders.noSearchResults') : t('orders.noOrders')}
+            </p>
+            <p className="text-xs text-slate-500 mt-1 max-w-[220px] mx-auto leading-normal">
+              {searching ? t('orders.noSearchResultsHint') : t('orders.noOrdersHint')}
             </p>
           </div>
         ) : (
-          filteredOrders.map((order) => {
+          filteredOrders.map(({ order, plantHits }) => {
             const isSelected = order.id === selectedOrderId;
             const { totalQty, loadedQty, percentage } = getOrderProgress(order);
+            const matchedPlantQty = plantHits.reduce((sum, hit) => sum + hit.quantity, 0);
 
             return (
               <div
@@ -185,41 +241,70 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                   </div>
                   {canDelete &&
                     (deletingOrderId === order.id ? (
-                    <div className="flex items-center space-x-1 shrink-0 z-10">
+                      <div className="flex items-center space-x-1 shrink-0 z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteConfirm(order.id);
+                          }}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all"
+                        >
+                          {t('common.confirm')}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingOrderId(null);
+                          }}
+                          className="px-2 py-1 bg-gray-150 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-bold transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteConfirm(order.id);
+                          setDeletingOrderId(order.id);
                         }}
-                        className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all"
+                        className="text-gray-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+                        title={t('orders.deleteConfirm')}
                       >
-                        {t('common.confirm')}
+                        <Trash2 className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingOrderId(null);
-                        }}
-                        className="px-2 py-1 bg-gray-150 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-bold transition-all"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingOrderId(order.id);
-                      }}
-                      className="text-gray-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
-                      title={t('orders.deleteConfirm')}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  ))}
+                    ))}
                 </div>
 
-                {/* Status & Date & Weight */}
+                {plantHits.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-teal-200 bg-teal-50/70 px-2.5 py-2 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-900 flex items-center gap-1">
+                      <Sprout className="h-3 w-3" />
+                      {t('orders.plantMatchSummary', {
+                        lines: plantHits.length,
+                        qty: matchedPlantQty
+                      })}
+                    </p>
+                    {plantHits.slice(0, 4).map((hit, idx) => (
+                      <p
+                        key={`${hit.plantName}-${hit.containerSize}-${idx}`}
+                        className="text-[11px] text-teal-950 leading-snug"
+                      >
+                        <span className="font-black font-mono">{hit.quantity}</span>
+                        <span className="text-teal-800"> × {dp.size(hit.containerSize)} </span>
+                        <span className="font-semibold">{dp.plant(hit.plantName)}</span>
+                        {hit.notes ? (
+                          <span className="text-teal-700/80"> · {hit.notes}</span>
+                        ) : null}
+                      </p>
+                    ))}
+                    {plantHits.length > 4 ? (
+                      <p className="text-[10px] font-semibold text-teal-800">
+                        {t('orders.plantMatchMore', { n: plantHits.length - 4 })}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2.5 pt-2.5 border-t border-gray-100/70 text-[11px] text-gray-500 font-mono">
                   <span className="shrink-0">{getStatusBadge(order.status)}</span>
                   {orderIdsNeedingInvoice?.has(order.id) && (
@@ -243,19 +328,21 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                   )}
                 </div>
 
-                {/* Staging Location Badge */}
                 {order.stagedLocation && (
                   <div className="mt-2 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 flex items-center space-x-1.5 w-fit">
                     <MapPin className="h-3.5 w-3.5 text-ink-700 shrink-0" />
-                    <span className="truncate">Staged at: <span className="font-black text-slate-900">{order.stagedLocation}</span></span>
+                    <span className="truncate">
+                      Staged at:{' '}
+                      <span className="font-black text-slate-900">{order.stagedLocation}</span>
+                    </span>
                   </div>
                 )}
 
-                {/* Progress Bar */}
                 <div className="mt-3">
                   <div className="flex justify-between items-center text-[11px] mb-1">
                     <span className="font-semibold text-gray-600">
-                      Loaded: <span className="font-bold text-gray-900">{loadedQty}</span> of {totalQty} plants
+                      Loaded: <span className="font-bold text-gray-900">{loadedQty}</span> of{' '}
+                      {totalQty} plants
                     </span>
                     <span className="font-bold text-ink-800 font-mono">{percentage}%</span>
                   </div>

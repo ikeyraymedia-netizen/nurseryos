@@ -164,7 +164,7 @@ const en = {
   },
   orders: {
     title: 'Plant Orders',
-    searchPlaceholder: 'Search customer or PO…',
+    searchPlaceholder: 'Search customer, PO, or plant…',
     filterAll: 'All',
     filterPending: 'To load',
     filterLoading: 'In progress',
@@ -175,6 +175,10 @@ const en = {
     deleteConfirm: 'Delete this order?',
     noOrders: 'No orders yet',
     noOrdersHint: 'Upload a customer order to get started.',
+    noSearchResults: 'No matching orders',
+    noSearchResultsHint: 'Try a different customer, PO, or plant name.',
+    plantMatchSummary: '{{qty}} matched plants · {{lines}} line(s)',
+    plantMatchMore: '+{{n}} more matching lines',
     needsInvoice: 'Needs invoice save'
   },
   trucks: {

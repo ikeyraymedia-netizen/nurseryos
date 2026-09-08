@@ -14,7 +14,6 @@ import {
   Trash2
 } from 'lucide-react';
 import { addCustomerOrder } from '../lib/db';
-import { updateCustomer } from '../lib/customers';
 import { notifyPushEvent } from '../lib/pushNotifications';
 import { findMatchingCustomers } from '../lib/customerMatch';
 import {
@@ -49,10 +48,6 @@ interface ParsedOrderDraft {
   customerName: string;
   /** Customer PO when clearly labeled on the upload; empty otherwise. */
   poNumber: string;
-  billingName: string;
-  billingAddress: string;
-  shippingName: string;
-  shippingAddress: string;
   items: PlantOrderItem[];
   originalText: string;
   totalWeightLbs: number;
@@ -335,10 +330,6 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setPendingDraft({
         customerName: parsedCustomerName,
         poNumber: String(result.poNumber || '').trim().replace(/^n\/?a$/i, ''),
-        billingName: String(result.billingName || '').trim(),
-        billingAddress: String(result.billingAddress || '').trim(),
-        shippingName: String(result.shippingName || '').trim(),
-        shippingAddress: String(result.shippingAddress || '').trim(),
         items: itemsWithIds,
         originalText: result.plainText || orderText || '',
         totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights),
@@ -540,37 +531,6 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       const linked = selectedCustomer;
       const namedItems = itemsNamedFromInventory(pendingDraft.items);
 
-      // Fill empty customer address fields from the upload (never overwrite existing).
-      if (linked?.id && permissions.canEditCustomers) {
-        const nextBillingName =
-          linked.billingName?.trim() || pendingDraft.billingName.trim() || undefined;
-        const nextBillingAddress =
-          linked.billingAddress?.trim() || pendingDraft.billingAddress.trim() || undefined;
-        const nextShippingName =
-          linked.shippingName?.trim() || pendingDraft.shippingName.trim() || undefined;
-        const nextShippingAddress =
-          linked.shippingAddress?.trim() ||
-          linked.receiverAddress?.trim() ||
-          pendingDraft.shippingAddress.trim() ||
-          undefined;
-        const shouldUpdate =
-          (nextBillingName && nextBillingName !== linked.billingName) ||
-          (nextBillingAddress && nextBillingAddress !== linked.billingAddress) ||
-          (nextShippingName && nextShippingName !== linked.shippingName) ||
-          (nextShippingAddress &&
-            nextShippingAddress !== linked.shippingAddress &&
-            nextShippingAddress !== linked.receiverAddress);
-        if (shouldUpdate) {
-          await updateCustomer({
-            ...linked,
-            billingName: nextBillingName || linked.billingName,
-            billingAddress: nextBillingAddress || linked.billingAddress,
-            shippingName: nextShippingName || linked.shippingName,
-            shippingAddress: nextShippingAddress || linked.shippingAddress
-          });
-        }
-      }
-
       if (uploadKind === 'estimate') {
         if (!linked?.id) {
           throw new Error('Pick a customer before saving an estimate. Estimates are saved under the customer only — not as a plant order.');
@@ -610,15 +570,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           freightCharge,
           discount,
           notes: t('upload.estimateNotesDefault'),
-          billToName:
-            pendingDraft.billingName.trim() ||
-            linked.billingName ||
-            linked.name,
-          billToAddress:
-            pendingDraft.billingAddress.trim() ||
-            linked.billingAddress ||
-            linked.shippingAddress ||
-            undefined,
+          billToName: linked.billingName || linked.name,
+          billToAddress: linked.billingAddress || linked.shippingAddress || undefined,
           customerEmail: linked.contactEmail || undefined,
           owner: salesRep.trim() || undefined,
           items: lineItems,
@@ -996,59 +949,6 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-white border border-gray-200 text-gray-700">
               {uploadKind === 'estimate' ? 'Estimate' : 'Plant order'}
             </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2">
-            <div className="bg-white border border-gray-100 rounded-lg px-3 py-2 space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
-                Ship-to address
-              </p>
-              <input
-                type="text"
-                value={pendingDraft.shippingName}
-                onChange={(e) =>
-                  setPendingDraft((d) => (d ? { ...d, shippingName: e.target.value } : d))
-                }
-                placeholder="Ship-to name (optional)"
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500"
-              />
-              <textarea
-                value={pendingDraft.shippingAddress}
-                onChange={(e) =>
-                  setPendingDraft((d) => (d ? { ...d, shippingAddress: e.target.value } : d))
-                }
-                placeholder="Street, city, state, ZIP from the order"
-                rows={3}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 resize-y"
-              />
-            </div>
-            <div className="bg-white border border-gray-100 rounded-lg px-3 py-2 space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
-                Bill-to address
-              </p>
-              <input
-                type="text"
-                value={pendingDraft.billingName}
-                onChange={(e) =>
-                  setPendingDraft((d) => (d ? { ...d, billingName: e.target.value } : d))
-                }
-                placeholder="Bill-to name (optional)"
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500"
-              />
-              <textarea
-                value={pendingDraft.billingAddress}
-                onChange={(e) =>
-                  setPendingDraft((d) => (d ? { ...d, billingAddress: e.target.value } : d))
-                }
-                placeholder="Billing address if different"
-                rows={3}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 resize-y"
-              />
-            </div>
-            <p className="text-[10px] text-gray-500 leading-relaxed">
-              Addresses from the upload are saved onto the linked customer when those fields are
-              empty (existing customer addresses are not overwritten).
-            </p>
           </div>
 
           {uploadKind === 'estimate' && (

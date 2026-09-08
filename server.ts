@@ -231,13 +231,21 @@ function getOrderParseSchema() {
           items: {
             type: Type.OBJECT,
             properties: {
-              plantName: { type: Type.STRING, description: 'Clean scientific or common name of the plant' },
+              plantName: {
+                type: Type.STRING,
+                description:
+                  'Clean plant common/cultivar name only. No prices, quantities, sizes, SKUs, caliper, or invoice columns.'
+              },
               containerSize: {
                 type: Type.STRING,
                 description: 'The standardized container size (e.g. #1, #3, #5, #7, #10, #15, #30, B&B, 4 inch, 6 inch, Tray, Other)'
               },
               quantity: { type: Type.INTEGER, description: 'Quantity ordered' },
-              notes: { type: Type.STRING, description: 'Any special notes or specs for this item, if found' }
+              notes: {
+                type: Type.STRING,
+                description:
+                  'Optional specs only (e.g. 24" caliper). Never put unit price, extended price, freight, or tax here.'
+              }
             },
             required: ['plantName', 'containerSize', 'quantity']
           }
@@ -710,6 +718,12 @@ function orderParseQualityScore(parsed: any | null): number {
     const name = String(item?.plantName || '').trim();
     if (size && size !== 'other') score += 4;
     else score -= 2;
+    if (/\$|\d+\.\d{2}/.test(name)) score -= 12;
+    if (
+      /\b(?:freight|tax|delivery|labor|fee|surcharge|subtotal|total|phone|fax)\b/i.test(name)
+    ) {
+      score -= 25;
+    }
     if (
       /\b(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|suite|ste)\b/i.test(
         name
@@ -854,7 +868,10 @@ It is a customer plant order list/invoice from a nursery. Extract:
    - Do NOT invent addresses. Use "" when a field is missing. If only one address block exists and it is clearly delivery, put it in shippingAddress.
 4. Structured list of plant items. CRITICAL RULES for items:
    - ONLY extract plant/tree/shrub lines that are clearly present in THIS document. NEVER invent, guess, or add plants that are not written on the page.
-   - Do NOT turn street addresses, phone numbers, ZIP codes, page headers, footers, or watermarks into plant lines.
+   - plantName must be ONLY the plant name (e.g. "Nellie Stevens Holly"). Strip unit prices, extended prices, SKUs, column headers, and sizes from the name.
+   - Put caliper/height like 24" into notes, not plantName.
+   - Do NOT create items for freight, delivery, tax, labor, fees, discounts, payments, phone numbers, addresses, page numbers, or totals.
+   - Do NOT turn street addresses, ZIP codes, page headers, footers, or watermarks into plant lines.
    - Do NOT repeat the same plant line multiple times unless the document itself lists it multiple times with clear separate quantities.
    - Ignore repeated headers/footers that appear on every page.
    Standardize the container sizes to the closest match from these standard terms:

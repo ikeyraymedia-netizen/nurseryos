@@ -34,9 +34,17 @@ const SIZE_RULES: Array<{ size: string; re: RegExp }> = [
   { size: 'Tray', re: /\b(?:tray|flat|plug\s*tray)\b/i }
 ];
 
+/** Invoice / charge descriptions that are never plant lines. */
+const NON_PLANT_NAME_RE =
+  /^(?:freight|shipping|delivery|fuel(?:\s+surcharge)?|surcharge|handling|labor|install(?:ation)?|tax|sales\s*tax|vat|gst|hst|discount|deposit|payment|credit|refund|misc(?:ellaneous)?|fee|service(?:\s+fee)?|restock(?:ing)?|minimum|subtotal|total|balance|amount\s*due|due\s*upon\s*receipt|invoice|order|purchase\s*order|page|phone|fax|email|website|www)$/i;
+
 /** Caliper / B&B height notes like 24", 30", 2.5" cal. */
 function noteSizePattern(): RegExp {
   return /\b(\d+(?:\.\d+)?)\s*(?:["”]|''|in(?:ch(?:es)?)?|cal(?:iper)?\.?)(?=\s|$|[^a-z0-9])/gi;
+}
+
+function priceTokenPattern(): RegExp {
+  return /\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\b\d+\.\d{2}\b/g;
 }
 
 function standardizeContainerSize(raw: string): string {
@@ -55,32 +63,48 @@ function extractNotes(raw: string): string | undefined {
   const inchMatches = raw.match(noteSizePattern());
   if (inchMatches) {
     for (const m of inchMatches) {
-      const cleaned = m.replace(/\s+/g, ' ').trim();
-      if (!notes.includes(cleaned)) notes.push(cleaned);
+      const cleaned = m
+        .replace(/\s+/g, ' ')
+        .replace(/\bcal(?:iper)?\.?\s*$/i, '')
+        .trim();
+      if (cleaned && !notes.includes(cleaned)) notes.push(cleaned);
     }
   }
-  // Parenthetical notes: (special grade)
+  // Parenthetical notes: (special grade) — skip pure prices
   const paren = raw.match(/\(([^)]+)\)/g);
   if (paren) {
     for (const p of paren) {
       const inner = p.slice(1, -1).trim();
-      if (inner && !/^\d+$/.test(inner) && !notes.includes(inner)) notes.push(inner);
+      if (!inner || /^\d+$/.test(inner) || priceTokenPattern().test(inner)) continue;
+      priceTokenPattern().lastIndex = 0;
+      if (!notes.includes(inner)) notes.push(inner);
     }
   }
   return notes.length ? notes.join(' · ') : undefined;
 }
 
-function stripSizeTokens(raw: string): string {
+/** Strip sizes, prices, units, and invoice noise so plantName is just the plant. */
+function cleanPlantName(raw: string): string {
   let name = raw.trim();
   for (const rule of SIZE_RULES) {
     name = name.replace(rule.re, ' ');
   }
   name = name.replace(noteSizePattern(), ' ');
   name = name.replace(/\([^)]*\)/g, ' ');
-  return name
+  name = name.replace(priceTokenPattern(), ' ');
+  // Leftover caliper / unit / invoice column words
+  name = name.replace(
+    /\b(?:cal(?:iper)?\.?|ea\.?|each|ext(?:ended)?|unit\s*price|price|amount|qty|quantity|description|item(?:\s*#)?|sku|code|loc(?:ation)?)\b/gi,
+    ' '
+  );
+  name = name.replace(/[@=]/g, ' ');
+  name = name
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[-–—,.:#]+|[-–—,.:#]+$/g, '')
+    .replace(/^[-–—,.:#/"'\s]+|[-–—,.:#/"'\s]+$/g, '')
+    .replace(/\s*,\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
     .trim();
+  return name;
 }
 
 function extractMeta(lines: string[]): {
@@ -124,9 +148,14 @@ function extractMeta(lines: string[]): {
       if (collected.length >= 6) break;
     }
     const name = collected[0] || '';
-    const address = collected.slice(name ? 1 : 0).join('\n').trim() || (collected.length === 1 ? collected[0] : '');
+    const address =
+      collected
+        .slice(name ? 1 : 0)
+        .join('\n')
+        .trim() || (collected.length === 1 ? collected[0] : '');
     // If only one line and it looks like a street/city, treat whole thing as address
-    const looksLikeAddress = /\d/.test(name) || /\b(?:st|street|ave|road|rd|blvd|ln|dr|suite|ste|box)\b/i.test(name);
+    const looksLikeAddress =
+      /\d/.test(name) || /\b(?:st|street|ave|road|rd|blvd|ln|dr|suite|ste|box)\b/i.test(name);
     if (looksLikeAddress && collected.length === 1) {
       return { name: '', address: name, nextIndex: i };
     }
@@ -142,9 +171,7 @@ function extractMeta(lines: string[]): {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const customerMatch = line.match(
-      /^(?:customer|client|company)\s*[:\-]\s*(.+)$/i
-    );
+    const customerMatch = line.match(/^(?:customer|client|company)\s*[:\-]\s*(.+)$/i);
     if (customerMatch?.[1]?.trim()) {
       customerName = customerMatch[1].trim();
       continue;
@@ -219,9 +246,23 @@ function extractMeta(lines: string[]): {
 }
 
 function isMetaOrJunkLine(line: string): boolean {
-  return /^(customer|bill\s*to|ship\s*to|sold\s*to|deliver(?:y)?\s*to|client|company|po|order|invoice|notes?|qty|quantity|plant|size|description|item|total|subtotal|tax|date|page|tel|phone|fax|email|www\.|http)\b/i.test(
+  return /^(customer|bill\s*to|ship\s*to|sold\s*to|deliver(?:y)?\s*to|client|company|po|order|invoice|notes?|qty|quantity|plant|size|description|item|total|subtotal|tax|sales\s*tax|date|page|tel|phone|fax|email|www\.|http|freight|shipping|delivery|balance|amount\s*due|due\s*upon)\b/i.test(
     line
   );
+}
+
+function isNonPlantDescription(name: string): boolean {
+  const cleaned = name.trim().replace(/\s+/g, ' ');
+  if (!cleaned) return true;
+  if (NON_PLANT_NAME_RE.test(cleaned)) return true;
+  if (
+    /\b(?:freight|sales\s*tax|delivery\s*charge|fuel\s*surcharge|handling\s*fee|labor\s*charge)\b/i.test(
+      cleaned
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Street / city lines often look like "123 Main St" and must not become plant rows. */
@@ -229,6 +270,7 @@ function looksLikeAddressOrNonPlant(plantName: string, quantity: number): boolea
   if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 9999) return true;
   const name = plantName.trim();
   if (!name) return true;
+  if (isNonPlantDescription(name)) return true;
   if (
     /\b(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|hwy|highway|suite|ste|apt|unit|floor|fl|p\.?\s*o\.?\s*box|zip|phone|fax|email)\b/i.test(
       name
@@ -239,17 +281,33 @@ function looksLikeAddressOrNonPlant(plantName: string, quantity: number): boolea
   // "Baton Rouge LA 70801" / trailing state+zip fragments
   if (/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/.test(name)) return true;
   if (/^\d{5}(?:-\d{4})?$/.test(name)) return true;
+  // Must contain at least one letter (not SKU-only / price leftovers)
+  if (!/[a-zA-Z]/.test(name)) return true;
   return false;
 }
 
 function buildItem(quantity: number, rest: string): ParsedOrderItem | null {
   if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 9999 || !rest.trim()) return null;
+
+  // Drop pure charge lines before size parsing (e.g. "Freight $150.00")
+  const preliminaryName = cleanPlantName(rest);
+  if (isNonPlantDescription(preliminaryName) || isNonPlantDescription(rest.trim())) return null;
+
   const containerSize = standardizeContainerSize(rest);
-  const plantName = stripSizeTokens(rest) || rest.trim();
+  const plantName = preliminaryName;
   if (!plantName || plantName.length < 2) return null;
-  // Avoid treating bare numbers / sizes as plant names
   if (/^[\d#"\s.]+$/.test(plantName)) return null;
   if (looksLikeAddressOrNonPlant(plantName, quantity)) return null;
+
+  // Bare "Other" with no size cue is usually junk (phone fragments, random text).
+  // Keep only when the rest clearly had a plant-ish multi-word name and a leading qty.
+  if (containerSize === 'Other') {
+    const hasSizeCue =
+      /#\s*\d|\b(?:gal(?:lon)?|b\s*&\s*b|tray|flat|inch|in\b|["”]|cal)/i.test(rest) ||
+      noteSizePattern().test(rest);
+    noteSizePattern().lastIndex = 0;
+    if (!hasSizeCue && plantName.split(/\s+/).length < 2) return null;
+  }
 
   const notes = extractNotes(rest);
   return {
@@ -267,10 +325,19 @@ function parseTabularLine(line: string): ParsedOrderItem | null {
     .filter(Boolean);
   if (parts.length < 2) return null;
 
+  // Prefer qty-first plant columns; skip pure price columns when joining.
+  const useful = (p: string) => !priceTokenPattern().test(p) || /[a-zA-Z#]/.test(p.replace(priceTokenPattern(), ''));
+
   // qty first: 171 | Wintergreen | B&B | 24"
   if (/^\d+$/.test(parts[0])) {
     const quantity = parseInt(parts[0], 10);
-    const rest = parts.slice(1).join(' ');
+    const rest = parts
+      .slice(1)
+      .filter((p) => {
+        priceTokenPattern().lastIndex = 0;
+        return useful(p);
+      })
+      .join(' ');
     return buildItem(quantity, rest);
   }
 
@@ -278,7 +345,13 @@ function parseTabularLine(line: string): ParsedOrderItem | null {
   const last = parts[parts.length - 1];
   if (/^\d+$/.test(last)) {
     const quantity = parseInt(last, 10);
-    const rest = parts.slice(0, -1).join(' ');
+    const rest = parts
+      .slice(0, -1)
+      .filter((p) => {
+        priceTokenPattern().lastIndex = 0;
+        return useful(p);
+      })
+      .join(' ');
     return buildItem(quantity, rest);
   }
 
@@ -292,12 +365,35 @@ function parseCsvishLine(line: string): ParsedOrderItem | null {
     .map((p) => p.trim())
     .filter(Boolean);
   if (parts.length < 2) return null;
+
+  // City, ST, ZIP style rows
+  if (
+    parts.length >= 2 &&
+    /^[A-Z]{2}$/i.test(parts[1] || '') &&
+    /^\d{5}(?:-\d{4})?$/.test(parts[2] || parts[parts.length - 1] || '')
+  ) {
+    return null;
+  }
+
+  const isPriceOnly = (p: string) => {
+    const stripped = p.replace(priceTokenPattern(), '').trim();
+    return !stripped || /^[\d.\s$]+$/.test(stripped);
+  };
+
   if (/^\d+$/.test(parts[0])) {
-    return buildItem(parseInt(parts[0], 10), parts.slice(1).join(' '));
+    const rest = parts
+      .slice(1)
+      .filter((p) => !isPriceOnly(p))
+      .join(' ');
+    return buildItem(parseInt(parts[0], 10), rest);
   }
   const last = parts[parts.length - 1];
   if (/^\d+$/.test(last)) {
-    return buildItem(parseInt(last, 10), parts.slice(0, -1).join(' '));
+    const rest = parts
+      .slice(0, -1)
+      .filter((p) => !isPriceOnly(p))
+      .join(' ');
+    return buildItem(parseInt(last, 10), rest);
   }
   return null;
 }
@@ -310,7 +406,7 @@ function explodeMultiQtyLine(line: string): string[] {
   const cleaned = line.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, '').trim();
   if (!cleaned) return [];
 
-  // Need at least two leading-qty plant chunks. Ignore zip-sized / year-sized numbers.
+  // Need at least two leading-qty plant chunks. Ignore zip-sized numbers.
   const starts: number[] = [];
   const re = /(?:^|\s)(\d{1,4})\s+(?=[A-Za-z(#])/g;
   let m: RegExpExecArray | null;
@@ -328,6 +424,9 @@ function explodeMultiQtyLine(line: string): string[] {
     ) {
       continue;
     }
+    // Don't split on prices like "45.00 Boxwood" — require integer qty tokens only (already).
+    // Skip if previous char looks like a decimal price boundary.
+    if (idx > 0 && cleaned[idx - 1] === '.') continue;
     starts.push(idx);
   }
 
@@ -343,16 +442,24 @@ function explodeMultiQtyLine(line: string): string[] {
   return chunks.length ? chunks : [cleaned];
 }
 
-/** Collapse duplicate plant+size(+notes) rows that PDF/OCR often repeats. */
+/** Sanitize + collapse duplicate plant+size(+notes) rows. */
 export function coalesceOrderItems(items: ParsedOrderItem[]): ParsedOrderItem[] {
   const map = new Map<string, ParsedOrderItem>();
-  for (const item of items) {
-    const plantName = String(item?.plantName || '').trim();
+  for (const raw of items) {
+    const quantity = Number(raw?.quantity) || 0;
+    if (quantity <= 0 || quantity > 9999) continue;
+
+    const containerSize = String(raw?.containerSize || 'Other').trim() || 'Other';
+    let plantName = cleanPlantName(String(raw?.plantName || ''));
     if (!plantName) continue;
-    const containerSize = String(item?.containerSize || 'Other').trim() || 'Other';
-    const notes = String(item?.notes || '').trim();
-    const quantity = Number(item?.quantity) || 0;
-    if (quantity <= 0) continue;
+    if (looksLikeAddressOrNonPlant(plantName, quantity)) continue;
+
+    let notes = String(raw?.notes || '').trim();
+    notes = notes
+      .replace(priceTokenPattern(), ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
     const key = `${plantName.toLowerCase()}|${containerSize.toLowerCase()}|${notes.toLowerCase()}`;
     const existing = map.get(key);
     if (!existing) {
@@ -374,6 +481,8 @@ function parseLineItem(line: string): ParsedOrderItem | null {
   const cleaned = line.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, '').trim();
   if (!cleaned || cleaned.length < 3) return null;
   if (isMetaOrJunkLine(cleaned)) return null;
+  // Pure money / total lines
+  if (/^(?:\$?\d[\d,]*\.?\d*\s*)+$/.test(cleaned)) return null;
 
   const tabular = parseTabularLine(cleaned);
   if (tabular) return tabular;
@@ -406,8 +515,10 @@ function parseLineItem(line: string): ParsedOrderItem | null {
       if (/#\s*$/.test(rest) || new RegExp(`#\\s*${quantity}\\b`, 'i').test(cleaned)) {
         continue;
       }
-      // Lone size-like trailing numbers on very short plant text are usually sizes, not qty.
+      // Trailing money amounts are not quantities (e.g. "... 225" from $225.00 already stripped)
       if (rest.length < 3) continue;
+      // Prefer not treating a lone trailing number after a price-heavy line as qty
+      if (/\$/.test(cleaned) && quantity >= 10) continue;
     }
 
     const item = buildItem(quantity, rest);
@@ -422,11 +533,9 @@ function buildPlainTextChecklist(
   poNumber: string,
   items: ParsedOrderItem[]
 ): string {
-  const header = [
-    `CUSTOMER: ${customerName}`,
-    poNumber ? `PO: ${poNumber}` : null,
-    ''
-  ].filter(Boolean);
+  const header = [`CUSTOMER: ${customerName}`, poNumber ? `PO: ${poNumber}` : null, ''].filter(
+    Boolean
+  );
 
   const lines = items.map(
     (item) =>
@@ -499,21 +608,36 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
 }
 
 /**
- * True when local parse likely missed lines (e.g. only 1 item but many qty tokens).
- * Caller can fall through to AI in that case.
+ * True when local parse is missing lines OR looks noisy (prices in names, many Other sizes).
+ * Caller should fall through to AI in that case.
  */
 export function localParseLooksIncomplete(
   rawText: string,
   local: ParsedOrderFromText | null
 ): boolean {
   if (!local || local.items.length === 0) return true;
-  const qtyTokens = countLikelyQtyTokens(rawText);
-  if (local.items.length === 1 && qtyTokens >= 3) return true;
-  if (qtyTokens >= local.items.length * 2 + 2) return true;
+
+  // Sanitization should have removed these; if any remain, distrust local.
+  const pricedNames = local.items.filter((i) => /\$/.test(i.plantName)).length;
+  if (pricedNames > 0) return true;
+
+  const otherHeavy = local.items.filter((i) => i.containerSize === 'Other').length;
+  if (otherHeavy >= Math.max(2, Math.ceil(local.items.length * 0.4))) return true;
+
   const lines = String(rawText || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l && !isMetaOrJunkLine(l));
+
+  // Count lines that look like real plant rows (leading qty + name), not bare prices.
+  const plantLikeLines = lines.filter((l) => {
+    if (!/^\d{1,4}\s+[A-Za-z(#]/.test(l)) return false;
+    if (/\b(?:freight|tax|delivery|labor|fee|total|subtotal|balance)\b/i.test(l)) return false;
+    return true;
+  }).length;
+
+  if (local.items.length === 1 && plantLikeLines >= 3) return true;
+  if (plantLikeLines >= local.items.length + 2) return true;
   if (lines.length >= 4 && local.items.length === 1) return true;
   return false;
 }

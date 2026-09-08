@@ -9,6 +9,10 @@ export interface ParsedOrderFromText {
   customerName: string;
   /** Customer PO when clearly labeled; empty otherwise. No invented order numbers. */
   poNumber: string;
+  billingName?: string;
+  billingAddress?: string;
+  shippingName?: string;
+  shippingAddress?: string;
   items: ParsedOrderItem[];
   plainText: string;
 }
@@ -79,18 +83,121 @@ function stripSizeTokens(raw: string): string {
     .trim();
 }
 
-function extractMeta(lines: string[]): { customerName: string; poNumber: string } {
+function extractMeta(lines: string[]): {
+  customerName: string;
+  poNumber: string;
+  billingName: string;
+  billingAddress: string;
+  shippingName: string;
+  shippingAddress: string;
+} {
   let customerName = 'Unknown Customer';
   let poNumber = '';
+  let billingName = '';
+  let billingAddress = '';
+  let shippingName = '';
+  let shippingAddress = '';
 
-  for (const line of lines) {
+  const isSectionHeader = (line: string) =>
+    /^(?:bill\s*to|sold\s*to|invoice\s*to|ship\s*to|deliver(?:y)?\s*to|deliver\s*to|receiver|jobsite|customer|client|company|po|p\.?o\.?|purchase\s*order|order|invoice|qty|quantity|plant|size|description|item|total|subtotal|tax|date|page)\b/i.test(
+      line
+    );
+
+  const captureAddressBlock = (
+    startIndex: number,
+    kind: 'bill' | 'ship'
+  ): { name: string; address: string; nextIndex: number } => {
+    const collected: string[] = [];
+    let i = startIndex;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      if (!line) {
+        if (collected.length > 0) break;
+        i += 1;
+        continue;
+      }
+      if (isSectionHeader(line) && collected.length > 0) break;
+      // Stop when we hit a plant qty line
+      if (/^\d+\s+[A-Za-z(#]/.test(line) && collected.length > 0) break;
+      collected.push(line);
+      i += 1;
+      if (collected.length >= 6) break;
+    }
+    const name = collected[0] || '';
+    const address = collected.slice(name ? 1 : 0).join('\n').trim() || (collected.length === 1 ? collected[0] : '');
+    // If only one line and it looks like a street/city, treat whole thing as address
+    const looksLikeAddress = /\d/.test(name) || /\b(?:st|street|ave|road|rd|blvd|ln|dr|suite|ste|box)\b/i.test(name);
+    if (looksLikeAddress && collected.length === 1) {
+      return { name: '', address: name, nextIndex: i };
+    }
+    if (kind === 'bill' || kind === 'ship') {
+      return {
+        name: looksLikeAddress ? '' : name,
+        address: looksLikeAddress ? collected.join('\n') : address || name,
+        nextIndex: i
+      };
+    }
+    return { name, address, nextIndex: i };
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const customerMatch = line.match(
-      /^(?:customer|bill\s*to|ship\s*to|client|company)\s*[:\-]\s*(.+)$/i
+      /^(?:customer|client|company)\s*[:\-]\s*(.+)$/i
     );
     if (customerMatch?.[1]?.trim()) {
       customerName = customerMatch[1].trim();
       continue;
     }
+
+    const billInline = line.match(/^(?:bill\s*to|sold\s*to|invoice\s*to)\s*[:\-]\s*(.+)$/i);
+    if (billInline?.[1]?.trim()) {
+      const rest = billInline[1].trim();
+      if (!billingName && !/\d/.test(rest)) billingName = rest;
+      else if (!billingAddress) billingAddress = rest;
+      const block = captureAddressBlock(i + 1, 'bill');
+      if (block.name && !billingName) billingName = block.name;
+      if (block.address) {
+        billingAddress = [billingAddress, block.address].filter(Boolean).join('\n').trim();
+        i = block.nextIndex - 1;
+      }
+      if (customerName === 'Unknown Customer' && billingName) customerName = billingName;
+      continue;
+    }
+    if (/^(?:bill\s*to|sold\s*to|invoice\s*to)\s*[:\-]?$/i.test(line)) {
+      const block = captureAddressBlock(i + 1, 'bill');
+      if (block.name && !billingName) billingName = block.name;
+      if (block.address) billingAddress = block.address;
+      if (customerName === 'Unknown Customer' && billingName) customerName = billingName;
+      i = block.nextIndex - 1;
+      continue;
+    }
+
+    const shipInline = line.match(
+      /^(?:ship\s*to|deliver(?:y)?\s*to|deliver\s*to|receiver|jobsite)\s*[:\-]\s*(.+)$/i
+    );
+    if (shipInline?.[1]?.trim()) {
+      const rest = shipInline[1].trim();
+      if (!shippingName && !/\d/.test(rest)) shippingName = rest;
+      else if (!shippingAddress) shippingAddress = rest;
+      const block = captureAddressBlock(i + 1, 'ship');
+      if (block.name && !shippingName) shippingName = block.name;
+      if (block.address) {
+        shippingAddress = [shippingAddress, block.address].filter(Boolean).join('\n').trim();
+        i = block.nextIndex - 1;
+      }
+      if (customerName === 'Unknown Customer' && shippingName) customerName = shippingName;
+      continue;
+    }
+    if (/^(?:ship\s*to|deliver(?:y)?\s*to|deliver\s*to|receiver|jobsite)\s*[:\-]?$/i.test(line)) {
+      const block = captureAddressBlock(i + 1, 'ship');
+      if (block.name && !shippingName) shippingName = block.name;
+      if (block.address) shippingAddress = block.address;
+      if (customerName === 'Unknown Customer' && shippingName) customerName = shippingName;
+      i = block.nextIndex - 1;
+      continue;
+    }
+
     // Only capture explicitly labeled purchase orders — not invoice/order numbers.
     const poMatch = line.match(
       /^(?:po|p\.?o\.?|purchase\s*order)\s*(?:#|number|no\.?)?\s*[:\-#]?\s*(.+)$/i
@@ -101,7 +208,14 @@ function extractMeta(lines: string[]): { customerName: string; poNumber: string 
     }
   }
 
-  return { customerName, poNumber };
+  return {
+    customerName,
+    poNumber,
+    billingName,
+    billingAddress,
+    shippingName,
+    shippingAddress
+  };
 }
 
 function isMetaOrJunkLine(line: string): boolean {
@@ -302,7 +416,8 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
     }
   }
 
-  const { customerName, poNumber } = extractMeta(rawLines);
+  const { customerName, poNumber, billingName, billingAddress, shippingName, shippingAddress } =
+    extractMeta(rawLines);
   const items: ParsedOrderItem[] = [];
 
   for (const line of candidateLines) {
@@ -315,6 +430,10 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
   return {
     customerName,
     poNumber,
+    billingName,
+    billingAddress,
+    shippingName,
+    shippingAddress,
     items,
     plainText: buildPlainTextChecklist(customerName, poNumber, items)
   };

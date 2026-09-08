@@ -1519,6 +1519,8 @@ const extra = {
     linkInventory: 'Vincular plantas al inventario',
     linkHint:
       'Vincule cada línea a su inventario. El presupuesto o pedido usará el nombre y tamaño de inventario. Puede cambiar un vínculo si la coincidencia automática es incorrecta.',
+    removeLine: 'Quitar esta línea de la carga',
+    needAtLeastOneLine: 'Deje al menos una línea de planta, o cancele la carga.',
     changeLink: 'Cambiar vínculo',
     uploadedAs: 'Subido como {{name}} ({{size}})',
     searchInventory: 'Buscar inventario',

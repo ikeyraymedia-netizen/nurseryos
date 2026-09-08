@@ -10,9 +10,11 @@ import {
   Plus,
   DollarSign,
   ClipboardList,
-  Search
+  Search,
+  Trash2
 } from 'lucide-react';
 import { addCustomerOrder } from '../lib/db';
+import { updateCustomer } from '../lib/customers';
 import { notifyPushEvent } from '../lib/pushNotifications';
 import { findMatchingCustomers } from '../lib/customerMatch';
 import {
@@ -47,6 +49,10 @@ interface ParsedOrderDraft {
   customerName: string;
   /** Customer PO when clearly labeled on the upload; empty otherwise. */
   poNumber: string;
+  billingName: string;
+  billingAddress: string;
+  shippingName: string;
+  shippingAddress: string;
   items: PlantOrderItem[];
   originalText: string;
   totalWeightLbs: number;
@@ -322,6 +328,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setPendingDraft({
         customerName: parsedCustomerName,
         poNumber: String(result.poNumber || '').trim().replace(/^n\/?a$/i, ''),
+        billingName: String(result.billingName || '').trim(),
+        billingAddress: String(result.billingAddress || '').trim(),
+        shippingName: String(result.shippingName || '').trim(),
+        shippingAddress: String(result.shippingAddress || '').trim(),
         items: itemsWithIds,
         originalText: result.plainText || orderText || '',
         totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights),
@@ -341,6 +351,40 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       console.error(err);
       setErrorMessage(err.message || t('upload.uploadError'));
       setLoading(false);
+    }
+  };
+
+  const removeDraftItem = (itemId: string) => {
+    setPendingDraft((draft) => {
+      if (!draft) return draft;
+      const items = draft.items.filter((row) => row.id !== itemId);
+      return {
+        ...draft,
+        items,
+        totalWeightLbs: orderWeightLbs(items, containerWeights)
+      };
+    });
+    setLinkedInventoryByItemId((prev) => {
+      if (!prev[itemId]) return prev;
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    setAutoLinkedItemIds((prev) => {
+      if (!prev[itemId]) return prev;
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    setOriginalParsedByItemId((prev) => {
+      if (!prev[itemId]) return prev;
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+    if (searchItemId === itemId) {
+      setSearchItemId(null);
+      setInventorySearch('');
     }
   };
 
@@ -475,6 +519,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
   const saveDraft = async () => {
     if (!pendingDraft || !uploadKind) return;
+    if (pendingDraft.items.length === 0) {
+      setErrorMessage(t('upload.needAtLeastOneLine'));
+      return;
+    }
     if (!salesRep.trim()) {
       setErrorMessage(t('upload.salesRepRequired'));
       return;
@@ -484,6 +532,37 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     try {
       const linked = selectedCustomer;
       const namedItems = itemsNamedFromInventory(pendingDraft.items);
+
+      // Fill empty customer address fields from the upload (never overwrite existing).
+      if (linked?.id && permissions.canEditCustomers) {
+        const nextBillingName =
+          linked.billingName?.trim() || pendingDraft.billingName.trim() || undefined;
+        const nextBillingAddress =
+          linked.billingAddress?.trim() || pendingDraft.billingAddress.trim() || undefined;
+        const nextShippingName =
+          linked.shippingName?.trim() || pendingDraft.shippingName.trim() || undefined;
+        const nextShippingAddress =
+          linked.shippingAddress?.trim() ||
+          linked.receiverAddress?.trim() ||
+          pendingDraft.shippingAddress.trim() ||
+          undefined;
+        const shouldUpdate =
+          (nextBillingName && nextBillingName !== linked.billingName) ||
+          (nextBillingAddress && nextBillingAddress !== linked.billingAddress) ||
+          (nextShippingName && nextShippingName !== linked.shippingName) ||
+          (nextShippingAddress &&
+            nextShippingAddress !== linked.shippingAddress &&
+            nextShippingAddress !== linked.receiverAddress);
+        if (shouldUpdate) {
+          await updateCustomer({
+            ...linked,
+            billingName: nextBillingName || linked.billingName,
+            billingAddress: nextBillingAddress || linked.billingAddress,
+            shippingName: nextShippingName || linked.shippingName,
+            shippingAddress: nextShippingAddress || linked.shippingAddress
+          });
+        }
+      }
 
       if (uploadKind === 'estimate') {
         if (!linked?.id) {
@@ -524,8 +603,15 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           freightCharge,
           discount,
           notes: t('upload.estimateNotesDefault'),
-          billToName: linked.billingName || linked.name,
-          billToAddress: linked.billingAddress || linked.shippingAddress || undefined,
+          billToName:
+            pendingDraft.billingName.trim() ||
+            linked.billingName ||
+            linked.name,
+          billToAddress:
+            pendingDraft.billingAddress.trim() ||
+            linked.billingAddress ||
+            linked.shippingAddress ||
+            undefined,
           customerEmail: linked.contactEmail || undefined,
           owner: salesRep.trim() || undefined,
           items: lineItems,
@@ -557,7 +643,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         owner: salesRep.trim() || undefined,
         ...(directShip ? { directShip: true } : {}),
         ...(pendingDraft.poNumber
-          ? { invoiceDetails: { poNumber: pendingDraft.poNumber } }
+          ? {
+              invoiceDetails: {
+                poNumber: pendingDraft.poNumber
+              }
+            }
           : {})
       });
 
@@ -901,6 +991,59 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             </span>
           </div>
 
+          <div className="grid grid-cols-1 gap-2">
+            <div className="bg-white border border-gray-100 rounded-lg px-3 py-2 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                Ship-to address
+              </p>
+              <input
+                type="text"
+                value={pendingDraft.shippingName}
+                onChange={(e) =>
+                  setPendingDraft((d) => (d ? { ...d, shippingName: e.target.value } : d))
+                }
+                placeholder="Ship-to name (optional)"
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500"
+              />
+              <textarea
+                value={pendingDraft.shippingAddress}
+                onChange={(e) =>
+                  setPendingDraft((d) => (d ? { ...d, shippingAddress: e.target.value } : d))
+                }
+                placeholder="Street, city, state, ZIP from the order"
+                rows={3}
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 resize-y"
+              />
+            </div>
+            <div className="bg-white border border-gray-100 rounded-lg px-3 py-2 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                Bill-to address
+              </p>
+              <input
+                type="text"
+                value={pendingDraft.billingName}
+                onChange={(e) =>
+                  setPendingDraft((d) => (d ? { ...d, billingName: e.target.value } : d))
+                }
+                placeholder="Bill-to name (optional)"
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500"
+              />
+              <textarea
+                value={pendingDraft.billingAddress}
+                onChange={(e) =>
+                  setPendingDraft((d) => (d ? { ...d, billingAddress: e.target.value } : d))
+                }
+                placeholder="Billing address if different"
+                rows={3}
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 resize-y"
+              />
+            </div>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              Addresses from the upload are saved onto the linked customer when those fields are
+              empty (existing customer addresses are not overwritten).
+            </p>
+          </div>
+
           {uploadKind === 'estimate' && (
             <p className="text-[11px] text-sky-900 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-2 leading-relaxed">
               Estimates require a linked customer and will not appear in Orders until you convert them
@@ -1031,12 +1174,24 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                     key={item.id}
                     className="bg-white border border-gray-100 rounded-lg px-3 py-2.5 space-y-2"
                   >
-                    <div className="text-xs font-bold text-gray-900">
-                      {dp.plant(item.plantName)}
-                      <span className="font-normal text-gray-500">
-                        {' '}
-                        • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
-                      </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-bold text-gray-900 min-w-0">
+                        {dp.plant(item.plantName)}
+                        <span className="font-normal text-gray-500">
+                          {' '}
+                          • {dp.size(item.containerSize)} • {t('common.qty')} {item.quantity}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => removeDraftItem(item.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 shrink-0 disabled:opacity-50"
+                        title={t('upload.removeLine')}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {t('common.delete')}
+                      </button>
                     </div>
                     {originalParsedByItemId[item.id] &&
                       (originalParsedByItemId[item.id].plantName !== item.plantName ||

@@ -1503,6 +1503,8 @@ const extra = {
     linkInventory: 'Link plants to inventory',
     linkHint:
       'Match each line to live inventory. The estimate or order will use your inventory plant name and size. You can change a link if the auto-match is wrong.',
+    removeLine: 'Remove this line from the upload',
+    needAtLeastOneLine: 'Keep at least one plant line, or cancel the upload.',
     changeLink: 'Change link',
     uploadedAs: 'Uploaded as {{name}} ({{size}})',
     searchInventory: 'Search inventory',

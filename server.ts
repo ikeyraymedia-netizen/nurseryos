@@ -204,6 +204,26 @@ function getOrderParseSchema() {
           description:
             'Customer PO number only when clearly labeled as PO / P.O. / Purchase Order. Empty string if none or unclear. Do not invent values or use order/invoice numbers.'
         },
+        billingName: {
+          type: Type.STRING,
+          description:
+            'Bill-to company or person name if shown separately from customerName. Empty string if none.'
+        },
+        billingAddress: {
+          type: Type.STRING,
+          description:
+            'Full bill-to / billing address as a multi-line string (street, city, state, ZIP). Empty string if none. Do not invent.'
+        },
+        shippingName: {
+          type: Type.STRING,
+          description:
+            'Ship-to / deliver-to company or person name if shown. Empty string if same as customer or missing.'
+        },
+        shippingAddress: {
+          type: Type.STRING,
+          description:
+            'Full ship-to / delivery / receiver address as a multi-line string. Empty string if none. Prefer Ship To / Deliver To / Receiver over Bill To when both exist.'
+        },
         items: {
           type: Type.ARRAY,
           description: 'A list of plant items extracted from the order',
@@ -339,6 +359,10 @@ function parseOrderJson(responseText: string): any | null {
 function mergeOrderParseResults(chunks: any[]): any {
   let customerName = 'Unknown Customer';
   let poNumber = '';
+  let billingName = '';
+  let billingAddress = '';
+  let shippingName = '';
+  let shippingAddress = '';
   let plainText = '';
   const seen = new Set<string>();
   const items: any[] = [];
@@ -351,6 +375,14 @@ function mergeOrderParseResults(chunks: any[]): any {
     }
     const po = String(chunk.poNumber || '').trim();
     if (po && !/^n\/?a$/i.test(po) && !poNumber) poNumber = po;
+    const bn = String(chunk.billingName || '').trim();
+    if (bn && !billingName) billingName = bn;
+    const ba = String(chunk.billingAddress || '').trim();
+    if (ba && ba.length > billingAddress.length) billingAddress = ba;
+    const sn = String(chunk.shippingName || '').trim();
+    if (sn && !shippingName) shippingName = sn;
+    const sa = String(chunk.shippingAddress || '').trim();
+    if (sa && sa.length > shippingAddress.length) shippingAddress = sa;
     const pt = String(chunk.plainText || '').trim();
     if (pt.length > plainText.length) plainText = pt;
 
@@ -367,7 +399,16 @@ function mergeOrderParseResults(chunks: any[]): any {
     }
   }
 
-  return { customerName, poNumber, items, plainText };
+  return {
+    customerName,
+    poNumber,
+    billingName,
+    billingAddress,
+    shippingName,
+    shippingAddress,
+    items,
+    plainText
+  };
 }
 
 function mergeInventoryItems(chunks: any[][]): any[] {
@@ -397,6 +438,10 @@ function normalizeParsedOrderPayload(parsed: any) {
     ...rest,
     customerName: String(parsed?.customerName || 'Unknown Customer').trim() || 'Unknown Customer',
     poNumber,
+    billingName: String(parsed?.billingName || '').trim(),
+    billingAddress: String(parsed?.billingAddress || '').trim(),
+    shippingName: String(parsed?.shippingName || '').trim(),
+    shippingAddress: String(parsed?.shippingAddress || '').trim(),
     items: Array.isArray(parsed?.items) ? parsed.items : [],
     plainText: String(parsed?.plainText || '')
   };
@@ -647,13 +692,31 @@ function pickStrongerOrderParse(
   aiParsed: any | null
 ): any | null {
   const aiItems = Array.isArray(aiParsed?.items) ? aiParsed.items : [];
-  if (local && local.items.length > aiItems.length) {
+  const preferLocal = Boolean(local && local.items.length > aiItems.length);
+  if (preferLocal && local) {
     console.log(
       `AI returned ${aiItems.length} items; keeping stronger local parse (${local.items.length}).`
     );
-    return local;
   }
-  return aiParsed;
+  const primary = preferLocal ? local : aiParsed;
+  const secondary = preferLocal ? aiParsed : local;
+  if (!primary) return secondary;
+  if (!secondary) return primary;
+
+  const fill = (a: unknown, b: unknown) => {
+    const left = String(a || '').trim();
+    const right = String(b || '').trim();
+    return left || right;
+  };
+
+  return {
+    ...primary,
+    billingName: fill((primary as any).billingName, (secondary as any).billingName),
+    billingAddress: fill((primary as any).billingAddress, (secondary as any).billingAddress),
+    shippingName: fill((primary as any).shippingName, (secondary as any).shippingName),
+    shippingAddress: fill((primary as any).shippingAddress, (secondary as any).shippingAddress),
+    poNumber: fill((primary as any).poNumber, (secondary as any).poNumber)
+  };
 }
 
 // API endpoint to parse the order
@@ -746,7 +809,12 @@ app.post('/api/parse-order', async (req, res) => {
 It is a customer plant order list/invoice from a nursery. Extract:
 1. Customer Name (look for Bill To, Ship To, Client, or main header name).
 2. Customer PO number ONLY if clearly labeled as PO, P.O., or Purchase Order. Leave poNumber as "" if missing or unclear. Do NOT extract order numbers, invoice numbers, or invent placeholders like N/A.
-3. Structured list of plant items. Standardize the container sizes to the closest match from these standard terms:
+3. Billing / shipping addresses when present:
+   - billingName + billingAddress from Bill To / Sold To / Invoice To blocks
+   - shippingName + shippingAddress from Ship To / Deliver To / Delivery / Receiver / Jobsite blocks
+   - Keep addresses as multi-line text with street, city, state, and ZIP when available
+   - Do NOT invent addresses. Use "" when a field is missing. If only one address block exists and it is clearly delivery, put it in shippingAddress.
+4. Structured list of plant items. Standardize the container sizes to the closest match from these standard terms:
    - '#1' (for 1 gallon, 1g, #1 pot, No. 1)
    - '#3' (for 3 gallon, 3g, #3 pot, No. 3)
    - '#5' (for 5 gallon, 5g, #5 pot, No. 5)
@@ -763,7 +831,7 @@ It is a customer plant order list/invoice from a nursery. Extract:
    - 'Tray' (for plant flats, plug trays, or groundcover trays)
    - 'Other' (if it doesn't fit any of the above, keep the size as reported)
 
-4. Generate a beautifully formatted plain-text representation (plainText) of the order.
+5. Generate a beautifully formatted plain-text representation (plainText) of the order.
 This text is meant for nursery workers loading trucks, so make it incredibly clear, bolding quantities and container sizes, listing plants in a neat checklist format with checkboxes [ ]. Exclude irrelevant invoice headers, tax calculations, or billing terms. Focus 100% on what plants need to be loaded!
 
 Return your response in structured JSON format matching the schema provided.`;

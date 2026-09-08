@@ -23,7 +23,7 @@ import {
   rememberInventoryAlias,
   subscribeToInventory
 } from '../lib/inventory';
-import { findMatchingInventoryPlants } from '../lib/inventoryMatch';
+import { findMatchingInventoryPlants, plantNameMatchScore } from '../lib/inventoryMatch';
 import { addCustomerDocument, nextDocumentNumber } from '../lib/documents';
 import { getDefaultPriceForSize } from '../lib/pricing';
 import { authJsonHeaders } from '../lib/apiAuth';
@@ -162,6 +162,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       )[0];
       if (!plant) return item;
 
+      const score = plantNameMatchScore(item.plantName, plant.plantName);
+      // plantNamesMatch already blocks weak solo words; require a real score to auto-rename.
+      if (score < 150) return item;
+
       linkUpdates[item.id] = {
         plantId: plant.id,
         plantName: plant.plantName,
@@ -172,13 +176,16 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         plantName: item.plantName,
         containerSize: item.containerSize
       };
-      rememberInventoryAlias(
-        tenantId,
-        original.plantName,
-        original.containerSize,
-        plant.plantName,
-        plant.containerSize
-      );
+      // Only persist strong aliases so one bad match cannot rename future uploads.
+      if (score >= 150) {
+        rememberInventoryAlias(
+          tenantId,
+          original.plantName,
+          original.containerSize,
+          plant.plantName,
+          plant.containerSize
+        );
+      }
       const next = applyInventoryName(item, plant);
       if (next !== item) draftChanged = true;
       return next;

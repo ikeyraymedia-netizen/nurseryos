@@ -27,7 +27,8 @@ import {
   decodeBase64Text,
   isPlainTextMime,
   parseOrderTextLocally,
-  localParseLooksIncomplete
+  localParseLooksIncomplete,
+  coalesceOrderItems
 } from './server/orderTextParse';
 import { chunkPdfText, extractPdfText } from './server/pdfTextExtract';
 
@@ -364,7 +365,6 @@ function mergeOrderParseResults(chunks: any[]): any {
   let shippingName = '';
   let shippingAddress = '';
   let plainText = '';
-  const seen = new Set<string>();
   const items: any[] = [];
 
   for (const chunk of chunks) {
@@ -391,14 +391,18 @@ function mergeOrderParseResults(chunks: any[]): any {
       if (!plantName) continue;
       const size = String(item?.containerSize || 'Other').trim() || 'Other';
       const qty = Number(item?.quantity) || 0;
+      if (qty <= 0) continue;
       const notes = String(item?.notes || '').trim();
-      const key = `${plantName.toLowerCase()}|${size.toLowerCase()}|${qty}|${notes.toLowerCase()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      items.push(item);
+      items.push({
+        plantName,
+        containerSize: size,
+        quantity: qty,
+        ...(notes ? { notes } : {})
+      });
     }
   }
 
+  // Collapse repeats from overlapping PDF chunks / OCR (same plant+size → keep max qty).
   return {
     customerName,
     poNumber,
@@ -406,7 +410,7 @@ function mergeOrderParseResults(chunks: any[]): any {
     billingAddress,
     shippingName,
     shippingAddress,
-    items,
+    items: coalesceOrderItems(items),
     plainText
   };
 }
@@ -434,6 +438,17 @@ function normalizeParsedOrderPayload(parsed: any) {
   const poNumber = rawPo && !/^n\/?a$/i.test(rawPo) ? rawPo : '';
   // Drop legacy orderNumber from the response — we only keep a clear customer PO.
   const { orderNumber: _ignored, ...rest } = parsed && typeof parsed === 'object' ? parsed : {};
+  const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
+  const items = coalesceOrderItems(
+    rawItems.map((item: any) => ({
+      plantName: String(item?.plantName || '').trim(),
+      containerSize: String(item?.containerSize || 'Other').trim() || 'Other',
+      quantity: Number(item?.quantity) || 0,
+      ...(String(item?.notes || '').trim()
+        ? { notes: String(item.notes).trim() }
+        : {})
+    }))
+  );
   return {
     ...rest,
     customerName: String(parsed?.customerName || 'Unknown Customer').trim() || 'Unknown Customer',
@@ -442,7 +457,7 @@ function normalizeParsedOrderPayload(parsed: any) {
     billingAddress: String(parsed?.billingAddress || '').trim(),
     shippingName: String(parsed?.shippingName || '').trim(),
     shippingAddress: String(parsed?.shippingAddress || '').trim(),
-    items: Array.isArray(parsed?.items) ? parsed.items : [],
+    items,
     plainText: String(parsed?.plainText || '')
   };
 }
@@ -687,15 +702,38 @@ async function parseOrderTextChunks(
   return mergeOrderParseResults(parsedChunks);
 }
 
+function orderParseQualityScore(parsed: any | null): number {
+  if (!parsed || !Array.isArray(parsed.items) || parsed.items.length === 0) return -1;
+  let score = parsed.items.length * 10;
+  for (const item of parsed.items) {
+    const size = String(item?.containerSize || '').trim().toLowerCase();
+    const name = String(item?.plantName || '').trim();
+    if (size && size !== 'other') score += 4;
+    else score -= 2;
+    if (
+      /\b(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|suite|ste)\b/i.test(
+        name
+      )
+    ) {
+      score -= 20;
+    }
+    const qty = Number(item?.quantity) || 0;
+    if (qty > 9999) score -= 15;
+  }
+  return score;
+}
+
 function pickStrongerOrderParse(
   local: ReturnType<typeof parseOrderTextLocally> | null,
   aiParsed: any | null
 ): any | null {
-  const aiItems = Array.isArray(aiParsed?.items) ? aiParsed.items : [];
-  const preferLocal = Boolean(local && local.items.length > aiItems.length);
+  const localScore = orderParseQualityScore(local);
+  const aiScore = orderParseQualityScore(aiParsed);
+  // Prefer quality over raw line count — local parse used to win by inventing address junk.
+  const preferLocal = localScore > aiScore;
   if (preferLocal && local) {
     console.log(
-      `AI returned ${aiItems.length} items; keeping stronger local parse (${local.items.length}).`
+      `Keeping local parse (score ${localScore} vs AI ${aiScore}; ${local.items.length} vs ${Array.isArray(aiParsed?.items) ? aiParsed.items.length : 0} items).`
     );
   }
   const primary = preferLocal ? local : aiParsed;
@@ -814,7 +852,12 @@ It is a customer plant order list/invoice from a nursery. Extract:
    - shippingName + shippingAddress from Ship To / Deliver To / Delivery / Receiver / Jobsite blocks
    - Keep addresses as multi-line text with street, city, state, and ZIP when available
    - Do NOT invent addresses. Use "" when a field is missing. If only one address block exists and it is clearly delivery, put it in shippingAddress.
-4. Structured list of plant items. Standardize the container sizes to the closest match from these standard terms:
+4. Structured list of plant items. CRITICAL RULES for items:
+   - ONLY extract plant/tree/shrub lines that are clearly present in THIS document. NEVER invent, guess, or add plants that are not written on the page.
+   - Do NOT turn street addresses, phone numbers, ZIP codes, page headers, footers, or watermarks into plant lines.
+   - Do NOT repeat the same plant line multiple times unless the document itself lists it multiple times with clear separate quantities.
+   - Ignore repeated headers/footers that appear on every page.
+   Standardize the container sizes to the closest match from these standard terms:
    - '#1' (for 1 gallon, 1g, #1 pot, No. 1)
    - '#3' (for 3 gallon, 3g, #3 pot, No. 3)
    - '#5' (for 5 gallon, 5g, #5 pot, No. 5)

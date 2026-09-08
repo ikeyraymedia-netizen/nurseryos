@@ -219,18 +219,37 @@ function extractMeta(lines: string[]): {
 }
 
 function isMetaOrJunkLine(line: string): boolean {
-  return /^(customer|bill\s*to|ship\s*to|client|company|po|order|invoice|notes?|qty|quantity|plant|size|description|item|total|subtotal|tax|date|page)\b/i.test(
+  return /^(customer|bill\s*to|ship\s*to|sold\s*to|deliver(?:y)?\s*to|client|company|po|order|invoice|notes?|qty|quantity|plant|size|description|item|total|subtotal|tax|date|page|tel|phone|fax|email|www\.|http)\b/i.test(
     line
   );
 }
 
+/** Street / city lines often look like "123 Main St" and must not become plant rows. */
+function looksLikeAddressOrNonPlant(plantName: string, quantity: number): boolean {
+  if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 9999) return true;
+  const name = plantName.trim();
+  if (!name) return true;
+  if (
+    /\b(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|hwy|highway|suite|ste|apt|unit|floor|fl|p\.?\s*o\.?\s*box|zip|phone|fax|email)\b/i.test(
+      name
+    )
+  ) {
+    return true;
+  }
+  // "Baton Rouge LA 70801" / trailing state+zip fragments
+  if (/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/.test(name)) return true;
+  if (/^\d{5}(?:-\d{4})?$/.test(name)) return true;
+  return false;
+}
+
 function buildItem(quantity: number, rest: string): ParsedOrderItem | null {
-  if (!Number.isFinite(quantity) || quantity <= 0 || !rest.trim()) return null;
+  if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 9999 || !rest.trim()) return null;
   const containerSize = standardizeContainerSize(rest);
   const plantName = stripSizeTokens(rest) || rest.trim();
   if (!plantName || plantName.length < 2) return null;
   // Avoid treating bare numbers / sizes as plant names
   if (/^[\d#"\s.]+$/.test(plantName)) return null;
+  if (looksLikeAddressOrNonPlant(plantName, quantity)) return null;
 
   const notes = extractNotes(rest);
   return {
@@ -291,12 +310,24 @@ function explodeMultiQtyLine(line: string): string[] {
   const cleaned = line.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, '').trim();
   if (!cleaned) return [];
 
-  // Need at least two leading-qty plant chunks
+  // Need at least two leading-qty plant chunks. Ignore zip-sized / year-sized numbers.
   const starts: number[] = [];
-  const re = /(?:^|\s)(\d+)\s+(?=[A-Za-z(#])/g;
+  const re = /(?:^|\s)(\d{1,4})\s+(?=[A-Za-z(#])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(cleaned))) {
+    const qty = parseInt(m[1], 10);
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 9999) continue;
     const idx = m.index + (m[0].startsWith(' ') || m[0].startsWith('\t') ? 1 : 0);
+    // Peek at the upcoming token — skip street-number + street-suffix pairs.
+    const peek = cleaned.slice(idx).match(/^\d+\s+([A-Za-z(#][\w'’-]*)/);
+    const firstWord = peek?.[1] || '';
+    if (
+      /^(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|hwy|suite|ste|apt|unit|box|po)$/i.test(
+        firstWord
+      )
+    ) {
+      continue;
+    }
     starts.push(idx);
   }
 
@@ -310,6 +341,33 @@ function explodeMultiQtyLine(line: string): string[] {
     if (chunk) chunks.push(chunk);
   }
   return chunks.length ? chunks : [cleaned];
+}
+
+/** Collapse duplicate plant+size(+notes) rows that PDF/OCR often repeats. */
+export function coalesceOrderItems(items: ParsedOrderItem[]): ParsedOrderItem[] {
+  const map = new Map<string, ParsedOrderItem>();
+  for (const item of items) {
+    const plantName = String(item?.plantName || '').trim();
+    if (!plantName) continue;
+    const containerSize = String(item?.containerSize || 'Other').trim() || 'Other';
+    const notes = String(item?.notes || '').trim();
+    const quantity = Number(item?.quantity) || 0;
+    if (quantity <= 0) continue;
+    const key = `${plantName.toLowerCase()}|${containerSize.toLowerCase()}|${notes.toLowerCase()}`;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        plantName,
+        containerSize,
+        quantity,
+        ...(notes ? { notes } : {})
+      });
+      continue;
+    }
+    // Same line repeated (overlap / OCR) — keep the larger qty, don't double-count.
+    existing.quantity = Math.max(existing.quantity, quantity);
+  }
+  return [...map.values()];
 }
 
 function parseLineItem(line: string): ParsedOrderItem | null {
@@ -425,7 +483,8 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
     if (item) items.push(item);
   }
 
-  if (items.length === 0) return null;
+  const coalesced = coalesceOrderItems(items);
+  if (coalesced.length === 0) return null;
 
   return {
     customerName,
@@ -434,8 +493,8 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
     billingAddress,
     shippingName,
     shippingAddress,
-    items,
-    plainText: buildPlainTextChecklist(customerName, poNumber, items)
+    items: coalesced,
+    plainText: buildPlainTextChecklist(customerName, poNumber, coalesced)
   };
 }
 

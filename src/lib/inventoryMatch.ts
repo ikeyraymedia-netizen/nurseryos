@@ -32,12 +32,41 @@ function normalizedWordSet(name: string): Set<string> {
   );
 }
 
+/** Too generic to auto-expand into a longer inventory name on their own. */
+const WEAK_SOLO_MATCH_WORDS = new Set([
+  'giant',
+  'dwarf',
+  'red',
+  'green',
+  'blue',
+  'white',
+  'pink',
+  'yellow',
+  'gold',
+  'silver',
+  'black',
+  'purple',
+  'variegated',
+  'japanese',
+  'chinese',
+  'common',
+  'hybrid',
+  'standard',
+  'compact',
+  'weeping',
+  'columnar',
+  'tree',
+  'shrub',
+  'plant'
+]);
+
 /**
  * Prefer specific cultivar matches over generic genus-only rows.
  * - Exact names match.
  * - Abbreviated orders match longer inventory names ("Crimson Fire" → "Crimson Fire Loropetalum").
  * - Do NOT match a longer order to a shorter single-word inventory
  *   ("Hydrangea Limelight" must not auto-link to bare "Hydrangea").
+ * - Do NOT expand weak solo words ("Giant" must not become "Giant Ligularia").
  */
 export function plantNamesMatch(orderName: string, inventoryName: string): boolean {
   const a = normalizePlantName(orderName);
@@ -51,7 +80,12 @@ export function plantNamesMatch(orderName: string, inventoryName: string): boole
 
   // Order is an abbreviated form of the inventory name.
   const orderSubsetOfInventory = [...orderWords].every((w) => inventoryWords.has(w));
-  if (orderSubsetOfInventory) return true;
+  if (orderSubsetOfInventory) {
+    if (orderWords.size >= 2) return true;
+    const only = [...orderWords][0];
+    // Single-word abbreviations must be distinctive (cultivar), not adjectives like "Giant".
+    if (only && !WEAK_SOLO_MATCH_WORDS.has(only) && only.length >= 5) return true;
+  }
 
   // Inventory is a multi-word subset of the order (not a bare genus like "Hydrangea").
   const inventorySubsetOfOrder = [...inventoryWords].every((w) => orderWords.has(w));

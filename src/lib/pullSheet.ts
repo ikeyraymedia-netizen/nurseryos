@@ -260,6 +260,139 @@ export function buildVendorPullLists(params: {
   });
 }
 
+/** Build per-vendor plain-text lists for one or more orders (no truck required). */
+export function buildVendorPullListsForOrders(params: {
+  orders: CustomerOrder[];
+  nurseryName?: string;
+}): VendorPullList[] {
+  const { orders, nurseryName = 'NurseryOS' } = params;
+  if (orders.length === 0) return [];
+
+  type OrderSection = {
+    orderId: string;
+    customerName: string;
+    ref: string | null;
+    stagedLocation: string;
+    lines: Array<{ plantName: string; containerSize: string; quantity: number }>;
+    quantity: number;
+  };
+
+  const byVendor = new Map<string, OrderSection[]>();
+
+  for (const order of orders) {
+    const sectionsForOrder = new Map<string, OrderSection>();
+    for (const item of order.items) {
+      const vendor = normalizeVendor(item.vendor);
+      let section = sectionsForOrder.get(vendor);
+      if (!section) {
+        section = {
+          orderId: order.id,
+          customerName: order.customerName,
+          ref: orderRefLabel(order),
+          stagedLocation: String(order.stagedLocation || '').trim(),
+          lines: [],
+          quantity: 0
+        };
+        sectionsForOrder.set(vendor, section);
+      }
+      section.lines.push({
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        quantity: item.quantity
+      });
+      section.quantity += item.quantity;
+    }
+    for (const [vendor, section] of sectionsForOrder) {
+      const list = byVendor.get(vendor) || [];
+      list.push(section);
+      byVendor.set(vendor, list);
+    }
+  }
+
+  const vendorNames = [...byVendor.keys()].sort(compareVendors);
+
+  return vendorNames.map((vendor) => {
+    const sections = (byVendor.get(vendor) || []).sort((a, b) => {
+      const stageCmp = (a.stagedLocation || 'zzz').localeCompare(b.stagedLocation || 'zzz');
+      if (stageCmp !== 0) return stageCmp;
+      return a.customerName.localeCompare(b.customerName);
+    });
+
+    const quantity = sections.reduce((sum, s) => sum + s.quantity, 0);
+    const header =
+      vendor === UNASSIGNED_VENDOR
+        ? 'Need from yard (no vendor assigned)'
+        : `Need from ${vendor}`;
+
+    const scopeLines =
+      orders.length === 1
+        ? [
+            `${nurseryName} · ${orders[0].customerName}`,
+            orderRefLabel(orders[0]) ? `Order: ${orderRefLabel(orders[0])}` : null
+          ]
+        : [`${nurseryName} · ${orders.length} orders`];
+
+    const orderBlocks: string[] = [];
+    for (const section of sections) {
+      const titleParts = [section.customerName];
+      if (section.ref) titleParts.push(section.ref);
+      const meta: string[] = [];
+      if (section.stagedLocation) meta.push(`Stage: ${section.stagedLocation}`);
+      else meta.push('Stage: (not set)');
+
+      orderBlocks.push(
+        [
+          `— ${titleParts.join(' · ')}`,
+          `  ${meta.join(' · ')}`,
+          ...section.lines
+            .sort(
+              (a, b) =>
+                a.plantName.localeCompare(b.plantName) ||
+                a.containerSize.localeCompare(b.containerSize)
+            )
+            .map((line) => `  • ${line.quantity} × ${line.containerSize}  ${line.plantName}`)
+        ].join('\n')
+      );
+    }
+
+    const totals = new Map<string, { plantName: string; containerSize: string; quantity: number }>();
+    for (const section of sections) {
+      for (const line of section.lines) {
+        const key = normalizeLineKey(line.plantName, line.containerSize, vendor);
+        const existing = totals.get(key);
+        if (existing) existing.quantity += line.quantity;
+        else
+          totals.set(key, {
+            plantName: line.plantName,
+            containerSize: line.containerSize,
+            quantity: line.quantity
+          });
+      }
+    }
+    const totalLines = [...totals.values()].sort(
+      (a, b) =>
+        a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
+    );
+
+    const text = [
+      header,
+      ...scopeLines,
+      '',
+      'BY ORDER / STAGE',
+      ...orderBlocks,
+      '',
+      'COMBINED TOTALS',
+      ...totalLines.map((line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`),
+      '',
+      `Total: ${quantity} plants`
+    ]
+      .filter((row) => row !== null)
+      .join('\n');
+
+    return { vendor, quantity, text };
+  });
+}
+
 /** Orders + item ids for a vendor across the given trucks. */
 export function collectVendorOrderItems(params: {
   trucks: Truck[];
@@ -278,12 +411,42 @@ export function collectVendorOrderItems(params: {
   return result;
 }
 
+/** Orders + item ids for a vendor across specific orders (no truck required). */
+export function collectVendorOrderItemsFromOrders(params: {
+  orders: CustomerOrder[];
+  vendor: string;
+}): Array<{ order: CustomerOrder; itemIds: string[] }> {
+  const vendorKey = normalizeVendorName(params.vendor);
+  const result: Array<{ order: CustomerOrder; itemIds: string[] }> = [];
+  for (const order of params.orders) {
+    const itemIds = order.items
+      .filter((item) => normalizeVendorName(item.vendor) === vendorKey)
+      .map((item) => item.id);
+    if (itemIds.length > 0) result.push({ order, itemIds });
+  }
+  return result;
+}
+
 export function vendorItemsFullyPulled(params: {
   trucks: Truck[];
   orders: CustomerOrder[];
   vendor: string;
 }): boolean {
   const groups = collectVendorOrderItems(params);
+  if (groups.length === 0) return false;
+  return groups.every(({ order, itemIds }) =>
+    itemIds.every((id) => {
+      const item = order.items.find((i) => i.id === id);
+      return !!item && (item.pulledQuantity ?? 0) >= item.quantity;
+    })
+  );
+}
+
+export function vendorItemsFullyPulledOnOrders(params: {
+  orders: CustomerOrder[];
+  vendor: string;
+}): boolean {
+  const groups = collectVendorOrderItemsFromOrders(params);
   if (groups.length === 0) return false;
   return groups.every(({ order, itemIds }) =>
     itemIds.every((id) => {

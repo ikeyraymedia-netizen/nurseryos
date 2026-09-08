@@ -18,7 +18,10 @@ import {
   MapPin,
   Trash2,
   Edit,
-  DollarSign
+  DollarSign,
+  MessageSquare,
+  Copy,
+  X
 } from 'lucide-react';
 import { CustomerOrder, ContainerWeight, Customer, CustomerDocument, CustomerDocumentType } from '../types';
 import { AppPermissions } from '../lib/permissions';
@@ -43,6 +46,12 @@ import { orderNeedsInvoiceSave } from '../lib/invoicing';
 import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { useSalesRepOptions } from '../lib/salesReps';
+import {
+  buildVendorPullListsForOrders,
+  collectVendorOrderItemsFromOrders,
+  vendorItemsFullyPulledOnOrders,
+  type VendorPullList
+} from '../lib/pullSheet';
 import { InvoiceModal } from './InvoiceModal';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { useT } from '../lib/i18n';
@@ -88,6 +97,10 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const [documentType, setDocumentType] = useState<CustomerDocumentType>('invoice');
   const [editingVendorItemId, setEditingVendorItemId] = useState<string | null>(null);
   const [tempVendorName, setTempVendorName] = useState('');
+  const [vendorPullLists, setVendorPullLists] = useState<VendorPullList[] | null>(null);
+  const [copiedVendorKey, setCopiedVendorKey] = useState<string | null>(null);
+  const [confirmMarkVendor, setConfirmMarkVendor] = useState<string | null>(null);
+  const [markingVendorKey, setMarkingVendorKey] = useState<string | null>(null);
 
   // Editing existing items
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -124,6 +137,76 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       console.error('Error saving item vendor:', err);
     }
   };
+
+  function buildOrderVendorLists() {
+    return buildVendorPullListsForOrders({
+      orders: [order],
+      nurseryName
+    });
+  }
+
+  function handleOpenVendorTextLists() {
+    if (!permissions.canTextVendors) return;
+    setVendorPullLists(buildOrderVendorLists());
+    setCopiedVendorKey(null);
+    setConfirmMarkVendor(null);
+    setMarkingVendorKey(null);
+  }
+
+  async function copyVendorText(list: VendorPullList) {
+    try {
+      await navigator.clipboard.writeText(list.text);
+      setCopiedVendorKey(list.vendor);
+      window.setTimeout(() => {
+        setCopiedVendorKey((current) => (current === list.vendor ? null : current));
+      }, 2000);
+    } catch (err) {
+      console.error('Copy vendor list failed:', err);
+      alert(t('trucksExtra.copyVendorFailed'));
+    }
+  }
+
+  async function shareVendorText(list: VendorPullList) {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: list.vendor === 'Unassigned' ? order.customerName : list.vendor,
+          text: list.text
+        });
+        return;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+      }
+    }
+    window.location.href = `sms:?&body=${encodeURIComponent(list.text)}`;
+  }
+
+  async function handleMarkVendorPulled(list: VendorPullList) {
+    if (!permissions.canCheckOffLoading) return;
+    const groups = collectVendorOrderItemsFromOrders({
+      orders: [order],
+      vendor: list.vendor
+    });
+    if (groups.length === 0) return;
+
+    setMarkingVendorKey(list.vendor);
+    setConfirmMarkVendor(null);
+    try {
+      for (const { order: target, itemIds } of groups) {
+        const idSet = new Set(itemIds);
+        const updatedItems = target.items.map((item) =>
+          idSet.has(item.id) ? { ...item, pulledQuantity: item.quantity } : item
+        );
+        await updateCustomerOrder({ ...target, items: updatedItems });
+      }
+      setVendorPullLists(buildOrderVendorLists());
+    } catch (err) {
+      console.error('Mark vendor pulled failed:', err);
+      alert(t('trucksExtra.markVendorPulledFailed'));
+    } finally {
+      setMarkingVendorKey(null);
+    }
+  }
 
   const handleCostSave = async (itemId: string, rawValue: string) => {
     const trimmed = rawValue.trim();
@@ -616,6 +699,19 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             >
               <FileText className="h-3.5 w-3.5" />
               <span>{t('loader.generateBol')}</span>
+            </button>
+          )}
+
+          {permissions.canTextVendors && (
+            <button
+              type="button"
+              disabled={order.items.length === 0}
+              onClick={handleOpenVendorTextLists}
+              className="px-3 py-1.5 bg-white hover:bg-ink-50 text-ink-950 border border-ink-200 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1 disabled:opacity-50"
+              title={t('trucksExtra.copyVendorListsTitle')}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span>{t('trucksExtra.textVendors')}</span>
             </button>
           )}
 
@@ -1566,6 +1662,141 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               <span className="text-[11px] font-mono font-bold text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-2 py-1">
                 {loadedQuantity}/{totalQuantity}
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vendorPullLists && (
+        <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-gray-150">
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-gray-900">{t('trucksExtra.textVendorsTitle')}</h3>
+                <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                  {t('trucksExtra.textVendorsOrderHint')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVendorPullLists(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-800 hover:bg-gray-100 shrink-0"
+                aria-label={t('common.close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {vendorPullLists.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-8">
+                  {t('trucksExtra.noVendorListsOrder')}
+                </p>
+              ) : (
+                vendorPullLists.map((list) => (
+                  <div
+                    key={list.vendor}
+                    className="border border-gray-200 rounded-xl p-3 bg-slate-50/60 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-gray-900 truncate">
+                          {list.vendor === 'Unassigned'
+                            ? t('trucksExtra.noVendorAssigned')
+                            : list.vendor}
+                        </p>
+                        <p className="text-[10px] text-gray-500 font-mono">
+                          {t('trucksExtra.vendorPlantCount', { n: list.quantity })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => void copyVendorText(list)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white border border-ink-200 text-ink-900 hover:bg-ink-50"
+                        >
+                          {copiedVendorKey === list.vendor ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-ink-700" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          {copiedVendorKey === list.vendor
+                            ? t('common.copied')
+                            : t('common.copy')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void shareVendorText(list)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-ink-700 text-white hover:bg-ink-800"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          {t('trucksExtra.textShare')}
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={list.text}
+                      rows={Math.min(10, list.text.split('\n').length + 1)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
+                    />
+                    {permissions.canCheckOffLoading &&
+                      (() => {
+                        const fullyPulled = vendorItemsFullyPulledOnOrders({
+                          orders: [order],
+                          vendor: list.vendor
+                        });
+                        const confirming = confirmMarkVendor === list.vendor;
+                        const marking = markingVendorKey === list.vendor;
+                        return (
+                          <div className="pt-1 border-t border-gray-200/80">
+                            {confirming ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[11px] font-semibold text-teal-900">
+                                  {t('trucksExtra.markVendorPulledConfirm', {
+                                    vendor:
+                                      list.vendor === 'Unassigned'
+                                        ? t('trucksExtra.noVendorAssigned')
+                                        : list.vendor,
+                                    n: list.quantity
+                                  })}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={marking}
+                                  onClick={() => void handleMarkVendorPulled(list)}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                                >
+                                  {marking ? t('common.pleaseWait') : t('common.yes')}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={marking}
+                                  onClick={() => setConfirmMarkVendor(null)}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-gray-200 text-gray-700"
+                                >
+                                  {t('common.no')}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={fullyPulled || marking}
+                                onClick={() => setConfirmMarkVendor(list.vendor)}
+                                className="text-[11px] font-bold text-teal-800 hover:underline disabled:opacity-50 disabled:no-underline"
+                              >
+                                {fullyPulled
+                                  ? t('trucksExtra.markVendorPulledDone')
+                                  : t('trucksExtra.markVendorPulled')}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

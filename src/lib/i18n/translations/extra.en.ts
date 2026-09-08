@@ -1621,9 +1621,12 @@ const extra = {
     textVendorsTitle: 'Text vendor pull lists',
     textVendorsHint:
       'Copy or share each vendor’s list — plants are grouped by order with stage location, plus combined totals. Use “All trucks this day” when one vendor delivery feeds multiple loads.',
+    textVendorsOrderHint:
+      'Copy or share each vendor’s list for this order — no truck assignment needed. Assign vendors on plant lines first for cleaner lists.',
     copyVendorListsTitle: 'Copy plain-text lists to text vendors',
     copyVendorFailed: 'Could not copy. Long-press the text box and copy instead.',
     noVendorLists: 'No plants on this truck yet.',
+    noVendorListsOrder: 'No plants on this order yet.',
     noVendorListsDay: 'No plants on trucks loading this day yet.',
     vendorScopeDay: 'All trucks this day ({{n}})',
     vendorScopeTruck: 'This truck only',

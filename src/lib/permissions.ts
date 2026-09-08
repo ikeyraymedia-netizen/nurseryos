@@ -19,7 +19,7 @@ export interface AppPermissions {
   canViewBOL: boolean;
   /** Assign / view grower vendors on order lines (gated by vendors module). */
   canUseVendors: boolean;
-  /** Copy/text vendor pull lists from Trucks (gated by textVendors module). */
+  /** Copy/text vendor pull lists from Orders or Trucks (gated by textVendors module). */
   canTextVendors: boolean;
   /** Enter plant cost and view profit/margin (gated by profit module; internal only). */
   canViewProfit: boolean;

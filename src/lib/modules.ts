@@ -71,7 +71,7 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     id: 'textVendors',
     label: 'Text Vendor Pull Lists',
     description:
-      'Copy or text day-wide / per-truck plant lists to growers from the Trucks workspace.',
+      'Copy or text plant lists to growers from Orders or Trucks (no truck assignment required).',
     group: 'addon'
   },
   {
@@ -235,7 +235,7 @@ export function applyModuleGates(
     canCompleteTasks: permissions.canCompleteTasks && tasks,
     canViewBOL: permissions.canViewBOL && bol,
     canUseVendors: permissions.canUseVendors && vendors,
-    canTextVendors: permissions.canTextVendors && textVendors && trucks,
+    canTextVendors: permissions.canTextVendors && textVendors && (trucks || orders),
     // Profit needs both the module AND invoicing (cost/margin lives in the invoice view).
     canViewProfit: permissions.canViewProfit && profit && invoicing,
     // Cost entry on the order workspace only needs the profit module.

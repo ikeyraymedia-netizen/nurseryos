@@ -199,15 +199,36 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
     }
   };
 
-  // Form states for adding a plant to existing order
+  // Form states for adding plants to existing order (multi-line)
   const [isAddingPlant, setIsAddingPlant] = useState(false);
-  const [newPlantName, setNewPlantName] = useState('');
-  const [newContainerSize, setNewContainerSize] = useState('');
-  const [newQuantity, setNewQuantity] = useState(1);
-  const [newVendorName, setNewVendorName] = useState('');
+  const [addLines, setAddLines] = useState<
+    Array<{
+      key: string;
+      plantName: string;
+      containerSize: string;
+      quantity: number;
+      vendor: string;
+      notes: string;
+    }>
+  >([]);
   const [newIsAddition, setNewIsAddition] = useState(true);
-  const [newNotes, setNewNotes] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+
+  const emptyAddLine = () => ({
+    key: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    plantName: '',
+    containerSize: '',
+    quantity: 1,
+    vendor: '',
+    notes: ''
+  });
+
+  const openAddPlantForm = () => {
+    setAddLines([emptyAddLine()]);
+    setNewIsAddition(true);
+    setAddError(null);
+    setIsAddingPlant(true);
+  };
 
   const handleAssignCustomer = async (customerId: string) => {
     if (!permissions.canEditOrders) return;
@@ -228,34 +249,51 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
     e.preventDefault();
     setAddError(null);
 
-    if (!newPlantName.trim()) {
-      setAddError(t('loader.plantNameRequired'));
+    const rows = addLines.map((line) => ({
+      ...line,
+      plantName: line.plantName.trim(),
+      vendor: line.vendor.trim(),
+      notes: line.notes.trim()
+    }));
+
+    if (rows.length === 0) {
+      setAddError(t('loader.addAtLeastOne'));
       return;
     }
-    if (!newContainerSize) {
-      setAddError(t('loader.sizeRequired'));
-      return;
-    }
-    if (newQuantity <= 0) {
-      setAddError('Quantity must be at least 1');
-      return;
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const label = t('loader.lineN', { n: i + 1 });
+      if (!row.plantName) {
+        setAddError(t('loader.plantNameRequiredLine', { line: label }));
+        return;
+      }
+      if (!row.containerSize) {
+        setAddError(t('loader.sizeRequiredLine', { line: label }));
+        return;
+      }
+      if (row.quantity <= 0) {
+        setAddError(t('loader.qtyMinLine', { line: label }));
+        return;
+      }
     }
 
     try {
-      const newItem = {
-        id: `item-add-${Date.now()}`,
-        plantName: newPlantName.trim(),
-        containerSize: newContainerSize,
-        quantity: Number(newQuantity) || 1,
+      const now = Date.now();
+      const newItems = rows.map((row, index) => ({
+        id: `item-add-${now}-${index}`,
+        plantName: row.plantName,
+        containerSize: row.containerSize,
+        quantity: Number(row.quantity) || 1,
         loadedQuantity: 0,
         pulledQuantity: 0,
-        notes: newNotes.trim() || undefined,
-        vendor: permissions.canUseVendors ? newVendorName.trim() || undefined : undefined,
+        notes: row.notes || undefined,
+        vendor: permissions.canUseVendors ? row.vendor || undefined : undefined,
         isAddition: newIsAddition,
         addedAt: new Date().toISOString()
-      };
+      }));
 
-      const updatedItems = [...order.items, newItem];
+      const updatedItems = [...order.items, ...newItems];
 
       let totalQty = 0;
       let totalLoaded = 0;
@@ -263,7 +301,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         totalQty += item.quantity;
         totalLoaded += item.loadedQuantity;
       });
-      
+
       let status: 'pending' | 'loading' | 'completed' = 'pending';
       if (totalLoaded > 0) {
         status = totalLoaded >= totalQty ? 'completed' : 'loading';
@@ -276,24 +314,22 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       });
 
       if (tenantId) {
+        const preview = newItems
+          .slice(0, 3)
+          .map((item) => `${item.plantName} (${item.containerSize}) × ${item.quantity}`)
+          .join(', ');
+        const extra = newItems.length > 3 ? ` +${newItems.length - 3} more` : '';
         void notifyPushEvent({
           tenantId,
           type: 'plant_added',
-          title: `Plant added · ${order.customerName}`,
-          body: `${newItem.plantName} (${newItem.containerSize}) × ${newItem.quantity}${
-            newItem.isAddition ? ' · addition' : ''
-          }`,
+          title: `Plant${newItems.length === 1 ? '' : 's'} added · ${order.customerName}`,
+          body: `${preview}${extra}${newIsAddition ? ' · addition' : ''}`,
           url: `/?tab=orders&order=${order.id}`
         });
       }
 
-      // Reset form on success
-      setNewPlantName('');
-      setNewContainerSize('');
-      setNewQuantity(1);
-      setNewVendorName('');
+      setAddLines([]);
       setNewIsAddition(true);
-      setNewNotes('');
       setIsAddingPlant(false);
     } catch (err: any) {
       console.error('Error adding plant to order:', err);
@@ -843,7 +879,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               !isAddingPlant ? (
               <button
                 type="button"
-                onClick={() => setIsAddingPlant(true)}
+                onClick={openAddPlantForm}
                 className="w-full py-2 px-4 border border-dashed border-ink-300 hover:border-ink-500 bg-ink-50/20 hover:bg-ink-50/50 text-ink-800 hover:text-ink-900 font-bold text-sm rounded-xl transition-all flex items-center justify-center space-x-2 shadow-sm mb-2"
               >
                 <Plus className="h-4.5 w-4.5 stroke-[2.5px]" />
@@ -857,12 +893,13 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                   <h4 className="text-sm font-bold text-gray-900 flex items-center">
                     <Plus className="h-4 w-4 mr-1 text-ink-700" />
-                    Add Plant to Order
+                    {t('loader.addPlantsTitle')}
                   </h4>
                   <button
                     type="button"
                     onClick={() => {
                       setIsAddingPlant(false);
+                      setAddLines([]);
                       setAddError(null);
                     }}
                     className="text-xs text-gray-400 hover:text-gray-600 font-bold"
@@ -878,86 +915,161 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
-                      Plant Name / Variety *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Dwarf Burford Holly"
-                      value={newPlantName}
-                      onChange={(e) => setNewPlantName(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
-                      Container Size *
-                    </label>
-                    <select
-                      value={newContainerSize}
-                      onChange={(e) => setNewContainerSize(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
-                      required
+                <div className="space-y-3">
+                  {addLines.map((line, index) => (
+                    <div
+                      key={line.key}
+                      className="rounded-xl border border-gray-150 bg-slate-50/60 p-3 space-y-2"
                     >
-                      <option value="">{t('loader.selectSize')}</option>
-                      {containerWeights.map((w) => (
-                        <option key={w.id} value={w.id}>
-                          {w.name} ({w.weightLbs} lbs)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                          {t('loader.lineN', { n: index + 1 })}
+                        </span>
+                        {addLines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAddLines((prev) => prev.filter((row) => row.key !== line.key))
+                            }
+                            className="text-[10px] font-bold text-rose-600 hover:text-rose-800 inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            {t('loader.removeLine')}
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="col-span-1 sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                            Plant Name / Variety *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Dwarf Burford Holly"
+                            value={line.plantName}
+                            onChange={(e) =>
+                              setAddLines((prev) =>
+                                prev.map((row) =>
+                                  row.key === line.key
+                                    ? { ...row, plantName: e.target.value }
+                                    : row
+                                )
+                              )
+                            }
+                            className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                            Container Size *
+                          </label>
+                          <select
+                            value={line.containerSize}
+                            onChange={(e) =>
+                              setAddLines((prev) =>
+                                prev.map((row) =>
+                                  row.key === line.key
+                                    ? { ...row, containerSize: e.target.value }
+                                    : row
+                                )
+                              )
+                            }
+                            className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
+                            required
+                          >
+                            <option value="">{t('loader.selectSize')}</option>
+                            {containerWeights.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.name} ({w.weightLbs} lbs)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div
+                        className={`grid grid-cols-1 gap-2 ${
+                          permissions.canUseVendors ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                        }`}
+                      >
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                            Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={line.quantity}
+                            onChange={(e) =>
+                              setAddLines((prev) =>
+                                prev.map((row) =>
+                                  row.key === line.key
+                                    ? {
+                                        ...row,
+                                        quantity: Math.max(1, parseInt(e.target.value) || 1)
+                                      }
+                                    : row
+                                )
+                              )
+                            }
+                            className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-white transition-all font-mono font-bold text-gray-800"
+                            required
+                          />
+                        </div>
+                        {permissions.canUseVendors && (
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                              Assign Vendor (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              list="vendors-list-loader"
+                              placeholder={t('loader.vendorPlaceholder')}
+                              value={line.vendor}
+                              onChange={(e) =>
+                                setAddLines((prev) =>
+                                  prev.map((row) =>
+                                    row.key === line.key
+                                      ? { ...row, vendor: e.target.value }
+                                      : row
+                                  )
+                                )
+                              }
+                              className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                            Optional Notes
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Late addition / Tag-along"
+                            value={line.notes}
+                            onChange={(e) =>
+                              setAddLines((prev) =>
+                                prev.map((row) =>
+                                  row.key === line.key ? { ...row, notes: e.target.value } : row
+                                )
+                              )
+                            }
+                            className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
-                <div
-                  className={`grid grid-cols-1 gap-3 ${
-                    permissions.canUseVendors ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
-                  }`}
+                <button
+                  type="button"
+                  onClick={() => setAddLines((prev) => [...prev, emptyAddLine()])}
+                  className="w-full py-2 px-3 border border-dashed border-ink-250 text-ink-700 hover:bg-ink-50 text-xs font-bold rounded-lg inline-flex items-center justify-center gap-1.5"
                 >
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
-                      Quantity *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={newQuantity}
-                      onChange={(e) => setNewQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-mono font-bold text-gray-800"
-                      required
-                    />
-                  </div>
-                  {permissions.canUseVendors && (
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
-                        Assign Vendor (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        list="vendors-list-loader"
-                        placeholder={t('loader.vendorPlaceholder')}
-                        value={newVendorName}
-                        onChange={(e) => setNewVendorName(e.target.value)}
-                        className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
-                      Optional Notes
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Late addition / Tag-along"
-                      value={newNotes}
-                      onChange={(e) => setNewNotes(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
-                    />
-                  </div>
-                </div>
+                  <Plus className="h-3.5 w-3.5" />
+                  {t('loader.addAnotherPlant')}
+                </button>
 
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <label className="flex items-center space-x-2 cursor-pointer select-none">
@@ -977,7 +1089,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                     className="px-4 py-2 bg-ink-700 hover:bg-ink-800 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center space-x-1"
                   >
                     <Check className="h-3.5 w-3.5" />
-                    <span>{t('loader.savePlant')}</span>
+                    <span>
+                      {addLines.length > 1
+                        ? t('loader.savePlants', { n: addLines.length })
+                        : t('loader.savePlant')}
+                    </span>
                   </button>
                 </div>
               </form>

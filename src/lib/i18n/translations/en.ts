@@ -164,7 +164,7 @@ const en = {
   },
   orders: {
     title: 'Plant Orders',
-    searchPlaceholder: 'Search customer, PO, or plant…',
+    searchPlaceholder: 'Search customer, PO, plant, or vendor…',
     filterAll: 'All',
     filterPending: 'To load',
     filterLoading: 'In progress',
@@ -176,8 +176,10 @@ const en = {
     noOrders: 'No orders yet',
     noOrdersHint: 'Upload a customer order to get started.',
     noSearchResults: 'No matching orders',
-    noSearchResultsHint: 'Try a different customer, PO, or plant name.',
-    plantMatchSummary: '{{qty}} matched plants · {{lines}} line(s)',
+    noSearchResultsHint: 'Try a different customer, PO, plant, or vendor name.',
+    plantMatchSummary: '{{qty}} still to load · {{lines}} line(s)',
+    vendorMatchSummary: '{{qty}} still to load from vendor · {{lines}} line(s)',
+    plantMatchPartial: '{{remaining}} of {{ordered}} left',
     plantMatchMore: '+{{n}} more matching lines',
     needsInvoice: 'Needs invoice save'
   },

@@ -30,22 +30,39 @@ type PlantSearchHit = {
   plantName: string;
   containerSize: string;
   quantity: number;
+  /** Still left to load on this line. */
+  remaining: number;
+  vendor?: string;
   notes?: string;
+  /** Why this line matched the query. */
+  matchedBy: 'plant' | 'vendor' | 'both';
 };
 
-function plantHitsForQuery(items: PlantOrderItem[], q: string): PlantSearchHit[] {
+function lineHitsForQuery(items: PlantOrderItem[], q: string): PlantSearchHit[] {
   if (!q) return [];
   const hits: PlantSearchHit[] = [];
   for (const item of items) {
-    const hay = [item.plantName, item.containerSize, item.notes || '']
+    const remaining = Math.max(0, item.quantity - (item.loadedQuantity || 0));
+    // Skip lines that are already fully loaded.
+    if (remaining <= 0) continue;
+
+    const plantHay = [item.plantName, item.containerSize, item.notes || '']
       .join(' ')
       .toLowerCase();
-    if (!hay.includes(q)) continue;
+    const vendorName = String(item.vendor || '').trim();
+    const vendorHay = vendorName.toLowerCase();
+    const plantMatch = plantHay.includes(q);
+    const vendorMatch = Boolean(vendorHay && vendorHay.includes(q));
+    if (!plantMatch && !vendorMatch) continue;
+
     hits.push({
       plantName: item.plantName,
       containerSize: item.containerSize,
       quantity: item.quantity,
-      ...(item.notes?.trim() ? { notes: item.notes.trim() } : {})
+      remaining,
+      ...(vendorName ? { vendor: vendorName } : {}),
+      ...(item.notes?.trim() ? { notes: item.notes.trim() } : {}),
+      matchedBy: plantMatch && vendorMatch ? 'both' : vendorMatch ? 'vendor' : 'plant'
     });
   }
   return hits;
@@ -91,7 +108,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           (order.owner || '').toLowerCase().includes(q) ||
           (order.stagedLocation || '').toLowerCase().includes(q);
 
-        const plantHits = plantHitsForQuery(order.items, q);
+        const plantHits = lineHitsForQuery(order.items, q);
+        // Plant/vendor searches only include orders that still have unloaded matches.
         if (!matchesMeta && plantHits.length === 0) return null;
 
         return { order, plantHits };
@@ -211,7 +229,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           filteredOrders.map(({ order, plantHits }) => {
             const isSelected = order.id === selectedOrderId;
             const { totalQty, loadedQty, percentage } = getOrderProgress(order);
-            const matchedPlantQty = plantHits.reduce((sum, hit) => sum + hit.quantity, 0);
+            const matchedPlantQty = plantHits.reduce((sum, hit) => sum + hit.remaining, 0);
 
             return (
               <div
@@ -279,19 +297,36 @@ export const OrdersList: React.FC<OrdersListProps> = ({
                   <div className="mt-2 rounded-lg border border-teal-200 bg-teal-50/70 px-2.5 py-2 space-y-1">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-teal-900 flex items-center gap-1">
                       <Sprout className="h-3 w-3" />
-                      {t('orders.plantMatchSummary', {
-                        lines: plantHits.length,
-                        qty: matchedPlantQty
-                      })}
+                      {plantHits.some((h) => h.matchedBy === 'vendor' || h.matchedBy === 'both')
+                        ? t('orders.vendorMatchSummary', {
+                            lines: plantHits.length,
+                            qty: matchedPlantQty
+                          })
+                        : t('orders.plantMatchSummary', {
+                            lines: plantHits.length,
+                            qty: matchedPlantQty
+                          })}
                     </p>
                     {plantHits.slice(0, 4).map((hit, idx) => (
                       <p
                         key={`${hit.plantName}-${hit.containerSize}-${idx}`}
                         className="text-[11px] text-teal-950 leading-snug"
                       >
-                        <span className="font-black font-mono">{hit.quantity}</span>
+                        <span className="font-black font-mono">{hit.remaining}</span>
                         <span className="text-teal-800"> × {dp.size(hit.containerSize)} </span>
                         <span className="font-semibold">{dp.plant(hit.plantName)}</span>
+                        {hit.vendor ? (
+                          <span className="text-teal-800 font-medium"> · {hit.vendor}</span>
+                        ) : null}
+                        {hit.remaining < hit.quantity ? (
+                          <span className="text-teal-700/80">
+                            {' '}
+                            ({t('orders.plantMatchPartial', {
+                              remaining: hit.remaining,
+                              ordered: hit.quantity
+                            })})
+                          </span>
+                        ) : null}
                         {hit.notes ? (
                           <span className="text-teal-700/80"> · {hit.notes}</span>
                         ) : null}

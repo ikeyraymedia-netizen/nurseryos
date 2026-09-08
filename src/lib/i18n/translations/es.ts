@@ -170,7 +170,7 @@ const es: TranslationDict = {
   },
   orders: {
     title: 'Pedidos de plantas',
-    searchPlaceholder: 'Buscar cliente, OC o planta…',
+    searchPlaceholder: 'Buscar cliente, OC, planta o proveedor…',
     filterAll: 'Todos',
     filterPending: 'Por cargar',
     filterLoading: 'En progreso',
@@ -182,8 +182,10 @@ const es: TranslationDict = {
     noOrders: 'Aún no hay pedidos',
     noOrdersHint: 'Suba un pedido de cliente para comenzar.',
     noSearchResults: 'No hay pedidos coincidentes',
-    noSearchResultsHint: 'Pruebe otro cliente, OC o nombre de planta.',
-    plantMatchSummary: '{{qty}} plantas coincidentes · {{lines}} línea(s)',
+    noSearchResultsHint: 'Pruebe otro cliente, OC, planta o proveedor.',
+    plantMatchSummary: '{{qty}} por cargar · {{lines}} línea(s)',
+    vendorMatchSummary: '{{qty}} por cargar del proveedor · {{lines}} línea(s)',
+    plantMatchPartial: '{{remaining}} de {{ordered}} restantes',
     plantMatchMore: '+{{n}} líneas coincidentes más',
     needsInvoice: 'Falta guardar factura'
   },

@@ -51,7 +51,12 @@ import {
   listAllDocuments,
   subscribeToDocument
 } from '../lib/documents';
-import { getDefaultPriceForSize } from '../lib/pricing';
+import {
+  getDefaultPriceForSize,
+  resolveLineUnitPrice,
+  defaultLineUnitPrice,
+  inventoryListPriceForPlant
+} from '../lib/pricing';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
 import { subscribeToInventory } from '../lib/inventory';
@@ -129,6 +134,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const initialDocumentType: CustomerDocumentType =
     (initialDocumentTypeProp as CustomerDocumentType) || 'invoice';
   const printRef = useRef<HTMLDivElement | null>(null);
+  /** Line ids whose price came from a saved doc, explicit unitPrice, or manual edit. */
+  const pricesLockedRef = useRef<Set<string>>(new Set());
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const salesRepOptions = useSalesRepOptions(tenantId);
   const t = useT();
@@ -373,31 +380,32 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setCreditLines(seededDraftLines);
 
     const pricesMap: Record<string, number> = {};
+    const locked = new Set<string>();
     if (doc?.items?.length) {
       doc.items.forEach((item) => {
         pricesMap[item.id] = item.unitPrice;
+        locked.add(item.id);
       });
       // Also map any order items not in the saved doc
       order.items.forEach((item) => {
         if (pricesMap[item.id] === undefined) {
-          pricesMap[item.id] =
-            item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
+          pricesMap[item.id] = resolveLineUnitPrice(item, inventoryPlants, containerWeights);
+          if (typeof item.unitPrice === 'number') locked.add(item.id);
         }
       });
     } else {
       order.items.forEach((item) => {
-        pricesMap[item.id] =
-          item.unitPrice !== undefined ? item.unitPrice : getDefaultPriceForSize(item.containerSize);
+        pricesMap[item.id] = resolveLineUnitPrice(item, inventoryPlants, containerWeights);
+        if (typeof item.unitPrice === 'number') locked.add(item.id);
       });
     }
     seededDraftLines.forEach((item) => {
       if (pricesMap[item.id] === undefined) {
-        pricesMap[item.id] =
-          item.unitPrice !== undefined
-            ? item.unitPrice
-            : getDefaultPriceForSize(item.containerSize);
+        pricesMap[item.id] = resolveLineUnitPrice(item, inventoryPlants, containerWeights);
+        if (typeof item.unitPrice === 'number' && item.unitPrice > 0) locked.add(item.id);
       }
     });
+    pricesLockedRef.current = locked;
     setItemPrices(pricesMap);
 
     const subsMap: Record<string, string> = {};
@@ -586,6 +594,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   const updateDraftLine = (id: string, patch: Partial<PlantOrderItem>) => {
+    const current = creditLines.find((line) => line.id === id);
+    const nextLine = current ? { ...current, ...patch } : null;
+    if (nextLine && patch.includePhotoLink === false) {
+      nextLine.photoUrl = null;
+    }
     setCreditLines((prev) =>
       prev.map((line) => {
         if (line.id !== id) return line;
@@ -596,7 +609,22 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         return next;
       })
     );
+    if (
+      nextLine &&
+      !pricesLockedRef.current.has(id) &&
+      (patch.plantName !== undefined || patch.containerSize !== undefined)
+    ) {
+      setItemPrices((prices) => ({
+        ...prices,
+        [id]: defaultLineUnitPrice(nextLine, inventoryPlants, containerWeights)
+      }));
+    }
   };
+
+  const priceForItem = (item: PlantOrderItem): number =>
+    itemPrices[item.id] !== undefined
+      ? itemPrices[item.id]
+      : defaultLineUnitPrice(item, inventoryPlants, containerWeights);
 
   /** Explicit photo only — never auto-matched from inventory. */
   const linePhotoUrl = (item: PlantOrderItem): string | null => {
@@ -716,7 +744,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
     const itemsRows = workingItems.map((item) => {
       const qty = getItemQty(item);
-      const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
+      const price = priceForItem(item);
       const unavailable = Boolean(item.unavailable);
       const total = unavailable ? 0 : qty * price;
       const muted = unavailable ? '#94a3b8' : undefined;
@@ -885,7 +913,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
     const itemsText = workingItems.map((item) => {
       const qty = getItemQty(item);
-      const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
+      const price = priceForItem(item);
       const unavailable = Boolean(item.unavailable);
       const total = unavailable ? 0 : qty * price;
       const note = String(item.notes || '').trim();
@@ -1157,6 +1185,37 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     return subscribeToWeights(setContainerWeights);
   }, [isOpen]);
 
+  // When inventory arrives after open, upgrade unlocked lines still on size defaults.
+  useEffect(() => {
+    if (!isOpen || inventoryPlants.length === 0) return;
+    const items =
+      creditLines.length > 0 ? creditLines : order?.items || [];
+    if (items.length === 0) return;
+    setItemPrices((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const item of items) {
+        if (pricesLockedRef.current.has(item.id)) continue;
+        const fromInv = inventoryListPriceForPlant(
+          inventoryPlants,
+          item.plantName,
+          item.containerSize,
+          containerWeights
+        );
+        if (fromInv == null) continue;
+        const current = next[item.id];
+        const sizeDefault = getDefaultPriceForSize(item.containerSize);
+        if (current === undefined || current === sizeDefault) {
+          if (current !== fromInv) {
+            next[item.id] = fromInv;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [isOpen, inventoryPlants, containerWeights, creditLines, order?.items]);
+
   useEffect(() => {
     if (!isOpen || !tenantId || !canCollectPayments) {
       setStripePaymentsReady(false);
@@ -1220,6 +1279,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
   // Pricing edit change handler
   const handlePriceChange = (itemId: string, newPrice: number) => {
+    pricesLockedRef.current.add(itemId);
     setItemPrices((prev) => ({
       ...prev,
       [itemId]: Math.max(0, newPrice),
@@ -1236,11 +1296,12 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     setSaveSuccess(false);
   };
 
-  // Restore Default Wholesale Prices
+  // Restore defaults: inventory list price when matched, else size-based wholesale
   const handleResetPrices = () => {
+    pricesLockedRef.current = new Set();
     const defaultPrices: Record<string, number> = {};
     workingItems.forEach((item) => {
-      defaultPrices[item.id] = getDefaultPriceForSize(item.containerSize);
+      defaultPrices[item.id] = defaultLineUnitPrice(item, inventoryPlants, containerWeights);
     });
     setItemPrices(defaultPrices);
     setSaveSuccess(false);
@@ -1338,10 +1399,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
       const updatedItems = workingItems.map((item) => ({
         ...item,
-        unitPrice:
-          itemPrices[item.id] !== undefined
-            ? itemPrices[item.id]
-            : getDefaultPriceForSize(item.containerSize),
+        unitPrice: priceForItem(item),
         unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
         substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined,
         unavailable: isEstimate ? Boolean(item.unavailable) : undefined,
@@ -2198,10 +2256,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       pdf.setFontSize(9);
       workingItems.forEach((item) => {
         const qty = getItemQty(item);
-        const price =
-          itemPrices[item.id] !== undefined
-            ? itemPrices[item.id]
-            : getDefaultPriceForSize(item.containerSize);
+        const price = priceForItem(item);
         const unavailable = Boolean(item.unavailable);
         const total = unavailable ? 0 : qty * price;
         const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
@@ -2373,10 +2428,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             const next = { ...prices };
             lines.forEach((item) => {
               if (next[item.id] === undefined) {
-                next[item.id] =
-                  item.unitPrice !== undefined
-                    ? item.unitPrice
-                    : getDefaultPriceForSize(item.containerSize);
+                next[item.id] = resolveLineUnitPrice(
+                  item,
+                  inventoryPlants,
+                  containerWeights
+                );
+                if (typeof item.unitPrice === 'number') {
+                  pricesLockedRef.current.add(item.id);
+                }
               }
             });
             return next;
@@ -3195,10 +3254,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <div className="space-y-2">
                   {workingItems.map((item) => {
                     const qty = getItemQty(item);
-                    const price =
-                      itemPrices[item.id] !== undefined
-                        ? itemPrices[item.id]
-                        : getDefaultPriceForSize(item.containerSize);
+                    const price = priceForItem(item);
                     const cost = itemCosts[item.id] ?? 0;
                     const lineProfit = item.unavailable ? 0 : (price - cost) * qty;
                     const sizeLabel = String(item.containerSize || '').trim();
@@ -3500,10 +3556,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <div className="md:hidden print:hidden space-y-2.5">
                   {workingItems.map((item) => {
                     const qty = getItemQty(item);
-                    const price =
-                      itemPrices[item.id] !== undefined
-                        ? itemPrices[item.id]
-                        : getDefaultPriceForSize(item.containerSize);
+                    const price = priceForItem(item);
                     const unavailable = Boolean(item.unavailable);
                     const total = unavailable ? 0 : qty * price;
                     const subs = itemSubstitutes[item.id] ?? item.substitutes ?? '';
@@ -3724,7 +3777,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   <tbody>
                     {workingItems.map((item) => {
                       const qty = getItemQty(item);
-                      const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : getDefaultPriceForSize(item.containerSize);
+                      const price = priceForItem(item);
                       const unavailable = Boolean(item.unavailable);
                       const total = unavailable ? 0 : qty * price;
                       const subs = itemSubstitutes[item.id] ?? item.substitutes ?? '';

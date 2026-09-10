@@ -24,7 +24,7 @@ import {
 } from '../lib/inventory';
 import { findMatchingInventoryPlants, plantNameMatchScore } from '../lib/inventoryMatch';
 import { addCustomerDocument, nextDocumentNumber } from '../lib/documents';
-import { getDefaultPriceForSize } from '../lib/pricing';
+import { defaultLineUnitPrice } from '../lib/pricing';
 import { authJsonHeaders } from '../lib/apiAuth';
 import { logAuditEvent } from '../lib/audit';
 import { AppPermissions } from '../lib/permissions';
@@ -537,7 +537,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         }
 
         const lineItems = namedItems.map((item) => {
-          const unitPrice = getDefaultPriceForSize(item.containerSize);
+          const unitPrice = defaultLineUnitPrice(
+            item,
+            inventoryPlants,
+            containerWeights
+          );
           return {
             id: item.id,
             plantName: item.plantName,

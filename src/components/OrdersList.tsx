@@ -38,13 +38,28 @@ type PlantSearchHit = {
   matchedBy: 'plant' | 'vendor' | 'both';
 };
 
+function lineMatchesQuery(item: PlantOrderItem, q: string): boolean {
+  const plantHay = [item.plantName, item.containerSize, item.notes || '']
+    .join(' ')
+    .toLowerCase();
+  const vendorHay = String(item.vendor || '')
+    .trim()
+    .toLowerCase();
+  return plantHay.includes(q) || Boolean(vendorHay && vendorHay.includes(q));
+}
+
+function lineRemaining(item: PlantOrderItem): number {
+  return Math.max(0, item.quantity - (Number(item.loadedQuantity) || 0));
+}
+
 function lineHitsForQuery(items: PlantOrderItem[], q: string): PlantSearchHit[] {
   if (!q) return [];
   const hits: PlantSearchHit[] = [];
   for (const item of items) {
-    const remaining = Math.max(0, item.quantity - (item.loadedQuantity || 0));
+    const remaining = lineRemaining(item);
     // Skip lines that are already fully loaded.
     if (remaining <= 0) continue;
+    if (!lineMatchesQuery(item, q)) continue;
 
     const plantHay = [item.plantName, item.containerSize, item.notes || '']
       .join(' ')
@@ -53,7 +68,6 @@ function lineHitsForQuery(items: PlantOrderItem[], q: string): PlantSearchHit[] 
     const vendorHay = vendorName.toLowerCase();
     const plantMatch = plantHay.includes(q);
     const vendorMatch = Boolean(vendorHay && vendorHay.includes(q));
-    if (!plantMatch && !vendorMatch) continue;
 
     hits.push({
       plantName: item.plantName,
@@ -108,11 +122,19 @@ export const OrdersList: React.FC<OrdersListProps> = ({
           (order.owner || '').toLowerCase().includes(q) ||
           (order.stagedLocation || '').toLowerCase().includes(q);
 
+        const matchedAnyLine = order.items.some((item) => lineMatchesQuery(item, q));
         const plantHits = lineHitsForQuery(order.items, q);
-        // Plant/vendor searches only include orders that still have unloaded matches.
-        if (!matchesMeta && plantHits.length === 0) return null;
 
-        return { order, plantHits };
+        // Plant/vendor query: only keep orders that still have unloaded matching lines.
+        // Do not keep a fully-loaded plant/vendor match just because customer/PO also matched.
+        if (matchedAnyLine) {
+          if (plantHits.length === 0) return null;
+          if (order.status === 'completed') return null;
+          return { order, plantHits };
+        }
+
+        if (!matchesMeta) return null;
+        return { order, plantHits: [] };
       })
       .filter(Boolean) as Array<{ order: CustomerOrder; plantHits: PlantSearchHit[] }>;
   }, [orders, searchQuery, statusFilter]);

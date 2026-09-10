@@ -229,11 +229,26 @@ export function CustomersWorkspace({
     return t('customers.estimate');
   }
 
+  useEffect(() => {
+    return subscribeToDocuments(setAllDocuments);
+  }, []);
+
+  const documentsByCustomerId = useMemo(() => {
+    const map = new Map<string, CustomerDocument[]>();
+    for (const doc of allDocuments) {
+      if (!doc.customerId) continue;
+      const list = map.get(doc.customerId);
+      if (list) list.push(doc);
+      else map.set(doc.customerId, [doc]);
+    }
+    return map;
+  }, [allDocuments]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return customers;
-    return customers.filter((c) =>
-      [
+    return customers.filter((c) => {
+      const profileHit = [
         c.name,
         c.contactEmail || '',
         c.phone || '',
@@ -246,9 +261,23 @@ export function CustomersWorkspace({
       ]
         .join(' ')
         .toLowerCase()
-        .includes(q)
-    );
-  }, [customers, search]);
+        .includes(q);
+      if (profileHit) return true;
+      const docs = documentsByCustomerId.get(c.id) || [];
+      return docs.some((doc) =>
+        [
+          doc.documentNumber,
+          doc.qboDocNumber || '',
+          doc.orderNumber || '',
+          doc.poNumber || '',
+          doc.referencedInvoiceNumber || ''
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      );
+    });
+  }, [customers, search, documentsByCustomerId]);
 
   const selectedCustomer = useMemo(
     () => filtered.find((c) => c.id === selectedCustomerId) || customers.find((c) => c.id === selectedCustomerId) || null,
@@ -324,9 +353,27 @@ export function CustomersWorkspace({
   }, [selectedCustomer, customerDocuments]);
 
   const filteredCustomerDocuments = useMemo(() => {
-    if (customerDocFilter === 'all') return customerDocuments;
-    return customerDocuments.filter((doc) => doc.type === customerDocFilter);
-  }, [customerDocuments, customerDocFilter]);
+    let docs =
+      customerDocFilter === 'all'
+        ? customerDocuments
+        : customerDocuments.filter((doc) => doc.type === customerDocFilter);
+    const q = search.toLowerCase().trim();
+    if (!q) return docs;
+    const numberHits = docs.filter((doc) =>
+      [
+        doc.documentNumber,
+        doc.qboDocNumber || '',
+        doc.orderNumber || '',
+        doc.poNumber || '',
+        doc.referencedInvoiceNumber || ''
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    );
+    // Only narrow the document list when the query matches a doc/order number.
+    return numberHits.length > 0 ? numberHits : docs;
+  }, [customerDocuments, customerDocFilter, search]);
 
   function openStatementEmailPanel() {
     if (!selectedCustomer || !customerStatement) return;
@@ -468,13 +515,6 @@ export function CustomersWorkspace({
     });
     window.location.href = mailtoUrl({ to, cc, subject, body });
   }
-
-  useEffect(() => {
-    if (workspaceView !== 'invoices' || !permissions.canViewInvoices) {
-      return;
-    }
-    return subscribeToDocuments(setAllDocuments);
-  }, [workspaceView, permissions.canViewInvoices]);
 
   const filteredInvoices = useMemo(() => {
     const periodStart = startOfInvoicePeriod(invoicePeriod);
@@ -1864,6 +1904,21 @@ export function CustomersWorkspace({
               ) : (
                 filtered.map((c) => {
                   const rowOrders = ordersByCustomerId.get(c.id) || [];
+                  const q = search.toLowerCase().trim();
+                  const matchingDocs = q
+                    ? (documentsByCustomerId.get(c.id) || []).filter((doc) =>
+                        [
+                          doc.documentNumber,
+                          doc.qboDocNumber || '',
+                          doc.orderNumber || '',
+                          doc.poNumber || '',
+                          doc.referencedInvoiceNumber || ''
+                        ]
+                          .join(' ')
+                          .toLowerCase()
+                          .includes(q)
+                      )
+                    : [];
                   return (
                     <button
                       key={c.id}
@@ -1882,6 +1937,15 @@ export function CustomersWorkspace({
                       <p className="text-[11px] text-ink-700 font-semibold mt-1">
                         {t('customers.ordersCount', { n: rowOrders.length })}
                       </p>
+                      {matchingDocs.length > 0 && (
+                        <p className="text-[11px] text-slate-600 mt-0.5 truncate">
+                          {matchingDocs
+                            .slice(0, 3)
+                            .map((doc) => doc.documentNumber)
+                            .join(' · ')}
+                          {matchingDocs.length > 3 ? ` · +${matchingDocs.length - 3}` : ''}
+                        </p>
+                      )}
                     </button>
                   );
                 })

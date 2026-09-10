@@ -392,7 +392,7 @@ const extra = {
     newCustomer: 'Nuevo cliente',
     contactEmail: 'Correo de contacto',
     saveCustomer: 'Guardar cliente',
-    searchCustomer: 'Buscar cliente...',
+    searchCustomer: 'Buscar cliente, factura o cotización…',
     noCustomers: 'Aún no hay clientes.',
     ordersCount: '{{n}} pedido(s)',
     nameRequired: 'El nombre del cliente es obligatorio.',

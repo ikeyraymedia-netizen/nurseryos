@@ -388,7 +388,7 @@ const extra = {
     newCustomer: 'New customer',
     contactEmail: 'Contact email',
     saveCustomer: 'Save Customer',
-    searchCustomer: 'Search for customer...',
+    searchCustomer: 'Search customer, invoice, or estimate…',
     noCustomers: 'No customers yet.',
     ordersCount: '{{n}} order(s)',
     nameRequired: 'Customer name is required.',

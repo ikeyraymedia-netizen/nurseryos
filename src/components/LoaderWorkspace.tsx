@@ -1615,6 +1615,10 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
           nurseryAddress={nurseryAddress}
           nurseryLogoSrc={nurseryLogoSrc}
           directShipMode
+          tenantId={tenantId}
+          onUpdateOrder={async (next) => {
+            await updateCustomerOrder(next);
+          }}
         />
       )}
 

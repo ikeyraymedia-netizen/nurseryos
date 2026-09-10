@@ -2144,6 +2144,10 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         onSaveBolDraft={async (draft) => {
           await updateTruck({ ...truck, bolDraft: draft });
         }}
+        tenantId={tenantId}
+        onUpdateOrder={async (order) => {
+          await updateCustomerOrder(order);
+        }}
       />
       )}
 

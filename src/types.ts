@@ -158,6 +158,12 @@ export interface CustomerOrder {
   directShip?: boolean;
   /** How this order was created. */
   source?: 'upload' | 'manual' | 'retail' | 'converted';
+  /** Customer-provided bill of lading (PDF or photo) stored in Firebase Storage. */
+  customerBolUrl?: string | null;
+  customerBolPath?: string | null;
+  customerBolFileName?: string | null;
+  customerBolUploadedAt?: string | null;
+  customerBolContentType?: string | null;
 }
 
 export interface Customer {
@@ -282,13 +288,13 @@ export interface TruckBolDraft {
   receiverContact?: string;
   specialInstructions?: string;
   blindBol?: boolean;
-  /** Last selected BOL type: 'consolidated' or an order id. */
+  /** Last selected stop / order id for this BOL. */
   selectedBOLType?: string;
-  /** Receiver address keyed by 'consolidated' or order id. */
+  /** Receiver address keyed by order id. */
   receiverAddresses?: Record<string, string>;
-  /** Point of contact keyed by 'consolidated' or order id. */
+  /** Point of contact keyed by order id. */
   receiverContacts?: Record<string, string>;
-  /** Customer PO # keyed by 'consolidated' or order id. */
+  /** Customer PO # keyed by order id. */
   poNumbers?: Record<string, string>;
   updatedAt?: string;
 }

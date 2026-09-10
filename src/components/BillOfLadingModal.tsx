@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Truck, CustomerOrder, ContainerWeight, Customer, TruckBolDraft } from '../types';
-import { X, Printer, Truck as TruckIcon, User, Calendar, FileText, CheckCircle, Ship, MapPin, EyeOff, Save } from 'lucide-react';
+import {
+  X,
+  Printer,
+  Truck as TruckIcon,
+  User,
+  Calendar,
+  FileText,
+  CheckCircle,
+  Ship,
+  MapPin,
+  EyeOff,
+  Save,
+  Upload,
+  ExternalLink,
+  Trash2
+} from 'lucide-react';
 import jsPDF from 'jspdf';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -9,6 +24,10 @@ import { useT, useLocale } from '../lib/i18n';
 import { imageSrcToDataUrl, resolveNurseryLogoSrc } from '../lib/nurseryBranding';
 import { sortOrdersByDropSequence } from '../lib/loadSequence';
 import { orderRefLabel } from '../lib/orderLabels';
+import {
+  deleteCustomerBolAttachment,
+  uploadCustomerBolAttachment
+} from '../lib/customerBolPhotos';
 
 interface BillOfLadingModalProps {
   isOpen: boolean;
@@ -24,8 +43,11 @@ interface BillOfLadingModalProps {
   nurseryLogoSrc?: string | null;
   /** Persist BOL form fields onto the truck so addresses survive closing. */
   onSaveBolDraft?: (draft: TruckBolDraft) => Promise<void>;
-  /** Single-order direct ship — no consolidated BOL or draft save. */
+  /** Single-order direct ship — no order picker or draft save. */
   directShipMode?: boolean;
+  tenantId?: string;
+  /** Persist customer-uploaded BOL file fields onto the plant order. */
+  onUpdateOrder?: (order: CustomerOrder) => Promise<void>;
 }
 
 function defaultShipperAddress(nurseryName: string, nurseryAddress: string, fallback: string) {
@@ -44,7 +66,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   nurseryAddress = '',
   nurseryLogoSrc = null,
   onSaveBolDraft,
-  directShipMode = false
+  directShipMode = false,
+  tenantId,
+  onUpdateOrder
 }) => {
   const t = useT();
   const { locale } = useLocale();
@@ -56,8 +80,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   // Delivery / drop sequence: last loaded is Stop 1
   const sortedOrders = sortOrdersByDropSequence(safeOrders, truck);
 
-  // State for document selection: 'consolidated' or a specific customer order ID
-  const [selectedBOLType, setSelectedBOLType] = useState<'consolidated' | string>('consolidated');
+  // Which stop / plant order this BOL is for
+  const [selectedBOLType, setSelectedBOLType] = useState<string>('');
   /** Hide consignee / customer name on printed BOL — address only (drop-ships). */
   const [blindBol, setBlindBol] = useState(false);
 
@@ -97,6 +121,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     fileName: string;
     blob: Blob;
   } | null>(null);
+  const [bolUploadBusyId, setBolUploadBusyId] = useState<string | null>(null);
+  const [bolUploadError, setBolUploadError] = useState<string | null>(null);
+  const customerBolInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const hydratedTruckIdRef = useRef<string | null>(null);
   const selectedBOLTypeRef = useRef(selectedBOLType);
   selectedBOLTypeRef.current = selectedBOLType;
@@ -151,30 +178,21 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   }
 
   function defaultReceiverForType(type: string): string {
-    const scoped =
-      type === 'consolidated'
-        ? sortedOrders
-        : sortedOrders.filter((o) => o.id === type);
+    const scoped = sortedOrders.filter((o) => o.id === type);
     return Array.from(
       new Set(scoped.map((o) => resolveOrderDeliveryAddress(o)).filter(Boolean))
     ).join('\n\n');
   }
 
   function defaultContactForType(type: string): string {
-    const scoped =
-      type === 'consolidated'
-        ? sortedOrders
-        : sortedOrders.filter((o) => o.id === type);
+    const scoped = sortedOrders.filter((o) => o.id === type);
     return Array.from(
       new Set(scoped.map((o) => resolveOrderContact(o)).filter(Boolean))
     ).join(', ');
   }
 
   function defaultPoForType(type: string): string {
-    const scoped =
-      type === 'consolidated'
-        ? sortedOrders
-        : sortedOrders.filter((o) => o.id === type);
+    const scoped = sortedOrders.filter((o) => o.id === type);
     return Array.from(
       new Set(
         scoped
@@ -182,6 +200,18 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
           .filter(Boolean)
       )
     ).join(', ');
+  }
+
+  function resolveSelectedOrderId(preferred?: string | null): string {
+    const preferredId = String(preferred || '').trim();
+    if (
+      preferredId &&
+      preferredId !== 'consolidated' &&
+      sortedOrders.some((o) => o.id === preferredId)
+    ) {
+      return preferredId;
+    }
+    return sortedOrders[0]?.id || '';
   }
 
   // Hydrate from saved truck.bolDraft when the modal opens (or truck changes).
@@ -199,14 +229,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       ? t('bol.truckUnit', { num: match[0] })
       : t('bol.defaultTruck');
 
-    const nextType =
-      draft?.selectedBOLType &&
-      (draft.selectedBOLType === 'consolidated' ||
-        sortedOrders.some((o) => o.id === draft.selectedBOLType))
-        ? draft.selectedBOLType
-        : directShipBol && sortedOrders.length === 1
-          ? sortedOrders[0].id
-          : 'consolidated';
+    const nextType = resolveSelectedOrderId(draft?.selectedBOLType);
 
     setSelectedBOLType(nextType);
     setBlindBol(Boolean(draft?.blindBol));
@@ -246,6 +269,15 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     setSaveDraftError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, truck.id]);
+
+  // Keep selection on a real stop if orders load/change (legacy drafts may still say consolidated).
+  const orderIdsKey = sortedOrders.map((o) => o.id).join(',');
+  useEffect(() => {
+    if (!isOpen || !orderIdsKey) return;
+    const next = resolveSelectedOrderId(selectedBOLType);
+    if (next && next !== selectedBOLType) setSelectedBOLType(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, orderIdsKey]);
 
   // Lock body scroll while open (helps mobile Safari keep the overlay visible).
   useEffect(() => {
@@ -342,12 +374,59 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   if (!isOpen) return null;
 
   // Filter orders based on the BOL selection type
-  const currentBOLOrders = selectedBOLType === 'consolidated'
-    ? sortedOrders
-    : sortedOrders.filter((o) => o.id === selectedBOLType);
+  const currentBOLOrders = sortedOrders.filter((o) => o.id === selectedBOLType);
+  const singleOrder = sortedOrders.find((o) => o.id === selectedBOLType) || null;
+  const canUploadCustomerBol = Boolean(tenantId && onUpdateOrder);
 
-  const isIndividual = selectedBOLType !== 'consolidated';
-  const singleOrder = isIndividual ? sortedOrders.find((o) => o.id === selectedBOLType) : null;
+  async function handleUploadCustomerBol(order: CustomerOrder, file: File) {
+    if (!tenantId || !onUpdateOrder) return;
+    setBolUploadBusyId(order.id);
+    setBolUploadError(null);
+    try {
+      const uploaded = await uploadCustomerBolAttachment({
+        tenantId,
+        orderId: order.id,
+        file
+      });
+      if (order.customerBolPath && order.customerBolPath !== uploaded.customerBolPath) {
+        await deleteCustomerBolAttachment(order.customerBolPath);
+      }
+      await onUpdateOrder({
+        ...order,
+        ...uploaded
+      });
+    } catch (err: unknown) {
+      setBolUploadError(
+        err instanceof Error ? err.message : t('bol.customerBolUploadFailed')
+      );
+    } finally {
+      setBolUploadBusyId(null);
+    }
+  }
+
+  async function handleRemoveCustomerBol(order: CustomerOrder) {
+    if (!onUpdateOrder) return;
+    if (!window.confirm(t('bol.customerBolRemoveConfirm'))) return;
+    setBolUploadBusyId(order.id);
+    setBolUploadError(null);
+    try {
+      await deleteCustomerBolAttachment(order.customerBolPath);
+      await onUpdateOrder({
+        ...order,
+        customerBolUrl: null,
+        customerBolPath: null,
+        customerBolFileName: null,
+        customerBolUploadedAt: null,
+        customerBolContentType: null
+      });
+    } catch (err: unknown) {
+      setBolUploadError(
+        err instanceof Error ? err.message : t('bol.customerBolRemoveFailed')
+      );
+    } finally {
+      setBolUploadBusyId(null);
+    }
+  }
 
   // Compute Cargo Totals dynamically for the active scope of the BOL (Consolidated vs Individual)
   let totalPlants = 0;
@@ -404,10 +483,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
     return orderRefLabel(order) || '—';
   }
 
-  // Dynamic BOL Number
-  const bolNumber = selectedBOLType === 'consolidated'
-    ? `BOL-${String(truck?.id || 'TRUCK').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`
-    : `BOL-${String(singleOrder?.id || 'ORD').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`;
+  // Dynamic BOL Number (per order / stop)
+  const bolNumber = `BOL-${String(singleOrder?.id || 'ORD').substring(0, 6).toUpperCase()}-${new Date(shipDate).getFullYear()}`;
 
   const handleDownloadPdf = async () => {
     setIsGeneratingPdf(true);
@@ -728,9 +805,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             <span>
               {isGeneratingPdf
                 ? t('bol.generating')
-                : selectedBOLType === 'consolidated'
-                  ? t('bol.downloadConsolidated')
-                  : t('bol.downloadOrder')}
+                : t('bol.downloadOrder')}
             </span>
           </button>
 
@@ -760,8 +835,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               </span>
             </button>
 
-            {/* BOL Type Selection */}
-            {!directShipBol && (
+            {/* Stop / order selection (multi-stop trucks only) */}
+            {!directShipBol && sortedOrders.length > 1 && (
               <div>
                 <label className="block font-bold text-gray-700 font-mono mb-1.5 uppercase tracking-wider text-[10px]">
                   {t('bol.selection')}
@@ -771,7 +846,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   onChange={(e) => handleBolTypeChange(e.target.value)}
                   className="w-full px-3 py-2 border border-ink-200 rounded-xl focus:outline-none focus:border-ink-500 bg-ink-50/40 font-semibold text-gray-800 text-xs"
                 >
-                  <option value="consolidated">{t('bol.consolidated')}</option>
                   {sortedOrders.map((order, idx) => (
                     <option key={order.id} value={order.id}>
                       {t('bol.stopOrder', {
@@ -809,6 +883,94 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
+
+            {canUploadCustomerBol && currentBOLOrders.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2.5">
+                <div>
+                  <p className="font-bold text-gray-700 font-mono uppercase tracking-wider text-[10px]">
+                    {t('bol.customerBol')}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-500 leading-snug">
+                    {t('bol.customerBolHint')}
+                  </p>
+                </div>
+                {currentBOLOrders.map((order) => {
+                  const busy = bolUploadBusyId === order.id;
+                  const hasFile = Boolean(order.customerBolUrl);
+                  return (
+                    <div
+                      key={order.id}
+                      className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2 space-y-1.5"
+                    >
+                      {currentBOLOrders.length > 1 && (
+                        <p className="text-[11px] font-semibold text-slate-700 truncate">
+                          {t('bol.customerBolOrder', {
+                            num: orderStopRef(order),
+                            customer: order.customerName
+                          })}
+                        </p>
+                      )}
+                      {hasFile ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a
+                            href={order.customerBolUrl || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-ink-800 hover:underline"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {order.customerBolFileName || t('bol.customerBolView')}
+                          </a>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => customerBolInputRefs.current[order.id]?.click()}
+                            className="text-[11px] font-bold text-slate-600 hover:text-ink-800 disabled:opacity-50"
+                          >
+                            {busy ? t('bol.customerBolUploading') : t('bol.customerBolReplace')}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleRemoveCustomerBol(order)}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:underline disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            {t('common.delete')}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => customerBolInputRefs.current[order.id]?.click()}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-ink-900 hover:bg-ink-50 disabled:opacity-50"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          {busy ? t('bol.customerBolUploading') : t('bol.customerBolUpload')}
+                        </button>
+                      )}
+                      <input
+                        ref={(el) => {
+                          customerBolInputRefs.current[order.id] = el;
+                        }}
+                        type="file"
+                        accept="image/*,application/pdf,.pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) void handleUploadCustomerBol(order, file);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+                {bolUploadError && (
+                  <p className="text-[10px] text-rose-700">{bolUploadError}</p>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
@@ -957,9 +1119,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               <span>
                 {isGeneratingPdf
                   ? t('bol.generating')
-                  : selectedBOLType === 'consolidated'
-                    ? t('bol.downloadConsolidated')
-                    : t('bol.downloadOrder')}
+                  : t('bol.downloadOrder')}
               </span>
             </button>
             <p className="text-[10px] text-slate-500 text-center md:hidden">{t('bol.phoneHint')}</p>

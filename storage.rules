@@ -42,5 +42,17 @@ service firebase.storage {
         );
       allow delete: if isTenantMember(tenantId);
     }
+
+    // Customer-provided bills of lading (image or PDF) — members only.
+    match /tenants/{tenantId}/customerBols/{orderId}/{fileName} {
+      allow read: if isTenantMember(tenantId);
+      allow create, update: if isTenantMember(tenantId)
+        && request.resource.size < 12 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+        );
+      allow delete: if isTenantMember(tenantId);
+    }
   }
 }

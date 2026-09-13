@@ -73,6 +73,7 @@ import { blobToBase64, looksLikeEmail, mailtoUrl, MAX_CC_RECIPIENTS, parseCcEmai
 import { OutboundReplySelect } from './OutboundReplySelect';
 import { EmailCcSection } from './EmailCcSection';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
+import { prepareEstimateAcceptLink } from '../lib/estimateAccept';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
@@ -782,8 +783,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const profitMargin = subtotal > 0 ? (totalProfit / subtotal) * 100 : 0;
 
   // HTML Email Layout Builder
-  const generateEmailHTML = (payUrlOverride?: string | null): string => {
+  const generateEmailHTML = (
+    payUrlOverride?: string | null,
+    acceptUrlOverride?: string | null
+  ): string => {
     const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
+    const acceptUrl = isEstimate ? acceptUrlOverride || null : null;
     const itemsRows = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = priceForItem(item);
@@ -941,6 +946,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             : ''
         }
 
+        ${
+          acceptUrl
+            ? `
+        <div style="margin-top: 28px; text-align: center; font-family: Arial, sans-serif;">
+          <a href="${acceptUrl}" style="display: inline-block; background-color: #0f766e; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 28px; border-radius: 10px;">
+            ${t('invoice.acceptEstimateButton')}
+          </a>
+          <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+            ${t('invoice.acceptEstimateHint')}<br/>
+            <a href="${acceptUrl}" style="color: #0f766e; word-break: break-all;">${acceptUrl}</a>
+          </p>
+        </div>`
+            : ''
+        }
+
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
           <p style="margin: 0 0 8px 0; color: #475569;">${t('invoice.emailPdfAttached', { docLabel: docLabel.toLowerCase() })}</p>
           <p style="margin: 0;">${nurseryName}</p>
@@ -951,8 +971,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   // Plain Text Email Builder
-  const generateEmailText = (payUrlOverride?: string | null): string => {
+  const generateEmailText = (
+    payUrlOverride?: string | null,
+    acceptUrlOverride?: string | null
+  ): string => {
     const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
+    const acceptUrl = isEstimate ? acceptUrlOverride || null : null;
     const itemsText = workingItems.map((item) => {
       const qty = getItemQty(item);
       const price = priceForItem(item);
@@ -1021,6 +1045,10 @@ ${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}${
       payUrl
         ? `\nPAY ONLINE:\n${payUrl}\n`
         : ''
+    }${
+      acceptUrl
+        ? `\nACCEPT THIS ESTIMATE:\n${acceptUrl}\n`
+        : ''
     }
 Thank you for choosing ${nurseryName}!
 A PDF copy of this ${docLabel.toLowerCase()} is attached.
@@ -1077,8 +1105,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       } else {
         emailPayUrl = null;
       }
-      const emailHtml = generateEmailHTML(emailPayUrl);
-      const emailText = generateEmailText(emailPayUrl);
+
+      let estimateAcceptUrl: string | null = null;
+      if (isEstimate) {
+        if (!savedDocumentId) {
+          setEmailSentStatus('error_general');
+          setEmailErrorMessage(t('invoice.saveEstimateBeforeEmail'));
+          return;
+        }
+        const prepared = await prepareEstimateAcceptLink({
+          tenantId,
+          documentId: savedDocumentId
+        });
+        estimateAcceptUrl = prepared.acceptUrl || null;
+      }
+
+      const emailHtml = generateEmailHTML(emailPayUrl, estimateAcceptUrl);
+      const emailText = generateEmailText(emailPayUrl, estimateAcceptUrl);
       const pdfDoc = await buildDocumentPdf();
       const pdfAttachment = {
         filename: pdfDoc.fileName,
@@ -2676,6 +2719,18 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               ) : (
                 t('invoice.paymentPending')
               )}
+            </div>
+          )}
+
+          {isEstimate && paymentDocument?.acceptanceStatus === 'accepted' && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-900">
+              {t('customers.estimateAccepted')}
+              {paymentDocument.acceptedAt
+                ? ` · ${new Date(paymentDocument.acceptedAt).toLocaleDateString()}`
+                : ''}
+              {paymentDocument.acceptedByName
+                ? ` · ${paymentDocument.acceptedByName}`
+                : ''}
             </div>
           )}
 

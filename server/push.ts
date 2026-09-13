@@ -32,7 +32,8 @@ const VALID_TYPES: PushEventType[] = [
   'truck_loading_started',
   'truck_loading_finished',
   'task_assigned',
-  'plant_added'
+  'plant_added',
+  'estimate_accepted'
 ];
 
 /** Public VAPID key — safe to expose; also readable at runtime on Railway without a rebuild. */
@@ -135,8 +136,11 @@ export function registerPushRoutes(app: Express): void {
         res.status(400).json({ error: 'tenantId, type, title, and body are required.' });
         return;
       }
-      if (type === 'task_assigned' && !targetUserId) {
-        res.status(400).json({ error: 'targetUserId is required for task_assigned.' });
+      if (
+        (type === 'task_assigned' || type === 'estimate_accepted') &&
+        !targetUserId
+      ) {
+        res.status(400).json({ error: 'targetUserId is required for this event.' });
         return;
       }
 

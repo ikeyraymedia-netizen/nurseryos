@@ -13,9 +13,13 @@ export type PushEventType =
   | 'truck_loading_started'
   | 'truck_loading_finished'
   | 'task_assigned'
-  | 'plant_added';
+  | 'plant_added'
+  | 'estimate_accepted';
 
-const RECIPIENT_ROLES: Record<Exclude<PushEventType, 'task_assigned'>, MemberRoleName[]> = {
+const RECIPIENT_ROLES: Record<
+  Exclude<PushEventType, 'task_assigned' | 'estimate_accepted'>,
+  MemberRoleName[]
+> = {
   invoice_paid: ['owner', 'admin', 'office', 'sales'],
   order_uploaded: ['owner', 'admin', 'supervisor', 'office', 'sales', 'loader'],
   truck_built: ['owner', 'admin', 'supervisor', 'loader'],
@@ -62,7 +66,7 @@ export interface SendTenantPushParams {
   title: string;
   body: string;
   url?: string;
-  /** Required for task_assigned — only this user is notified. */
+  /** Required for task_assigned / estimate_accepted — only this user is notified. */
   targetUserId?: string;
   /** Skip notifying the actor (e.g. person who added the plant). */
   excludeUserId?: string;
@@ -182,9 +186,9 @@ export async function sendTenantPush(params: SendTenantPushParams): Promise<void
   getAdminDb();
 
   let userIds: string[];
-  if (params.type === 'task_assigned') {
+  if (params.type === 'task_assigned' || params.type === 'estimate_accepted') {
     if (!params.targetUserId) {
-      console.warn('[push] task_assigned missing targetUserId');
+      console.warn(`[push] ${params.type} missing targetUserId`);
       return;
     }
     userIds =

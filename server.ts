@@ -15,6 +15,7 @@ import { registerPlatformRoutes } from './server/platform';
 import { registerTerminalRoutes } from './server/terminal';
 import { registerPublicAvailabilityRoutes } from './server/publicAvailability';
 import { registerEstimatePhotoRoutes } from './server/estimatePhotos';
+import { registerEstimateAcceptRoutes } from './server/estimateAccept';
 import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
@@ -53,6 +54,7 @@ registerPushRoutes(app);
 registerPlatformRoutes(app);
 registerPublicAvailabilityRoutes(app);
 registerEstimatePhotoRoutes(app);
+registerEstimateAcceptRoutes(app);
 registerTerminalRoutes(app);
 
 /** Require a signed-in Firebase user for AI / cost-bearing routes. */

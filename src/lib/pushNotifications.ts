@@ -9,7 +9,8 @@ export type PushEventType =
   | 'truck_loading_started'
   | 'truck_loading_finished'
   | 'task_assigned'
-  | 'plant_added';
+  | 'plant_added'
+  | 'estimate_accepted';
 
 const DEVICE_ID_KEY = 'nurseryos:fcmDeviceId';
 const ENABLED_KEY = 'nurseryos:pushEnabled';

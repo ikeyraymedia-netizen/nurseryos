@@ -1375,6 +1375,18 @@ export function CustomersWorkspace({
                               {t('customers.paid')}
                             </span>
                           )}
+                          {doc.type === 'estimate' && doc.acceptanceStatus === 'accepted' && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
+                              {t('customers.estimateAccepted')}
+                            </span>
+                          )}
+                          {doc.type === 'estimate' &&
+                            doc.acceptanceStatus === 'pending' &&
+                            doc.emailSentAt && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
+                              {t('customers.estimateAwaitingAccept')}
+                            </span>
+                          )}
                           {doc.type === 'invoice' && doc.paymentStatus === 'pending' && (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
                               {t('customers.pending')}

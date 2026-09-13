@@ -274,6 +274,15 @@ export interface CustomerDocument {
   stripeConnectedAccountId?: string;
   createdAt: string;
   updatedAt: string;
+  /** Customer acceptance for emailed estimates. */
+  acceptanceStatus?: 'pending' | 'accepted';
+  acceptToken?: string | null;
+  acceptedAt?: string | null;
+  acceptedByName?: string | null;
+  /** Who emailed the estimate (notified on accept). */
+  estimateSentByUserId?: string | null;
+  estimateSentByEmail?: string | null;
+  estimateSentByName?: string | null;
 }
 
 /** Saved BOL form fields so addresses survive closing the modal. */

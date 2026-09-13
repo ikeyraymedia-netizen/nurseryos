@@ -30,6 +30,7 @@ import { logAuditEvent } from '../lib/audit';
 import { AppPermissions } from '../lib/permissions';
 import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
 import { useSalesRepOptions } from '../lib/salesReps';
+import { InventoryPlantPicker } from './InventoryPlantPicker';
 import { ContainerWeight, Customer, InventoryPlant, PlantOrderItem, CustomerDocumentType } from '../types';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { useT } from '../lib/i18n';
@@ -57,7 +58,17 @@ interface ParsedOrderDraft {
 }
 
 type UploadKind = 'order' | 'estimate';
-type InputMode = 'file' | 'text';
+type InputMode = 'file' | 'text' | 'manual';
+
+function blankDraftItem(): PlantOrderItem {
+  return {
+    id: `item-manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    plantName: '',
+    containerSize: '',
+    quantity: 1,
+    loadedQuantity: 0
+  };
+}
 
 function applyInventoryName(
   item: PlantOrderItem,
@@ -118,6 +129,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<ParsedOrderDraft | null>(null);
   const [uploadKind, setUploadKind] = useState<UploadKind | null>(null);
+  const [isManualDraft, setIsManualDraft] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [salesRep, setSalesRep] = useState('');
   const [directShip, setDirectShip] = useState(false);
@@ -138,7 +150,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   useEffect(() => subscribeToInventory(setInventoryPlants), []);
 
   useEffect(() => {
-    if (!pendingDraft || inventoryPlants.length === 0) return;
+    if (!pendingDraft || inventoryPlants.length === 0 || isManualDraft) return;
 
     let draftChanged = false;
     const linkUpdates: Record<string, { plantId: string; plantName: string; containerSize: string }> =
@@ -208,7 +220,8 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     linkedInventoryByItemId,
     originalParsedByItemId,
     containerWeights,
-    tenantId
+    tenantId,
+    isManualDraft
   ]);
 
   const selectedCustomer = useMemo(
@@ -219,6 +232,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const resetDraftState = () => {
     setPendingDraft(null);
     setUploadKind(null);
+    setIsManualDraft(false);
     setSelectedCustomerId('');
     setSalesRep('');
     setDirectShip(false);
@@ -227,6 +241,57 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setAutoLinkedItemIds({});
     setSearchItemId(null);
     setInventorySearch('');
+  };
+
+  const startManualDraft = () => {
+    setErrorMessage(null);
+    setSavedOrderId(null);
+    setSavedEstimateCustomerId(null);
+    setStatusMessage('');
+    setLinkedInventoryByItemId({});
+    setOriginalParsedByItemId({});
+    setAutoLinkedItemIds({});
+    setSearchItemId(null);
+    setInventorySearch('');
+    setIsManualDraft(true);
+    setUploadKind(null);
+    const item = blankDraftItem();
+    setPendingDraft({
+      customerName: '',
+      poNumber: '',
+      items: [item],
+      originalText: 'Manual entry',
+      totalWeightLbs: 0,
+      suggestedCustomerId: '',
+      matchConfidence: 'none',
+      matchSuggestions: []
+    });
+  };
+
+  const updateDraftItem = (itemId: string, patch: Partial<PlantOrderItem>) => {
+    setPendingDraft((draft) => {
+      if (!draft) return draft;
+      const items = draft.items.map((item) =>
+        item.id === itemId ? { ...item, ...patch } : item
+      );
+      return {
+        ...draft,
+        items,
+        totalWeightLbs: orderWeightLbs(items, containerWeights)
+      };
+    });
+  };
+
+  const addManualDraftLine = () => {
+    setPendingDraft((draft) => {
+      if (!draft) return draft;
+      const items = [...draft.items, blankDraftItem()];
+      return {
+        ...draft,
+        items,
+        totalWeightLbs: orderWeightLbs(items, containerWeights)
+      };
+    });
   };
 
   const processFile = async (file: File, orderText?: string) => {
@@ -533,6 +598,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setErrorMessage(t('upload.needAtLeastOneLine'));
       return;
     }
+    if (pendingDraft.items.some((item) => !item.plantName.trim() || !item.containerSize.trim())) {
+      setErrorMessage('Each line needs a plant name and container size.');
+      return;
+    }
+    if (pendingDraft.items.some((item) => !item.quantity || item.quantity < 1)) {
+      setErrorMessage('Each line needs a quantity of at least 1.');
+      return;
+    }
     if (!salesRep.trim()) {
       setErrorMessage(t('upload.salesRepRequired'));
       return;
@@ -701,8 +774,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       </div>
 
       <p className="text-sm text-slate-600 mb-4 leading-relaxed font-medium">
-        Upload plant paperwork or paste plain text. After AI reads it, choose whether it’s an
-        estimate (saved under the customer only) or a plant order for loading.
+        Upload plant paperwork, paste plain text, or type lines by hand. After AI reads a file or
+        paste — or when you type manually — choose estimate (customer only) or a plant order for
+        loading.
       </p>
 
       {!loading && !pendingDraft && !savedOrderId && !savedEstimateCustomerId && (
@@ -714,14 +788,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 setInputMode('file');
                 setErrorMessage(null);
               }}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] sm:text-xs font-bold transition-all ${
                 inputMode === 'file'
                   ? 'bg-white text-ink-800 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               <Upload className="h-3.5 w-3.5" />
-              Upload File
+              Upload
             </button>
             <button
               type="button"
@@ -729,14 +803,29 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 setInputMode('text');
                 setErrorMessage(null);
               }}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] sm:text-xs font-bold transition-all ${
                 inputMode === 'text'
                   ? 'bg-white text-ink-800 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              Paste Text
+              Paste
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setInputMode('manual');
+                setErrorMessage(null);
+              }}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] sm:text-xs font-bold transition-all ${
+                inputMode === 'manual'
+                  ? 'bg-white text-ink-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Sprout className="h-3.5 w-3.5" />
+              Type
             </button>
           </div>
 
@@ -775,7 +864,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 Choose File
               </button>
             </div>
-          ) : (
+          ) : inputMode === 'text' ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
               <label
                 htmlFor="pasted-order-text"
@@ -802,6 +891,27 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               >
                 <Sprout className="h-4 w-4" />
                 Analyze Pasted Text
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 text-center space-y-3">
+              <div className="mx-auto bg-ink-100/80 p-3 rounded-full text-ink-800 w-fit shadow-sm">
+                <Sprout className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Type the order yourself</p>
+                <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                  Add plants with the inventory dropdown — pick a match to link stock, or type a
+                  name and save without one.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={startManualDraft}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold rounded-xl shadow transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Start typing order
               </button>
             </div>
           )}
@@ -897,10 +1007,18 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/40 space-y-3">
           <p className="text-sm font-bold text-gray-900">{t('upload.isEstimate')}</p>
           <p className="text-xs text-gray-600 leading-relaxed">
-            Parsed <span className="font-semibold">{pendingDraft.customerName}</span>
-            {pendingDraft.poNumber ? ` • PO ${pendingDraft.poNumber}` : ''} •{' '}
-            {pendingDraft.items.length} line
-            {pendingDraft.items.length === 1 ? '' : 's'}.
+            {isManualDraft ? (
+              <>
+                Manual entry — you’ll add plants next. Choose estimate or plant order.
+              </>
+            ) : (
+              <>
+                Parsed <span className="font-semibold">{pendingDraft.customerName || 'order'}</span>
+                {pendingDraft.poNumber ? ` • PO ${pendingDraft.poNumber}` : ''} •{' '}
+                {pendingDraft.items.length} line
+                {pendingDraft.items.length === 1 ? '' : 's'}.
+              </>
+            )}
           </p>
           <button
             type="button"
@@ -957,9 +1075,13 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           </div>
 
           <div className="text-xs text-gray-600 bg-white border border-gray-100 rounded-lg px-3 py-2">
-            <span className="font-semibold text-gray-800">Parsed from document:</span>{' '}
-            {pendingDraft.customerName}
-            {pendingDraft.poNumber ? (
+            <span className="font-semibold text-gray-800">
+              {isManualDraft ? 'Manual entry' : 'Parsed from document:'}
+            </span>{' '}
+            {isManualDraft
+              ? `${pendingDraft.items.length} line${pendingDraft.items.length === 1 ? '' : 's'}`
+              : pendingDraft.customerName || '—'}
+            {!isManualDraft && pendingDraft.poNumber ? (
               <span className="text-gray-400"> • PO {pendingDraft.poNumber}</span>
             ) : null}
             <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-white border border-gray-200 text-gray-700">
@@ -1071,14 +1193,160 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
           {(uploadKind === 'order' || uploadKind === 'estimate') && (
           <div className="border-t border-ink-200/80 pt-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Sprout className="h-4 w-4 text-ink-700" />
-              <p className="text-sm font-bold text-gray-900">{t('upload.linkInventory')}</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Sprout className="h-4 w-4 text-ink-700 shrink-0" />
+                <p className="text-sm font-bold text-gray-900">
+                  {isManualDraft ? 'Plant lines' : t('upload.linkInventory')}
+                </p>
+              </div>
+              {isManualDraft && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={addManualDraftLine}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 shrink-0"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add line
+                </button>
+              )}
             </div>
-            <p className="text-[11px] text-gray-500 leading-relaxed">{t('upload.linkHint')}</p>
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              {isManualDraft
+                ? 'Type a plant name to see inventory matches. Click one to link, or save without a match.'
+                : t('upload.linkHint')}
+            </p>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <div className={`space-y-2 pr-1 ${isManualDraft ? '' : 'max-h-80 overflow-y-auto'}`}>
               {pendingDraft.items.map((item) => {
+                if (isManualDraft) {
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white border border-gray-100 rounded-lg px-3 py-2.5 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          Line
+                        </span>
+                        {pendingDraft.items.length > 1 && (
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => removeDraftItem(item.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 shrink-0 disabled:opacity-50"
+                            title={t('upload.removeLine')}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {t('common.delete')}
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                            Plant Name *
+                          </label>
+                          <InventoryPlantPicker
+                            plants={inventoryPlants}
+                            plantName={item.plantName}
+                            containerSize={item.containerSize}
+                            inventoryItemId={item.inventoryItemId}
+                            containerWeights={containerWeights}
+                            required
+                            inputClassName="block w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
+                            onChange={(next) => {
+                              updateDraftItem(item.id, {
+                                plantName: next.plantName,
+                                containerSize:
+                                  next.containerSize !== undefined
+                                    ? next.containerSize
+                                    : item.containerSize,
+                                inventoryItemId: next.inventoryItemId
+                              });
+                              if (next.inventoryItemId) {
+                                const plant = inventoryPlants.find(
+                                  (p) => p.id === next.inventoryItemId
+                                );
+                                if (plant) {
+                                  setLinkedInventoryByItemId((prev) => ({
+                                    ...prev,
+                                    [item.id]: {
+                                      plantId: plant.id,
+                                      plantName: plant.plantName,
+                                      containerSize: plant.containerSize
+                                    }
+                                  }));
+                                  setAutoLinkedItemIds((prev) => {
+                                    if (!prev[item.id]) return prev;
+                                    const copy = { ...prev };
+                                    delete copy[item.id];
+                                    return copy;
+                                  });
+                                }
+                              } else {
+                                setLinkedInventoryByItemId((prev) => {
+                                  if (!prev[item.id]) return prev;
+                                  const copy = { ...prev };
+                                  delete copy[item.id];
+                                  return copy;
+                                });
+                              }
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                            Size *
+                          </label>
+                          <select
+                            value={item.containerSize}
+                            onChange={(e) => {
+                              updateDraftItem(item.id, {
+                                containerSize: e.target.value,
+                                inventoryItemId: undefined
+                              });
+                              setLinkedInventoryByItemId((prev) => {
+                                if (!prev[item.id]) return prev;
+                                const copy = { ...prev };
+                                delete copy[item.id];
+                                return copy;
+                              });
+                            }}
+                            className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
+                            required
+                          >
+                            <option value="">Select size…</option>
+                            {containerWeights.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
+                          Quantity *
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateDraftItem(item.id, {
+                              quantity: Math.max(1, parseInt(e.target.value, 10) || 1)
+                            })
+                          }
+                          className="block w-full sm:w-32 px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-mono font-bold text-gray-800"
+                          required
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+
                 const status = getItemInventoryStatus(item);
                 const source = suggestionSourceForItem(item);
                 const suggestions = getInventoryMatchSuggestions(

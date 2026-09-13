@@ -61,16 +61,22 @@ type InputMode = 'file' | 'text';
 
 function applyInventoryName(
   item: PlantOrderItem,
-  plant: Pick<InventoryPlant, 'plantName' | 'containerSize'>
+  plant: { plantName: string; containerSize: string; id?: string; plantId?: string }
 ): PlantOrderItem {
   const containerSize = plant.containerSize || item.containerSize;
-  if (item.plantName === plant.plantName && item.containerSize === containerSize) {
+  const inventoryItemId = plant.id || plant.plantId || item.inventoryItemId;
+  if (
+    item.plantName === plant.plantName &&
+    item.containerSize === containerSize &&
+    item.inventoryItemId === inventoryItemId
+  ) {
     return item;
   }
   return {
     ...item,
     plantName: plant.plantName,
-    containerSize
+    containerSize,
+    ...(inventoryItemId ? { inventoryItemId } : {})
   };
 }
 
@@ -512,7 +518,13 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             item.containerSize,
             containerWeights
           )[0];
-      return plant ? applyInventoryName(item, plant) : item;
+      if (!plant) return { ...item, inventoryItemId: item.inventoryItemId };
+      const named = applyInventoryName(item, plant);
+      const plantId =
+        'id' in plant && plant.id
+          ? plant.id
+          : manual?.plantId || named.inventoryItemId;
+      return plantId ? { ...named, inventoryItemId: plantId } : named;
     });
 
   const saveDraft = async () => {

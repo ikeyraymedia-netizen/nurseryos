@@ -23,7 +23,7 @@ import {
   Copy,
   X
 } from 'lucide-react';
-import { CustomerOrder, ContainerWeight, Customer, CustomerDocument, CustomerDocumentType } from '../types';
+import { CustomerOrder, ContainerWeight, Customer, CustomerDocument, CustomerDocumentType, InventoryPlant } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { orderRefLabel } from '../lib/orderLabels';
 import {
@@ -41,7 +41,7 @@ import {
   canGenerateStandaloneBol,
   isDirectShipOrder
 } from '../lib/orderVisibility';
-import { notifyInventorySyncIssue } from '../lib/inventory';
+import { notifyInventorySyncIssue, subscribeToInventory } from '../lib/inventory';
 import { orderNeedsInvoiceSave } from '../lib/invoicing';
 import { listAllDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
@@ -54,6 +54,7 @@ import {
 } from '../lib/pullSheet';
 import { InvoiceModal } from './InvoiceModal';
 import { BillOfLadingModal } from './BillOfLadingModal';
+import { InventoryPlantPicker } from './InventoryPlantPicker';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { notifyPushEvent } from '../lib/pushNotifications';
@@ -109,7 +110,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const [editQuantity, setEditQuantity] = useState(1);
   const [editNotes, setEditNotes] = useState('');
   const [editIsAddition, setEditIsAddition] = useState(false);
+  const [editInventoryItemId, setEditInventoryItemId] = useState<string | undefined>(undefined);
   const [needsInvoiceSave, setNeedsInvoiceSave] = useState(false);
+  const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
+
+  useEffect(() => subscribeToInventory(setInventoryPlants), []);
 
   useEffect(() => {
     if (!permissions.canViewInvoices) {
@@ -292,6 +297,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       quantity: number;
       vendor: string;
       notes: string;
+      inventoryItemId?: string;
     }>
   >([]);
   const [newIsAddition, setNewIsAddition] = useState(true);
@@ -303,7 +309,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
     containerSize: '',
     quantity: 1,
     vendor: '',
-    notes: ''
+    notes: '',
+    inventoryItemId: undefined as string | undefined
   });
 
   const openAddPlantForm = () => {
@@ -372,6 +379,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         pulledQuantity: 0,
         notes: row.notes || undefined,
         vendor: permissions.canUseVendors ? row.vendor || undefined : undefined,
+        inventoryItemId: row.inventoryItemId || undefined,
         isAddition: newIsAddition,
         addedAt: new Date().toISOString()
       }));
@@ -555,6 +563,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             loadedQuantity: loadedQty,
             pulledQuantity: pulledQty,
             notes: editNotes.trim() || undefined,
+            inventoryItemId: editInventoryItemId || undefined,
             isAddition: editIsAddition
           };
         }
@@ -1039,21 +1048,30 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                           <label className="block text-[10px] font-bold text-gray-400 uppercase font-mono mb-1">
                             Plant Name / Variety *
                           </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Dwarf Burford Holly"
-                            value={line.plantName}
-                            onChange={(e) =>
+                          <InventoryPlantPicker
+                            plants={inventoryPlants}
+                            plantName={line.plantName}
+                            containerSize={line.containerSize}
+                            inventoryItemId={line.inventoryItemId}
+                            containerWeights={containerWeights}
+                            required
+                            onChange={(next) =>
                               setAddLines((prev) =>
                                 prev.map((row) =>
                                   row.key === line.key
-                                    ? { ...row, plantName: e.target.value }
+                                    ? {
+                                        ...row,
+                                        plantName: next.plantName,
+                                        containerSize:
+                                          next.containerSize !== undefined
+                                            ? next.containerSize
+                                            : row.containerSize,
+                                        inventoryItemId: next.inventoryItemId
+                                      }
                                     : row
                                 )
                               )
                             }
-                            className="block w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
-                            required
                           />
                         </div>
                         <div>
@@ -1066,7 +1084,11 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               setAddLines((prev) =>
                                 prev.map((row) =>
                                   row.key === line.key
-                                    ? { ...row, containerSize: e.target.value }
+                                    ? {
+                                        ...row,
+                                        containerSize: e.target.value,
+                                        inventoryItemId: undefined
+                                      }
                                     : row
                                 )
                               )
@@ -1235,12 +1257,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             <label className="block text-[9px] font-bold text-gray-400 uppercase font-mono mb-1">
                               Plant Name / Variety
                             </label>
-                            <input
-                              type="text"
-                              value={editPlantName}
-                              onChange={(e) => setEditPlantName(e.target.value)}
-                              className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
+                            <InventoryPlantPicker
+                              plants={inventoryPlants}
+                              plantName={editPlantName}
+                              containerSize={editContainerSize}
+                              inventoryItemId={editInventoryItemId}
+                              containerWeights={containerWeights}
                               required
+                              inputClassName="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
+                              onChange={(next) => {
+                                setEditPlantName(next.plantName);
+                                if (next.containerSize !== undefined) {
+                                  setEditContainerSize(next.containerSize);
+                                }
+                                setEditInventoryItemId(next.inventoryItemId);
+                              }}
                             />
                           </div>
                           <div>
@@ -1249,7 +1280,10 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             </label>
                             <select
                               value={editContainerSize}
-                              onChange={(e) => setEditContainerSize(e.target.value)}
+                              onChange={(e) => {
+                                setEditContainerSize(e.target.value);
+                                setEditInventoryItemId(undefined);
+                              }}
                               className="block w-full px-2.5 py-1.5 border border-gray-250 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                               required
                             >
@@ -1349,6 +1383,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                                   setEditQuantity(item.quantity);
                                   setEditNotes(item.notes || '');
                                   setEditIsAddition(!!item.isAddition);
+                                  setEditInventoryItemId(item.inventoryItemId);
                                 }}
                                 className="p-1 text-gray-400 hover:text-ink-700 hover:bg-ink-50 rounded transition-colors"
                                 title={t('loader.editItem')}

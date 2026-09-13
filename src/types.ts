@@ -95,6 +95,8 @@ export interface PlantOrderItem {
   loadedQuantity: number; // For loaders to track loading progress
   /** Qty already saved on one or more invoices for this order line. */
   invoicedQuantity?: number;
+  /** Linked live-inventory plant id when the user picked a match (optional). */
+  inventoryItemId?: string;
   inventoryDeductedQty?: number; // Qty removed from live inventory after confirmed sync
   inventorySyncConfirmed?: boolean; // True only after inventory write succeeded
   pulledQuantity?: number; // To track pulled/delivered progress

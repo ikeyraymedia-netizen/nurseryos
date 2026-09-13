@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { CustomerOrder, Truck, ContainerWeight, Customer } from '../types';
+import React, { useEffect, useState } from 'react';
+import { CustomerOrder, Truck, ContainerWeight, Customer, InventoryPlant } from '../types';
 import { AppPermissions } from '../lib/permissions';
-import { notifyInventorySyncIssue } from '../lib/inventory';
+import { notifyInventorySyncIssue, subscribeToInventory } from '../lib/inventory';
 import {
   updateOrderItemProgress,
   updateOrderItemPulledProgress,
@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
+import { InventoryPlantPicker } from './InventoryPlantPicker';
 import { buildVendorPullListsForTrucks, collectVendorOrderItems, trucksLoadingOnDate, vendorItemsFullyPulled, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
@@ -121,6 +122,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [copiedVendorKey, setCopiedVendorKey] = useState<string | null>(null);
   const [markingVendorKey, setMarkingVendorKey] = useState<string | null>(null);
   const [confirmMarkVendor, setConfirmMarkVendor] = useState<string | null>(null);
+  const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
+
+  useEffect(() => subscribeToInventory(setInventoryPlants), []);
 
   const dayTrucks = trucksLoadingOnDate(trucks.length > 0 ? trucks : [truck], truck.loadingDate);
   const dayTruckCount = dayTrucks.length > 0 ? dayTrucks.length : 1;
@@ -270,6 +274,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       containerSize: string;
       quantity: number;
       notes: string;
+      inventoryItemId?: string;
     }>
   >([]);
   const [newIsAddition, setNewIsAddition] = useState(true);
@@ -280,7 +285,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
     plantName: '',
     containerSize: '',
     quantity: 1,
-    notes: ''
+    notes: '',
+    inventoryItemId: undefined as string | undefined
   });
 
   const openAddPlantForm = (orderId: string) => {
@@ -297,6 +303,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [editQuantity, setEditQuantity] = useState(1);
   const [editNotes, setEditNotes] = useState('');
   const [editIsAddition, setEditIsAddition] = useState(false);
+  const [editInventoryItemId, setEditInventoryItemId] = useState<string | undefined>(undefined);
   const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
   const [tempVendorName, setTempVendorName] = useState('');
 
@@ -308,6 +315,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   const [standaloneContainerSize, setStandaloneContainerSize] = useState('');
   const [standaloneQuantity, setStandaloneQuantity] = useState(1);
   const [standaloneNotes, setStandaloneNotes] = useState('');
+  const [standaloneInventoryItemId, setStandaloneInventoryItemId] = useState<string | undefined>(
+    undefined
+  );
   const [standaloneError, setStandaloneError] = useState<string | null>(null);
 
   async function handleVendorSave(order: CustomerOrder, itemId: string, vendorName: string) {
@@ -553,6 +563,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         quantity: Number(row.quantity) || 1,
         loadedQuantity: 0,
         notes: row.notes || undefined,
+        inventoryItemId: row.inventoryItemId || undefined,
         isAddition: newIsAddition,
         addedAt: new Date().toISOString()
       }));
@@ -636,6 +647,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
         quantity: Number(standaloneQuantity) || 1,
         loadedQuantity: 0,
         notes: standaloneNotes.trim() || undefined,
+        inventoryItemId: standaloneInventoryItemId || undefined,
         isAddition: true,
         addedAt: new Date().toISOString()
       };
@@ -678,6 +690,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
       setStandaloneContainerSize('');
       setStandaloneQuantity(1);
       setStandaloneNotes('');
+      setStandaloneInventoryItemId(undefined);
       setIsCreatingStandalone(false);
     } catch (err: any) {
       console.error('Error creating standalone addition:', err);
@@ -733,6 +746,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
             loadedQuantity: loadedQty,
             pulledQuantity: pulledQty,
             notes: editNotes.trim() || undefined,
+            inventoryItemId: editInventoryItemId || undefined,
             isAddition: editIsAddition
           };
         }
@@ -1132,13 +1146,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                     <label className="block text-[9px] font-bold text-gray-400 uppercase font-mono mb-1">
                       Plant Name / Variety *
                     </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Dwarf Burford Holly"
-                      value={standalonePlantName}
-                      onChange={(e) => setStandalonePlantName(e.target.value)}
-                      className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-amber-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                    <InventoryPlantPicker
+                      plants={inventoryPlants}
+                      plantName={standalonePlantName}
+                      containerSize={standaloneContainerSize}
+                      inventoryItemId={standaloneInventoryItemId}
+                      containerWeights={containerWeights}
                       required
+                      inputClassName="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-amber-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
+                      onChange={(next) => {
+                        setStandalonePlantName(next.plantName);
+                        if (next.containerSize !== undefined) {
+                          setStandaloneContainerSize(next.containerSize);
+                        }
+                        setStandaloneInventoryItemId(next.inventoryItemId);
+                      }}
                     />
                   </div>
                   <div>
@@ -1147,7 +1169,10 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                     </label>
                     <select
                       value={standaloneContainerSize}
-                      onChange={(e) => setStandaloneContainerSize(e.target.value)}
+                      onChange={(e) => {
+                        setStandaloneContainerSize(e.target.value);
+                        setStandaloneInventoryItemId(undefined);
+                      }}
                       className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-amber-500 bg-gray-50 focus:bg-white transition-all font-medium text-gray-800"
                       required
                     >
@@ -1507,21 +1532,31 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                     <label className="block text-[9px] font-bold text-gray-400 uppercase font-mono mb-1">
                                       Plant Name / Variety *
                                     </label>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g. Dwarf Burford Holly"
-                                      value={line.plantName}
-                                      onChange={(e) =>
+                                    <InventoryPlantPicker
+                                      plants={inventoryPlants}
+                                      plantName={line.plantName}
+                                      containerSize={line.containerSize}
+                                      inventoryItemId={line.inventoryItemId}
+                                      containerWeights={containerWeights}
+                                      required
+                                      inputClassName="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
+                                      onChange={(next) =>
                                         setAddLines((prev) =>
                                           prev.map((row) =>
                                             row.key === line.key
-                                              ? { ...row, plantName: e.target.value }
+                                              ? {
+                                                  ...row,
+                                                  plantName: next.plantName,
+                                                  containerSize:
+                                                    next.containerSize !== undefined
+                                                      ? next.containerSize
+                                                      : row.containerSize,
+                                                  inventoryItemId: next.inventoryItemId
+                                                }
                                               : row
                                           )
                                         )
                                       }
-                                      className="block w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-ink-500 bg-white transition-all font-medium text-gray-800"
-                                      required
                                     />
                                   </div>
                                   <div>
@@ -1534,7 +1569,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         setAddLines((prev) =>
                                           prev.map((row) =>
                                             row.key === line.key
-                                              ? { ...row, containerSize: e.target.value }
+                                              ? {
+                                                  ...row,
+                                                  containerSize: e.target.value,
+                                                  inventoryItemId: undefined
+                                                }
                                               : row
                                           )
                                         )
@@ -1665,12 +1704,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                       <label className="block text-[9px] font-bold text-gray-400 uppercase font-mono mb-1">
                                         Plant Name / Variety
                                       </label>
-                                      <input
-                                        type="text"
-                                        value={editPlantName}
-                                        onChange={(e) => setEditPlantName(e.target.value)}
-                                        className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
+                                      <InventoryPlantPicker
+                                        plants={inventoryPlants}
+                                        plantName={editPlantName}
+                                        containerSize={editContainerSize}
+                                        inventoryItemId={editInventoryItemId}
+                                        containerWeights={containerWeights}
                                         required
+                                        inputClassName="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
+                                        onChange={(next) => {
+                                          setEditPlantName(next.plantName);
+                                          if (next.containerSize !== undefined) {
+                                            setEditContainerSize(next.containerSize);
+                                          }
+                                          setEditInventoryItemId(next.inventoryItemId);
+                                        }}
                                       />
                                     </div>
                                     <div>
@@ -1679,7 +1727,10 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                       </label>
                                       <select
                                         value={editContainerSize}
-                                        onChange={(e) => setEditContainerSize(e.target.value)}
+                                        onChange={(e) => {
+                                          setEditContainerSize(e.target.value);
+                                          setEditInventoryItemId(undefined);
+                                        }}
                                         className="block w-full px-2 py-1 border border-gray-250 rounded-md text-xs focus:outline-none focus:border-ink-500 bg-white font-medium text-gray-800"
                                         required
                                       >
@@ -1775,6 +1826,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                             setEditQuantity(item.quantity);
                                             setEditNotes(item.notes || '');
                                             setEditIsAddition(!!item.isAddition);
+                                            setEditInventoryItemId(item.inventoryItemId);
                                           }}
                                           className="p-0.5 text-gray-400 hover:text-ink-700 hover:bg-ink-50 rounded"
                                           title={t('loader.editItem')}

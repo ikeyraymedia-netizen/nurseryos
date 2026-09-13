@@ -210,7 +210,8 @@ export function RetailWorkspace({ tenantId, permissions, userId }: Props) {
         containerSize: c.containerSize,
         quantity: c.quantity,
         loadedQuantity: c.quantity,
-        unitPrice: c.unitPrice
+        unitPrice: c.unitPrice,
+        inventoryItemId: c.inventoryPlantId
       }));
 
       await addCustomerOrder({
@@ -227,7 +228,8 @@ export function RetailWorkspace({ tenantId, permissions, userId }: Props) {
       const deltas = cart.map((c) => ({
         plantName: c.plantName,
         containerSize: c.containerSize,
-        delta: c.quantity
+        delta: c.quantity,
+        inventoryItemId: c.inventoryPlantId
       }));
       await adjustInventoryForLoadDeltas(deltas, tenantId);
 

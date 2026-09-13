@@ -53,7 +53,12 @@ function confirmedInventoryDeducted(item: {
 
 async function syncInventoryAfterLoad(
   tenantId: string,
-  deltas: Array<{ plantName: string; containerSize: string; delta: number }>
+  deltas: Array<{
+    plantName: string;
+    containerSize: string;
+    delta: number;
+    inventoryItemId?: string;
+  }>
 ): Promise<{ message: string; ok: boolean }> {
   if (deltas.length === 0) {
     return { message: 'No inventory changes were needed.', ok: true };
@@ -705,7 +710,8 @@ export async function updateOrderItemProgress(
       ? {
           plantName: currentItem.plantName,
           containerSize: currentItem.containerSize,
-          delta: inventoryDelta
+          delta: inventoryDelta,
+          inventoryItemId: currentItem.inventoryItemId || undefined
         }
       : null;
 
@@ -909,7 +915,8 @@ export async function markAllItemsAsLoaded(orderId: string, orderItems: any[]): 
     .map((item) => ({
       plantName: item.plantName,
       containerSize: item.containerSize,
-      delta: item.quantity - confirmedInventoryDeducted(item)
+      delta: item.quantity - confirmedInventoryDeducted(item),
+      inventoryItemId: item.inventoryItemId || undefined
     }))
     .filter((d) => d.delta !== 0);
 
@@ -972,7 +979,8 @@ export async function resetOrderProgress(orderId: string, orderItems: any[]): Pr
     .map((item) => ({
       plantName: item.plantName,
       containerSize: item.containerSize,
-      delta: -confirmedInventoryDeducted(item)
+      delta: -confirmedInventoryDeducted(item),
+      inventoryItemId: item.inventoryItemId || undefined
     }));
 
   const updatedItems = orderItems.map((item) => ({

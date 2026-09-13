@@ -450,6 +450,8 @@ export interface InventoryLoadDelta {
   plantName: string;
   containerSize: string;
   delta: number;
+  /** Prefer this inventory plant when the order line was explicitly linked. */
+  inventoryItemId?: string;
 }
 
 /** Adjust inventory qty when loaders check off plants (positive delta = deduct, negative = restore). */
@@ -481,8 +483,15 @@ export async function adjustInventoryForLoadDeltas(
   const getQty = (plant: InventoryPlant) =>
     pendingQty.has(plant.id) ? pendingQty.get(plant.id)! : plant.quantityAvailable;
 
-  for (const { plantName, containerSize, delta } of meaningful) {
-    let matches = findMatchingInventoryPlants(plants, plantName, containerSize);
+  for (const { plantName, containerSize, delta, inventoryItemId } of meaningful) {
+    let matches: InventoryPlant[] = [];
+    if (inventoryItemId) {
+      const linked = plants.find((p) => p.id === inventoryItemId);
+      if (linked) matches = [linked];
+    }
+    if (matches.length === 0) {
+      matches = findMatchingInventoryPlants(plants, plantName, containerSize);
+    }
     if (matches.length === 0) {
       matches = getAliasedMatches(tenantId, plants, plantName, containerSize);
     }

@@ -82,6 +82,7 @@ import { dueDateFromPaymentTerms } from '../lib/dates';
 import {
   bumpInvoicedQuantities,
   invoicesForOrder,
+  itemRemainingInvoiceQty,
   restoreInvoicedQuantitiesAfterDelete
 } from '../lib/invoicing';
 
@@ -340,26 +341,67 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     const seedDraftLines = (): PlantOrderItem[] => {
       const fromDoc = doc?.items || [];
-      if (fromDoc.length > 0) {
-        return fromDoc.map((item) => ({
-          id: item.id,
-          plantName: item.plantName,
-          containerSize: item.containerSize,
-          quantity: item.quantity,
-          loadedQuantity: 0,
-          unitPrice: item.unitPrice,
-          unitCost: item.unitCost,
-          notes: item.notes,
-          substitutes: item.substitutes,
-          unavailable: item.unavailable,
-          includePhotoLink: item.includePhotoLink,
-          photoUrl: item.photoUrl,
-          vendor: item.vendor
-        }));
+      const isPreviewNew = order.id.startsWith('preview-new-');
+      const liveOrderItems =
+        !isPreviewNew && order.items.length > 0 ? order.items : [];
+
+      const toPlantLine = (item: {
+        id: string;
+        plantName: string;
+        containerSize: string;
+        quantity: number;
+        unitPrice?: number;
+        unitCost?: number;
+        notes?: string;
+        substitutes?: string;
+        unavailable?: boolean;
+        includePhotoLink?: boolean;
+        photoUrl?: string | null;
+        vendor?: string;
+      }): PlantOrderItem => ({
+        id: item.id,
+        plantName: item.plantName,
+        containerSize: item.containerSize,
+        quantity: item.quantity,
+        loadedQuantity: 0,
+        unitPrice: item.unitPrice,
+        unitCost: item.unitCost,
+        notes: item.notes,
+        substitutes: item.substitutes,
+        unavailable: item.unavailable,
+        includePhotoLink: item.includePhotoLink,
+        photoUrl: item.photoUrl,
+        vendor: item.vendor
+      });
+
+      // Credit memos are intentional subsets — keep the saved snapshot as-is.
+      if (type === 'credit_memo' && fromDoc.length > 0) {
+        return fromDoc.map(toPlantLine);
       }
-      if (order.items.length > 0 && !order.id.startsWith('preview-new-')) {
-        return order.items.map((item) => ({ ...item }));
+
+      // Start from the saved document (preserve prices/qty on existing lines),
+      // then append live order lines that were added after the last save.
+      const merged: PlantOrderItem[] = fromDoc.map(toPlantLine);
+      const seen = new Set(merged.map((line) => line.id));
+
+      for (const item of liveOrderItems) {
+        if (seen.has(item.id)) continue;
+        if (type === 'invoice') {
+          const remaining = itemRemainingInvoiceQty(item);
+          if (remaining <= 0) continue;
+          merged.push({ ...item, quantity: remaining });
+        } else {
+          merged.push({ ...item });
+        }
+        seen.add(item.id);
       }
+
+      if (merged.length > 0) return merged;
+
+      if (liveOrderItems.length > 0) {
+        return liveOrderItems.map((item) => ({ ...item }));
+      }
+
       return [
         {
           id: `line-${Date.now()}`,
@@ -1527,15 +1569,24 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             vendor: fromWorking.vendor
           };
         });
+        const previousDocLineIds = new Set(
+          (existingDocument || fetchedDocument || liveDocument)?.items?.map((item) => item.id) ||
+            []
+        );
+        const invoicedBumpLines = creatingNewDocument
+          ? updatedItems.map((item) => ({
+              id: item.id,
+              quantity: getItemQty(item)
+            }))
+          : updatedItems
+              .filter((item) => !previousDocLineIds.has(item.id))
+              .map((item) => ({
+                id: item.id,
+                quantity: getItemQty(item)
+              }));
         const itemsForOrder =
-          documentType === 'invoice' && creatingNewDocument
-            ? bumpInvoicedQuantities(
-                mergedItems,
-                updatedItems.map((item) => ({
-                  id: item.id,
-                  quantity: getItemQty(item)
-                }))
-              )
+          documentType === 'invoice' && invoicedBumpLines.length > 0
+            ? bumpInvoicedQuantities(mergedItems, invoicedBumpLines)
             : mergedItems;
         await updateCustomerOrder({
           ...updatedOrder,
@@ -2791,6 +2842,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   <option value="Net 15">Net 15</option>
                   <option value="Net 30">Net 30</option>
                   <option value="Net 45">Net 45</option>
+                  <option value="Net 60">Net 60</option>
                 </select>
               </div>
               )}

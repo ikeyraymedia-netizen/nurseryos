@@ -29,6 +29,9 @@ const SIZE_RULES: Array<{ size: string; re: RegExp }> = [
   { size: '#5', re: /(?:#\s*5\b|\b5\s*g(?:al(?:lon)?)?\b)/i },
   { size: '#3', re: /(?:#\s*3\b|\b3\s*g(?:al(?:lon)?)?\b)/i },
   { size: '#1', re: /(?:#\s*1\b|\b1\s*g(?:al(?:lon)?)?\b|\bno\.?\s*1\b)/i },
+  // Nursery pot codes like 4.0P / 4P (≈ 4" pot)
+  { size: '4 inch', re: /\b4(?:\.0)?\s*P\b/i },
+  { size: '6 inch', re: /\b6(?:\.0)?\s*P\b/i },
   { size: '6 inch', re: /\b6\s*(?:inch|in|"|'')\b/i },
   { size: '4 inch', re: /\b4\s*(?:inch|in|"|'')\b/i },
   { size: 'Tray', re: /\b(?:tray|flat|plug\s*tray)\b/i }
@@ -49,7 +52,7 @@ function heightNotePattern(): RegExp {
 }
 
 function sizeTokenPattern(): RegExp {
-  return /#\s*\d{1,3}\b|\b(?:b\s*&\s*b|b\.?\s*&?\s*b\.?)\b|\b(?:\d+\s*)?(?:gallon|gal|g)\b|\b(?:4|6)\s*(?:inch|in|"|'')\b|\b(?:tray|flat)\b/i;
+  return /#\s*\d{1,3}\b|\b(?:b\s*&\s*b|b\.?\s*&?\s*b\.?)\b|\b(?:\d+\s*)?(?:gallon|gal|g)\b|\b\d+(?:\.\d+)?\s*P\b|\b(?:4|6)\s*(?:inch|in|"|'')\b|\b(?:tray|flat)\b/i;
 }
 
 function priceTokenPattern(): RegExp {
@@ -196,6 +199,12 @@ function extractMeta(lines: string[]): {
       continue;
     }
 
+    // MNI Direct–style POs often mash vendor + ship-to onto one line.
+    const mniShip = line.match(/\b(MNI\s+Direct(?:\s+Branch\s+\d+)?)\b/i);
+    if (mniShip?.[1] && customerName === 'Unknown Customer') {
+      customerName = mniShip[1].replace(/\s+/g, ' ').trim();
+    }
+
     const billInline = line.match(/^(?:bill\s*to|sold\s*to|invoice\s*to)\s*[:\-]\s*(.+)$/i);
     if (billInline?.[1]?.trim()) {
       const rest = billInline[1].trim();
@@ -265,7 +274,7 @@ function extractMeta(lines: string[]): {
 }
 
 function isMetaOrJunkLine(line: string): boolean {
-  return /^(customer|bill\s*to|ship\s*to|sold\s*to|deliver(?:y)?\s*to|client|company|po|order|invoice|notes?|qty|quantity|plant|size|description|item|total|subtotal|tax|sales\s*tax|date|page|tel|phone|fax|email|www\.|http|freight|shipping|delivery|balance|amount\s*due|due\s*upon)\b/i.test(
+  return /^(customer|bill\s*to|ship(?:-|\s*)to|sold\s*to|deliver(?:y)?\s*to|client|company|po|order|invoice|notes?|qty|quantity|plant|size|description|item|total|subtotal|tax|sales\s*tax|date|page|tel|phone|fax|email|www\.|http|freight|shipping|delivery|balance|amount\s*due|due\s*upon|vendor\s+address|ship-to\s+address|payment\s*terms|home\s*page|purchase\s*order|no\.\s*item|item\s+reference)\b/i.test(
     line
   );
 }
@@ -284,12 +293,33 @@ function isNonPlantDescription(name: string): boolean {
   return false;
 }
 
+const MONTH_NAME_RE =
+  /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b/i;
+
 /** Street / city lines often look like "123 Main St" and must not become plant rows. */
 function looksLikeAddressOrNonPlant(plantName: string, quantity: number): boolean {
   if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 9999) return true;
   const name = plantName.trim();
   if (!name) return true;
   if (isNonPlantDescription(name)) return true;
+  // Calendar / PO header junk ("September 11", or "Days Mike Ary September 16")
+  if (MONTH_NAME_RE.test(name)) return true;
+  // Payment-terms residue after "Net 60" was mistaken for qty
+  if (/^(?:net\s+)?days?\b/i.test(name)) return true;
+  if (
+    /\b(?:payment\s*terms|vendor\s+truck|ship(?:ment)?\s+method|receive\s+by|buyer|net\s+\d+\s+days?)\b/i.test(
+      name
+    )
+  ) {
+    return true;
+  }
+  // Vendor / ship-to headers: "Bayou State Plant Co MNI Direct Branch"
+  if (
+    /\b(?:mni\s*direct|plant\s+co\.?|nursery|llc|inc\.?|corp\.?|branch)\b/i.test(name) &&
+    !sizeTokenPattern().test(name)
+  ) {
+    return true;
+  }
   if (
     /\b(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|hwy|highway|suite|ste|apt|unit|floor|fl|p\.?\s*o\.?\s*box|zip|phone|fax|email)\b/i.test(
       name
@@ -318,14 +348,15 @@ function buildItem(quantity: number, rest: string): ParsedOrderItem | null {
   if (/^[\d#"\s.]+$/.test(plantName)) return null;
   if (looksLikeAddressOrNonPlant(plantName, quantity)) return null;
 
-  // Bare "Other" with no size cue is usually junk (phone fragments, random text).
-  // Keep only when the rest clearly had a plant-ish multi-word name and a leading qty.
+  // Bare "Other" with no size cue is usually header/address junk on vendor POs.
+  // Keep only short single-token leftovers when a size cue was present in the line.
   if (containerSize === 'Other') {
     const hasSizeCue =
-      /#\s*\d|\b(?:gal(?:lon)?|b\s*&\s*b|tray|flat|inch|in\b|["”]|cal)/i.test(rest) ||
-      noteSizePattern().test(rest);
+      /#\s*\d|\b(?:gal(?:lon)?|b\s*&\s*b|tray|flat|inch|in\b|["”]|cal)|\b\d+(?:\.\d+)?\s*P\b|\b\d+\s*G\b/i.test(
+        rest
+      ) || noteSizePattern().test(rest);
     noteSizePattern().lastIndex = 0;
-    if (!hasSizeCue && plantName.split(/\s+/).length < 2) return null;
+    if (!hasSizeCue) return null;
   }
 
   const notes = extractNotes(rest);
@@ -437,10 +468,15 @@ function explodeMultiQtyLine(line: string): string[] {
     const peek = cleaned.slice(idx).match(/^\d+\s+([A-Za-z(#][\w'’-]*)/);
     const firstWord = peek?.[1] || '';
     if (
-      /^(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|hwy|suite|ste|apt|unit|box|po)$/i.test(
+      /^(?:st|street|ave|avenue|rd|road|blvd|ln|lane|dr|drive|way|ct|court|hwy|suite|ste|apt|unit|box|po|days?)$/i.test(
         firstWord
       )
     ) {
+      continue;
+    }
+    // Skip payment-terms "60 Days …" / calendar "11 September …" style false qty starts
+    const afterQty = cleaned.slice(idx).replace(/^\d+\s+/, '');
+    if (MONTH_NAME_RE.test(afterQty.slice(0, 40)) || /^(?:net\s+)?days?\b/i.test(afterQty)) {
       continue;
     }
     // Don't split on prices like "45.00 Boxwood" — require integer qty tokens only (already).
@@ -498,8 +534,8 @@ export function coalesceOrderItems(items: ParsedOrderItem[]): ParsedOrderItem[] 
       });
       continue;
     }
-    // Same line repeated (overlap / OCR) — keep the larger qty, don't double-count.
-    existing.quantity = Math.max(existing.quantity, quantity);
+    // Same plant+size listed again on a PO — add quantities.
+    existing.quantity = Math.min(9999, existing.quantity + quantity);
   }
   return [...map.values()];
 }
@@ -508,12 +544,50 @@ function normalizeLoose(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Vendor PO rows: ItemRef Description Size Quantity
+ * e.g. "3451 Trachelospermum Asiatic Jasmine 4.0P 1,584"
+ * Quantity is last (may include thousands commas). Item # is NOT the quantity.
+ */
+function parseVendorItemRefSizeQtyLine(line: string): ParsedOrderItem | null {
+  const cleaned = line.trim();
+  const m = cleaned.match(
+    /^(\d{3,6})\s+(.+?)\s+(\d+(?:\.\d+)?P|#\s*\d{1,3}|\d{1,3}\s*G(?:al(?:lon)?)?|B\s*&\s*B|Tray|Flat)\s+([\d,]+)\s*$/i
+  );
+  if (!m) return null;
+  const description = m[2].trim();
+  const sizeRaw = m[3].trim();
+  const qty = parseInt(m[4].replace(/,/g, ''), 10);
+  if (!Number.isFinite(qty) || qty <= 0 || qty > 9999) return null;
+  if (description.split(/\s+/).length < 1) return null;
+  if (
+    /^(?:january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(
+      description
+    )
+  ) {
+    return null;
+  }
+  if (
+    /\b(?:payment|terms|vendor|truck|address|phone|email|buyer|shipment|method|branch)\b/i.test(
+      description
+    ) &&
+    !/[a-z]{4,}/i.test(description.replace(/\b(?:payment|terms|vendor|truck|address|phone|email|buyer|shipment|method|branch)\b/gi, ''))
+  ) {
+    return null;
+  }
+  return buildItem(qty, `${description} ${sizeRaw}`);
+}
+
 function parseLineItem(line: string): ParsedOrderItem | null {
   const cleaned = line.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, '').trim();
   if (!cleaned || cleaned.length < 3) return null;
   if (isMetaOrJunkLine(cleaned)) return null;
   // Pure money / total lines
   if (/^(?:\$?\d[\d,]*\.?\d*\s*)+$/.test(cleaned)) return null;
+
+  // MNI Direct / similar: Item # + Description + Size + Qty (qty last)
+  const vendorRow = parseVendorItemRefSizeQtyLine(cleaned);
+  if (vendorRow) return vendorRow;
 
   const structured = parseStructuredColumns(cleaned);
   if (structured) return structured;
@@ -586,9 +660,9 @@ function parseStructuredColumns(line: string): ParsedOrderItem | null {
     }
   }
 
-  // qty size name (no line number)
+  // qty size name (no line number) — include 3G / 4.0P codes
   const qtySizeName = line.match(
-    /^(\d{1,5})\s+(#\s*\d{1,3}|B\s*&\s*B|B\.?\s*&?\s*B\.?|\d+\s*g(?:al(?:lon)?)?|(?:4|6)\s*(?:inch|in|"|'')|tray|flat)\s+(.+)$/i
+    /^(\d{1,5})\s+(#\s*\d{1,3}|B\s*&\s*B|B\.?\s*&?\s*B\.?|\d+(?:\.\d+)?P|\d+\s*g(?:al(?:lon)?)?|(?:4|6)\s*(?:inch|in|"|'')|tray|flat)\s+(.+)$/i
   );
   if (qtySizeName) {
     const qty = parseInt(qtySizeName[1], 10);
@@ -702,7 +776,20 @@ export function localParseLooksIncomplete(
     .map((l) => l.trim())
     .filter((l) => l && !isMetaOrJunkLine(l));
 
+  const allSized =
+    local.items.length >= 1 &&
+    local.items.every((i) => i.containerSize && i.containerSize !== 'Other');
+
+  // Vendor ItemRef/Description/Qty tables often list the same plant twice; coalesce
+  // shrinks the item count vs raw rows — that is not "incomplete".
+  const vendorPoTable =
+    /\b(?:item\s+reference|description)\b.+\bquantity\b|\bno\.\s*item\b.+\bquantity\b/i.test(
+      String(rawText || '')
+    );
+  if (vendorPoTable && allSized && local.items.length >= 3) return false;
+
   // Count lines that look like real plant rows (leading qty + name), not bare prices.
+  // Item-ref-first vendor rows (3451 Plant Name 3G 12) also match this pattern.
   const plantLikeLines = lines.filter((l) => {
     if (!/^\d{1,4}\s+[A-Za-z(#]/.test(l)) return false;
     if (/\b(?:freight|tax|delivery|labor|fee|total|subtotal|balance)\b/i.test(l)) return false;
@@ -710,7 +797,9 @@ export function localParseLooksIncomplete(
   }).length;
 
   if (local.items.length === 1 && plantLikeLines >= 3) return true;
-  if (plantLikeLines >= local.items.length + 2) return true;
+  // Allow a small gap when duplicates were coalesced into sized items.
+  const allowedGap = allSized ? 4 : 1;
+  if (plantLikeLines >= local.items.length + 1 + allowedGap) return true;
   if (lines.length >= 4 && local.items.length === 1) return true;
   return false;
 }
@@ -727,14 +816,6 @@ export function localParseLooksReliable(
   if (!local) return false;
 
   const text = String(rawText || '');
-  // Columnar invoices / packing lists — prefer AI.
-  if (
-    /\bitem\b.+\bqty\b|\bqty\b.+\bsize\b.+\bdesc|\bdescription\b.+\bquantity\b|\bline\s*#?\b.+\bqty\b/i.test(
-      text
-    )
-  ) {
-    return false;
-  }
   if (local.items.some((i) => /^\d+/.test(i.plantName.trim()))) return false;
   if (local.items.some((i) => heightNotePattern().test(i.plantName))) {
     heightNotePattern().lastIndex = 0;
@@ -745,6 +826,22 @@ export function localParseLooksReliable(
   // Every line should have a recognized container size for a confident local-only result.
   const sized = local.items.filter((i) => i.containerSize && i.containerSize !== 'Other').length;
   if (sized < local.items.length) return false;
+
+  // Vendor PO tables (Item # / Description / Quantity) — trust when local sized cleanly.
+  if (
+    /\b(?:item\s+reference|description)\b.+\bquantity\b|\bno\.\s*item\b.+\bquantity\b/i.test(text)
+  ) {
+    return local.items.length >= 3 && sized === local.items.length;
+  }
+
+  // Other columnar invoices / packing lists — prefer AI unless already sized-perfect above.
+  if (
+    /\bitem\b.+\bqty\b|\bqty\b.+\bsize\b.+\bdesc|\bdescription\b.+\bquantity\b|\bline\s*#?\b.+\bqty\b/i.test(
+      text
+    )
+  ) {
+    return false;
+  }
 
   return true;
 }

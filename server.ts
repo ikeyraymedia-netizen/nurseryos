@@ -724,7 +724,9 @@ function orderParseQualityScore(parsed: any | null): number {
     if (/\$|\d+\.\d{2}/.test(name)) score -= 12;
     if (/^\d+/.test(name)) score -= 30;
     if (
-      /\b(?:freight|tax|delivery|labor|fee|surcharge|subtotal|total|phone|fax)\b/i.test(name)
+      /\b(?:freight|tax|delivery|labor|fee|surcharge|subtotal|total|phone|fax|september|january|february|march|april|may|june|july|august|october|november|december|vendor\s+truck|payment\s*terms)\b/i.test(
+        name
+      )
     ) {
       score -= 25;
     }
@@ -840,6 +842,13 @@ app.post('/api/parse-order', async (req, res) => {
         );
         if (text.length >= 40) {
           const localFromPdf = parseOrderTextLocally(text);
+          if (localFromPdf && localParseLooksReliable(text, localFromPdf)) {
+            console.log(
+              `Parsed order PDF locally (${localFromPdf.items.length} items) — skipping AI.`
+            );
+            res.json(normalizeParsedOrderPayload(localFromPdf));
+            return;
+          }
           if (localFromPdf) {
             localFallback =
               !localFallback ||
@@ -871,6 +880,8 @@ It is a customer plant order list/invoice from a nursery. Extract:
 4. Structured list of plant items. CRITICAL RULES for items:
    - ONLY extract plant/tree/shrub lines that are clearly present in THIS document. NEVER invent, guess, or add plants that are not written on the page.
    - If the document has columns like Item # / Line / Qty / Size / Description, use Qty as quantity — never the line/item number.
+   - Common vendor PO layout: "ItemRef Description Size Quantity" with quantity LAST (may use commas like 1,584). Example: "3451 Trachelospermum Asiatic Jasmine 4.0P 1,584" → qty 1584, size 4.0P/#4", name Trachelospermum Asiatic Jasmine. Do NOT use 3451 as the quantity.
+   - Sizes like 3G / 15G / 1G / 7G mean #3 / #15 / #1 / #7 gallon pots. 4.0P means a 4" pot.
    - plantName must be ONLY the plant name (e.g. "Nellie Stevens Holly"). Strip unit prices, extended prices, SKUs, column headers, and sizes from the name.
    - Put caliper/height like 24" or 6-7' into notes, not plantName.
    - Do NOT create items for freight, delivery, tax, labor, fees, discounts, payments, phone numbers, addresses, page numbers, or totals.

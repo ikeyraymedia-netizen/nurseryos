@@ -265,7 +265,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h4 className="text-sm font-black text-gray-900 font-sans truncate pr-4">
+                    <h4 className="text-sm font-black text-gray-900 font-sans break-words leading-snug">
                       {order.customerName}
                     </h4>
                     {orderRefLabel(order) && (

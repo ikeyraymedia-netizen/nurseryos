@@ -37,7 +37,8 @@ import {
   Plus,
   Trash2,
   Image as ImageIcon,
-  Upload
+  Upload,
+  GripVertical
 } from 'lucide-react';
 import { updateCustomerOrder, addCustomerOrder, subscribeToWeights } from '../lib/db';
 import {
@@ -169,6 +170,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [referencedInvoiceNumber, setReferencedInvoiceNumber] = useState('');
   /** Editable plant lines for estimates and credit memos. */
   const [creditLines, setCreditLines] = useState<PlantOrderItem[]>([]);
+  const [dragLineId, setDragLineId] = useState<string | null>(null);
   const [salesRep, setSalesRep] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
@@ -722,6 +724,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
   };
 
+  const reorderDraftLines = (fromId: string, toId: string) => {
+    if (!fromId || !toId || fromId === toId) return;
+    setCreditLines((prev) => {
+      const from = prev.findIndex((line) => line.id === fromId);
+      const to = prev.findIndex((line) => line.id === toId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
   const getContainerUnitWeight = (size: string): number => {
     const match = containerWeights.find(
       (w) =>
@@ -797,11 +812,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const muted = unavailable ? '#94a3b8' : undefined;
       const note = String(item.notes || '').trim();
       const noteHtml = note
-        ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">${t('invoice.notePrefix')} ${note}</div>`
+        ? `<div style="margin-top:6px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Notes</div>
+           <div style="margin-top:2px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">${note}</div>`
         : '';
       const subs = (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim();
       const subsHtml = subs
-        ? `<div style="margin-top:4px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">Possible subs: ${subs}</div>`
+        ? `<div style="margin-top:4px;margin-left:12px;font-size:11px;color:#64748b;font-weight:normal;font-style:italic;">${t('invoice.possibleSubs')}: ${subs}</div>`
         : '';
       const unavailableHtml = unavailable
         ? `<div style="margin-top:4px;font-size:11px;color:#b91c1c;font-weight:bold;">${t('invoice.notAvailable')}</div>`
@@ -993,8 +1009,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           const photo = linePhotoUrl(item);
           return photo ? `  ${t('invoice.viewPhoto')}: ${photo}` : '';
         })(),
-        note ? `  Note: ${note}` : '',
-        subs ? `  Possible subs: ${subs}` : ''
+        note ? `  Notes:\n    ${note}` : '',
+        subs ? `    ${t('invoice.possibleSubs')}: ${subs}` : ''
       ]
         .filter(Boolean)
         .join('\n');
@@ -2363,16 +2379,18 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           : [];
         const photoLabel = photo ? t('invoice.viewPhoto') : '';
         const noteLines = note
-          ? pdf.splitTextToSize(`${t('invoice.notePrefix')} ${note}`, xSize - xPlant - 10)
+          ? pdf.splitTextToSize(note, xSize - xPlant - 18)
           : [];
         const subLines = subs
-          ? pdf.splitTextToSize(`${t('invoice.possibleSubs')}: ${subs}`, xSize - xPlant - 10)
+          ? pdf.splitTextToSize(`${t('invoice.possibleSubs')}: ${subs}`, xSize - xPlant - 26)
           : [];
         const linePitch = 11;
+        const notesHeaderH = note || subs ? 10 : 0;
         const textBlockHeight =
           Math.max(9, nameLines.length * linePitch) +
           (unavailableLines.length ? unavailableLines.length * 10 + 2 : 0) +
           (photo ? 12 : 0) +
+          notesHeaderH +
           (noteLines.length ? noteLines.length * 10 + 2 : 0) +
           (subLines.length ? subLines.length * 10 + 2 : 0);
         // Space for text + padding under glyphs + rule + gap before next baseline
@@ -2414,11 +2432,19 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           pdf.setFont('helvetica', 'normal');
           pdf.setFontSize(9);
         }
+        if (note || subs) {
+          pdf.setFontSize(7);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(100, 116, 139);
+          pdf.text('NOTES', xPlant, belowName);
+          belowName += 9;
+          pdf.setFont('helvetica', 'normal');
+        }
         if (noteLines.length) {
           pdf.setFontSize(8);
           pdf.setTextColor(100, 100, 100);
           noteLines.forEach((l: string, i: number) => {
-            pdf.text(l, xPlant, belowName + i * 10);
+            pdf.text(l, xPlant + 4, belowName + i * 10);
           });
           belowName += noteLines.length * 10 + 2;
           pdf.setFontSize(9);
@@ -2427,7 +2453,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           pdf.setFontSize(8);
           pdf.setTextColor(100, 100, 100);
           subLines.forEach((l: string, i: number) => {
-            pdf.text(l, xPlant, belowName + i * 10);
+            pdf.text(l, xPlant + 10, belowName + i * 10);
           });
           pdf.setFontSize(9);
         }
@@ -3671,13 +3697,42 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     return (
                       <div
                         key={item.id}
+                        onDragOver={(e) => {
+                          if (!canEditLines || !dragLineId) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const fromId = e.dataTransfer.getData('text/plain') || dragLineId;
+                          if (fromId) reorderDraftLines(fromId, item.id);
+                          setDragLineId(null);
+                        }}
                         className={`rounded-lg border p-2.5 ${
+                          dragLineId === item.id ? 'opacity-60 border-ink-400' : ''
+                        } ${
                           unavailable
                             ? 'border-slate-200 bg-slate-50 text-slate-400'
                             : 'border-gray-200 bg-white text-gray-800'
                         }`}
                       >
                         <div className="flex items-start gap-2">
+                          {canEditLines && (
+                            <span
+                              draggable
+                              onDragStart={(e) => {
+                                setDragLineId(item.id);
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', item.id);
+                              }}
+                              onDragEnd={() => setDragLineId(null)}
+                              className="mt-1 p-0.5 text-slate-400 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+                              title="Drag to reorder"
+                              aria-label="Drag to reorder"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </span>
+                          )}
                           <div className="min-w-0 flex-1">
                             {canEditLines ? (
                               <input
@@ -3709,15 +3764,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 {t('invoice.notAvailable')}
                               </span>
                             )}
-                            {item.notes && (
-                              <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5 break-words">
-                                Note: {item.notes}
-                              </span>
-                            )}
-                            {!canEditLines && subs.trim() ? (
-                              <span className="block text-[10px] text-slate-500 font-normal italic mt-0.5 break-words">
-                                {t('invoice.possibleSubs')}: {subs.trim()}
-                              </span>
+                            {!canEditLines && (item.notes?.trim() || subs.trim()) ? (
+                              <div className="mt-1.5 space-y-0.5">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                  Notes
+                                </p>
+                                {item.notes?.trim() ? (
+                                  <p className="text-[10px] text-gray-500 italic break-words">
+                                    {item.notes.trim()}
+                                  </p>
+                                ) : null}
+                                {subs.trim() ? (
+                                  <p className="text-[10px] text-slate-500 italic break-words pl-2 border-l-2 border-slate-200">
+                                    {t('invoice.possibleSubs')}: {subs.trim()}
+                                  </p>
+                                ) : null}
+                              </div>
                             ) : null}
                           </div>
                           {canEditLines && (
@@ -3836,21 +3898,59 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 </span>
                               </label>
                             </div>
+                            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2 space-y-2">
+                              <label className="block">
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                  Notes
+                                </span>
+                                <textarea
+                                  value={item.notes || ''}
+                                  onChange={(e) =>
+                                    updateDraftLine(item.id, {
+                                      notes: e.target.value || undefined
+                                    })
+                                  }
+                                  rows={2}
+                                  placeholder="Line notes for the customer…"
+                                  className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 resize-y"
+                                />
+                              </label>
+                              <label className="block pl-2 border-l-2 border-slate-200">
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                  {t('invoice.possibleSubs')}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={subs}
+                                  onChange={(e) =>
+                                    setItemSubstitutes((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value
+                                    }))
+                                  }
+                                  placeholder={t('invoice.possibleSubsPlaceholder')}
+                                  className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                        {canEditLines && documentType !== 'estimate' && (
+                          <div className="mt-2 pt-2 border-t border-gray-100">
                             <label className="block">
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                {t('invoice.possibleSubs')}
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                Notes
                               </span>
-                              <input
-                                type="text"
-                                value={subs}
+                              <textarea
+                                value={item.notes || ''}
                                 onChange={(e) =>
-                                  setItemSubstitutes((prev) => ({
-                                    ...prev,
-                                    [item.id]: e.target.value
-                                  }))
+                                  updateDraftLine(item.id, {
+                                    notes: e.target.value || undefined
+                                  })
                                 }
-                                placeholder={t('invoice.possibleSubsPlaceholder')}
-                                className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white"
+                                rows={2}
+                                placeholder="Line notes for the customer…"
+                                className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white resize-y"
                               />
                             </label>
                           </div>
@@ -3873,6 +3973,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <table className="hidden md:table print:table w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
+                      {canEditLines && (
+                        <th className="pb-1 w-8 print:hidden" aria-label="Reorder" />
+                      )}
                       <th className="pb-1 text-left">{t('invoice.plantVarietyName')}</th>
                       <th className="pb-1 text-center w-28">{t('invoice.potSize')}</th>
                       <th className="pb-1 text-center w-20">Quantity</th>
@@ -3892,12 +3995,42 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       return (
                         <tr
                           key={item.id}
+                          onDragOver={(e) => {
+                            if (!canEditLines || !dragLineId) return;
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const fromId = e.dataTransfer.getData('text/plain') || dragLineId;
+                            if (fromId) reorderDraftLines(fromId, item.id);
+                            setDragLineId(null);
+                          }}
                           className={`border-b border-gray-200 text-xs font-medium ${
+                            dragLineId === item.id ? 'opacity-60' : ''
+                          } ${
                             unavailable
                               ? 'bg-slate-50 text-slate-400'
                               : 'text-gray-800'
                           }`}
                         >
+                          {canEditLines && (
+                            <td className="py-1.5 align-top print:hidden w-8">
+                              <span
+                                draggable
+                                onDragStart={(e) => {
+                                  setDragLineId(item.id);
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  e.dataTransfer.setData('text/plain', item.id);
+                                }}
+                                onDragEnd={() => setDragLineId(null)}
+                                className="inline-flex text-slate-400 cursor-grab active:cursor-grabbing"
+                                title="Drag to reorder"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </span>
+                            </td>
+                          )}
                           <td className="py-1.5">
                             {canEditLines ? (
                               <input
@@ -3944,11 +4077,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 </a>
                               );
                             })()}
-                            {item.notes && (
-                              <span className="block text-[10px] text-gray-400 font-normal italic mt-0.5">
-                                Note: {item.notes}
-                              </span>
-                            )}
+                            {!canEditLines && (item.notes?.trim() || subs.trim()) ? (
+                              <div className="mt-1.5 space-y-0.5">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                  Notes
+                                </p>
+                                {item.notes?.trim() ? (
+                                  <p className="text-[10px] text-gray-500 italic">
+                                    {item.notes.trim()}
+                                  </p>
+                                ) : null}
+                                {subs.trim() ? (
+                                  <p className="text-[10px] text-slate-500 italic pl-2 border-l-2 border-slate-200">
+                                    {t('invoice.possibleSubs')}: {subs.trim()}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
                             {documentType === 'estimate' ? (
                               <>
                               {canEditLines && (
@@ -4090,23 +4235,41 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                   )}
                                 </div>
                               )}
-                              <label className="block mt-1.5">
-                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                  {t('invoice.possibleSubs')}
-                                </span>
-                                <input
-                                  type="text"
-                                  value={subs}
-                                  onChange={(e) =>
-                                    setItemSubstitutes((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value
-                                    }))
-                                  }
-                                  placeholder={t('invoice.possibleSubsPlaceholder')}
-                                  className="mt-0.5 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white"
-                                />
-                              </label>
+                              <div className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50/70 p-2 space-y-2 max-w-md print:border-0 print:bg-transparent print:p-0">
+                                <label className="block">
+                                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                    Notes
+                                  </span>
+                                  <textarea
+                                    value={item.notes || ''}
+                                    onChange={(e) =>
+                                      updateDraftLine(item.id, {
+                                        notes: e.target.value || undefined
+                                      })
+                                    }
+                                    rows={2}
+                                    placeholder="Line notes for the customer…"
+                                    className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-normal text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 resize-y print:border-0 print:p-0"
+                                  />
+                                </label>
+                                <label className="block pl-2 border-l-2 border-slate-200">
+                                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                    {t('invoice.possibleSubs')}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={subs}
+                                    onChange={(e) =>
+                                      setItemSubstitutes((prev) => ({
+                                        ...prev,
+                                        [item.id]: e.target.value
+                                      }))
+                                    }
+                                    placeholder={t('invoice.possibleSubsPlaceholder')}
+                                    className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-ink-600"
+                                  />
+                                </label>
+                              </div>
                               <label className="block mt-1.5 print:hidden">
                                 <span className="text-[9px] font-bold uppercase tracking-wide text-indigo-500 inline-flex items-center gap-1">
                                   {t('invoice.quotedVendor')}
@@ -4126,10 +4289,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 />
                               </label>
                               </>
-                            ) : subs.trim() ? (
-                              <span className="block text-[10px] text-slate-500 font-normal italic mt-0.5">
-                                {t('invoice.possibleSubs')}: {subs.trim()}
-                              </span>
+                            ) : canEditLines ? (
+                              <label className="block mt-1.5 max-w-md">
+                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                  Notes
+                                </span>
+                                <textarea
+                                  value={item.notes || ''}
+                                  onChange={(e) =>
+                                    updateDraftLine(item.id, {
+                                      notes: e.target.value || undefined
+                                    })
+                                  }
+                                  rows={2}
+                                  placeholder="Line notes for the customer…"
+                                  className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-normal text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white resize-y"
+                                />
+                              </label>
                             ) : null}
                           </td>
                           <td className={`py-1.5 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-500'}`}>

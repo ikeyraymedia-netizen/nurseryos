@@ -917,7 +917,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                           onClick={() => openInvoice(order)}
                           className="w-full text-left px-3 py-2.5 text-xs hover:bg-ink-50 border-b border-slate-50 last:border-b-0"
                         >
-                          <span className="font-bold text-gray-900 block truncate">{order.customerName}</span>
+                          <span className="font-bold text-gray-900 block break-words leading-snug">{order.customerName}</span>
                           {orderRefLabel(order) && (
                             <span className="text-[10px] text-gray-500 font-mono">{orderRefLabel(order)}</span>
                           )}
@@ -1270,9 +1270,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                             </span>
                           </>
                         )}
-                        <h4 className="text-sm font-bold text-gray-900 truncate">
-                          {order.customerName}
-                        </h4>
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-900 break-words leading-snug mt-1">
+                        {order.customerName}
+                      </h4>
+                      <div className="flex items-center flex-wrap gap-1.5 mt-0.5">
                         {orderRefLabel(order) && (
                           <span className="text-[10px] font-mono font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
                             {orderRefLabel(order)}

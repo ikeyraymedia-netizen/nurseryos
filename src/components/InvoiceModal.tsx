@@ -3765,17 +3765,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               </span>
                             )}
                             {!canEditLines && (item.notes?.trim() || subs.trim()) ? (
-                              <div className="mt-1.5 space-y-0.5">
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                  Notes
-                                </p>
+                              <div className="mt-0.5 space-y-0.5">
                                 {item.notes?.trim() ? (
                                   <p className="text-[10px] text-gray-500 italic break-words">
                                     {item.notes.trim()}
                                   </p>
                                 ) : null}
                                 {subs.trim() ? (
-                                  <p className="text-[10px] text-slate-500 italic break-words pl-2 border-l-2 border-slate-200">
+                                  <p className="text-[10px] text-slate-500 italic break-words">
                                     {t('invoice.possibleSubs')}: {subs.trim()}
                                   </p>
                                 ) : null}
@@ -3882,7 +3879,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         </div>
 
                         {documentType === 'estimate' && canEditLines && (
-                          <div className="mt-2 pt-2 border-t border-gray-100 space-y-2">
+                          <div className="mt-1.5 space-y-1">
                             <div className="flex flex-wrap gap-x-4 gap-y-1">
                               <label className="inline-flex items-center gap-1.5 cursor-pointer">
                                 <input
@@ -3898,61 +3895,51 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 </span>
                               </label>
                             </div>
-                            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2 space-y-2">
-                              <label className="block">
-                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                  Notes
-                                </span>
-                                <textarea
-                                  value={item.notes || ''}
-                                  onChange={(e) =>
-                                    updateDraftLine(item.id, {
-                                      notes: e.target.value || undefined
-                                    })
-                                  }
-                                  rows={2}
-                                  placeholder="Line notes for the customer…"
-                                  className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 resize-y"
-                                />
-                              </label>
-                              <label className="block pl-2 border-l-2 border-slate-200">
-                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                  {t('invoice.possibleSubs')}
-                                </span>
-                                <input
-                                  type="text"
-                                  value={subs}
-                                  onChange={(e) =>
-                                    setItemSubstitutes((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value
-                                    }))
-                                  }
-                                  placeholder={t('invoice.possibleSubsPlaceholder')}
-                                  className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600"
-                                />
-                              </label>
-                            </div>
-                          </div>
-                        )}
-                        {canEditLines && documentType !== 'estimate' && (
-                          <div className="mt-2 pt-2 border-t border-gray-100">
-                            <label className="block">
-                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                Notes
-                              </span>
-                              <textarea
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[10px] text-slate-400 shrink-0 w-10">Note</span>
+                              <input
+                                type="text"
                                 value={item.notes || ''}
                                 onChange={(e) =>
                                   updateDraftLine(item.id, {
                                     notes: e.target.value || undefined
                                   })
                                 }
-                                rows={2}
-                                placeholder="Line notes for the customer…"
-                                className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white resize-y"
+                                placeholder="Optional note…"
+                                className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
                               />
-                            </label>
+                            </div>
+                            <div className="flex items-center gap-2 min-w-0 pl-3">
+                              <span className="text-[10px] text-slate-400 shrink-0 w-10">Subs</span>
+                              <input
+                                type="text"
+                                value={subs}
+                                onChange={(e) =>
+                                  setItemSubstitutes((prev) => ({
+                                    ...prev,
+                                    [item.id]: e.target.value
+                                  }))
+                                }
+                                placeholder={t('invoice.possibleSubsPlaceholder')}
+                                className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {canEditLines && documentType !== 'estimate' && (
+                          <div className="mt-1.5 flex items-center gap-2 min-w-0">
+                            <span className="text-[10px] text-slate-400 shrink-0 w-10">Note</span>
+                            <input
+                              type="text"
+                              value={item.notes || ''}
+                              onChange={(e) =>
+                                updateDraftLine(item.id, {
+                                  notes: e.target.value || undefined
+                                })
+                              }
+                              placeholder="Optional note…"
+                              className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
+                            />
                           </div>
                         )}
                       </div>
@@ -4078,17 +4065,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               );
                             })()}
                             {!canEditLines && (item.notes?.trim() || subs.trim()) ? (
-                              <div className="mt-1.5 space-y-0.5">
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                  Notes
-                                </p>
+                              <div className="mt-0.5 space-y-0.5">
                                 {item.notes?.trim() ? (
                                   <p className="text-[10px] text-gray-500 italic">
                                     {item.notes.trim()}
                                   </p>
                                 ) : null}
                                 {subs.trim() ? (
-                                  <p className="text-[10px] text-slate-500 italic pl-2 border-l-2 border-slate-200">
+                                  <p className="text-[10px] text-slate-500 italic">
                                     {t('invoice.possibleSubs')}: {subs.trim()}
                                   </p>
                                 ) : null}
@@ -4235,27 +4219,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                   )}
                                 </div>
                               )}
-                              <div className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50/70 p-2 space-y-2 max-w-md print:border-0 print:bg-transparent print:p-0">
-                                <label className="block">
-                                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                    Notes
-                                  </span>
-                                  <textarea
+                              <div className="mt-1 max-w-md space-y-0.5 print:hidden">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[10px] text-slate-400 shrink-0 w-10">Note</span>
+                                  <input
+                                    type="text"
                                     value={item.notes || ''}
                                     onChange={(e) =>
                                       updateDraftLine(item.id, {
                                         notes: e.target.value || undefined
                                       })
                                     }
-                                    rows={2}
-                                    placeholder="Line notes for the customer…"
-                                    className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-normal text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 resize-y print:border-0 print:p-0"
+                                    placeholder="Optional note…"
+                                    className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] font-normal text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
                                   />
-                                </label>
-                                <label className="block pl-2 border-l-2 border-slate-200">
-                                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                    {t('invoice.possibleSubs')}
-                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 min-w-0 pl-3">
+                                  <span className="text-[10px] text-slate-400 shrink-0 w-10">Subs</span>
                                   <input
                                     type="text"
                                     value={subs}
@@ -4266,11 +4246,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                       }))
                                     }
                                     placeholder={t('invoice.possibleSubsPlaceholder')}
-                                    className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-normal text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-ink-600"
+                                    className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] font-normal text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
                                   />
-                                </label>
+                                </div>
                               </div>
-                              <label className="block mt-1.5 print:hidden">
+                              <label className="block mt-1 print:hidden">
                                 <span className="text-[9px] font-bold uppercase tracking-wide text-indigo-500 inline-flex items-center gap-1">
                                   {t('invoice.quotedVendor')}
                                   <span className="normal-case tracking-normal font-semibold text-indigo-400">
@@ -4290,22 +4270,20 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               </label>
                               </>
                             ) : canEditLines ? (
-                              <label className="block mt-1.5 max-w-md">
-                                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                                  Notes
-                                </span>
-                                <textarea
+                              <div className="mt-1 flex items-center gap-2 min-w-0 max-w-md">
+                                <span className="text-[10px] text-slate-400 shrink-0 w-10">Note</span>
+                                <input
+                                  type="text"
                                   value={item.notes || ''}
                                   onChange={(e) =>
                                     updateDraftLine(item.id, {
                                       notes: e.target.value || undefined
                                     })
                                   }
-                                  rows={2}
-                                  placeholder="Line notes for the customer…"
-                                  className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-normal text-slate-700 focus:outline-none focus:ring-1 focus:ring-ink-600 focus:bg-white resize-y"
+                                  placeholder="Optional note…"
+                                  className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] font-normal text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
                                 />
-                              </label>
+                              </div>
                             ) : null}
                           </td>
                           <td className={`py-1.5 text-center font-mono font-bold ${unavailable ? 'text-slate-400' : 'text-gray-500'}`}>

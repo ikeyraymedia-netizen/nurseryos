@@ -873,6 +873,43 @@ export async function updateOrderItemVendor(
   }
 }
 
+export async function updateOrderItemCosts(
+  orderId: string,
+  costsByItemId: Record<string, number>,
+  orderItems: any[]
+): Promise<void> {
+  const tenantId = requireTenantId();
+  const updatedItems = orderItems.map((item) => {
+    if (!(item.id in costsByItemId)) return item;
+    const unitCost = costsByItemId[item.id];
+    return {
+      ...item,
+      unitCost: Number.isFinite(unitCost) ? Math.max(0, unitCost) : item.unitCost
+    };
+  });
+
+  const orders = getLocalOrders();
+  const updatedOrders = orders.map((o) => {
+    if (o.id === orderId) {
+      return { ...o, items: updatedItems };
+    }
+    return o;
+  });
+  saveLocalOrders(updatedOrders);
+
+  if (fallbackActive) return;
+
+  try {
+    await updateDoc(orderDoc(tenantId, orderId), {
+      items: updatedItems
+    });
+  } catch (error: any) {
+    console.error('Error updating item costs on Firestore:', error);
+    activateLocalFallback(error.message || 'Firestore update failed');
+    throw error;
+  }
+}
+
 export async function updateOrderItemCost(
   orderId: string,
   itemId: string,

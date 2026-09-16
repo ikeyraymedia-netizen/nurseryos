@@ -111,6 +111,17 @@ export async function addCustomerDocument(
   return id;
 }
 
+export async function updateDocumentLineCosts(
+  documentId: string,
+  items: CustomerDocument['items']
+): Promise<void> {
+  const tenantId = requireTenantId();
+  await updateDoc(documentDoc(tenantId, documentId), {
+    items: sanitizeForFirestore(items),
+    updatedAt: new Date().toISOString()
+  });
+}
+
 export async function updateCustomerDocument(document: CustomerDocument): Promise<void> {
   const tenantId = requireTenantId();
   const { id, ...rest } = document;

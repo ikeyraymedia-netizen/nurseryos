@@ -40,7 +40,7 @@ import {
   Upload,
   GripVertical
 } from 'lucide-react';
-import { updateCustomerOrder, addCustomerOrder, subscribeToWeights } from '../lib/db';
+import { updateCustomerOrder, addCustomerOrder, subscribeToWeights, updateOrderItemCosts } from '../lib/db';
 import {
   addCustomerDocument,
   updateCustomerDocument,
@@ -50,7 +50,8 @@ import {
   nextDocumentNumber,
   isEstimateDocumentNumber,
   listAllDocuments,
-  subscribeToDocument
+  subscribeToDocument,
+  updateDocumentLineCosts
 } from '../lib/documents';
 import {
   getDefaultPriceForSize,
@@ -186,6 +187,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [itemSubstitutes, setItemSubstitutes] = useState<Record<string, string>>({});
   // Store editable item costs (internal profit tracking only)
   const [itemCosts, setItemCosts] = useState<Record<string, number>>({});
+  const [isSavingCosts, setIsSavingCosts] = useState(false);
+  const [costSaveNote, setCostSaveNote] = useState<string | null>(null);
   /** Inventory plants — used to resolve estimate photo links. */
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
   /** Container weights — used for estimate shipping weight. */
@@ -1440,6 +1443,45 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       [itemId]: Math.max(0, newCost)
     }));
     setSaveSuccess(false);
+    setCostSaveNote(null);
+  };
+
+  const saveCostsOnly = async () => {
+    const costsByItemId: Record<string, number> = {};
+    for (const item of workingItems) {
+      const cost = itemCosts[item.id];
+      if (typeof cost !== 'number' || !Number.isFinite(cost)) continue;
+      costsByItemId[item.id] = Math.max(0, cost);
+    }
+
+    const hasRealOrder = Boolean(order.id) && !order.id.startsWith('preview-');
+    const docForCosts = liveDocument || fetchedDocument || existingDocument;
+    const documentId = savedDocumentId || docForCosts?.id || null;
+    if (!hasRealOrder && !documentId) {
+      setCostSaveNote('Save the invoice once first.');
+      return;
+    }
+
+    setIsSavingCosts(true);
+    setCostSaveNote(null);
+    try {
+      if (hasRealOrder) {
+        await updateOrderItemCosts(order.id, costsByItemId, order.items);
+      }
+      let wroteDocument = false;
+      if (documentId && docForCosts?.items?.length) {
+        const items = docForCosts.items.map((item) =>
+          item.id in costsByItemId ? { ...item, unitCost: costsByItemId[item.id] } : item
+        );
+        await updateDocumentLineCosts(documentId, items);
+        wroteDocument = true;
+      }
+      setCostSaveNote(wroteDocument ? 'Saved' : 'Saved on the order');
+    } catch (err: any) {
+      setCostSaveNote(err?.message || 'Could not save costs');
+    } finally {
+      setIsSavingCosts(false);
+    }
   };
 
   // Restore defaults: inventory list price when matched, else size-based wholesale
@@ -3530,6 +3572,25 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     </span>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void saveCostsOnly()}
+                  disabled={isSavingCosts}
+                  className="w-full py-2 bg-indigo-800 hover:bg-indigo-900 disabled:opacity-60 text-white rounded-lg text-xs font-bold transition-all"
+                >
+                  {isSavingCosts ? 'Saving…' : 'Save'}
+                </button>
+                {costSaveNote && (
+                  <p
+                    className={`text-center text-[10px] font-semibold ${
+                      costSaveNote === 'Saved' || costSaveNote === 'Saved on the order'
+                        ? 'text-indigo-800'
+                        : 'text-rose-600'
+                    }`}
+                  >
+                    {costSaveNote}
+                  </p>
+                )}
               </div>
             )}
 

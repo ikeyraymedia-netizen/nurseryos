@@ -21,6 +21,7 @@ import {
   DollarSign,
   MessageSquare,
   Copy,
+  GripVertical,
   X
 } from 'lucide-react';
 import { CustomerOrder, ContainerWeight, Customer, CustomerDocument, CustomerDocumentType, InventoryPlant } from '../types';
@@ -105,6 +106,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
 
   // Editing existing items
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [editPlantName, setEditPlantName] = useState('');
   const [editContainerSize, setEditContainerSize] = useState('');
   const [editQuantity, setEditQuantity] = useState(1);
@@ -521,6 +523,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
     const note = await resetOrderProgress(order.id, order.items);
     notifyInventorySyncIssue(note);
     setShowResetConfirm(false);
+  };
+
+  const handleReorderItems = async (fromId: string, toId: string) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const from = order.items.findIndex((item) => item.id === fromId);
+    const to = order.items.findIndex((item) => item.id === toId);
+    if (from < 0 || to < 0) return;
+    const next = [...order.items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    try {
+      await updateCustomerOrder({ ...order, items: next });
+    } catch (err) {
+      console.error('Error reordering items:', err);
+    }
   };
 
   const handleDeleteItem = async (itemId: string) => {
@@ -1232,7 +1249,20 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                 return (
                   <div
                     key={item.id}
+                    onDragOver={(e) => {
+                      if (!permissions.canEditOrders || !dragItemId) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const fromId = e.dataTransfer.getData('text/plain') || dragItemId;
+                      if (fromId) void handleReorderItems(fromId, item.id);
+                      setDragItemId(null);
+                    }}
                     className={`border rounded-lg p-2 transition-all shadow-sm ${
+                      dragItemId === item.id ? 'opacity-60 border-ink-400' : ''
+                    } ${
                       isEditing
                         ? 'border-ink-600 bg-slate-50'
                         : isFullyLoaded && isFullyPulled
@@ -1355,7 +1385,24 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         </div>
                       </form>
                     ) : (
-                      <div className="flex flex-col gap-1.5 w-full min-w-0">
+                      <div className="flex gap-1.5 w-full min-w-0">
+                        {permissions.canEditOrders && (
+                          <span
+                            draggable
+                            onDragStart={(e) => {
+                              setDragItemId(item.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                              e.dataTransfer.setData('text/plain', item.id);
+                            }}
+                            onDragEnd={() => setDragItemId(null)}
+                            className="mt-0.5 p-0.5 text-slate-400 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+                            title="Drag to reorder"
+                            aria-label="Drag to reorder"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </span>
+                        )}
+                        <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                         {/* Item Description */}
                         <div className="min-w-0">
                           <div className="flex items-center flex-wrap gap-1.5">
@@ -1573,6 +1620,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                             </div>
                           </div>
                         </div>
+                      </div>
                       </div>
                     )}
                   </div>

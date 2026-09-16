@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { addCustomerOrder } from '../lib/db';
 import { notifyPushEvent } from '../lib/pushNotifications';
-import { findMatchingCustomers } from '../lib/customerMatch';
 import {
   getInventoryMatchSuggestions,
   promptInventoryLink,
@@ -52,9 +51,6 @@ interface ParsedOrderDraft {
   items: PlantOrderItem[];
   originalText: string;
   totalWeightLbs: number;
-  suggestedCustomerId: string;
-  matchConfidence: 'exact' | 'fuzzy' | 'none';
-  matchSuggestions: Customer[];
 }
 
 type UploadKind = 'order' | 'estimate';
@@ -131,6 +127,9 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const [uploadKind, setUploadKind] = useState<UploadKind | null>(null);
   const [isManualDraft, setIsManualDraft] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const customerSearchRef = useRef<HTMLDivElement>(null);
   const [salesRep, setSalesRep] = useState('');
   const [directShip, setDirectShip] = useState(false);
   const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
@@ -229,11 +228,37 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     [customers, selectedCustomerId]
   );
 
+  const customerMatches = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase();
+    if (!q) return [];
+    return [...customers]
+      .filter((customer) => {
+        const hay = [customer.name, customer.billingName || '', customer.contactEmail || '']
+          .join(' ')
+          .toLowerCase();
+        return q.split(/\s+/).every((part) => hay.includes(part));
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+      .slice(0, 12);
+  }, [customers, customerQuery]);
+
+  useEffect(() => {
+    const onDocMouseDown = (event: MouseEvent) => {
+      if (!customerSearchRef.current?.contains(event.target as Node)) {
+        setCustomerSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, []);
+
   const resetDraftState = () => {
     setPendingDraft(null);
     setUploadKind(null);
     setIsManualDraft(false);
     setSelectedCustomerId('');
+    setCustomerQuery('');
+    setCustomerSearchOpen(false);
     setSalesRep('');
     setDirectShip(false);
     setLinkedInventoryByItemId({});
@@ -255,16 +280,16 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setInventorySearch('');
     setIsManualDraft(true);
     setUploadKind(null);
+    setSelectedCustomerId('');
+    setCustomerQuery('');
+    setCustomerSearchOpen(false);
     const item = blankDraftItem();
     setPendingDraft({
       customerName: '',
       poNumber: '',
       items: [item],
       originalText: 'Manual entry',
-      totalWeightLbs: 0,
-      suggestedCustomerId: '',
-      matchConfidence: 'none',
-      matchSuggestions: []
+      totalWeightLbs: 0
     });
   };
 
@@ -395,20 +420,16 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       }
 
       const parsedCustomerName = result.customerName || t('upload.unknownCustomer');
-      const match = findMatchingCustomers(parsedCustomerName, customers);
-      const suggestedId = match.best?.id || '';
 
       setPendingDraft({
         customerName: parsedCustomerName,
         poNumber: String(result.poNumber || '').trim().replace(/^n\/?a$/i, ''),
         items: itemsWithIds,
         originalText: result.plainText || orderText || '',
-        totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights),
-        suggestedCustomerId: suggestedId,
-        matchConfidence: match.confidence,
-        matchSuggestions: match.suggestions
+        totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights)
       });
-      setSelectedCustomerId(suggestedId);
+      setSelectedCustomerId('');
+      setCustomerQuery('');
       setUploadKind(null);
       setLinkedInventoryByItemId({});
       setOriginalParsedByItemId(originals);
@@ -614,13 +635,12 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setErrorMessage(null);
     try {
       const linked = selectedCustomer;
+      if (!linked?.id) {
+        throw new Error('Search for a customer and pick one before saving.');
+      }
       const namedItems = itemsNamedFromInventory(pendingDraft.items);
 
       if (uploadKind === 'estimate') {
-        if (!linked?.id) {
-          throw new Error('Pick a customer before saving an estimate. Estimates are saved under the customer only — not as a plant order.');
-        }
-
         const lineItems = namedItems.map((item) => {
           const unitPrice = defaultLineUnitPrice(
             item,
@@ -1062,7 +1082,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             <div className="flex items-center gap-2 min-w-0">
               <Users className="h-4 w-4 text-ink-700 shrink-0" />
               <p className="text-sm font-bold text-gray-900 truncate">
-                {uploadKind === 'estimate' ? 'Save estimate under customer' : 'Match customer before saving'}
+                {uploadKind === 'estimate' ? 'Save estimate under customer' : 'Select customer'}
               </p>
             </div>
             <button
@@ -1096,53 +1116,57 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
             </p>
           )}
 
-          {pendingDraft.matchConfidence !== 'none' && pendingDraft.suggestedCustomerId && (
-            <p className="text-xs font-semibold text-ink-800">
-              {pendingDraft.matchConfidence === 'exact'
-                ? 'Exact customer match found.'
-                : 'Similar customer match found — confirm or choose another.'}
-            </p>
-          )}
-
-          {pendingDraft.matchSuggestions.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Suggested matches</p>
-              {pendingDraft.matchSuggestions.map((customer) => (
-                <button
-                  key={customer.id}
-                  type="button"
-                  onClick={() => setSelectedCustomerId(customer.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg border text-xs ${
-                    selectedCustomerId === customer.id
-                      ? 'border-ink-500 bg-ink-50 font-bold text-ink-900'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  {customer.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div>
+          <div ref={customerSearchRef} className="relative">
             <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">
-              {uploadKind === 'estimate' ? 'Customer (required)' : 'Or choose any customer'}
+              Customer
             </label>
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              disabled={saving}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white disabled:bg-gray-100"
-            >
-              <option value="">
-                {uploadKind === 'estimate' ? 'Select a customer…' : 'No link — keep parsed name only'}
-              </option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={customerQuery}
+                onChange={(e) => {
+                  setCustomerQuery(e.target.value);
+                  setSelectedCustomerId('');
+                  setCustomerSearchOpen(true);
+                }}
+                onFocus={() => setCustomerSearchOpen(true)}
+                disabled={saving}
+                placeholder="Start typing a customer name…"
+                autoComplete="off"
+                className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white disabled:bg-gray-100 focus:outline-none focus:border-ink-500"
+              />
+            </div>
+            {selectedCustomer && (
+              <p className="mt-1 text-[10px] font-semibold text-emerald-800">
+                Selected · {selectedCustomer.name}
+              </p>
+            )}
+            {customerSearchOpen && customerQuery.trim() && (
+              <div className="absolute z-30 mt-1 w-full max-h-52 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                {customerMatches.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-gray-500">No customers match</div>
+                ) : (
+                  customerMatches.map((customer) => (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setSelectedCustomerId(customer.id);
+                        setCustomerQuery(customer.name);
+                        setCustomerSearchOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs border-b border-gray-50 last:border-0 hover:bg-ink-50 ${
+                        selectedCustomerId === customer.id ? 'bg-emerald-50 font-bold text-ink-900' : 'text-gray-800'
+                      }`}
+                    >
+                      {customer.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -1600,7 +1624,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
               disabled={
                 saving ||
                 !salesRep.trim() ||
-                (uploadKind === 'estimate' && !selectedCustomerId)
+                !selectedCustomerId
               }
               className="flex-1 px-3 py-2 rounded-lg bg-ink-700 hover:bg-ink-800 text-white text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
             >

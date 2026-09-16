@@ -787,15 +787,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const useQboPayLinks = Boolean(canUseQuickbooks);
   const useStripePayLinks = Boolean(canCollectPayments && stripePaymentsReady && !useQboPayLinks);
 
+  /** Blank / $0 selling price means the line is not in profit (cost is ignored too). */
+  const lineHasSellingPrice = (item: PlantOrderItem): boolean => {
+    if (item.unavailable) return false;
+    const price = priceForItem(item);
+    return Number.isFinite(price) && price > 0;
+  };
+
   // Internal cost/profit (never shown to the customer)
-  const totalCost = workingItems.reduce((sum, item) => {
-    if (item.unavailable) return sum;
+  const profitItems = workingItems.filter(lineHasSellingPrice);
+  const profitRevenue = profitItems.reduce((sum, item) => {
+    return sum + getItemQty(item) * priceForItem(item);
+  }, 0);
+  const totalCost = profitItems.reduce((sum, item) => {
     const qty = getItemQty(item);
     const cost = itemCosts[item.id] ?? 0;
     return sum + qty * cost;
   }, 0);
-  const totalProfit = subtotal - totalCost;
-  const profitMargin = subtotal > 0 ? (totalProfit / subtotal) * 100 : 0;
+  const totalProfit = profitRevenue - totalCost;
+  const profitMargin = profitRevenue > 0 ? (totalProfit / profitRevenue) * 100 : 0;
 
   // HTML Email Layout Builder
   const generateEmailHTML = (
@@ -3389,12 +3399,15 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     const qty = getItemQty(item);
                     const price = priceForItem(item);
                     const cost = itemCosts[item.id] ?? 0;
-                    const lineProfit = item.unavailable ? 0 : (price - cost) * qty;
+                    const inProfit = lineHasSellingPrice(item);
+                    const lineProfit = inProfit ? (price - cost) * qty : null;
                     const sizeLabel = String(item.containerSize || '').trim();
                     return (
                       <div
                         key={item.id}
-                        className={`rounded-lg border border-indigo-100 bg-white/70 px-2 py-1.5 space-y-1${item.unavailable ? ' opacity-40' : ''}`}
+                        className={`rounded-lg border border-indigo-100 bg-white/70 px-2 py-1.5 space-y-1${
+                          inProfit ? '' : ' opacity-50'
+                        }`}
                       >
                         <div className="min-w-0">
                           <p className="text-[11px] font-semibold text-gray-800 leading-snug break-words">
@@ -3410,7 +3423,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                             <span className="text-slate-300 mx-1">·</span>
                             Qty {qty}
                             <span className="text-slate-300 mx-1">·</span>
-                            ${price.toFixed(2)} ea
+                            {item.unavailable
+                              ? t('invoice.notAvailable')
+                              : inProfit
+                                ? `$${price.toFixed(2)} ea`
+                                : 'No price — not in profit'}
                           </p>
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -3424,20 +3441,27 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={cost || ''}
+                                value={Number.isFinite(cost) ? cost : 0}
                                 placeholder={t('invoice.costPlaceholder')}
                                 onFocus={(e) => e.target.select()}
-                                onChange={(e) => handleCostChange(item.id, Number(e.target.value))}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  handleCostChange(item.id, raw === '' ? 0 : Number(raw));
+                                }}
                                 className="w-16 font-mono font-bold text-right text-indigo-800 bg-white border border-indigo-200 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded"
                               />
                             </div>
                             <span
                               className={`min-w-[3.5rem] text-right font-mono font-bold text-[10px] ${
-                                lineProfit >= 0 ? 'text-ink-700' : 'text-rose-600'
+                                lineProfit == null
+                                  ? 'text-slate-400'
+                                  : lineProfit >= 0
+                                    ? 'text-ink-700'
+                                    : 'text-rose-600'
                               }`}
                               title="Line profit"
                             >
-                              ${lineProfit.toFixed(2)}
+                              {lineProfit == null ? '—' : `$${lineProfit.toFixed(2)}`}
                             </span>
                           </div>
                         </div>
@@ -3448,7 +3472,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <div className="pt-2 border-t border-indigo-200 space-y-1 text-[10px] font-mono">
                   <div className="flex justify-between">
                     <span className="text-gray-500 font-medium">Revenue:</span>
-                    <span className="font-bold text-gray-900">${subtotal.toFixed(2)}</span>
+                    <span className="font-bold text-gray-900">${profitRevenue.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 font-medium">Total Cost:</span>

@@ -88,7 +88,10 @@ function buildProfitByRep(
     let cost = 0;
     for (const item of inv.items || []) {
       const qty = item.quantity || 0;
-      revenue += qty * (item.unitPrice || 0);
+      const price = item.unitPrice || 0;
+      // No selling price — leave the line out of profit entirely.
+      if (price <= 0) continue;
+      revenue += qty * price;
       cost += qty * (item.unitCost || 0);
     }
     const row =

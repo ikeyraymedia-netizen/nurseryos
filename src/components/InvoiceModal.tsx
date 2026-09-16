@@ -426,29 +426,42 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     const pricesMap: Record<string, number> = {};
     const locked = new Set<string>();
-    if (doc?.items?.length) {
-      doc.items.forEach((item) => {
+    const lockExplicitPrice = (
+      item: { id: string; unitPrice?: number },
+      fallback?: () => number
+    ) => {
+      if (typeof item.unitPrice === 'number' && Number.isFinite(item.unitPrice)) {
         pricesMap[item.id] = item.unitPrice;
         locked.add(item.id);
+        return;
+      }
+      if (pricesMap[item.id] === undefined && fallback) {
+        pricesMap[item.id] = fallback();
+      }
+    };
+    if (doc?.items?.length) {
+      doc.items.forEach((item) => {
+        lockExplicitPrice(item);
       });
       // Also map any order items not in the saved doc
       order.items.forEach((item) => {
-        if (pricesMap[item.id] === undefined) {
-          pricesMap[item.id] = resolveLineUnitPrice(item, inventoryPlants, containerWeights);
-          if (typeof item.unitPrice === 'number') locked.add(item.id);
-        }
+        if (pricesMap[item.id] !== undefined || locked.has(item.id)) return;
+        lockExplicitPrice(item, () =>
+          resolveLineUnitPrice(item, inventoryPlants, containerWeights)
+        );
       });
     } else {
       order.items.forEach((item) => {
-        pricesMap[item.id] = resolveLineUnitPrice(item, inventoryPlants, containerWeights);
-        if (typeof item.unitPrice === 'number') locked.add(item.id);
+        lockExplicitPrice(item, () =>
+          resolveLineUnitPrice(item, inventoryPlants, containerWeights)
+        );
       });
     }
     seededDraftLines.forEach((item) => {
-      if (pricesMap[item.id] === undefined) {
-        pricesMap[item.id] = resolveLineUnitPrice(item, inventoryPlants, containerWeights);
-        if (typeof item.unitPrice === 'number' && item.unitPrice > 0) locked.add(item.id);
-      }
+      if (pricesMap[item.id] !== undefined || locked.has(item.id)) return;
+      lockExplicitPrice(item, () =>
+        resolveLineUnitPrice(item, inventoryPlants, containerWeights)
+      );
     });
     pricesLockedRef.current = locked;
     setItemPrices(pricesMap);
@@ -787,17 +800,26 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const useQboPayLinks = Boolean(canUseQuickbooks);
   const useStripePayLinks = Boolean(canCollectPayments && stripePaymentsReady && !useQboPayLinks);
 
-  /** Blank / $0 selling price means the line is not in profit (cost is ignored too). */
+  /**
+   * Selling price the user actually entered or saved.
+   * Inventory/size defaults are suggestions only — blank until locked.
+   */
+  const enteredSellingPrice = (item: PlantOrderItem): number | null => {
+    if (!pricesLockedRef.current.has(item.id)) return null;
+    const price = itemPrices[item.id];
+    return typeof price === 'number' && Number.isFinite(price) ? price : null;
+  };
+
+  /** $0 counts. A blank / never-saved price does not (that line's cost is ignored too). */
   const lineHasSellingPrice = (item: PlantOrderItem): boolean => {
     if (item.unavailable) return false;
-    const price = priceForItem(item);
-    return Number.isFinite(price) && price > 0;
+    return enteredSellingPrice(item) != null;
   };
 
   // Internal cost/profit (never shown to the customer)
   const profitItems = workingItems.filter(lineHasSellingPrice);
   const profitRevenue = profitItems.reduce((sum, item) => {
-    return sum + getItemQty(item) * priceForItem(item);
+    return sum + getItemQty(item) * (enteredSellingPrice(item) || 0);
   }, 0);
   const totalCost = profitItems.reduce((sum, item) => {
     const qty = getItemQty(item);
@@ -1388,12 +1410,25 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
   if (!isOpen) return null;
 
-  // Pricing edit change handler
-  const handlePriceChange = (itemId: string, newPrice: number) => {
+  // Pricing edit change handler. Empty string = not entered (void in profit). "0" is a real $0 price.
+  const handlePriceChange = (itemId: string, raw: string) => {
+    if (raw.trim() === '') {
+      pricesLockedRef.current.delete(itemId);
+      setItemPrices((prev) => {
+        if (!(itemId in prev)) return prev;
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+      setSaveSuccess(false);
+      return;
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
     pricesLockedRef.current.add(itemId);
     setItemPrices((prev) => ({
       ...prev,
-      [itemId]: Math.max(0, newPrice),
+      [itemId]: Math.max(0, parsed)
     }));
     setSaveSuccess(false);
   };
@@ -1510,7 +1545,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
       const updatedItems = workingItems.map((item) => ({
         ...item,
-        unitPrice: priceForItem(item),
+        unitPrice: pricesLockedRef.current.has(item.id)
+          ? Math.max(0, Number(itemPrices[item.id]) || 0)
+          : undefined,
         unitCost: itemCosts[item.id] !== undefined ? itemCosts[item.id] : item.unitCost,
         substitutes: (itemSubstitutes[item.id] ?? item.substitutes ?? '').trim() || undefined,
         unavailable: isEstimate ? Boolean(item.unavailable) : undefined,
@@ -3397,7 +3434,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <div className="space-y-2">
                   {workingItems.map((item) => {
                     const qty = getItemQty(item);
-                    const price = priceForItem(item);
+                    const enteredPrice = enteredSellingPrice(item);
+                    const price = enteredPrice ?? 0;
                     const cost = itemCosts[item.id] ?? 0;
                     const inProfit = lineHasSellingPrice(item);
                     const lineProfit = inProfit ? (price - cost) * qty : null;
@@ -3880,10 +3918,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={price || ''}
+                                value={enteredSellingPrice(item) == null ? '' : enteredSellingPrice(item)}
                                 placeholder="0.00"
                                 onFocus={(e) => e.target.select()}
-                                onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
+                                onChange={(e) => handlePriceChange(item.id, e.target.value)}
                                 className="w-full min-w-0 font-mono font-bold text-ink-800 bg-transparent focus:outline-none"
                               />
                             </div>
@@ -4355,10 +4393,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={price || ''}
+                                value={enteredSellingPrice(item) == null ? '' : enteredSellingPrice(item)}
                                 placeholder="0.00"
                                 onFocus={(e) => e.target.select()}
-                                onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
+                                onChange={(e) => handlePriceChange(item.id, e.target.value)}
                                 className="price-input w-20 font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
                               />
                             </div>

@@ -282,7 +282,7 @@ export function buildApAging(bills: VendorBill[], asOf = new Date()): AgingRepor
 function invoiceCogs(doc: CustomerDocument): number {
   let cost = 0;
   for (const item of doc.items || []) {
-    if ((item.unitPrice || 0) <= 0) continue;
+    if (item.unitPrice == null || !Number.isFinite(item.unitPrice)) continue;
     cost += (item.quantity || 0) * (item.unitCost || 0);
   }
   return cost;

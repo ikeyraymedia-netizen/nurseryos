@@ -1,5 +1,22 @@
 import { CustomerOrder, CustomerDocument, PlantOrderItem } from '../types';
 
+/** Default upload-estimate footer. Drop it once the estimate becomes an invoice or order. */
+const UNCONVERTED_ESTIMATE_NOTE_PATTERNS = [
+  /Estimate from uploaded paperwork\.\s*/gi,
+  /Not yet converted to a plant order\.?\s*/gi,
+  /Presupuesto de documento subido\.\s*/gi,
+  /Aún no convertido a pedido de plantas\.?\s*/gi
+];
+
+export function notesWithoutUnconvertedEstimate(notes: string | undefined | null): string {
+  if (!notes) return '';
+  let next = notes;
+  for (const pattern of UNCONVERTED_ESTIMATE_NOTE_PATTERNS) {
+    next = next.replace(pattern, '');
+  }
+  return next.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 /** True when the order has pricing entered (line prices and/or invoice details). */
 export function orderHasPricing(order: CustomerOrder): boolean {
   const pricedLines = order.items.some((item) => typeof item.unitPrice === 'number' && item.unitPrice > 0);

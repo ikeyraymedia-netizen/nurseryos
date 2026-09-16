@@ -86,6 +86,7 @@ import {
   bumpInvoicedQuantities,
   invoicesForOrder,
   itemRemainingInvoiceQty,
+  notesWithoutUnconvertedEstimate,
   restoreInvoicedQuantitiesAfterDelete
 } from '../lib/invoicing';
 
@@ -335,9 +336,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           ? details.discount
           : 0
     );
+    const storedNotes = doc?.notes || details?.notes || '';
+    const notesForType =
+      type === 'estimate' ? storedNotes : notesWithoutUnconvertedEstimate(storedNotes);
     setInvoiceNotes(
-      doc?.notes ||
-        details?.notes ||
+      notesForType ||
         (type === 'estimate'
           ? t('invoice.defaultNotesEstimate')
           : type === 'credit_memo'
@@ -1621,6 +1624,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         }
       }
 
+      const notesToSave =
+        documentType === 'estimate'
+          ? invoiceNotes
+          : notesWithoutUnconvertedEstimate(invoiceNotes) ||
+            (documentType === 'credit_memo'
+              ? t('invoice.defaultNotesCreditMemo')
+              : t('invoice.defaultNotesInvoice'));
+
       const invoiceDetailsPayload: InvoiceDetails = {
         invoiceNumber,
         invoiceDate,
@@ -1631,7 +1642,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         freightCharge: currentFreight,
         freightAllocation,
         discount,
-        notes: invoiceNotes
+        notes: notesToSave
       };
 
       const updatedOrder: CustomerOrder = {
@@ -1785,7 +1796,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           freightCharge: isCreditMemo ? 0 : currentFreight,
           freightAllocation: isCreditMemo ? undefined : freightAllocation,
           discount: isCreditMemo ? 0 : discount,
-          notes: invoiceNotes,
+          notes: notesToSave,
           billToName,
           billToAddress: billToAddress || undefined,
           customerEmail: customerEmail || undefined,
@@ -2622,6 +2633,17 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
   const handleDocumentTypeChange = (type: CustomerDocumentType) => {
     setDocumentType(type);
+    if (type !== 'estimate') {
+      const cleaned = notesWithoutUnconvertedEstimate(invoiceNotes);
+      if (cleaned !== invoiceNotes.trim()) {
+        setInvoiceNotes(
+          cleaned ||
+            (type === 'credit_memo'
+              ? t('invoice.defaultNotesCreditMemo')
+              : t('invoice.defaultNotesInvoice'))
+        );
+      }
+    }
     setInvoiceNumber(defaultDocumentNumber(type));
     void nextDocumentNumber(type, {
       considerQuickbooks: canUseQuickbooks,

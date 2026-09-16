@@ -32,6 +32,7 @@ import {
     deleteCustomerDocument
 } from '../lib/documents';
 import { addCustomerOrder } from '../lib/db';
+import { notesWithoutUnconvertedEstimate } from '../lib/invoicing';
 import { notifyPushEvent } from '../lib/pushNotifications';
 import { logAuditEvent } from '../lib/audit';
 import { orderRefLabel } from '../lib/orderLabels';
@@ -890,6 +891,7 @@ export function CustomersWorkspace({
               tenantId
             })
           : doc.documentNumber;
+      const convertedNotes = notesWithoutUnconvertedEstimate(doc.notes);
 
       const orderId = await addCustomerOrder({
         customerName: selectedCustomer.name,
@@ -912,13 +914,14 @@ export function CustomersWorkspace({
           taxRate: doc.taxRate,
           freightCharge: doc.freightCharge,
           discount: doc.discount,
-          notes: doc.notes
+          notes: convertedNotes || undefined
         }
       });
 
       await updateCustomerDocument({
         ...doc,
         orderId,
+        notes: convertedNotes || undefined,
         updatedAt: new Date().toISOString()
       });
 

@@ -1412,7 +1412,7 @@ app.get('/api/config-status', (req, res) => {
 app.post('/api/run-report', async (req, res) => {
   try {
     await requireAuthUid(req);
-    const { question, nurseryName, data } = req.body || {};
+    const { question, nurseryName, data, history } = req.body || {};
     if (!question || typeof question !== 'string' || !question.trim()) {
       res.status(400).json({ error: 'Missing report question.' });
       return;
@@ -1426,12 +1426,41 @@ app.post('/api/run-report', async (req, res) => {
     const nursery = typeof nurseryName === 'string' && nurseryName.trim() ? nurseryName.trim() : 'Nursery';
     const snapshot = JSON.stringify(data);
 
-    const prompt = `You are NurseryOS, an operations and sales analyst for a wholesale nursery named "${nursery}".
+    const priorTurns = Array.isArray(history)
+      ? history
+          .filter(
+            (turn: any) =>
+              turn &&
+              (turn.role === 'user' || turn.role === 'assistant') &&
+              typeof turn.content === 'string' &&
+              turn.content.trim()
+          )
+          .slice(-12)
+          .map((turn: { role: string; content: string }) => {
+            const label = turn.role === 'assistant' ? 'Assistant' : 'User';
+            return `${label}:\n${turn.content.trim()}`;
+          })
+          .join('\n\n')
+      : '';
 
-The user asked for this report:
+    const conversationBlock = priorTurns
+      ? `This is a continuing conversation. Use the prior turns for context, then answer the latest question. Still base every number on the JSON data below — never invent figures from memory of an earlier answer if the JSON differs.
+
+PRIOR TURNS:
+${priorTurns}
+
+LATEST QUESTION:
 """
 ${question.trim()}
+"""`
+      : `The user asked for this report:
 """
+${question.trim()}
+"""`;
+
+    const prompt = `You are NurseryOS, an operations and sales analyst for a wholesale nursery named "${nursery}".
+
+${conversationBlock}
 
 Use ONLY the JSON nursery data below. Do not invent plants, customers, invoices, or dollar amounts. If data is missing, say so clearly.
 

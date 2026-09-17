@@ -616,8 +616,9 @@ export function ReportsWorkspace({
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
   const [docsError, setDocsError] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
-  const [report, setReport] = useState<string | null>(null);
-  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>(
+    []
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -753,15 +754,20 @@ export function ReportsWorkspace({
     );
   }
 
-  async function runReport(promptText: string) {
+  async function runReport(promptText: string, options?: { fresh?: boolean }) {
     const trimmed = promptText.trim();
     if (!trimmed || loading) return;
 
+    const history = options?.fresh ? [] : messages;
     setLoading(true);
     setError(null);
-    setReport(null);
-    setLastQuestion(trimmed);
     setCopied(false);
+    if (options?.fresh) {
+      setMessages([{ role: 'user', content: trimmed }]);
+    } else {
+      setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
+    }
+    setQuestion('');
 
     try {
       const freshDocuments = await refreshDocuments();
@@ -780,7 +786,8 @@ export function ReportsWorkspace({
         body: JSON.stringify({
           question: trimmed,
           nurseryName,
-          data
+          data,
+          history
         })
       });
 
@@ -793,9 +800,17 @@ export function ReportsWorkspace({
         throw new Error(`${result.error || t('reports.runFailed')}${details}`);
       }
 
-      setReport(result.report || t('reports.noReportReturned'));
+      const answer = result.report || t('reports.noReportReturned');
+      setMessages((prev) => [...prev, { role: 'assistant', content: answer }]);
     } catch (err: any) {
       setError(err?.message || t('reports.runFailed'));
+      // Drop the unanswered user turn so they can retry cleanly.
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        const last = prev[prev.length - 1];
+        if (last.role === 'user' && last.content === trimmed) return prev.slice(0, -1);
+        return prev;
+      });
     } finally {
       setLoading(false);
     }
@@ -806,10 +821,18 @@ export function ReportsWorkspace({
     void runReport(question);
   }
 
+  function handleNewChat() {
+    setMessages([]);
+    setQuestion('');
+    setError(null);
+    setCopied(false);
+  }
+
   async function handleCopy() {
-    if (!report) return;
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!lastAssistant) return;
     try {
-      await navigator.clipboard.writeText(report);
+      await navigator.clipboard.writeText(lastAssistant.content);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -1259,90 +1282,63 @@ export function ReportsWorkspace({
         )}
 
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-            <Sparkles className="h-4 w-4 text-ink-700 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                {t('reports.askAi')}
-              </p>
-              <p className="text-xs font-semibold text-gray-800">{t('reports.askAiSubtitle')}</p>
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="h-4 w-4 text-ink-700 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                  {t('reports.askAi')}
+                </p>
+                <p className="text-xs font-semibold text-gray-800">{t('reports.askAiSubtitle')}</p>
+              </div>
             </div>
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={handleNewChat}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-white disabled:opacity-50 shrink-0"
+              >
+                {t('reports.newChat')}
+              </button>
+            )}
           </div>
           <div className="p-4 space-y-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2">
-                {t('reports.suggested')}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {suggestedReports.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => {
-                      setQuestion(suggestion);
-                      void runReport(suggestion);
-                    }}
-                    className="text-left text-[11px] font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-ink-300 hover:bg-ink-50 text-gray-700 disabled:opacity-50 transition-colors"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-2">
-              <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                {t('reports.typeOwn')}
-              </label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <textarea
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  rows={2}
-                  placeholder={t('reports.askPlaceholder')}
-                  className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-white resize-y min-h-[72px]"
-                  disabled={loading}
-                />
-                <button
-                  type="submit"
-                  disabled={loading || !question.trim()}
-                  className="sm:self-stretch inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-700 hover:bg-ink-800 text-white text-xs font-black disabled:opacity-50 shrink-0"
-                >
-                  {loading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      {t('reports.running')}
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      {t('reports.askBtn')}
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-
-            {error && (
-              <div className="flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">{error}</p>
+            {messages.length === 0 && (
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-2">
+                  {t('reports.suggested')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedReports.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        void runReport(suggestion, { fresh: true });
+                      }}
+                      className="text-left text-[11px] font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-ink-300 hover:bg-ink-50 text-gray-700 disabled:opacity-50 transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {(report || loading) && (
+            {(messages.length > 0 || loading) && (
               <div className="border border-slate-200 rounded-2xl bg-white overflow-hidden flex flex-col min-h-[180px]">
                 <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                      {t('reports.aiResponse')}
+                      {t('reports.aiChat')}
                     </p>
-                    {lastQuestion && (
-                      <p className="text-xs font-semibold text-gray-800 truncate">{lastQuestion}</p>
-                    )}
+                    <p className="text-xs font-semibold text-gray-800">
+                      {t('reports.aiChatHint')}
+                    </p>
                   </div>
-                  {report && (
+                  {messages.some((m) => m.role === 'assistant') && (
                     <button
                       type="button"
                       onClick={() => void handleCopy()}
@@ -1362,18 +1358,75 @@ export function ReportsWorkspace({
                     </button>
                   )}
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 max-h-80">
-                  {loading ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="flex-1 overflow-y-auto p-4 max-h-96 space-y-3">
+                  {messages.map((message, index) => (
+                    <div
+                      key={`${message.role}-${index}`}
+                      className={`rounded-xl px-3 py-2.5 text-sm leading-relaxed ${
+                        message.role === 'user'
+                          ? 'bg-ink-50 border border-ink-100 text-ink-950 ml-4'
+                          : 'bg-slate-50 border border-slate-200 text-gray-800 mr-2'
+                      }`}
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">
+                        {message.role === 'user' ? t('reports.you') : t('reports.aiResponse')}
+                      </p>
+                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed m-0">
+                        {message.content}
+                      </pre>
+                    </div>
+                  ))}
+                  {loading && (
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
                       <RefreshCw className="h-7 w-7 text-ink-700 animate-spin mb-3" />
                       <p className="text-sm font-bold text-gray-800">{t('reports.analyzing')}</p>
                     </div>
-                  ) : (
-                    <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed">
-                      {report}
-                    </pre>
                   )}
                 </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                {messages.length > 0 ? t('reports.followUp') : t('reports.typeOwn')}
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  rows={2}
+                  placeholder={
+                    messages.length > 0
+                      ? t('reports.followUpPlaceholder')
+                      : t('reports.askPlaceholder')
+                  }
+                  className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-white resize-y min-h-[72px]"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !question.trim()}
+                  className="sm:self-stretch inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink-700 hover:bg-ink-800 text-white text-xs font-black disabled:opacity-50 shrink-0"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      {t('reports.running')}
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      {messages.length > 0 ? t('reports.followUpBtn') : t('reports.askBtn')}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {error && (
+              <div className="flex items-start gap-2 text-xs text-red-800 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">{error}</p>
               </div>
             )}
           </div>

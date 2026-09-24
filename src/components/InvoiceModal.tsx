@@ -156,6 +156,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       (order.id && !order.id.startsWith('preview-') ? order.id : null)
   );
   const documentContextRef = useRef('');
+  /** Prevent form re-seeds from wiping costs/prices while the user is editing. */
+  const costsDirtyRef = useRef(false);
+  const pricesDirtyRef = useRef(false);
   // State for quantity basis: 'ordered' | 'pulled' | 'loaded'
   const [qtyBasis, setQtyBasis] = useState<'ordered' | 'pulled' | 'loaded'>('ordered');
 
@@ -249,22 +252,44 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [vendorSuggestions, setVendorSuggestions] = useState<string[]>(DEFAULT_VENDORS);
   // Initialize or reload states when order / document type changes
   useEffect(() => {
-    if (!order || !isOpen) return;
+    if (!isOpen) {
+      documentContextRef.current = '';
+      costsDirtyRef.current = false;
+      pricesDirtyRef.current = false;
+      return;
+    }
+    if (!order) return;
 
     const doc = existingDocument || fetchedDocument;
     const type = doc?.type || initialDocumentType;
     setDocumentType(type);
     const documentContext = `${order.id}:${type}:${doc?.id || 'new'}`;
-    if (documentContextRef.current !== documentContext) {
-      documentContextRef.current = documentContext;
-      setSavedDocumentId(doc?.id || null);
-      setLinkedPlantOrderId(
-        doc?.orderId ||
-          (order.id && !order.id.startsWith('preview-') ? order.id : null)
-      );
-    } else if (doc?.id) {
-      setSavedDocumentId(doc.id);
-      if (doc.orderId) setLinkedPlantOrderId(doc.orderId);
+    const prevContext = documentContextRef.current;
+    const contextChanged = prevContext !== documentContext;
+
+    // Same invoice/order — do not rebuild the form (that was wiping cost & profit).
+    if (!contextChanged) {
+      if (doc?.id) {
+        setSavedDocumentId(doc.id);
+        if (doc.orderId) setLinkedPlantOrderId(doc.orderId);
+      }
+      return;
+    }
+
+    const softDocAttach =
+      Boolean(doc?.id) &&
+      prevContext === `${order.id}:${type}:new` &&
+      documentContext === `${order.id}:${type}:${doc!.id}`;
+
+    documentContextRef.current = documentContext;
+    setSavedDocumentId(doc?.id || null);
+    setLinkedPlantOrderId(
+      doc?.orderId ||
+        (order.id && !order.id.startsWith('preview-') ? order.id : null)
+    );
+    if (!softDocAttach) {
+      costsDirtyRef.current = false;
+      pricesDirtyRef.current = false;
     }
 
     setBillToName(
@@ -442,7 +467,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         return;
       }
       if (pricesMap[item.id] === undefined && fallback) {
+        // Inventory list price / size default should show and save on the invoice.
         pricesMap[item.id] = fallback();
+        locked.add(item.id);
       }
     };
     if (doc?.items?.length) {
@@ -469,8 +496,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         resolveLineUnitPrice(item, inventoryPlants, containerWeights)
       );
     });
-    pricesLockedRef.current = locked;
-    setItemPrices(pricesMap);
+    if (softDocAttach && pricesDirtyRef.current) {
+      setItemPrices((prev) => {
+        const merged = { ...pricesMap, ...prev };
+        for (const id of Object.keys(prev)) {
+          locked.add(id);
+        }
+        pricesLockedRef.current = locked;
+        return merged;
+      });
+    } else {
+      pricesLockedRef.current = locked;
+      setItemPrices(pricesMap);
+    }
 
     const subsMap: Record<string, string> = {};
     order.items.forEach((item) => {
@@ -491,7 +529,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     seededDraftLines.forEach((item) => {
       if (costsMap[item.id] === undefined) costsMap[item.id] = item.unitCost ?? 0;
     });
-    setItemCosts(costsMap);
+    if (softDocAttach && costsDirtyRef.current) {
+      setItemCosts((prev) => ({ ...costsMap, ...prev }));
+    } else {
+      setItemCosts(costsMap);
+    }
 
     setSaveSuccess(false);
 
@@ -678,9 +720,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       !pricesLockedRef.current.has(id) &&
       (patch.plantName !== undefined || patch.containerSize !== undefined)
     ) {
+      const nextPrice = defaultLineUnitPrice(nextLine, inventoryPlants, containerWeights);
+      pricesLockedRef.current.add(id);
       setItemPrices((prices) => ({
         ...prices,
-        [id]: defaultLineUnitPrice(nextLine, inventoryPlants, containerWeights)
+        [id]: nextPrice
       }));
     }
   };
@@ -1324,7 +1368,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     return subscribeToWeights(setContainerWeights);
   }, [isOpen]);
 
-  // When inventory arrives after open, upgrade unlocked lines still on size defaults.
+  // When inventory arrives after open, upgrade lines still on size defaults to list price.
   useEffect(() => {
     if (!isOpen || inventoryPlants.length === 0) return;
     const items =
@@ -1334,7 +1378,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       let changed = false;
       const next = { ...prev };
       for (const item of items) {
-        if (pricesLockedRef.current.has(item.id)) continue;
         const fromInv = inventoryListPriceForPlant(
           inventoryPlants,
           item.plantName,
@@ -1344,9 +1387,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         if (fromInv == null) continue;
         const current = next[item.id];
         const sizeDefault = getDefaultPriceForSize(item.containerSize);
+        // Fill blank lines, or replace a size-default placeholder once inventory matches.
         if (current === undefined || current === sizeDefault) {
           if (current !== fromInv) {
             next[item.id] = fromInv;
+            pricesLockedRef.current.add(item.id);
+            changed = true;
+          } else if (!pricesLockedRef.current.has(item.id)) {
+            pricesLockedRef.current.add(item.id);
             changed = true;
           }
         }
@@ -1420,6 +1468,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   const handlePriceChange = (itemId: string, raw: string) => {
     if (raw.trim() === '') {
       pricesLockedRef.current.delete(itemId);
+      pricesDirtyRef.current = true;
       setItemPrices((prev) => {
         if (!(itemId in prev)) return prev;
         const next = { ...prev };
@@ -1432,6 +1481,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     const parsed = Number(raw);
     if (!Number.isFinite(parsed)) return;
     pricesLockedRef.current.add(itemId);
+    pricesDirtyRef.current = true;
     setItemPrices((prev) => ({
       ...prev,
       [itemId]: Math.max(0, parsed)
@@ -1441,6 +1491,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
   // Cost edit change handler (internal profit tracking)
   const handleCostChange = (itemId: string, newCost: number) => {
+    costsDirtyRef.current = true;
     setItemCosts((prev) => ({
       ...prev,
       [itemId]: Math.max(0, newCost)
@@ -1478,7 +1529,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         );
         await updateDocumentLineCosts(documentId, items);
         wroteDocument = true;
+        const patchDoc = (prev: CustomerDocument | null) =>
+          prev && prev.id === documentId
+            ? { ...prev, items, updatedAt: new Date().toISOString() }
+            : prev;
+        setLiveDocument(patchDoc);
+        setFetchedDocument(patchDoc);
       }
+      costsDirtyRef.current = false;
       setCostSaveNote(wroteDocument ? 'Saved' : 'Saved on the order');
     } catch (err: any) {
       setCostSaveNote(err?.message || 'Could not save costs');
@@ -1489,11 +1547,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
   // Restore defaults: inventory list price when matched, else size-based wholesale
   const handleResetPrices = () => {
-    pricesLockedRef.current = new Set();
     const defaultPrices: Record<string, number> = {};
+    const locked = new Set<string>();
     workingItems.forEach((item) => {
       defaultPrices[item.id] = defaultLineUnitPrice(item, inventoryPlants, containerWeights);
+      locked.add(item.id);
     });
+    pricesLockedRef.current = locked;
+    pricesDirtyRef.current = true;
     setItemPrices(defaultPrices);
     setSaveSuccess(false);
   };
@@ -1852,6 +1913,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         }
         return next;
       });
+      costsDirtyRef.current = false;
+      pricesDirtyRef.current = false;
+      if (persistedId) {
+        documentContextRef.current = `${order.id}:${documentType}:${persistedId}`;
+      }
 
         if (freightShares && freightAllocation) {
           const allDocuments = await listAllDocuments();

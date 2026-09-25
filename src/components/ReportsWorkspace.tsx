@@ -18,7 +18,12 @@ import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument, Vendo
 import { useLocale, useT } from '../lib/i18n';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
-import { listAllDocuments, subscribeToDocuments, filterDocumentsForLiveOrders } from '../lib/documents';
+import {
+  listAllDocuments,
+  subscribeToDocuments,
+  filterDocumentsForLiveOrders,
+  resolveLineUnitCost
+} from '../lib/documents';
 import { authJsonHeaders } from '../lib/apiAuth';
 import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
 import { subscribeToVendorBills } from '../lib/purchasing';
@@ -74,8 +79,12 @@ function buildProfitByRep(
   orders: CustomerOrder[]
 ): ProfitByRepRow[] {
   const ownerByOrderId = new Map<string, string>();
+  const orderCostByLine = new Map<string, number | undefined>();
   for (const o of orders) {
     if (o.owner) ownerByOrderId.set(o.id, o.owner);
+    for (const item of o.items || []) {
+      orderCostByLine.set(`${o.id}:${item.id}`, item.unitCost);
+    }
   }
   const invoices = documents.filter((d) => d.type === 'invoice');
   const map = new Map<string, ProfitByRepRow>();
@@ -92,7 +101,8 @@ function buildProfitByRep(
       // Blank / missing price — leave the line out until a price is saved. $0 still counts.
       if (price == null || !Number.isFinite(price)) continue;
       revenue += qty * price;
-      cost += qty * (item.unitCost || 0);
+      const orderCost = inv.orderId ? orderCostByLine.get(`${inv.orderId}:${item.id}`) : undefined;
+      cost += qty * resolveLineUnitCost(orderCost, item.unitCost);
     }
     const row =
       map.get(rep) || { rep, invoiceCount: 0, revenue: 0, cost: 0, profit: 0, margin: 0 };

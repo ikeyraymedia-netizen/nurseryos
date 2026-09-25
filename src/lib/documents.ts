@@ -122,6 +122,47 @@ export async function updateDocumentLineCosts(
   });
 }
 
+/**
+ * Invoice/estimate saves used to write `unitCost: 0` as a placeholder, so a $0 on the
+ * document must not hide a real cost entered later on the order.
+ */
+export function resolveLineUnitCost(
+  orderCost: number | undefined | null,
+  documentCost: number | undefined | null
+): number {
+  const fromDoc = typeof documentCost === 'number' && Number.isFinite(documentCost) ? documentCost : null;
+  const fromOrder = typeof orderCost === 'number' && Number.isFinite(orderCost) ? orderCost : null;
+  if (fromDoc != null && fromDoc > 0) return fromDoc;
+  if (fromOrder != null) return fromOrder;
+  return fromDoc ?? 0;
+}
+
+/** Copy an order line's cost onto every saved document linked to that order. */
+export async function syncOrderLineCostToDocuments(
+  orderId: string,
+  itemId: string,
+  unitCost: number | undefined
+): Promise<void> {
+  const tenantId = requireTenantId();
+  const snapshot = await getDocs(query(documentsCol(tenantId), where('orderId', '==', orderId)));
+  const now = new Date().toISOString();
+  await Promise.all(
+    snapshot.docs.map(async (snap) => {
+      const data = snap.data() as Omit<CustomerDocument, 'id'>;
+      if (data.type === 'credit_memo') return;
+      const items = data.items || [];
+      if (!items.some((item) => item.id === itemId)) return;
+      const nextItems = items.map((item) =>
+        item.id === itemId ? { ...item, unitCost } : item
+      );
+      await updateDoc(documentDoc(tenantId, snap.id), {
+        items: sanitizeForFirestore(nextItems),
+        updatedAt: now
+      });
+    })
+  );
+}
+
 export async function updateCustomerDocument(document: CustomerDocument): Promise<void> {
   const tenantId = requireTenantId();
   const { id, ...rest } = document;

@@ -44,7 +44,7 @@ import {
 } from '../lib/orderVisibility';
 import { notifyInventorySyncIssue, subscribeToInventory } from '../lib/inventory';
 import { orderNeedsInvoiceSave } from '../lib/invoicing';
-import { listAllDocuments } from '../lib/documents';
+import { listAllDocuments, syncOrderLineCostToDocuments } from '../lib/documents';
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { useSalesRepOptions } from '../lib/salesReps';
 import {
@@ -225,6 +225,12 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       await updateOrderItemCost(order.id, itemId, next, order.items);
     } catch (err) {
       console.error('Error saving item cost:', err);
+      return;
+    }
+    try {
+      await syncOrderLineCostToDocuments(order.id, itemId, next);
+    } catch (err) {
+      console.error('Error copying item cost to invoices:', err);
     }
   };
 

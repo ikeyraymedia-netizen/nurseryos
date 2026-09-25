@@ -51,7 +51,8 @@ import {
   isEstimateDocumentNumber,
   listAllDocuments,
   subscribeToDocument,
-  updateDocumentLineCosts
+  updateDocumentLineCosts,
+  resolveLineUnitCost
 } from '../lib/documents';
 import {
   getDefaultPriceForSize,
@@ -520,11 +521,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setItemSubstitutes(subsMap);
 
     const costsMap: Record<string, number> = {};
+    const orderCostById = new Map<string, number | undefined>(
+      order.items.map((item) => [item.id, item.unitCost])
+    );
     order.items.forEach((item) => {
       costsMap[item.id] = item.unitCost ?? 0;
     });
     doc?.items?.forEach((item) => {
-      if (item.unitCost !== undefined) costsMap[item.id] = item.unitCost;
+      costsMap[item.id] = resolveLineUnitCost(orderCostById.get(item.id), item.unitCost);
     });
     seededDraftLines.forEach((item) => {
       if (costsMap[item.id] === undefined) costsMap[item.id] = item.unitCost ?? 0;
@@ -1402,6 +1406,33 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       return changed ? next : prev;
     });
   }, [isOpen, inventoryPlants, containerWeights, creditLines, order?.items]);
+
+  // Pick up costs another user saves while this invoice is open, unless this user is mid-edit.
+  useEffect(() => {
+    if (!isOpen || costsDirtyRef.current) return;
+    const orderCostById = new Map<string, number | undefined>(
+      (order?.items || []).map((item) => [item.id, item.unitCost])
+    );
+    const docCostById = new Map<string, number | undefined>(
+      (liveDocument?.items || []).map((item) => [item.id, item.unitCost])
+    );
+    const ids = new Set<string>();
+    orderCostById.forEach((_cost, id) => ids.add(id));
+    docCostById.forEach((_cost, id) => ids.add(id));
+    if (ids.size === 0) return;
+    setItemCosts((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of ids) {
+        const resolved = resolveLineUnitCost(orderCostById.get(id), docCostById.get(id));
+        if (next[id] !== resolved) {
+          next[id] = resolved;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [isOpen, order?.items, liveDocument]);
 
   useEffect(() => {
     if (!isOpen || !tenantId || !canCollectPayments) {

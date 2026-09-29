@@ -9,6 +9,7 @@ import {
   registerStripeWebhookRoute,
   isStripeConfigured
 } from './server/stripe';
+import { registerMelioRoutes, registerMelioWebhookRoute } from './server/melio';
 import { registerEmailRoutes } from './server/email';
 import { registerPushRoutes } from './server/push';
 import { registerPlatformRoutes } from './server/platform';
@@ -40,6 +41,7 @@ const app = express();
 
 // Stripe webhooks need the raw body for signature verification — before JSON parser.
 registerStripeWebhookRoute(app);
+registerMelioWebhookRoute(app);
 
 // Increase payload limit to handle base64 PDFs and images
 app.use(express.json({ limit: '50mb' }));
@@ -49,6 +51,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 registerQuickbooksRoutes(app);
 registerStripeRoutes(app);
+registerMelioRoutes(app);
 registerEmailRoutes(app);
 registerPushRoutes(app);
 registerPlatformRoutes(app);

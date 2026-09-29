@@ -76,6 +76,11 @@ import {
   payVendorBillStripeAch,
   refreshVendorBillStripePayment
 } from '../lib/stripe';
+import {
+  fetchMelioReady,
+  payVendorBillMelio,
+  refreshVendorBillMelioPayment
+} from '../lib/melio';
 import { pushVendorBillToQuickbooks } from '../lib/quickbooks';
 import { logAuditEvent } from '../lib/audit';
 import { BankFeedPanel } from './BankFeedPanel';
@@ -221,6 +226,7 @@ export function PurchasingWorkspace({
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [stripeTreasuryReady, setStripeTreasuryReady] = useState(false);
+  const [melioReady, setMelioReady] = useState(false);
 
   // PO form
   const [showPoForm, setShowPoForm] = useState(false);
@@ -276,6 +282,26 @@ export function PurchasingWorkspace({
       cancelled = true;
     };
   }, [tenantId, permissions.canPayVendorBills]);
+
+  useEffect(() => {
+    if (!permissions.canPayVendorBillsMelio) {
+      setMelioReady(false);
+      return;
+    }
+    let cancelled = false;
+    void fetchMelioReady(tenantId)
+      .then((ready) => {
+        if (!cancelled) setMelioReady(ready);
+      })
+      .catch(() => {
+        if (!cancelled) setMelioReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, permissions.canPayVendorBillsMelio]);
+
+  const canPayMelio = permissions.canPayVendorBillsMelio && melioReady;
 
   const q = search.toLowerCase().trim();
 
@@ -986,7 +1012,53 @@ export function PurchasingWorkspace({
     );
   }
 
+  async function payBillsMelio(targetBills: VendorBill[]) {
+    if (targetBills.length === 0) return;
+    if (new Set(targetBills.map((b) => b.vendorId)).size > 1) {
+      setError(t('purchasing.selectSameVendor'));
+      return;
+    }
+    const first = targetBills[0];
+    const vendor = vendors.find((v) => v.id === first.vendorId);
+    const hasBank =
+      Boolean(vendor?.bankRoutingNumber?.replace(/\D/g, '').length === 9) &&
+      Boolean(vendor?.bankAccountNumber || vendor?.bankAccountLast4);
+    if (!hasBank) {
+      setError(t('purchasing.melioNeedsBank'));
+      return;
+    }
+    const amount = money(targetBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0));
+    const last4 = vendor?.bankAccountLast4 || '****';
+    const ok = window.confirm(
+      targetBills.length > 1
+        ? t('purchasing.melioPayConfirmMulti', {
+            amount,
+            n: targetBills.length,
+            vendor: first.vendorName,
+            last4
+          })
+        : t('purchasing.melioPayConfirm', { amount, vendor: first.vendorName, last4 })
+    );
+    if (!ok) return;
+    const result = await payVendorBillMelio({
+      tenantId,
+      billIds: targetBills.map((b) => b.id)
+    });
+    setSelectedBillIds([]);
+    const sentLast4 = result.last4 || last4;
+    setStatus(
+      targetBills.length > 1
+        ? t('purchasing.melioPaymentSentMulti', { n: targetBills.length, last4: sentLast4 })
+        : t('purchasing.melioPaymentSent', { last4: sentLast4 })
+    );
+  }
+
   async function refreshBillAch(bill: VendorBill) {
+    if (bill.melioPaymentId) {
+      const result = await refreshVendorBillMelioPayment({ tenantId, billId: bill.id });
+      setStatus(t('purchasing.achStatusRefreshed', { status: result.status || 'unknown' }));
+      return;
+    }
     if (!bill.stripeOutboundPaymentId) {
       setError(t('purchasing.achRefreshNeedsStripe'));
       return;
@@ -1003,7 +1075,8 @@ export function PurchasingWorkspace({
   }
 
   function renderBillSelectionBar() {
-    const canPay = permissions.canPayVendorBills;
+    const canPayStripe = permissions.canPayVendorBills;
+    const canPay = canPayStripe || canPayMelio;
     const canDelete = permissions.canManageVendorBills;
     if ((!canPay && !canDelete) || selectedBills.length === 0) return null;
     const unpaidSelected = selectedBills.filter((b) => b.status === 'unpaid');
@@ -1052,7 +1125,7 @@ export function PurchasingWorkspace({
               {t('purchasing.deleteSelectedBills', { n: selectedBills.length })}
             </button>
           )}
-          {canPay && (
+          {canPayStripe && (
             <button
               type="button"
               disabled={busy || unpaidSelected.length === 0}
@@ -1060,6 +1133,19 @@ export function PurchasingWorkspace({
               className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white disabled:opacity-50"
             >
               {t('purchasing.paySelectedAch', {
+                n: unpaidSelected.length,
+                amount: money(unpaidTotal)
+              })}
+            </button>
+          )}
+          {canPayMelio && (
+            <button
+              type="button"
+              disabled={busy || unpaidSelected.length === 0}
+              onClick={() => void run(async () => payBillsMelio(unpaidSelected))}
+              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-indigo-700 text-white disabled:opacity-50"
+            >
+              {t('purchasing.paySelectedMelio', {
                 n: unpaidSelected.length,
                 amount: money(unpaidTotal)
               })}
@@ -1074,7 +1160,7 @@ export function PurchasingWorkspace({
     const isSelected = selectedBillIds.includes(bill.id);
     const canSelect =
       permissions.canManageVendorBills ||
-      (bill.status === 'unpaid' && permissions.canPayVendorBills);
+      (bill.status === 'unpaid' && (permissions.canPayVendorBills || canPayMelio));
     return (
       <div
         key={bill.id}
@@ -1139,15 +1225,25 @@ export function PurchasingWorkspace({
             )}
             {bill.status === 'payment_pending' && (
               <p className="text-[11px] font-bold text-sky-800 mt-1">
-                {bill.stripeOutboundPaymentId
-                  ? t('purchasing.achProcessingStripe', {
-                      last4: bill.stripeAchLast4 || '****'
-                    })
-                  : t('purchasing.achPendingLegacy')}
-                {bill.stripeOutboundPaymentStatus
+                {bill.melioPaymentId
+                  ? t('purchasing.melioProcessing', { last4: bill.melioAchLast4 || '****' })
+                  : bill.stripeOutboundPaymentId
+                    ? t('purchasing.achProcessingStripe', {
+                        last4: bill.stripeAchLast4 || '****'
+                      })
+                    : t('purchasing.achPendingLegacy')}
+                {bill.melioPaymentId && bill.melioPaymentStatus
+                  ? ` · Melio: ${bill.melioPaymentStatus}`
+                  : ''}
+                {!bill.melioPaymentId && bill.stripeOutboundPaymentStatus
                   ? ` · Stripe: ${bill.stripeOutboundPaymentStatus}`
                   : ''}
                 {bill.stripePaymentError ? ` · ${bill.stripePaymentError}` : ''}
+              </p>
+            )}
+            {bill.status === 'unpaid' && bill.melioPaymentError && (
+              <p className="text-[11px] font-bold text-rose-700 mt-1">
+                Melio: {bill.melioPaymentError}
               </p>
             )}
             {bill.items?.length > 0 && (
@@ -1192,7 +1288,7 @@ export function PurchasingWorkspace({
             {t('purchasing.viewScannedInvoice')}
           </a>
         )}
-        {permissions.canManageVendorBills || permissions.canPayVendorBills ? (
+        {permissions.canManageVendorBills || permissions.canPayVendorBills || canPayMelio ? (
           <div className="flex flex-wrap gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
             {permissions.canManageVendorBills && (
             <button
@@ -1215,7 +1311,20 @@ export function PurchasingWorkspace({
                 {t('purchasing.payViaAch')}
               </button>
             )}
-            {bill.status === 'payment_pending' && permissions.canPayVendorBills && (
+            {bill.status === 'unpaid' && canPayMelio && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run(async () => payBillsMelio([bill]))}
+                className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-indigo-700 text-white"
+              >
+                {t('purchasing.payViaMelio')}
+              </button>
+            )}
+            {bill.status === 'payment_pending' &&
+              (bill.melioPaymentId
+                ? permissions.canPayVendorBillsMelio
+                : permissions.canPayVendorBills) && (
               <button
                 type="button"
                 disabled={busy}

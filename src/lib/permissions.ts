@@ -50,6 +50,8 @@ export interface AppPermissions {
   canManageBillPay: boolean;
   /** Initiate ACH bill payments via Stripe Treasury (gated by billPay module). */
   canPayVendorBills: boolean;
+  /** Pay vendor bills through Melio (gated by melioBillPay module). */
+  canPayVendorBillsMelio: boolean;
   /** Retail POS checkout (gated by retailPos module). */
   canUseRetailPOS: boolean;
 }
@@ -176,6 +178,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageVendorBills: true,
         canManageBillPay: true,
         canPayVendorBills: true,
+        canPayVendorBillsMelio: true,
         canUseRetailPOS: true
       };
     case 'supervisor':
@@ -220,6 +223,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageVendorBills: false,
         canManageBillPay: false,
         canPayVendorBills: false,
+        canPayVendorBillsMelio: false,
         canUseRetailPOS: false
       };
     case 'office':
@@ -263,6 +267,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageVendorBills: true,
         canManageBillPay: false,
         canPayVendorBills: true,
+        canPayVendorBillsMelio: true,
         canUseRetailPOS: true
       };
     case 'sales':
@@ -306,6 +311,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageVendorBills: true,
         canManageBillPay: false,
         canPayVendorBills: false,
+        canPayVendorBillsMelio: false,
         canUseRetailPOS: true
       };
     case 'loader':
@@ -348,6 +354,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageVendorBills: false,
         canManageBillPay: false,
         canPayVendorBills: false,
+        canPayVendorBillsMelio: false,
         canUseRetailPOS: false
       };
     case 'inventory':
@@ -390,6 +397,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageVendorBills: false,
         canManageBillPay: false,
         canPayVendorBills: false,
+        canPayVendorBillsMelio: false,
         canUseRetailPOS: false
       };
     default:

@@ -17,6 +17,7 @@ export type TenantModuleId =
   | 'quickbooks'
   | 'purchasing'
   | 'billPay'
+  | 'melioBillPay'
   | 'retailPos';
 
 export interface Tenant {
@@ -529,6 +530,11 @@ export interface VendorBill {
   stripePaymentError?: string | null;
   /** Last4 of vendor bank used for this ACH (display). */
   stripeAchLast4?: string | null;
+  /** Melio Payouts payment id when paid via Melio bill pay. */
+  melioPaymentId?: string | null;
+  melioPaymentStatus?: string | null;
+  melioPaymentError?: string | null;
+  melioAchLast4?: string | null;
   /** QuickBooks Online Bill id after AP sync. */
   qboBillId?: string | null;
   qboDocNumber?: string | null;

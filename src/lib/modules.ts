@@ -106,6 +106,13 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     group: 'addon'
   },
   {
+    id: 'melioBillPay',
+    label: 'Melio Bill Pay',
+    description:
+      'Pay vendor bills by ACH through Melio from Purchasing. Requires Purchasing; the nursery links its Melio business and bank in Team settings.',
+    group: 'addon'
+  },
+  {
     id: 'retailPos',
     label: 'Retail POS',
     description:
@@ -128,6 +135,7 @@ export const OPT_IN_MODULE_IDS: TenantModuleId[] = [
   'quickbooks',
   'purchasing',
   'billPay',
+  'melioBillPay',
   'retailPos'
 ];
 
@@ -207,6 +215,7 @@ export function applyModuleGates(
   const quickbooks = mods.has('quickbooks');
   const purchasing = mods.has('purchasing');
   const billPay = mods.has('billPay') && purchasing;
+  const melioBillPay = mods.has('melioBillPay') && purchasing;
   const retailPos = mods.has('retailPos');
   const ops = orders || trucks;
 
@@ -253,6 +262,7 @@ export function applyModuleGates(
     canManageVendorBills: permissions.canManageVendorBills && purchasing,
     canManageBillPay: permissions.canManageBillPay && billPay,
     canPayVendorBills: permissions.canPayVendorBills && billPay,
+    canPayVendorBillsMelio: permissions.canPayVendorBillsMelio && melioBillPay,
     canUseRetailPOS: permissions.canUseRetailPOS && retailPos
   };
 }

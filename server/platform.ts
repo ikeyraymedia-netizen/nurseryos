@@ -42,7 +42,8 @@ const ALL_MODULE_IDS = new Set([
   'payments',
   'quickbooks',
   'purchasing',
-  'billPay'
+  'billPay',
+  'melioBillPay'
 ]);
 
 type AccessRequestStatus = 'pending' | 'approved' | 'declined';

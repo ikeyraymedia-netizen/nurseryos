@@ -482,8 +482,13 @@ const extra = {
     invoiceCount: '{{n}} factura(s)',
     estimateCount: '{{n}} presupuesto(s)',
     sunToday: 'Dom–hoy · {{n}} factura(s)',
-    repYtd: 'Representante · año a la fecha',
+    repYtd: 'Representante · semana, mes, trimestre, año',
     repTotals: 'Totales de facturas por representante para {{year}}',
+    repWeek: 'Semana',
+    repMonth: 'Mes',
+    repQuarter: 'T{{q}}',
+    repYear: '{{year}}',
+    repAllTotal: 'Todos',
     salesRep: 'Representante',
     invoices: 'Facturas',
     sales: 'Ventas',
@@ -1318,6 +1323,16 @@ const extra = {
     achStatusRefreshed: 'Estado del pago: {{status}}',
     achProcessingStripe: 'ACH en proceso al banco del proveedor ••••{{last4}}',
     achPendingLegacy: 'Pago ACH pendiente',
+    payViaMelio: 'Pagar con Melio',
+    paySelectedMelio: 'Melio · {{n}} facturas · {{amount}}',
+    melioPayConfirm: '¿Enviar {{amount}} con Melio a {{vendor}} (••••{{last4}})?',
+    melioPayConfirmMulti:
+      '¿Enviar un pago Melio de {{amount}} por {{n}} facturas a {{vendor}} (••••{{last4}})?',
+    melioPaymentSent: 'Pago Melio programado a ••••{{last4}}.',
+    melioPaymentSentMulti: 'Un pago Melio programado por {{n}} facturas a ••••{{last4}}.',
+    melioProcessing: 'Pago Melio al banco del proveedor ••••{{last4}}',
+    melioNeedsBank:
+      'Agregue el routing y número de cuenta del proveedor en Proveedores antes de pagar con Melio.',
     achNeedsBank:
       'Agregue el routing y número de cuenta del proveedor en Proveedores antes de pagar por ACH de Stripe.',
     achNeedsTreasury:
@@ -1338,7 +1353,7 @@ const extra = {
     qbSynced: 'Sincronizado con QuickBooks · {{doc}}',
     vendorBankSection: 'Datos bancarios ACH',
     vendorBankHint:
-      'Para pagos a proveedores con Stripe Treasury. El número de cuenta se guarda solo para ACH y se muestra como últimos 4 dígitos.',
+      'Para pagar a este proveedor por ACH (Melio o Stripe). El número de cuenta se guarda solo para ACH y se muestra como últimos 4 dígitos.',
     bankAccountHolder: 'Nombre del titular',
     bankRouting: 'Routing (9 dígitos)',
     bankAccount: 'Número de cuenta',

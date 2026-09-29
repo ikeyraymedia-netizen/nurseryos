@@ -131,6 +131,25 @@ export async function ensureQboPayLink(params: {
   };
 }
 
+/** Mark every invoice paid in QuickBooks since the last check as paid in NurseryOS. */
+export async function syncQboPayments(
+  tenantId: string
+): Promise<{ changed: number; markedPaid: number }> {
+  const res = await fetch('/api/quickbooks/sync-payments', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ tenantId })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as any)?.error || 'Failed to sync QuickBooks payments.');
+  }
+  return {
+    changed: Number((data as any)?.changed || 0),
+    markedPaid: Number((data as any)?.markedPaid || 0)
+  };
+}
+
 /** Check QBO invoice balance and mark NurseryOS paid when Balance is 0. */
 export async function refreshQboPaymentStatus(params: {
   tenantId: string;

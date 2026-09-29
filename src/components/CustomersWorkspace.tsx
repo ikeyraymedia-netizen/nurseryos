@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { syncQboPayments } from '../lib/quickbooks';
 import {
   Upload,
   Users,
@@ -233,6 +234,11 @@ export function CustomersWorkspace({
   useEffect(() => {
     return subscribeToDocuments(setAllDocuments);
   }, []);
+
+  useEffect(() => {
+    if (!tenantId || !permissions.canUseQuickbooks) return;
+    void syncQboPayments(tenantId).catch(() => undefined);
+  }, [tenantId, permissions.canUseQuickbooks]);
 
   const documentsByCustomerId = useMemo(() => {
     const map = new Map<string, CustomerDocument[]>();

@@ -2210,7 +2210,145 @@ export async function syncPaidVendorBillPaymentToQbo(
   return { synced: true, qboBillPaymentId: paymentId };
 }
 
+const QBO_CDC_MAX_LOOKBACK_MS = 29 * 24 * 60 * 60 * 1000;
+const QBO_PAYMENT_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const paymentSyncInFlight = new Set<string>();
+
+/**
+ * Mark NurseryOS invoices paid when QuickBooks shows them fully paid.
+ * Uses the QBO change feed (CDC), so only invoices changed since the last sync are read.
+ */
+export async function syncQboInvoicePayments(
+  tenantId: string
+): Promise<{ changed: number; markedPaid: number; skipped?: string }> {
+  if (paymentSyncInFlight.has(tenantId)) return { changed: 0, markedPaid: 0, skipped: 'busy' };
+  const integration = await loadIntegration(tenantId);
+  if (!integration?.accessToken || !integration.realmId) {
+    return { changed: 0, markedPaid: 0, skipped: 'not_connected' };
+  }
+
+  paymentSyncInFlight.add(tenantId);
+  try {
+    const startedAt = new Date();
+    const last = Date.parse(String((integration as any).paymentSyncAt || ''));
+    const oldest = startedAt.getTime() - QBO_CDC_MAX_LOOKBACK_MS;
+    const since = new Date(
+      Number.isFinite(last) ? Math.max(last - 5 * 60 * 1000, oldest) : oldest
+    ).toISOString();
+
+    const cdc = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/cdc?entities=Invoice&changedSince=${encodeURIComponent(since)}&minorversion=65`
+    );
+    const invoices: any[] = [];
+    for (const block of cdc?.CDCResponse || []) {
+      for (const qr of block?.QueryResponse || []) {
+        if (Array.isArray(qr?.Invoice)) invoices.push(...qr.Invoice);
+      }
+    }
+
+    const docs = getAdminDb().collection(`tenants/${tenantId}/documents`);
+    if (!Number.isFinite(last)) {
+      const linked = await docs.where('qboInvoiceId', '>', '').get();
+      const unpaidIds = [
+        ...new Set(
+          linked.docs
+            .map((d) => d.data() || {})
+            .filter((d) => d.type === 'invoice' && String(d.paymentStatus || '') !== 'paid')
+            .map((d) => String(d.qboInvoiceId).replace(/'/g, ''))
+        )
+      ];
+      for (let i = 0; i < unpaidIds.length; i += 30) {
+        const ids = unpaidIds.slice(i, i + 30).map((id) => `'${id}'`).join(',');
+        const q = await qboRequest<any>(
+          tenantId,
+          'GET',
+          `/query?query=${encodeURIComponent(
+            `select * from Invoice where Id in (${ids}) maxresults 30`
+          )}&minorversion=65`
+        );
+        if (Array.isArray(q?.QueryResponse?.Invoice)) invoices.push(...q.QueryResponse.Invoice);
+      }
+    }
+
+    let markedPaid = 0;
+    for (const invoice of invoices) {
+      if (!invoice?.Id || invoice.status === 'Deleted') continue;
+      const balance = Number(invoice.Balance);
+      const total = Number(invoice.TotalAmt);
+      if (!Number.isFinite(balance) || balance > 0.009 || !(total > 0)) continue;
+
+      const matches = await docs.where('qboInvoiceId', '==', String(invoice.Id)).limit(5).get();
+      for (const snap of matches.docs) {
+        const doc = snap.data() || {};
+        if (doc.type !== 'invoice' || String(doc.paymentStatus || '') === 'paid') continue;
+        const now = new Date().toISOString();
+        const link = invoice.InvoiceLink || invoice.invoiceLink;
+        await snap.ref.set(
+          {
+            paymentStatus: 'paid',
+            paidAt: now,
+            paymentMethod: 'quickbooks',
+            ...(link ? { qboInvoiceLink: String(link).trim() } : {}),
+            updatedAt: now
+          },
+          { merge: true }
+        );
+        markedPaid += 1;
+      }
+    }
+
+    await integrationRef(tenantId).set(
+      { paymentSyncAt: startedAt.toISOString() },
+      { merge: true }
+    );
+    if (markedPaid > 0) {
+      console.log(`[quickbooks] marked ${markedPaid} invoice(s) paid from QBO for ${tenantId}`);
+    }
+    return { changed: invoices.length, markedPaid };
+  } finally {
+    paymentSyncInFlight.delete(tenantId);
+  }
+}
+
+async function syncAllTenantsQboPayments() {
+  if (!isQuickbooksConfigured() || !isFirebaseAdminConfigured()) return;
+  const tenants = await getAdminDb().collection('tenants').select().get();
+  for (const tenant of tenants.docs) {
+    const qb = await integrationRef(tenant.id).get();
+    if (!qb.exists || !qb.data()?.realmId) continue;
+    try {
+      await syncQboInvoicePayments(tenant.id);
+    } catch (err: any) {
+      console.warn('[quickbooks] payment sync failed', tenant.id, err?.message || err);
+    }
+  }
+}
+
+let paymentSyncTimerStarted = false;
+function startQboPaymentSyncTimer() {
+  if (paymentSyncTimerStarted) return;
+  paymentSyncTimerStarted = true;
+  setTimeout(() => void syncAllTenantsQboPayments(), 30 * 1000);
+  setInterval(() => void syncAllTenantsQboPayments(), QBO_PAYMENT_SYNC_INTERVAL_MS);
+}
+
 export function registerQuickbooksRoutes(app: Express) {
+  startQboPaymentSyncTimer();
+
+  app.post('/api/quickbooks/sync-payments', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+      res.json(await syncQboInvoicePayments(tenantId));
+    })
+  );
+
   app.get('/api/quickbooks/config-status', (_req, res) => {
     const quickbooks = isQuickbooksConfigured();
     const firebaseAdmin = isFirebaseAdminConfigured();

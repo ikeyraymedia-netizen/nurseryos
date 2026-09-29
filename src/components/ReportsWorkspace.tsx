@@ -210,8 +210,12 @@ interface PeriodSales {
 
 interface RepYearSales {
   rep: string;
+  /** Year-to-date sales. */
   salesTotal: number;
   invoiceCount: number;
+  quarterTotal: number;
+  monthTotal: number;
+  weekTotal: number;
 }
 
 /** Calendar year / quarter / month / week sales + sales-rep YTD from invoices. */
@@ -262,52 +266,53 @@ function buildPeriodSalesOverview(
     invoiceCount: 0
   };
   const repYearMap = new Map<string, RepYearSales>();
-
-  for (const inv of invoices) {
-    const dt = invoiceDate(inv);
-    if (!dt) continue;
-    const day = startOfLocalDay(dt);
-    const amount = inv.grandTotal || 0;
-
-    if (day >= yearStart) {
-      year.salesTotal += amount;
-      year.invoiceCount += 1;
-      const rep = resolveInvoiceRep(inv, ownerByOrderId);
-      const row = repYearMap.get(rep) || { rep, salesTotal: 0, invoiceCount: 0 };
-      row.salesTotal += amount;
-      row.invoiceCount += 1;
+  const repRow = (rep: string): RepYearSales => {
+    let row = repYearMap.get(rep);
+    if (!row) {
+      row = { rep, salesTotal: 0, invoiceCount: 0, quarterTotal: 0, monthTotal: 0, weekTotal: 0 };
       repYearMap.set(rep, row);
     }
-    if (day >= quarterStart) {
+    return row;
+  };
+
+  const addToPeriods = (doc: CustomerDocument, amount: number, countInvoice: boolean) => {
+    const dt = invoiceDate(doc);
+    if (!dt) return;
+    const day = startOfLocalDay(dt);
+    const inYear = day >= yearStart;
+    const inQuarter = day >= quarterStart;
+    const inMonth = day >= monthStart;
+    const inWeek = day >= weekStart;
+    if (!inYear && !inWeek) return;
+    const row = repRow(resolveInvoiceRep(doc, ownerByOrderId));
+    const n = countInvoice ? 1 : 0;
+
+    if (inYear) {
+      year.salesTotal += amount;
+      year.invoiceCount += n;
+      row.salesTotal += amount;
+      row.invoiceCount += n;
+    }
+    if (inQuarter) {
       quarter.salesTotal += amount;
-      quarter.invoiceCount += 1;
+      quarter.invoiceCount += n;
+      row.quarterTotal += amount;
     }
-    if (day >= monthStart) {
+    if (inMonth) {
       month.salesTotal += amount;
-      month.invoiceCount += 1;
+      month.invoiceCount += n;
+      row.monthTotal += amount;
     }
-    if (day >= weekStart) {
+    if (inWeek) {
       week.salesTotal += amount;
-      week.invoiceCount += 1;
+      week.invoiceCount += n;
+      row.weekTotal += amount;
     }
-  }
+  };
 
-  const creditMemos = documents.filter((d) => d.type === 'credit_memo');
-  for (const cm of creditMemos) {
-    const dt = invoiceDate(cm);
-    if (!dt) continue;
-    const day = startOfLocalDay(dt);
-    const amount = -(cm.grandTotal || 0);
-    if (day >= yearStart) {
-      year.salesTotal += amount;
-      const rep = resolveInvoiceRep(cm, ownerByOrderId);
-      const row = repYearMap.get(rep) || { rep, salesTotal: 0, invoiceCount: 0 };
-      row.salesTotal += amount;
-      repYearMap.set(rep, row);
-    }
-    if (day >= quarterStart) quarter.salesTotal += amount;
-    if (day >= monthStart) month.salesTotal += amount;
-    if (day >= weekStart) week.salesTotal += amount;
+  for (const inv of invoices) addToPeriods(inv, inv.grandTotal || 0, true);
+  for (const cm of documents.filter((d) => d.type === 'credit_memo')) {
+    addToPeriods(cm, -(cm.grandTotal || 0), false);
   }
 
   const repYear = [...repYearMap.values()].sort((a, b) => {
@@ -990,13 +995,20 @@ export function ReportsWorkspace({
               {t('reports.noInvoicesYear')}
             </p>
           ) : (
-            <div className="overflow-x-auto max-h-56 overflow-y-auto">
+            <div className="overflow-x-auto max-h-72 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-white">
                   <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
                     <th className="text-left font-bold px-4 py-2">{t('reports.salesRep')}</th>
+                    <th className="text-right font-bold px-3 py-2">{t('reports.repWeek')}</th>
+                    <th className="text-right font-bold px-3 py-2">{t('reports.repMonth')}</th>
+                    <th className="text-right font-bold px-3 py-2">
+                      {t('reports.repQuarter', { q: quarterNum })}
+                    </th>
+                    <th className="text-right font-bold px-4 py-2">
+                      {t('reports.repYear', { year: now.getFullYear() })}
+                    </th>
                     <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
-                    <th className="text-right font-bold px-4 py-2">{t('reports.sales')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1014,15 +1026,44 @@ export function ReportsWorkspace({
                       >
                         {displayRep(row.rep)}
                       </td>
-                      <td className="text-right font-mono text-gray-700 px-3 py-2">
-                        {row.invoiceCount}
+                      <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
+                        {money(row.weekTotal)}
                       </td>
-                      <td className="text-right font-mono font-black text-indigo-800 px-4 py-2">
+                      <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
+                        {money(row.monthTotal)}
+                      </td>
+                      <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
+                        {money(row.quarterTotal)}
+                      </td>
+                      <td className="text-right font-mono font-black text-indigo-800 px-4 py-2 tabular-nums">
                         {money(row.salesTotal)}
+                      </td>
+                      <td className="text-right font-mono text-gray-500 px-3 py-2">
+                        {row.invoiceCount}
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="sticky bottom-0 bg-indigo-50/90 border-t border-indigo-200">
+                  <tr className="font-bold">
+                    <td className="text-left px-4 py-2 text-indigo-900">{t('reports.repAllTotal')}</td>
+                    <td className="text-right font-mono px-3 py-2 tabular-nums">
+                      {money(periodSales.week.salesTotal)}
+                    </td>
+                    <td className="text-right font-mono px-3 py-2 tabular-nums">
+                      {money(periodSales.month.salesTotal)}
+                    </td>
+                    <td className="text-right font-mono px-3 py-2 tabular-nums">
+                      {money(periodSales.quarter.salesTotal)}
+                    </td>
+                    <td className="text-right font-mono font-black text-indigo-900 px-4 py-2 tabular-nums">
+                      {money(periodSales.year.salesTotal)}
+                    </td>
+                    <td className="text-right font-mono text-gray-600 px-3 py-2">
+                      {periodSales.year.invoiceCount}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

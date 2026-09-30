@@ -1,5 +1,9 @@
 import { CustomerDocument, VendorBill } from '../types';
-import { purchaseCategoryLabel, isPlantPurchaseCategory } from './purchaseCategories';
+import {
+  billDiscountFactor,
+  purchaseCategoryLabel,
+  isPlantPurchaseCategory
+} from './purchaseCategories';
 
 export type AccountingPeriod = 'month' | 'quarter' | 'year' | 'all';
 
@@ -335,8 +339,9 @@ export function buildProfitAndLoss(
       expenseMap.set('Other', (expenseMap.get('Other') || 0) + amt);
       continue;
     }
+    const factor = billDiscountFactor(bill);
     for (const line of lines) {
-      const amt = (line.quantity || 0) * (line.unitCost || 0);
+      const amt = (line.quantity || 0) * (line.unitCost || 0) * factor;
       const category = purchaseCategoryLabel(
         line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
       );
@@ -348,8 +353,9 @@ export function buildProfitAndLoss(
       }
     }
     if (bill.freightCharge) {
-      operatingExpenses += bill.freightCharge;
-      expenseMap.set('Freight', (expenseMap.get('Freight') || 0) + bill.freightCharge);
+      const freight = bill.freightCharge * factor;
+      operatingExpenses += freight;
+      expenseMap.set('Freight', (expenseMap.get('Freight') || 0) + freight);
     }
   }
 
@@ -545,8 +551,9 @@ export function buildExpenseReport(
       byCategory.set('Other', c);
       continue;
     }
+    const factor = billDiscountFactor(bill);
     for (const line of lines) {
-      const amt = (line.quantity || 0) * (line.unitCost || 0);
+      const amt = (line.quantity || 0) * (line.unitCost || 0) * factor;
       const category = purchaseCategoryLabel(
         line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
       );
@@ -557,7 +564,7 @@ export function buildExpenseReport(
     }
     if (bill.freightCharge) {
       const c = byCategory.get('Freight') || { amount: 0, count: 0 };
-      c.amount += bill.freightCharge;
+      c.amount += bill.freightCharge * factor;
       c.count += 1;
       byCategory.set('Freight', c);
     }

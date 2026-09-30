@@ -825,6 +825,25 @@ function mapVendorBillToQboBill(params: {
     });
   }
 
+  // QBO bill expense lines must be positive, so spread the vendor discount across lines.
+  const linesTotal = lines.reduce((sum, l) => sum + l.Amount, 0);
+  const discount = Math.min(Math.abs(Number(bill.discountAmount) || 0), linesTotal);
+  if (discount > 0 && linesTotal > 0) {
+    let remainingCents = Math.round(discount * 100);
+    lines.forEach((line, i) => {
+      const cents = Math.round(line.Amount * 100);
+      const share =
+        i === lines.length - 1
+          ? Math.min(remainingCents, cents)
+          : Math.min(cents, Math.round((discount * 100 * cents) / Math.round(linesTotal * 100)));
+      remainingCents -= share;
+      line.Amount = (cents - share) / 100;
+    });
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (!(lines[i].Amount > 0)) lines.splice(i, 1);
+    }
+  }
+
   if (lines.length === 0) {
     const total = Number(bill.grandTotal) || Number(bill.subtotal) || 0;
     if (!(total > 0)) {
@@ -850,6 +869,7 @@ function mapVendorBillToQboBill(params: {
   const noteParts = [
     bill.billNumber ? `NurseryOS ${bill.billNumber}` : null,
     bill.poNumber ? `PO ${bill.poNumber}` : null,
+    discount > 0 ? `Vendor discount $${discount.toFixed(2)} applied` : null,
     bill.notes ? String(bill.notes) : null
   ].filter(Boolean);
   const txnDate = toQboDate(bill.billDate) || new Date().toISOString().slice(0, 10);

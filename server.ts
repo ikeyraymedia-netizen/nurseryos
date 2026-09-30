@@ -1165,6 +1165,11 @@ function getVendorInvoiceParseSchema() {
           description:
             'Document-level freight / shipping / delivery charge if listed separately from line items, else 0'
         },
+        discountAmount: {
+          type: Type.NUMBER,
+          description:
+            'Total invoice-level discount (Discount / Discounts / Less discount / Early-pay discount) as a POSITIVE number, else 0'
+        },
         notes: {
           type: Type.STRING,
           description: 'Payment terms, PO reference, or other useful bill notes'
@@ -1336,7 +1341,8 @@ Extract:
 3. billDate and dueDate as YYYY-MM-DD when clearly shown; otherwise empty string.
 4. Do NOT put freight in a separate freightCharge field — if shipping/freight appears, add it as a normal line item with category Freight (quantity 1, unitCost = freight amount). Set freightCharge to 0.
 5. notes — payment terms, our PO #, or short useful context.
-6. ALL purchase line items (plants AND supplies AND freight rows):
+5b. discountAmount — if the invoice shows a discount in the totals area (e.g. "Discounts -$128.96") or as a discount row, put the total discount here as a POSITIVE number. NEVER add discounts as line items. Use 0 when there is no discount.
+6. ALL purchase line items (plants AND supplies AND freight rows — never discount rows):
    - plantName: plant name OR supply/product description (use "Freight" for freight lines)
    - containerSize: for plants use closest of #1, #3, #5, #7, #10, #15, #30, #45, #65, #100, B&B, 4 inch, 6 inch, Tray, Other; for non-plants use "" or Other
    - quantity (integer; use 1 if a lump sum with no qty)

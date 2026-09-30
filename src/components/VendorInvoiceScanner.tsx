@@ -47,6 +47,7 @@ interface ParsedInvoiceDraft {
   dueDate: string;
   notes: string;
   items: DraftLine[];
+  discountAmount: number;
   matchConfidence: 'exact' | 'fuzzy' | 'none';
   matchSuggestions: Vendor[];
 }
@@ -133,7 +134,8 @@ export function VendorInvoiceScanner({
     );
   }, [draft]);
 
-  const grandTotal = lineSubtotal;
+  const discountAmount = Math.min(Math.max(0, Number(draft?.discountAmount) || 0), lineSubtotal);
+  const grandTotal = lineSubtotal - discountAmount;
 
   function resetDraft() {
     setDraft(null);
@@ -214,7 +216,22 @@ export function VendorInvoiceScanner({
       }
 
       const result = await response.json();
-      const rawItems = Array.isArray(result.items) ? result.items : [];
+      const allItems: Record<string, unknown>[] = Array.isArray(result.items) ? result.items : [];
+      const isDiscountRow = (item: Record<string, unknown>) =>
+        /\bdiscount/i.test(String(item.plantName || '')) ||
+        (Number(item.unitCost) || 0) < 0;
+      const discountFromRows = allItems
+        .filter(isDiscountRow)
+        .reduce(
+          (sum, item) =>
+            sum + Math.abs((Number(item.quantity) || 1) * (Number(item.unitCost) || 0)),
+          0
+        );
+      const discountAmount =
+        Math.round(
+          (Math.abs(Number(result.discountAmount) || 0) || discountFromRows) * 100
+        ) / 100;
+      const rawItems = allItems.filter((item) => !isDiscountRow(item));
       const items: DraftLine[] = rawItems
         .map((item: Record<string, unknown>) => {
           const category = normalizePurchaseCategory(item.category, item.lineType);
@@ -266,6 +283,7 @@ export function VendorInvoiceScanner({
         dueDate,
         notes: String(result.notes || '').trim(),
         items,
+        discountAmount,
         matchConfidence: match.confidence,
         matchSuggestions: match.suggestions
       });
@@ -363,7 +381,8 @@ export function VendorInvoiceScanner({
         vendorInvoiceNumber: draft.vendorInvoiceNumber || undefined,
         invoicePhotoUrl,
         invoicePhotoPath,
-        items
+        items,
+        discountAmount: Math.max(0, Number(draft.discountAmount) || 0) || undefined
       });
 
       resetDraft();
@@ -698,6 +717,26 @@ export function VendorInvoiceScanner({
             >
               {t('purchasing.addLine')}
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-end justify-end gap-3 text-xs">
+            <p className="font-semibold text-slate-600">
+              {t('purchasing.subtotal')} {money(lineSubtotal)}
+            </p>
+            <label className="block">
+              <span className="font-bold text-slate-600">{t('purchasing.discount')}</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={draft.discountAmount || ''}
+                placeholder="0.00"
+                onChange={(e) =>
+                  setDraft({ ...draft, discountAmount: Math.abs(Number(e.target.value) || 0) })
+                }
+                className="mt-1 w-28 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
+              />
+            </label>
           </div>
 
           <textarea

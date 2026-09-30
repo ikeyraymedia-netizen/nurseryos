@@ -111,3 +111,18 @@ export function categorySelectValue(category: string): string {
   }
   return CUSTOM_CATEGORY_VALUE;
 }
+
+/** Multiplier that spreads a bill's flat discount across its line / freight amounts. */
+export function billDiscountFactor(bill: {
+  items?: { quantity?: number; unitCost?: number }[];
+  freightCharge?: number;
+  discountAmount?: number;
+}): number {
+  const discount = Math.abs(Number(bill.discountAmount) || 0);
+  if (!discount) return 1;
+  const gross =
+    (bill.items || []).reduce((sum, l) => sum + (l.quantity || 0) * (l.unitCost || 0), 0) +
+    (bill.freightCharge || 0);
+  if (!(gross > 0)) return 1;
+  return Math.max(0, 1 - discount / gross);
+}

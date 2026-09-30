@@ -508,6 +508,8 @@ export interface VendorBill {
   items: VendorBillLine[];
   subtotal: number;
   freightCharge?: number;
+  /** Flat vendor discount taken off the invoice total (positive number). */
+  discountAmount?: number;
   grandTotal: number;
   /** Scanned invoice image/PDF in Firebase Storage. */
   invoicePhotoUrl?: string | null;

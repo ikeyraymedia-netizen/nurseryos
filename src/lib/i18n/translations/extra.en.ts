@@ -1313,6 +1313,9 @@ const extra = {
     achNeedsTreasury:
       'Enable Stripe Treasury for this nursery in Team → Stripe before paying vendor bills by ACH. Or use Mark paid for offline ACH/check.',
     achRefreshNeedsStripe: 'This bill has no Stripe ACH payment to refresh.',
+    subtotal: 'Subtotal',
+    discount: 'Discount ($)',
+    total: 'Total',
     markSelectedPaid: 'Mark {{n}} paid · {{amount}}',
     markSelectedPaidTitle: 'Mark {{n}} bills paid',
     markSelectedPaidDone: 'Marked {{n}} bills paid · {{ref}}.',

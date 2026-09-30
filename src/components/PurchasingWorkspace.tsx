@@ -54,7 +54,8 @@ import {
   emptyBillLine,
   isPlantPurchaseCategory,
   resolvePurchaseCategory,
-  purchaseCategoryLabel
+  purchaseCategoryLabel,
+  billDiscountFactor
 } from '../lib/purchaseCategories';
 import { blobToBase64, looksLikeEmail, MAX_CC_RECIPIENTS, parseCcEmails, sendTenantEmail } from '../lib/email';
 import { OutboundReplySelect } from './OutboundReplySelect';
@@ -405,17 +406,18 @@ export function PurchasingWorkspace({
     for (const bill of monthBills) {
       total += bill.grandTotal || 0;
       byVendor.set(bill.vendorName, (byVendor.get(bill.vendorName) || 0) + (bill.grandTotal || 0));
+      const factor = billDiscountFactor(bill);
       for (const line of bill.items || []) {
         const cat = purchaseCategoryLabel(
           line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
         );
-        const amount = (line.quantity || 0) * (line.unitCost || 0);
+        const amount = (line.quantity || 0) * (line.unitCost || 0) * factor;
         byCategory.set(cat, (byCategory.get(cat) || 0) + amount);
       }
       // Legacy header freight on older bills (not stored as a line)
       if (bill.freightCharge) {
         const label = 'Freight';
-        byCategory.set(label, (byCategory.get(label) || 0) + bill.freightCharge);
+        byCategory.set(label, (byCategory.get(label) || 0) + bill.freightCharge * factor);
       }
     }
 

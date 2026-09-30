@@ -346,8 +346,18 @@ async function applyReceivedQtyToInventory(
   });
 }
 
+function roundCents(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function clampBillDiscount(value: unknown, max: number): number {
+  const n = Math.abs(Number(value) || 0);
+  return roundCents(Math.min(n, Math.max(0, max)));
+}
+
 export async function createVendorBill(input: {
   id?: string;
+  discountAmount?: number;
   vendorId: string;
   vendorName: string;
   billDate?: string;
@@ -371,6 +381,7 @@ export async function createVendorBill(input: {
   }));
   const subtotal = billLineSubtotal(items);
   const freight = input.freightCharge || 0;
+  const discount = clampBillDiscount(input.discountAmount, subtotal + freight);
   const full: VendorBill = {
     id,
     vendorId: input.vendorId,
@@ -386,7 +397,8 @@ export async function createVendorBill(input: {
     items,
     subtotal,
     freightCharge: freight || undefined,
-    grandTotal: subtotal + freight,
+    discountAmount: discount || undefined,
+    grandTotal: roundCents(subtotal + freight - discount),
     invoicePhotoUrl: input.invoicePhotoUrl ?? null,
     invoicePhotoPath: input.invoicePhotoPath ?? null,
     createdAt: now,
@@ -400,13 +412,15 @@ export async function updateVendorBill(bill: VendorBill): Promise<void> {
   const tenantId = requireTenantId();
   const subtotal = billLineSubtotal(bill.items || []);
   const freight = bill.freightCharge || 0;
+  const discount = clampBillDiscount(bill.discountAmount, subtotal + freight);
   const { id, ...rest } = bill;
   const payload = sanitizeForFirestore({
     ...rest,
     id,
     subtotal,
     freightCharge: freight || undefined,
-    grandTotal: subtotal + freight,
+    discountAmount: discount,
+    grandTotal: roundCents(subtotal + freight - discount),
     updatedAt: new Date().toISOString()
   });
   await setDoc(vendorBillDoc(tenantId, id), payload, { merge: true });

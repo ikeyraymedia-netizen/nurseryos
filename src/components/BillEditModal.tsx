@@ -69,7 +69,14 @@ export function BillEditModal({
   const [vendorInvoice, setVendorInvoice] = useState(bill.vendorInvoiceNumber || '');
   const [notes, setNotes] = useState(bill.notes || '');
   const [lines, setLines] = useState<BillFormLine[]>(() => billToFormLines(bill));
+  const [discount, setDiscount] = useState<number>(bill.discountAmount || 0);
   const [error, setError] = useState<string | null>(null);
+  const lineSubtotal = lines.reduce(
+    (sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0),
+    0
+  );
+  const formTotal =
+    lineSubtotal + (bill.freightCharge || 0) - Math.min(discount, lineSubtotal + (bill.freightCharge || 0));
 
   useEffect(() => {
     setVendorId(bill.vendorId || '');
@@ -78,6 +85,7 @@ export function BillEditModal({
     setVendorInvoice(bill.vendorInvoiceNumber || '');
     setNotes(bill.notes || '');
     setLines(billToFormLines(bill));
+    setDiscount(bill.discountAmount || 0);
     setError(null);
 
     if (bill.dueDate) {
@@ -161,7 +169,8 @@ export function BillEditModal({
         dueDate: dueDate.trim() || undefined,
         vendorInvoiceNumber: vendorInvoice.trim() || undefined,
         notes: notes.trim() || undefined,
-        items
+        items,
+        discountAmount: Math.max(0, Number(discount) || 0)
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('purchasing.somethingWentWrong'));
@@ -385,6 +394,27 @@ export function BillEditModal({
             >
               {t('purchasing.addLine')}
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-end justify-end gap-3 text-xs">
+            <p className="font-semibold text-slate-600">
+              {t('purchasing.subtotal')} {money(lineSubtotal)}
+            </p>
+            <label className="block">
+              <span className="font-bold text-slate-600">{t('purchasing.discount')}</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={discount || ''}
+                placeholder="0.00"
+                onChange={(e) => setDiscount(Math.abs(Number(e.target.value) || 0))}
+                className="mt-1 w-28 px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-right"
+              />
+            </label>
+            <p className="font-bold text-slate-800">
+              {t('purchasing.total')} {money(formTotal)}
+            </p>
           </div>
 
           <textarea

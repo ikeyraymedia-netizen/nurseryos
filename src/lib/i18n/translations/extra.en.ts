@@ -1313,6 +1313,12 @@ const extra = {
     achNeedsTreasury:
       'Enable Stripe Treasury for this nursery in Team → Stripe before paying vendor bills by ACH. Or use Mark paid for offline ACH/check.',
     achRefreshNeedsStripe: 'This bill has no Stripe ACH payment to refresh.',
+    filterVendor: 'Vendor',
+    filterAllVendors: 'All vendors',
+    filterDateField: 'Filter by',
+    filterFrom: 'From',
+    filterTo: 'To',
+    filterClear: 'Clear filters',
     billMode_due: 'Unpaid by due date',
     billMode_paid: 'Paid',
     billMode_all: 'All',

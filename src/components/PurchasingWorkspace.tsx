@@ -272,6 +272,10 @@ export function PurchasingWorkspace({
   const [markingPaidBills, setMarkingPaidBills] = useState<VendorBill[] | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [billListMode, setBillListMode] = useState<BillListMode>('due');
+  const [billFilterVendorId, setBillFilterVendorId] = useState('');
+  const [billFilterDateField, setBillFilterDateField] = useState<'dueDate' | 'billDate'>('dueDate');
+  const [billFilterFrom, setBillFilterFrom] = useState('');
+  const [billFilterTo, setBillFilterTo] = useState('');
 
   useEffect(() => {
     const unsubV = subscribeToVendors(setVendors);
@@ -342,11 +346,34 @@ export function PurchasingWorkspace({
   }, [orders, q]);
 
   const filteredBills = useMemo(() => {
-    if (!q) return bills;
-    return bills.filter((b) =>
-      [b.billNumber, b.vendorName, b.status, b.poNumber].join(' ').toLowerCase().includes(q)
-    );
-  }, [bills, q]);
+    return bills.filter((b) => {
+      if (
+        q &&
+        ![b.billNumber, b.vendorName, b.status, b.poNumber, b.vendorInvoiceNumber]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      ) {
+        return false;
+      }
+      if (billFilterVendorId && b.vendorId !== billFilterVendorId) return false;
+      if (billFilterFrom || billFilterTo) {
+        const date = (billFilterDateField === 'dueDate' ? b.dueDate : b.billDate) || '';
+        if (!date) return false;
+        if (billFilterFrom && date < billFilterFrom) return false;
+        if (billFilterTo && date > billFilterTo) return false;
+      }
+      return true;
+    });
+  }, [bills, q, billFilterVendorId, billFilterDateField, billFilterFrom, billFilterTo]);
+
+  const billVendorOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of bills) if (b.vendorId) map.set(b.vendorId, b.vendorName || b.vendorId);
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [bills]);
+
+  const billFiltersActive = Boolean(billFilterVendorId || billFilterFrom || billFilterTo);
 
   const selectedVendor = useMemo(
     () =>
@@ -2641,6 +2668,74 @@ export function PurchasingWorkspace({
                   {t('purchasing.billBucket_thisWeek')} {money(billDueGroups[1].total)}
                 </span>
               </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-100 bg-white p-2.5 text-xs">
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase text-slate-500">
+                {t('purchasing.filterVendor')}
+              </span>
+              <select
+                value={billFilterVendorId}
+                onChange={(e) => setBillFilterVendorId(e.target.value)}
+                className="mt-0.5 block w-48 px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+              >
+                <option value="">{t('purchasing.filterAllVendors')}</option>
+                {billVendorOptions.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase text-slate-500">
+                {t('purchasing.filterDateField')}
+              </span>
+              <select
+                value={billFilterDateField}
+                onChange={(e) => setBillFilterDateField(e.target.value as 'dueDate' | 'billDate')}
+                className="mt-0.5 block px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+              >
+                <option value="dueDate">{t('purchasing.dueDate')}</option>
+                <option value="billDate">{t('purchasing.billDate')}</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase text-slate-500">
+                {t('purchasing.filterFrom')}
+              </span>
+              <input
+                type="date"
+                value={billFilterFrom}
+                onChange={(e) => setBillFilterFrom(e.target.value)}
+                className="mt-0.5 block px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase text-slate-500">
+                {t('purchasing.filterTo')}
+              </span>
+              <input
+                type="date"
+                value={billFilterTo}
+                onChange={(e) => setBillFilterTo(e.target.value)}
+                className="mt-0.5 block px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+              />
+            </label>
+            {billFiltersActive && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBillFilterVendorId('');
+                  setBillFilterFrom('');
+                  setBillFilterTo('');
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-600"
+              >
+                {t('purchasing.filterClear')}
+              </button>
             )}
           </div>
 

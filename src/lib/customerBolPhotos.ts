@@ -1,12 +1,9 @@
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { deleteObject, ref } from 'firebase/storage';
 import { storage } from '../firebase';
 import { fileToCompressedJpegBlob } from './inventoryPhotos';
+import { uploadTenantAttachment } from './tenantAttachments';
 
 const MAX_BYTES = 12 * 1024 * 1024;
-
-function bolObjectPath(tenantId: string, orderId: string, ext: 'jpg' | 'pdf'): string {
-  return `tenants/${tenantId}/customerBols/${orderId}/bol.${ext}`;
-}
 
 function isPdfFile(file: File): boolean {
   return (
@@ -36,14 +33,15 @@ export async function uploadCustomerBolAttachment(params: {
   const fileName = params.file.name.trim() || (isPdfFile(params.file) ? 'bol.pdf' : 'bol.jpg');
 
   if (isPdfFile(params.file)) {
-    const path = bolObjectPath(params.tenantId, params.orderId, 'pdf');
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, params.file, {
-      contentType: 'application/pdf',
-      cacheControl: 'private,max-age=31536000'
+    const { url, path } = await uploadTenantAttachment({
+      tenantId: params.tenantId,
+      kind: 'customerBol',
+      docId: params.orderId,
+      blob: params.file,
+      contentType: 'application/pdf'
     });
     return {
-      customerBolUrl: await getDownloadURL(storageRef),
+      customerBolUrl: url,
       customerBolPath: path,
       customerBolFileName: fileName,
       customerBolContentType: 'application/pdf',
@@ -55,15 +53,15 @@ export async function uploadCustomerBolAttachment(params: {
     throw new Error('BOL attachment must be an image or PDF.');
   }
 
-  const blob = await fileToCompressedJpegBlob(params.file);
-  const path = bolObjectPath(params.tenantId, params.orderId, 'jpg');
-  const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, blob, {
-    contentType: 'image/jpeg',
-    cacheControl: 'private,max-age=31536000'
+  const { url, path } = await uploadTenantAttachment({
+    tenantId: params.tenantId,
+    kind: 'customerBol',
+    docId: params.orderId,
+    blob: await fileToCompressedJpegBlob(params.file),
+    contentType: 'image/jpeg'
   });
   return {
-    customerBolUrl: await getDownloadURL(storageRef),
+    customerBolUrl: url,
     customerBolPath: path,
     customerBolFileName: fileName.replace(/\.[^.]+$/, '') + '.jpg',
     customerBolContentType: 'image/jpeg',

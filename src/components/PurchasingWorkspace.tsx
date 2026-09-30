@@ -27,7 +27,12 @@ import {
 } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { useT } from '../lib/i18n';
-import { dueDateFromPaymentTerms, toDateKey } from '../lib/dates';
+import {
+  addDaysToDateKey,
+  dueDateFromPaymentTerms,
+  startOfWeekSunday,
+  toDateKey
+} from '../lib/dates';
 import {
   addVendor,
   bulkImportVendors,
@@ -120,6 +125,18 @@ function money(n: number) {
 function todayKey() {
   return toDateKey(new Date());
 }
+
+/** Whole days from `fromKey` to `toKey` (YYYY-MM-DD); negative when `toKey` is earlier. */
+function daysBetweenKeys(fromKey: string, toKey: string): number {
+  const a = Date.parse(`${fromKey}T00:00:00Z`);
+  const b = Date.parse(`${toKey}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+type BillListMode = 'due' | 'paid' | 'all';
+type BillDueBucket = 'overdue' | 'thisWeek' | 'nextWeek' | 'later' | 'noDue';
+const BILL_DUE_BUCKETS: BillDueBucket[] = ['overdue', 'thisWeek', 'nextWeek', 'later', 'noDue'];
 
 function emptyLine(): Omit<PurchaseOrderLine, 'id' | 'quantityReceived'> {
   return {
@@ -254,6 +271,7 @@ export function PurchasingWorkspace({
   const [billLines, setBillLines] = useState<BillFormLine[]>([emptyBillLine()]);
   const [markingPaidBills, setMarkingPaidBills] = useState<VendorBill[] | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
+  const [billListMode, setBillListMode] = useState<BillListMode>('due');
 
   useEffect(() => {
     const unsubV = subscribeToVendors(setVendors);
@@ -351,6 +369,49 @@ export function PurchasingWorkspace({
     }
     return list.sort((a, b) => (b.billDate || '').localeCompare(a.billDate || ''));
   }, [bills, selectedVendorId, q]);
+
+  const billDueGroups = useMemo(() => {
+    const today = todayKey();
+    const weekEnd = addDaysToDateKey(startOfWeekSunday(), 6);
+    const nextWeekEnd = addDaysToDateKey(weekEnd, 7);
+    const groups: Record<BillDueBucket, VendorBill[]> = {
+      overdue: [],
+      thisWeek: [],
+      nextWeek: [],
+      later: [],
+      noDue: []
+    };
+    for (const bill of filteredBills) {
+      if (bill.status === 'paid') continue;
+      const due = bill.dueDate || '';
+      if (!due) groups.noDue.push(bill);
+      else if (due < today) groups.overdue.push(bill);
+      else if (due <= weekEnd) groups.thisWeek.push(bill);
+      else if (due <= nextWeekEnd) groups.nextWeek.push(bill);
+      else groups.later.push(bill);
+    }
+    return BILL_DUE_BUCKETS.map((key) => {
+      const list = groups[key].sort(
+        (a, b) =>
+          (a.dueDate || a.billDate || '').localeCompare(b.dueDate || b.billDate || '') ||
+          a.vendorName.localeCompare(b.vendorName)
+      );
+      return {
+        key,
+        bills: list,
+        total: list.reduce((sum, b) => sum + (b.grandTotal || 0), 0)
+      };
+    });
+  }, [filteredBills]);
+
+  const billListFlat = useMemo(() => {
+    if (billListMode === 'paid') {
+      return filteredBills
+        .filter((b) => b.status === 'paid')
+        .sort((a, b) => (b.paidAt || b.billDate || '').localeCompare(a.paidAt || a.billDate || ''));
+    }
+    return [...filteredBills].sort((a, b) => (b.billDate || '').localeCompare(a.billDate || ''));
+  }, [filteredBills, billListMode]);
 
   const selectedBills = useMemo(() => {
     const set = new Set(selectedBillIds);
@@ -1232,6 +1293,24 @@ export function PurchasingWorkspace({
                 : ''}
               {bill.poNumber ? ` · ${bill.poNumber}` : ''} · {money(bill.grandTotal)}
             </p>
+            {bill.status !== 'paid' && bill.dueDate && (() => {
+              const days = daysBetweenKeys(todayKey(), bill.dueDate);
+              if (days < 0) {
+                return (
+                  <p className="text-[11px] font-bold text-rose-700 mt-0.5">
+                    {t('purchasing.overdueDays', { n: -days })}
+                  </p>
+                );
+              }
+              if (days <= 7) {
+                return (
+                  <p className="text-[11px] font-bold text-amber-700 mt-0.5">
+                    {days === 0 ? t('purchasing.dueToday') : t('purchasing.dueInDays', { n: days })}
+                  </p>
+                );
+              }
+              return null;
+            })()}
             {bill.status === 'paid' && (bill.paymentMethod || bill.paymentReference) && (
               <p className="text-[11px] font-bold text-emerald-800 mt-1">
                 {formatPaymentRecord(t, bill.paymentMethod, bill.paymentReference)}
@@ -2537,12 +2616,94 @@ export function PurchasingWorkspace({
             </form>
           )}
 
-          <div className="space-y-2 max-h-[480px] overflow-y-auto">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden">
+              {(['due', 'paid', 'all'] as BillListMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setBillListMode(mode)}
+                  className={`px-3 py-1.5 text-[11px] font-bold ${
+                    billListMode === mode ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
+                  }`}
+                >
+                  {t(`purchasing.billMode_${mode}`)}
+                </button>
+              ))}
+            </div>
+            {billListMode === 'due' && (
+              <p className="text-[11px] font-bold text-slate-600">
+                <span className="text-rose-700">
+                  {t('purchasing.billBucket_overdue')} {money(billDueGroups[0].total)}
+                </span>
+                {' · '}
+                <span className="text-amber-700">
+                  {t('purchasing.billBucket_thisWeek')} {money(billDueGroups[1].total)}
+                </span>
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2 max-h-[640px] overflow-y-auto">
             {renderBillSelectionBar()}
-            {filteredBills.length === 0 ? (
+            {billListMode === 'due' ? (
+              billDueGroups.every((g) => g.bills.length === 0) ? (
+                <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noUnpaidBills')}</p>
+              ) : (
+                billDueGroups
+                  .filter((g) => g.bills.length > 0)
+                  .map((group) => {
+                    const selectable = group.bills.filter(
+                      (b) =>
+                        b.status === 'unpaid' &&
+                        (permissions.canManageVendorBills ||
+                          permissions.canPayVendorBills ||
+                          canPayMelio)
+                    );
+                    const allSelected =
+                      selectable.length > 0 &&
+                      selectable.every((b) => selectedBillIds.includes(b.id));
+                    return (
+                      <div key={group.key} className="space-y-2">
+                        <div
+                          className={`sticky top-0 z-10 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wide ${
+                            group.key === 'overdue'
+                              ? 'bg-rose-50 text-rose-800'
+                              : group.key === 'thisWeek'
+                                ? 'bg-amber-50 text-amber-800'
+                                : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          <label className="inline-flex items-center gap-2">
+                            {selectable.length > 0 && (
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={() => {
+                                  const ids = selectable.map((b) => b.id);
+                                  setSelectedBillIds((prev) =>
+                                    allSelected
+                                      ? prev.filter((id) => !ids.includes(id))
+                                      : [...new Set([...prev, ...ids])]
+                                  );
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-ink-700"
+                                aria-label={t('purchasing.selectGroup')}
+                              />
+                            )}
+                            {t(`purchasing.billBucket_${group.key}`)} · {group.bills.length}
+                          </label>
+                          <span>{money(group.total)}</span>
+                        </div>
+                        {group.bills.map((bill) => renderBillCard(bill))}
+                      </div>
+                    );
+                  })
+              )
+            ) : billListFlat.length === 0 ? (
               <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noBills')}</p>
             ) : (
-              filteredBills.map((bill) => renderBillCard(bill))
+              billListFlat.map((bill) => renderBillCard(bill))
             )}
           </div>
         </div>

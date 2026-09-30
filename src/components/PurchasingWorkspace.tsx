@@ -251,7 +251,7 @@ export function PurchasingWorkspace({
   const [billVendorInvoice, setBillVendorInvoice] = useState('');
   const [billNotes, setBillNotes] = useState('');
   const [billLines, setBillLines] = useState<BillFormLine[]>([emptyBillLine()]);
-  const [markingPaidBill, setMarkingPaidBill] = useState<VendorBill | null>(null);
+  const [markingPaidBills, setMarkingPaidBills] = useState<VendorBill[] | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -1125,6 +1125,26 @@ export function PurchasingWorkspace({
               {t('purchasing.deleteSelectedBills', { n: selectedBills.length })}
             </button>
           )}
+          {unpaidSelected.length > 0 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (new Set(unpaidSelected.map((b) => b.vendorId)).size > 1) {
+                  setError(t('purchasing.markPaidSameVendor'));
+                  return;
+                }
+                setError(null);
+                setMarkingPaidBills(unpaidSelected);
+              }}
+              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white disabled:opacity-50"
+            >
+              {t('purchasing.markSelectedPaid', {
+                n: unpaidSelected.length,
+                amount: money(unpaidTotal)
+              })}
+            </button>
+          )}
           {canPayStripe && (
             <button
               type="button"
@@ -1391,7 +1411,7 @@ export function PurchasingWorkspace({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => setMarkingPaidBill(bill)}
+                onClick={() => setMarkingPaidBills([bill])}
                 className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white"
               >
                 {t('purchasing.markPaid')}
@@ -2731,29 +2751,54 @@ export function PurchasingWorkspace({
         />
       )}
 
-      {markingPaidBill && (
+      {markingPaidBills && markingPaidBills.length > 0 && (
         <MarkPaidModal
-          title={t('purchasing.markPaid')}
-          subtitle={`${markingPaidBill.billNumber} · ${markingPaidBill.vendorName}`}
-          amountLabel={money(markingPaidBill.grandTotal)}
+          title={
+            markingPaidBills.length > 1
+              ? t('purchasing.markSelectedPaidTitle', { n: markingPaidBills.length })
+              : t('purchasing.markPaid')
+          }
+          subtitle={
+            markingPaidBills.length > 1
+              ? `${markingPaidBills[0].vendorName} · ${markingPaidBills
+                  .map((b) => b.billNumber)
+                  .join(', ')}`
+              : `${markingPaidBills[0].billNumber} · ${markingPaidBills[0].vendorName}`
+          }
+          amountLabel={money(markingPaidBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0))}
           busy={busy}
-          onCancel={() => setMarkingPaidBill(null)}
+          onCancel={() => setMarkingPaidBills(null)}
           onConfirm={async (payment) => {
             await run(async () => {
-              const payResult = await markVendorBillPaid(markingPaidBill, payment);
-              setMarkingPaidBill(null);
-              if (payResult.qboPaymentError) {
+              const targets = markingPaidBills;
+              const qboErrors: string[] = [];
+              let qboSynced = 0;
+              let qboAlready = 0;
+              for (const bill of targets) {
+                const payResult = await markVendorBillPaid(bill, payment);
+                if (payResult.qboPaymentError) qboErrors.push(payResult.qboPaymentError);
+                else if (payResult.qboPaymentSynced && !payResult.qboPaymentSkipped) qboSynced += 1;
+                else if (
+                  payResult.qboPaymentReason === 'already_synced' ||
+                  payResult.qboPaymentReason === 'already_paid_in_qbo'
+                ) {
+                  qboAlready += 1;
+                }
+              }
+              setMarkingPaidBills(null);
+              setSelectedBillIds((prev) => prev.filter((id) => !targets.some((b) => b.id === id)));
+              if (qboErrors.length > 0) {
+                setStatus(t('purchasing.qbBillPaymentSyncFailed', { error: qboErrors[0] }));
+              } else if (targets.length > 1) {
                 setStatus(
-                  t('purchasing.qbBillPaymentSyncFailed', {
-                    error: payResult.qboPaymentError
-                  })
+                  t('purchasing.markSelectedPaidDone', {
+                    n: targets.length,
+                    ref: formatPaymentRecord(t, payment.method, payment.reference)
+                  }) + (qboSynced > 0 ? ` ${t('purchasing.qbBillPaymentSynced')}` : '')
                 );
-              } else if (payResult.qboPaymentSynced && !payResult.qboPaymentSkipped) {
+              } else if (qboSynced > 0) {
                 setStatus(t('purchasing.qbBillPaymentSynced'));
-              } else if (
-                payResult.qboPaymentReason === 'already_synced' ||
-                payResult.qboPaymentReason === 'already_paid_in_qbo'
-              ) {
+              } else if (qboAlready > 0) {
                 setStatus(t('purchasing.qbBillPaymentAlreadySynced'));
               }
             });

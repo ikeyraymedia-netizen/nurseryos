@@ -113,6 +113,7 @@ const extra = {
     exporting: 'Exporting…',
     exportIncludeQty: 'Include inventory qty',
     exportIncludePhotos: 'Include photo links',
+    exportPhotosOnly: 'Only plants that have a photo',
     inStockOnly: 'In-stock only ({{n}})',
     uploadCsv: 'Upload CSV',
     uploadExcel: 'Excel',

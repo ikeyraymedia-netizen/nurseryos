@@ -195,6 +195,7 @@ export function InventoryWorkspace({
     return true;
   });
   const [exportInStockOnly, setExportInStockOnly] = useState(true);
+  const [exportPhotosOnly, setExportPhotosOnly] = useState(false);
   const [pdfSheet, setPdfSheet] = useState<{
     url: string;
     fileName: string;
@@ -574,12 +575,15 @@ export function InventoryWorkspace({
   }
 
   const exportPlants = useMemo(() => {
-    const list =
+    let list =
       exportIncludeQty && exportInStockOnly
         ? plants.filter((p) => (p.quantityAvailable || 0) > 0)
         : plants;
+    if (exportIncludePhotos && exportPhotosOnly) {
+      list = list.filter((p) => /^https?:\/\//i.test(p.photoUrl || ''));
+    }
     return [...list].sort((a, b) => a.plantName.localeCompare(b.plantName));
-  }, [plants, exportInStockOnly, exportIncludeQty]);
+  }, [plants, exportInStockOnly, exportIncludeQty, exportIncludePhotos, exportPhotosOnly]);
 
   async function handleExportExcel() {
     setExportBusy(true);
@@ -831,6 +835,17 @@ export function InventoryWorkspace({
                         />
                         <span>{t('inventory.exportIncludePhotos')}</span>
                       </label>
+                      {exportIncludePhotos ? (
+                        <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer pl-5">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={exportPhotosOnly}
+                            onChange={(e) => setExportPhotosOnly(e.target.checked)}
+                          />
+                          <span>{t('inventory.exportPhotosOnly')}</span>
+                        </label>
+                      ) : null}
                       {exportIncludeQty ? (
                         <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer pl-5">
                           <input

@@ -1,13 +1,9 @@
-import {
-  deleteObject,
-  getDownloadURL,
-  ref,
-  uploadBytes
-} from 'firebase/storage';
+import { deleteObject, ref } from 'firebase/storage';
 import jsPDF from 'jspdf';
 import { storage } from '../firebase';
 import { InventoryPlant } from '../types';
 import { updateInventoryPlant } from './inventory';
+import { uploadTenantAttachment } from './tenantAttachments';
 import { deliverPdfBlob, type PdfDelivery } from './downloadPdf';
 import {
   imageSrcToDataUrl,
@@ -22,7 +18,12 @@ export async function fileToCompressedJpegBlob(
   maxEdge = 1280,
   quality = 0.82
 ): Promise<Blob> {
-  if (!file.type.startsWith('image/')) {
+  // Some mobile browsers hand back camera/library photos with an empty type.
+  const looksLikeImage =
+    file.type.startsWith('image/') ||
+    (!file.type && /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(file.name || '')) ||
+    (!file.type && !file.name);
+  if (!looksLikeImage) {
     throw new Error('Please choose an image file (PNG, JPG, or WebP).');
   }
   const objectUrl = URL.createObjectURL(file);
@@ -55,26 +56,22 @@ export async function fileToCompressedJpegBlob(
   }
 }
 
-function photoObjectPath(tenantId: string, plantId: string): string {
-  return `tenants/${tenantId}/inventory/${plantId}/photo.jpg`;
-}
-
 export async function uploadInventoryPlantPhoto(params: {
   tenantId: string;
   plant: InventoryPlant;
   file: File;
 }): Promise<InventoryPlant> {
-  const path = photoObjectPath(params.tenantId, params.plant.id);
   const blob = await fileToCompressedJpegBlob(params.file);
-  const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, blob, {
-    contentType: 'image/jpeg',
-    cacheControl: 'public,max-age=31536000'
+  const { url, path } = await uploadTenantAttachment({
+    tenantId: params.tenantId,
+    kind: 'inventoryPhoto',
+    docId: params.plant.id,
+    blob,
+    contentType: 'image/jpeg'
   });
-  const photoUrl = await getDownloadURL(storageRef);
   const updated: InventoryPlant = {
     ...params.plant,
-    photoUrl,
+    photoUrl: url,
     photoPath: path,
     dateUpdated: new Date().toISOString()
   };

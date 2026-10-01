@@ -16,7 +16,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 /** Upload a vendor invoice or customer BOL through the server; returns download URL + Storage path. */
 export async function uploadTenantAttachment(params: {
   tenantId: string;
-  kind: 'vendorBill' | 'customerBol';
+  kind: 'vendorBill' | 'customerBol' | 'inventoryPhoto';
   docId: string;
   blob: Blob;
   contentType: 'application/pdf' | 'image/jpeg';

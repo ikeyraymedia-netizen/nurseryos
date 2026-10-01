@@ -12,8 +12,9 @@ const BUCKET = process.env.FIREBASE_STORAGE_BUCKET || 'nurseryos-54c15.firebases
 const MAX_BYTES = 12 * 1024 * 1024;
 
 const KINDS = {
-  vendorBill: { folder: 'vendorBills', baseName: 'invoice' },
-  customerBol: { folder: 'customerBols', baseName: 'bol' }
+  vendorBill: { folder: 'vendorBills', baseName: 'invoice', cache: 'private,max-age=31536000' },
+  customerBol: { folder: 'customerBols', baseName: 'bol', cache: 'private,max-age=31536000' },
+  inventoryPhoto: { folder: 'inventory', baseName: 'photo', cache: 'public,max-age=31536000' }
 } as const;
 
 type AttachmentKind = keyof typeof KINDS;
@@ -33,7 +34,7 @@ async function readBearerUid(req: Request): Promise<string> {
 }
 
 function isSafeSegment(value: string): boolean {
-  return /^[A-Za-z0-9_-]{1,128}$/.test(value);
+  return /^[^/\\#?[\]*\x00-\x1f]{1,200}$/.test(value) && value !== '.' && value !== '..';
 }
 
 /** Upload scanned vendor invoices / customer BOLs via Admin SDK (no Storage-rules cross-service lookup). */
@@ -78,7 +79,11 @@ export function registerTenantAttachmentRoutes(app: Express): void {
       }
 
       getAdminDb();
-      const { folder, baseName } = KINDS[kind];
+      const { folder, baseName, cache } = KINDS[kind];
+      if (kind === 'inventoryPhoto' && contentType !== 'image/jpeg') {
+        res.status(400).json({ error: 'Plant photos must be JPEG.' });
+        return;
+      }
       const ext = contentType === 'application/pdf' ? 'pdf' : 'jpg';
       const path = `tenants/${tenantId}/${folder}/${docId}/${baseName}.${ext}`;
       const downloadToken = randomUUID();
@@ -88,7 +93,7 @@ export function registerTenantAttachmentRoutes(app: Express): void {
         .save(buffer, {
           metadata: {
             contentType,
-            cacheControl: 'private,max-age=31536000',
+            cacheControl: cache,
             metadata: { firebaseStorageDownloadTokens: downloadToken }
           }
         });

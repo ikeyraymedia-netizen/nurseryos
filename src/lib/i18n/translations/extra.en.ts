@@ -317,6 +317,7 @@ const extra = {
     noDocs: 'No estimates, invoices, or credit memos yet.',
     balance: 'Balance $0.00',
     paid: 'Paid',
+    overpaid: 'Overpaid ${{amount}}',
     estimateAccepted: 'Accepted',
     estimateAwaitingAccept: 'Awaiting accept',
     pending: 'Pending',
@@ -1645,6 +1646,8 @@ const extra = {
   appExtra: {
     noSelection: 'No Selection',
     qbConnected: 'QuickBooks connected for this nursery.',
+    qbUserConnectedAlert:
+      'Your QuickBooks login is connected. Invoices and estimates where you are the sales rep will now show your name in QuickBooks audit history.',
     qbConnectedAlert:
       'QuickBooks connected. Open Team to confirm status, then push invoices from the invoice screen.',
     qbFailed: 'QuickBooks connect failed:',

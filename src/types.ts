@@ -265,6 +265,8 @@ export interface CustomerDocument {
   /** Stripe Connect payment collection status for this invoice. */
   paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed';
   paidAt?: string;
+  /** Amount the customer paid beyond the invoice total (unapplied in QuickBooks). */
+  overpaidAmount?: number;
   /** How the invoice was paid (manual entry or Stripe). */
   paymentMethod?: PaymentMethod;
   /** Check number or ACH/Wire/CC confirmation / reference. */

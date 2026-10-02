@@ -1384,6 +1384,11 @@ export function CustomersWorkspace({
                               {t('customers.paid')}
                             </span>
                           )}
+                          {doc.type === 'invoice' && (doc.overpaidAmount || 0) > 0 && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-violet-100 text-violet-800">
+                              {t('customers.overpaid', { amount: (doc.overpaidAmount || 0).toFixed(2) })}
+                            </span>
+                          )}
                           {doc.type === 'estimate' && doc.acceptanceStatus === 'accepted' && (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
                               {t('customers.estimateAccepted')}
@@ -1699,6 +1704,11 @@ export function CustomersWorkspace({
                             ) : (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-slate-100 text-slate-700">
                                 {t('customers.unpaid')}
+                              </span>
+                            )}
+                            {(doc.overpaidAmount || 0) > 0 && (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-violet-100 text-violet-800">
+                                {t('customers.overpaid', { amount: (doc.overpaidAmount || 0).toFixed(2) })}
                               </span>
                             )}
                           </div>

@@ -408,6 +408,9 @@ function NurseryApp({
     if (qb === 'connected') {
       alert(t('appExtra.qbConnectedAlert'));
       setShowTeamManager(true);
+    } else if (qb === 'user-connected') {
+      alert(t('appExtra.qbUserConnectedAlert'));
+      setShowTeamManager(true);
     } else if (qb === 'error') {
       alert(`${t('appExtra.qbFailed')} ${params.get('message') || t('invoice.unknownError')}`);
     }

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'async_hooks';
 import { createHmac, timingSafeEqual } from 'crypto';
 import type { Express, Request, Response } from 'express';
 import {
@@ -73,7 +74,12 @@ function signState(payload: object): string {
   return `${body}.${sig}`;
 }
 
-function verifyState(state: string): { tenantId: string; uid: string; exp: number } {
+function verifyState(state: string): {
+  tenantId: string;
+  uid: string;
+  exp: number;
+  mode?: 'company' | 'user';
+} {
   const [body, sig] = state.split('.');
   if (!body || !sig) throw new Error('Invalid OAuth state.');
   const expected = createHmac('sha256', stateSecret()).update(body).digest('base64url');
@@ -86,6 +92,7 @@ function verifyState(state: string): { tenantId: string; uid: string; exp: numbe
     tenantId: string;
     uid: string;
     exp: number;
+    mode?: 'company' | 'user';
   };
   if (!parsed.tenantId || !parsed.uid || !parsed.exp) {
     throw new Error('Invalid OAuth state payload.');
@@ -98,6 +105,100 @@ function verifyState(state: string): { tenantId: string; uid: string; exp: numbe
 
 function integrationRef(tenantId: string) {
   return getAdminDb().doc(`tenants/${tenantId}/integrations/quickbooks`);
+}
+
+/** A team member's own QuickBooks login (so QBO audit history shows them, not the company connector). */
+interface QbUserConnection {
+  uid: string;
+  realmId: string;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: number;
+  refreshTokenExpiresAt?: number;
+  connectedAt: string;
+  updatedAt: string;
+  error?: string | null;
+}
+
+function userConnectionRef(tenantId: string, uid: string) {
+  return getAdminDb().doc(`tenants/${tenantId}/integrations/quickbooks_user_${uid}`);
+}
+
+/** When set, QBO calls in this async context use that member's own QuickBooks login. */
+const qbActor = new AsyncLocalStorage<{ uid: string }>();
+
+async function getUserAccessToken(
+  tenantId: string,
+  uid: string,
+  companyRealmId: string
+): Promise<string | null> {
+  const ref = userConnectionRef(tenantId, uid);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const conn = snap.data() as QbUserConnection;
+  if (!conn.refreshToken || conn.realmId !== companyRealmId || conn.error) return null;
+  if (Date.now() < conn.accessTokenExpiresAt - 60_000) return conn.accessToken;
+  try {
+    const refreshed = await exchangeToken(
+      new URLSearchParams({ grant_type: 'refresh_token', refresh_token: conn.refreshToken })
+    );
+    await ref.set(
+      {
+        accessToken: refreshed.access_token,
+        refreshToken: refreshed.refresh_token || conn.refreshToken,
+        accessTokenExpiresAt: Date.now() + refreshed.expires_in * 1000,
+        refreshTokenExpiresAt: refreshed.x_refresh_token_expires_in
+          ? Date.now() + refreshed.x_refresh_token_expires_in * 1000
+          : conn.refreshTokenExpiresAt ?? null,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+    return refreshed.access_token;
+  } catch (err: any) {
+    console.warn(`[quickbooks] user connection for ${uid} failed to refresh; using company login`);
+    await ref.set(
+      { error: err?.message || 'Refresh failed — reconnect QuickBooks.', updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
+    return null;
+  }
+}
+
+/** Same label NurseryOS shows in Sales Rep dropdowns (displayName, else email local part). */
+function memberRepLabel(member: Record<string, any>, uid: string): string {
+  const name = String(member.displayName || '').trim();
+  if (name) return name;
+  const email = String(member.email || '').trim();
+  return email.split('@')[0]?.trim() || email || uid;
+}
+
+async function findMemberUidByRepLabel(tenantId: string, label: string): Promise<string | null> {
+  const wanted = label.trim().toLowerCase();
+  if (!wanted) return null;
+  const snap = await getAdminDb().collection(`tenants/${tenantId}/members`).get();
+  for (const d of snap.docs) {
+    if (memberRepLabel(d.data(), d.id).toLowerCase() === wanted) return d.id;
+  }
+  return null;
+}
+
+/** Prefer the tagged sales rep's QuickBooks login, then the person pushing, else company login. */
+async function resolveQbActorUid(
+  tenantId: string,
+  repLabel: string,
+  pusherUid: string
+): Promise<string | null> {
+  const integration = await loadIntegration(tenantId);
+  if (!integration?.realmId) return null;
+  const repUid = repLabel ? await findMemberUidByRepLabel(tenantId, repLabel) : null;
+  for (const candidate of [repUid, pusherUid]) {
+    if (!candidate) continue;
+    const snap = await userConnectionRef(tenantId, candidate).get();
+    const conn = snap.exists ? (snap.data() as QbUserConnection) : null;
+    if (conn?.refreshToken && conn.realmId === integration.realmId && !conn.error) return candidate;
+  }
+  return null;
 }
 
 async function readBearerUid(req: Request): Promise<string> {
@@ -173,6 +274,14 @@ async function getValidAccessToken(tenantId: string): Promise<{
     });
   }
 
+  const actor = qbActor.getStore();
+  if (actor?.uid) {
+    const userToken = await getUserAccessToken(tenantId, actor.uid, integration.realmId);
+    if (userToken) {
+      return { accessToken: userToken, realmId: integration.realmId, integration };
+    }
+  }
+
   const skewMs = 60_000;
   if (Date.now() < integration.accessTokenExpiresAt - skewMs) {
     return {
@@ -221,6 +330,10 @@ async function qboRequest<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined
   });
   const data = (await res.json().catch(() => ({}))) as any;
+  if ((res.status === 401 || res.status === 403) && qbActor.getStore()?.uid) {
+    console.warn('[quickbooks] member login rejected; retrying with company login');
+    return qbActor.exit(() => qboRequest<T>(tenantId, method, path, body));
+  }
   if (!res.ok) {
     const fault = data?.Fault?.Error?.[0];
     // QBO often puts a generic Message ("Invalid String") but the useful part
@@ -959,6 +1072,24 @@ async function findOrCreateItemForLine(
 async function getPoCustomFieldDefinition(
   tenantId: string
 ): Promise<{ definitionId: string; name: string } | null> {
+  return findSalesCustomFieldDefinition(tenantId, (label) =>
+    /\bp\.?\s*o\.?\b|purchase\s*order/i.test(label)
+  );
+}
+
+/** Sales-form custom field used for the sales rep (e.g. "Sales Rep", "Rep", migrated tag group). */
+async function getSalesRepCustomFieldDefinition(
+  tenantId: string
+): Promise<{ definitionId: string; name: string } | null> {
+  return findSalesCustomFieldDefinition(tenantId, (label) =>
+    /sales\s*rep|^rep\b|salesperson|sales\s*person/i.test(label.trim())
+  );
+}
+
+async function findSalesCustomFieldDefinition(
+  tenantId: string,
+  matches: (label: string) => boolean
+): Promise<{ definitionId: string; name: string } | null> {
   try {
     const prefs = await qboRequest<any>(
       tenantId,
@@ -989,9 +1120,8 @@ async function getPoCustomFieldDefinition(
       }
     }
 
-    const looksLikePo = (label: string) => /\bp\.?\s*o\.?\b|purchase\s*order/i.test(label);
     for (const [slot, label] of names) {
-      if (enabled.get(slot) !== false && looksLikePo(label)) {
+      if (enabled.get(slot) !== false && matches(label)) {
         return { definitionId: slot, name: label };
       }
     }
@@ -1582,20 +1712,31 @@ async function mapDocToInvoice(
   }
 
   const poNumber = sanitizeQbString(doc.poNumber, 31);
-  let customField: Array<Record<string, any>> | undefined;
+  const salesRep = sanitizeQbString(doc.owner, 31);
+  const customFields: Array<Record<string, any>> = [];
   if (poNumber) {
     const poDef = await getPoCustomFieldDefinition(tenantId);
     if (poDef) {
-      customField = [
-        {
-          DefinitionId: poDef.definitionId,
-          Name: poDef.name,
-          Type: 'StringType',
-          StringValue: poNumber
-        }
-      ];
+      customFields.push({
+        DefinitionId: poDef.definitionId,
+        Name: poDef.name,
+        Type: 'StringType',
+        StringValue: poNumber
+      });
     }
   }
+  if (salesRep) {
+    const repDef = await getSalesRepCustomFieldDefinition(tenantId);
+    if (repDef && !customFields.some((f) => f.DefinitionId === repDef.definitionId)) {
+      customFields.push({
+        DefinitionId: repDef.definitionId,
+        Name: repDef.name,
+        Type: 'StringType',
+        StringValue: salesRep
+      });
+    }
+  }
+  const customField = customFields.length ? customFields : undefined;
 
   const paymentTerms = sanitizeQbString(doc.paymentTerms, 100);
   const memo = [
@@ -1610,6 +1751,7 @@ async function mapDocToInvoice(
     [
       doc.notes ? String(doc.notes) : '',
       poNumber ? `Customer PO #: ${poNumber}` : '',
+      salesRep ? `Sales rep: ${salesRep}` : '',
       referencedInvoice ? `Applies to invoice ${referencedInvoice}` : '',
       `NurseryOS ${doc.type || 'invoice'} ${doc.documentNumber || ''}`.trim()
     ]
@@ -1694,9 +1836,26 @@ function sandboxPayLinkError(): Error {
 }
 
 /**
- * Push NurseryOS invoice/estimate/credit memo to QBO (create or update).
+ * Push NurseryOS invoice/estimate/credit memo to QBO (create or update), acting as the
+ * tagged sales rep's own QuickBooks login when they've connected one.
  */
 async function pushDocumentToQboInternal(
+  tenantId: string,
+  documentId: string,
+  uid: string
+): ReturnType<typeof pushDocumentToQboAsCurrentActor> {
+  const snap = await getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`).get();
+  const repLabel = String(snap.data()?.owner || '').trim();
+  const actorUid = await resolveQbActorUid(tenantId, repLabel, uid);
+  if (!actorUid) {
+    return qbActor.exit(() => pushDocumentToQboAsCurrentActor(tenantId, documentId, uid));
+  }
+  return qbActor.run({ uid: actorUid }, () =>
+    pushDocumentToQboAsCurrentActor(tenantId, documentId, uid)
+  );
+}
+
+async function pushDocumentToQboAsCurrentActor(
   tenantId: string,
   documentId: string,
   uid: string
@@ -2230,6 +2389,65 @@ export async function syncPaidVendorBillPaymentToQbo(
   return { synced: true, qboBillPaymentId: paymentId };
 }
 
+/** First invoice a QBO payment was applied to — its unapplied remainder counts as that invoice's overpayment. */
+function paymentOwnerInvoiceId(payment: any): string | null {
+  for (const line of Array.isArray(payment?.Line) ? payment.Line : []) {
+    for (const lt of Array.isArray(line?.LinkedTxn) ? line.LinkedTxn : []) {
+      if (lt?.TxnType === 'Invoice' && lt.TxnId) return String(lt.TxnId);
+    }
+  }
+  return null;
+}
+
+async function fetchQboEntitiesById(tenantId: string, entity: 'Invoice' | 'Payment', ids: string[]) {
+  const out: any[] = [];
+  const clean = [...new Set(ids.map((id) => String(id).replace(/'/g, '')).filter(Boolean))];
+  for (let i = 0; i < clean.length; i += 30) {
+    const list = clean.slice(i, i + 30).map((id) => `'${id}'`).join(',');
+    const q = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/query?query=${encodeURIComponent(
+        `select * from ${entity} where Id in (${list}) maxresults 30`
+      )}&minorversion=65`
+    );
+    if (Array.isArray(q?.QueryResponse?.[entity])) out.push(...q.QueryResponse[entity]);
+  }
+  return out;
+}
+
+/** Overpaid amount per QBO invoice id, from unapplied amounts on the payments linked to each invoice. */
+async function computeQboOverpayments(
+  tenantId: string,
+  invoices: any[],
+  knownPayments: Map<string, any>
+): Promise<Map<string, number>> {
+  const neededPaymentIds: string[] = [];
+  for (const inv of invoices) {
+    for (const lt of Array.isArray(inv?.LinkedTxn) ? inv.LinkedTxn : []) {
+      if (lt?.TxnType === 'Payment' && lt.TxnId && !knownPayments.has(String(lt.TxnId))) {
+        neededPaymentIds.push(String(lt.TxnId));
+      }
+    }
+  }
+  for (const p of await fetchQboEntitiesById(tenantId, 'Payment', neededPaymentIds)) {
+    if (p?.Id) knownPayments.set(String(p.Id), p);
+  }
+  const result = new Map<string, number>();
+  for (const inv of invoices) {
+    if (!inv?.Id) continue;
+    let over = 0;
+    for (const lt of Array.isArray(inv.LinkedTxn) ? inv.LinkedTxn : []) {
+      if (lt?.TxnType !== 'Payment') continue;
+      const p = knownPayments.get(String(lt.TxnId));
+      const unapplied = Number(p?.UnappliedAmt) || 0;
+      if (unapplied > 0.009 && paymentOwnerInvoiceId(p) === String(inv.Id)) over += unapplied;
+    }
+    result.set(String(inv.Id), Math.round(over * 100) / 100);
+  }
+  return result;
+}
+
 const QBO_CDC_MAX_LOOKBACK_MS = 29 * 24 * 60 * 60 * 1000;
 const QBO_PAYMENT_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const paymentSyncInFlight = new Set<string>();
@@ -2259,68 +2477,90 @@ export async function syncQboInvoicePayments(
     const cdc = await qboRequest<any>(
       tenantId,
       'GET',
-      `/cdc?entities=Invoice&changedSince=${encodeURIComponent(since)}&minorversion=65`
+      `/cdc?entities=Invoice,Payment&changedSince=${encodeURIComponent(since)}&minorversion=65`
     );
-    const invoices: any[] = [];
+    const invoiceById = new Map<string, any>();
+    const knownPayments = new Map<string, any>();
     for (const block of cdc?.CDCResponse || []) {
       for (const qr of block?.QueryResponse || []) {
-        if (Array.isArray(qr?.Invoice)) invoices.push(...qr.Invoice);
+        for (const inv of Array.isArray(qr?.Invoice) ? qr.Invoice : []) {
+          if (inv?.Id) invoiceById.set(String(inv.Id), inv);
+        }
+        for (const p of Array.isArray(qr?.Payment) ? qr.Payment : []) {
+          if (p?.Id) knownPayments.set(String(p.Id), p);
+        }
       }
     }
 
     const docs = getAdminDb().collection(`tenants/${tenantId}/documents`);
-    if (!Number.isFinite(last)) {
+    const needInvoiceIds: string[] = [];
+    // Payments changed (e.g. overpayment recorded, or the credit later applied elsewhere).
+    for (const p of knownPayments.values()) {
+      const owner = paymentOwnerInvoiceId(p);
+      if (owner && !invoiceById.has(owner)) needInvoiceIds.push(owner);
+    }
+    const backfillPaid = !(integration as any).overpaymentBackfillAt;
+    if (!Number.isFinite(last) || backfillPaid) {
       const linked = await docs.where('qboInvoiceId', '>', '').get();
-      const unpaidIds = [
-        ...new Set(
-          linked.docs
-            .map((d) => d.data() || {})
-            .filter((d) => d.type === 'invoice' && String(d.paymentStatus || '') !== 'paid')
-            .map((d) => String(d.qboInvoiceId).replace(/'/g, ''))
-        )
-      ];
-      for (let i = 0; i < unpaidIds.length; i += 30) {
-        const ids = unpaidIds.slice(i, i + 30).map((id) => `'${id}'`).join(',');
-        const q = await qboRequest<any>(
-          tenantId,
-          'GET',
-          `/query?query=${encodeURIComponent(
-            `select * from Invoice where Id in (${ids}) maxresults 30`
-          )}&minorversion=65`
-        );
-        if (Array.isArray(q?.QueryResponse?.Invoice)) invoices.push(...q.QueryResponse.Invoice);
+      for (const d of linked.docs) {
+        const data = d.data() || {};
+        if (data.type !== 'invoice') continue;
+        const isPaid = String(data.paymentStatus || '') === 'paid';
+        if (backfillPaid || !isPaid) {
+          needInvoiceIds.push(String(data.qboInvoiceId));
+        }
       }
     }
+    for (const inv of await fetchQboEntitiesById(
+      tenantId,
+      'Invoice',
+      needInvoiceIds.filter((id) => !invoiceById.has(id))
+    )) {
+      if (inv?.Id) invoiceById.set(String(inv.Id), inv);
+    }
+
+    const invoices = [...invoiceById.values()].filter(
+      (inv) => inv?.Id && inv.status !== 'Deleted'
+    );
+    const overpaidById = await computeQboOverpayments(tenantId, invoices, knownPayments);
 
     let markedPaid = 0;
     for (const invoice of invoices) {
-      if (!invoice?.Id || invoice.status === 'Deleted') continue;
       const balance = Number(invoice.Balance);
       const total = Number(invoice.TotalAmt);
-      if (!Number.isFinite(balance) || balance > 0.009 || !(total > 0)) continue;
+      const paidInQbo = Number.isFinite(balance) && balance <= 0.009 && total > 0;
+      const overpaid = overpaidById.get(String(invoice.Id)) || 0;
 
       const matches = await docs.where('qboInvoiceId', '==', String(invoice.Id)).limit(5).get();
       for (const snap of matches.docs) {
         const doc = snap.data() || {};
-        if (doc.type !== 'invoice' || String(doc.paymentStatus || '') === 'paid') continue;
+        if (doc.type !== 'invoice') continue;
+        const update: Record<string, any> = {};
         const now = new Date().toISOString();
-        const link = invoice.InvoiceLink || invoice.invoiceLink;
-        await snap.ref.set(
-          {
+        if (paidInQbo && String(doc.paymentStatus || '') !== 'paid') {
+          const link = invoice.InvoiceLink || invoice.invoiceLink;
+          Object.assign(update, {
             paymentStatus: 'paid',
             paidAt: now,
             paymentMethod: 'quickbooks',
-            ...(link ? { qboInvoiceLink: String(link).trim() } : {}),
-            updatedAt: now
-          },
-          { merge: true }
-        );
-        markedPaid += 1;
+            ...(link ? { qboInvoiceLink: String(link).trim() } : {})
+          });
+          markedPaid += 1;
+        }
+        if (Math.abs((Number(doc.overpaidAmount) || 0) - overpaid) > 0.009) {
+          update.overpaidAmount = overpaid > 0 ? overpaid : 0;
+        }
+        if (Object.keys(update).length > 0) {
+          await snap.ref.set({ ...update, updatedAt: now }, { merge: true });
+        }
       }
     }
 
     await integrationRef(tenantId).set(
-      { paymentSyncAt: startedAt.toISOString() },
+      {
+        paymentSyncAt: startedAt.toISOString(),
+        ...(backfillPaid ? { overpaymentBackfillAt: startedAt.toISOString() } : {})
+      },
       { merge: true }
     );
     if (markedPaid > 0) {
@@ -2431,11 +2671,22 @@ export function registerQuickbooksRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertAdminOrOwner(tenantId, uid);
+      const mode = req.body?.mode === 'user' ? 'user' : 'company';
+      if (mode === 'user') {
+        await assertCanPushInvoice(tenantId, uid);
+        const integration = await loadIntegration(tenantId);
+        if (!integration?.realmId) {
+          res.status(400).json({ error: 'Connect the company QuickBooks first (owner/admin).' });
+          return;
+        }
+      } else {
+        await assertAdminOrOwner(tenantId, uid);
+      }
       const { clientId, redirectUri } = requireQbConfig();
       const state = signState({
         tenantId,
         uid,
+        mode,
         exp: Date.now() + 15 * 60 * 1000
       });
       const url = new URL(INTUIT_AUTHORIZE);
@@ -2463,8 +2714,12 @@ export function registerQuickbooksRoutes(app: Express) {
         return;
       }
 
-      const { tenantId, uid } = verifyState(state);
-      await assertAdminOrOwner(tenantId, uid);
+      const { tenantId, uid, mode } = verifyState(state);
+      if (mode === 'user') {
+        await assertCanPushInvoice(tenantId, uid);
+      } else {
+        await assertAdminOrOwner(tenantId, uid);
+      }
       const { redirectUri } = requireQbConfig();
       const token = await exchangeToken(
         new URLSearchParams({
@@ -2475,6 +2730,34 @@ export function registerQuickbooksRoutes(app: Express) {
       );
 
       const now = new Date().toISOString();
+      if (mode === 'user') {
+        const integration = await loadIntegration(tenantId);
+        if (!integration?.realmId || integration.realmId !== realmId) {
+          res.redirect(
+            `${appOrigin()}/?qb=error&message=${encodeURIComponent(
+              'You picked a different QuickBooks company than the one NurseryOS is connected to.'
+            )}`
+          );
+          return;
+        }
+        const conn: QbUserConnection = {
+          uid,
+          realmId,
+          accessToken: token.access_token,
+          refreshToken: token.refresh_token,
+          accessTokenExpiresAt: Date.now() + token.expires_in * 1000,
+          ...(token.x_refresh_token_expires_in
+            ? { refreshTokenExpiresAt: Date.now() + token.x_refresh_token_expires_in * 1000 }
+            : {}),
+          connectedAt: now,
+          updatedAt: now,
+          error: null
+        };
+        await userConnectionRef(tenantId, uid).set(conn);
+        res.redirect(`${appOrigin()}/?qb=user-connected`);
+        return;
+      }
+
       const doc: QbIntegration = {
         provider: 'quickbooks',
         realmId,
@@ -2498,6 +2781,48 @@ export function registerQuickbooksRoutes(app: Express) {
       );
     }
   });
+
+  /** Which team members have linked their own QuickBooks login (no tokens returned). */
+  app.get('/api/quickbooks/user-connections', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.query.tenantId || '');
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      await assertCanPushInvoice(tenantId, uid);
+      const integration = await loadIntegration(tenantId);
+      const snap = await getAdminDb().collection(`tenants/${tenantId}/integrations`).get();
+      const connections = snap.docs
+        .filter((d) => d.id.startsWith('quickbooks_user_'))
+        .map((d) => {
+          const c = d.data() as QbUserConnection;
+          return {
+            uid: c.uid,
+            connectedAt: c.connectedAt,
+            error: c.error || (integration?.realmId && c.realmId !== integration.realmId
+              ? 'Connected to a different QuickBooks company.'
+              : null)
+          };
+        });
+      res.json({ connections });
+    })
+  );
+
+  app.post('/api/quickbooks/user-disconnect', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = String(req.body?.tenantId || '');
+      const targetUid = String(req.body?.userId || uid);
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId is required.' });
+        return;
+      }
+      if (targetUid === uid) await assertCanPushInvoice(tenantId, uid);
+      else await assertAdminOrOwner(tenantId, uid);
+      await userConnectionRef(tenantId, targetUid).delete();
+      res.json({ success: true });
+    })
+  );
 
   app.post('/api/quickbooks/disconnect', (req, res) =>
     withAuth(req, res, async (uid) => {
@@ -2675,6 +3000,12 @@ export function registerQuickbooksRoutes(app: Express) {
       const link = invoice.InvoiceLink || invoice.invoiceLink;
       const qboInvoiceLink = link ? String(link).trim() : doc.qboInvoiceLink || null;
       const now = new Date().toISOString();
+      const overpaidAmount =
+        (await computeQboOverpayments(tenantId, [invoice], new Map())).get(String(invoice.Id)) || 0;
+      const overpaidUpdate =
+        Math.abs((Number(doc.overpaidAmount) || 0) - overpaidAmount) > 0.009
+          ? { overpaidAmount }
+          : {};
 
       if (paidInQbo && String(doc.paymentStatus || '') !== 'paid') {
         await docRef.set(
@@ -2683,18 +3014,23 @@ export function registerQuickbooksRoutes(app: Express) {
             paidAt: now,
             paymentMethod: 'quickbooks',
             qboInvoiceLink: qboInvoiceLink || null,
+            ...overpaidUpdate,
             updatedAt: now
           },
           { merge: true }
         );
-      } else if (qboInvoiceLink && qboInvoiceLink !== doc.qboInvoiceLink) {
+      } else if (
+        (qboInvoiceLink && qboInvoiceLink !== doc.qboInvoiceLink) ||
+        Object.keys(overpaidUpdate).length > 0
+      ) {
         await docRef.set(
-          { qboInvoiceLink, updatedAt: now },
+          { ...(qboInvoiceLink ? { qboInvoiceLink } : {}), ...overpaidUpdate, updatedAt: now },
           { merge: true }
         );
       }
 
       res.json({
+        overpaidAmount,
         paid: paidInQbo || String(doc.paymentStatus || '') === 'paid',
         balance: Number.isFinite(balance) ? balance : null,
         totalAmt: Number.isFinite(totalAmt) ? totalAmt : null,

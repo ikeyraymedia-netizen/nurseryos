@@ -2940,6 +2940,13 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   {paymentDocument?.paidAt
                     ? ` · ${new Date(paymentDocument.paidAt).toLocaleDateString()}`
                     : ''}
+                  {(paymentDocument?.overpaidAmount || 0) > 0 && (
+                    <span className="block text-violet-800 mt-0.5">
+                      {t('customers.overpaid', {
+                        amount: (paymentDocument?.overpaidAmount || 0).toFixed(2)
+                      })}
+                    </span>
+                  )}
                   {(paymentDocument?.paymentMethod || paymentDocument?.paymentReference) && (
                     <span className="block font-semibold mt-0.5">
                       {formatPaymentRecord(

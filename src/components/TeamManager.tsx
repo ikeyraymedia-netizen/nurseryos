@@ -33,6 +33,7 @@ import {
   StripeStatus
 } from '../lib/stripe';
 import MelioPanel from './MelioPanel';
+import QuickbooksUserLoginsPanel from './QuickbooksUserLoginsPanel';
 import {
   disconnectEmail,
   fetchEmailStatus,
@@ -829,6 +830,12 @@ export function TeamManager({
                     {qbRecentBusy ? t('common.loading') : t('teamExtra.showQbo')}
                   </button>
                 </div>
+                <QuickbooksUserLoginsPanel
+                  tenantId={tenant.id}
+                  currentUserId={currentUserId}
+                  members={members}
+                  canManageOthers
+                />
                 {qbRecent.length > 0 && (
                   <div className="rounded-lg border border-sky-100 bg-white px-2.5 py-2 space-y-1.5">
                     <p className="text-[10px] font-bold uppercase text-sky-900">

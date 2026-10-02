@@ -321,6 +321,7 @@ const extra = {
     noDocs: 'Aún no hay presupuestos, facturas ni notas de crédito.',
     balance: 'Saldo $0.00',
     paid: 'Pagado',
+    overpaid: 'Sobrepago ${{amount}}',
     estimateAccepted: 'Aceptada',
     estimateAwaitingAccept: 'Pendiente de aceptar',
     pending: 'Pendiente',
@@ -1662,6 +1663,8 @@ const extra = {
   appExtra: {
     noSelection: 'Sin selección',
     qbConnected: 'QuickBooks conectado para este vivero.',
+    qbUserConnectedAlert:
+      'Tu inicio de sesión de QuickBooks está conectado. Las facturas y cotizaciones donde eres el vendedor ahora mostrarán tu nombre en el historial de auditoría de QuickBooks.',
     qbConnectedAlert:
       'QuickBooks conectado. Abra Equipo para confirmar el estado, luego envíe facturas desde la pantalla de factura.',
     qbFailed: 'Error al conectar QuickBooks:',

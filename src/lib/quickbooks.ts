@@ -39,16 +39,46 @@ export async function fetchQuickbooksStatus(tenantId: string): Promise<Quickbook
   return (await res.json()) as QuickbooksStatus;
 }
 
-export async function startQuickbooksConnect(tenantId: string): Promise<string> {
+export async function startQuickbooksConnect(
+  tenantId: string,
+  mode: 'company' | 'user' = 'company'
+): Promise<string> {
   const res = await fetch('/api/quickbooks/connect', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ tenantId })
+    body: JSON.stringify({ tenantId, mode })
   });
   if (!res.ok) throw new Error(await readApiError(res));
   const data = (await res.json()) as { authorizeUrl?: string };
   if (!data?.authorizeUrl) throw new Error('No QuickBooks authorize URL returned.');
   return String(data.authorizeUrl);
+}
+
+export interface QuickbooksUserConnection {
+  uid: string;
+  connectedAt: string;
+  error: string | null;
+}
+
+export async function fetchQuickbooksUserConnections(
+  tenantId: string
+): Promise<QuickbooksUserConnection[]> {
+  const res = await fetch(
+    `/api/quickbooks/user-connections?tenantId=${encodeURIComponent(tenantId)}`,
+    { headers: await authHeaders() }
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as { connections?: QuickbooksUserConnection[] };
+  return data.connections || [];
+}
+
+export async function disconnectQuickbooksUser(tenantId: string, userId?: string): Promise<void> {
+  const res = await fetch('/api/quickbooks/user-disconnect', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ tenantId, userId })
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
 }
 
 export async function disconnectQuickbooks(tenantId: string): Promise<void> {

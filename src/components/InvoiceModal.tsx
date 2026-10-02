@@ -47,6 +47,7 @@ import {
   deleteCustomerDocument,
   markCustomerInvoicePaid,
   defaultDocumentNumber,
+  isDocumentNumberTaken,
   nextDocumentNumber,
   isEstimateDocumentNumber,
   listAllDocuments,
@@ -307,8 +308,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     );
 
     const details = order.invoiceDetails;
-    const existingNumber =
-      doc?.documentNumber || details?.invoiceNumber || null;
+    // Only a saved document owns its number. A number left on the order (reserved at
+    // estimate conversion or by an unsaved draft) may since have gone to another invoice.
+    const existingNumber = doc?.documentNumber || null;
     // Estimates use EST-####. When invoicing a converted estimate order, allocate
     // the next real invoice number instead of carrying EST-#### forward.
     const reuseExisting =
@@ -323,7 +325,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         considerQuickbooks: canUseQuickbooks,
         tenantId
       }).then((num) => {
-        if (!cancelled) setInvoiceNumber(num);
+        if (cancelled) return;
+        const placeholder = defaultDocumentNumber(type);
+        setInvoiceNumber((prev) => (prev === placeholder ? num : prev));
       });
     }
     setInvoiceDate(
@@ -632,8 +636,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setLiveDocument(null);
       return;
     }
+    let lastSeenNumber: string | null = null;
     return subscribeToDocument(savedDocumentId, (doc) => {
       setLiveDocument(doc);
+      // QuickBooks pushes can renumber the saved document; keep the form on the stored number.
+      const storedNumber = String(doc?.documentNumber || '').trim() || null;
+      if (storedNumber && lastSeenNumber && storedNumber !== lastSeenNumber) {
+        setInvoiceNumber(storedNumber);
+      }
+      if (storedNumber) lastSeenNumber = storedNumber;
       if (doc?.paymentStatus === 'paid') setLocalMarkedPaid(true);
       if (doc?.qboInvoiceLink) setPayLinkUrl(doc.qboInvoiceLink);
       else if (doc?.stripeCheckoutUrl) setPayLinkUrl(doc.stripeCheckoutUrl);
@@ -1188,6 +1199,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
     try {
       const qbSync = await syncToQuickbooksOnEmail();
+      // The email body and PDF are built from the number on screen; never send a stale one.
+      if (qbSync.documentNumber && qbSync.documentNumber !== invoiceNumber.trim()) {
+        setEmailSentStatus('error_general');
+        setEmailErrorMessage(
+          t('invoice.emailNumberChanged', { number: qbSync.documentNumber })
+        );
+        return;
+      }
       if (qbSync.note) setEmailQbNote(qbSync.note);
 
       // Pay links are optional — never block sending. Use the URL returned here
@@ -1665,8 +1684,28 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     setSaveSuccess(false);
 
     const creatingNewDocument = !savedDocumentId;
+    const enteredNumber = invoiceNumber.trim();
 
     try {
+      // The field shows a placeholder until the async allocation lands; never save it.
+      // Numbers reserved earlier (or typed in) may already belong to another document.
+      let invoiceNumber = enteredNumber;
+      const allocateFresh = () =>
+        nextDocumentNumber(documentType, { considerQuickbooks: canUseQuickbooks, tenantId });
+      if (
+        creatingNewDocument &&
+        (!invoiceNumber || invoiceNumber === defaultDocumentNumber(documentType))
+      ) {
+        invoiceNumber = await allocateFresh();
+      } else if (await isDocumentNumberTaken(documentType, invoiceNumber, savedDocumentId)) {
+        const qboNumber = String(liveDocument?.qboDocNumber || '').trim();
+        invoiceNumber =
+          qboNumber && !(await isDocumentNumberTaken(documentType, qboNumber, savedDocumentId))
+            ? qboNumber
+            : await allocateFresh();
+      }
+      if (invoiceNumber !== enteredNumber) setInvoiceNumber(invoiceNumber);
+
       const currentFreight =
         freightShares?.find((share) => share.orderId === order.id)?.amount ?? freightCharge;
       const freightAllocation: FreightAllocation | undefined =
@@ -2155,6 +2194,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   const syncToQuickbooksOnEmail = async (): Promise<{
     note: string | null;
     qboInvoiceLink: string | null;
+    documentNumber?: string | null;
   }> => {
     if (!canUseQuickbooks) return { note: null, qboInvoiceLink: null };
     if (documentType !== 'invoice' && documentType !== 'estimate' && documentType !== 'credit_memo') {
@@ -2178,7 +2218,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           : result.reused
             ? t('invoice.emailAlreadyInQb')
             : t('invoice.emailAlsoSyncedQb'),
-        qboInvoiceLink: result.qboInvoiceLink || null
+        qboInvoiceLink: result.qboInvoiceLink || null,
+        documentNumber: result.documentNumber ? String(result.documentNumber).trim() : null
       };
     } catch (err: any) {
       console.warn('[invoice] QBO sync on email', err?.message || err);
@@ -2741,11 +2782,12 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         );
       }
     }
-    setInvoiceNumber(defaultDocumentNumber(type));
+    const placeholder = defaultDocumentNumber(type);
+    setInvoiceNumber(placeholder);
     void nextDocumentNumber(type, {
       considerQuickbooks: canUseQuickbooks,
       tenantId
-    }).then(setInvoiceNumber);
+    }).then((num) => setInvoiceNumber((prev) => (prev === placeholder ? num : prev)));
     setSaveSuccess(false);
     if (type === 'credit_memo' || type === 'estimate') {
       setCreditLines((prev) => {

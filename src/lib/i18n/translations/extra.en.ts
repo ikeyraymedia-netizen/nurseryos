@@ -1033,6 +1033,8 @@ const extra = {
     emailUpdatedInQb: 'Updated this document in QuickBooks.',
     emailAlreadyInQb: 'Already in QuickBooks.',
     emailQbSaveFirst: 'Save the document first to sync it to QuickBooks on email.',
+    emailNumberChanged:
+      'This document is number {{number}} in NurseryOS and QuickBooks, not the number shown. Nothing was sent — check the number (save if you changed it) and press Send again.',
     emailQbSyncFailed: 'Email sent, but QuickBooks sync failed: {{error}}',
     includePayHint:
       'Pushes the invoice to QuickBooks (if needed) and puts the QuickBooks pay link in the email.',

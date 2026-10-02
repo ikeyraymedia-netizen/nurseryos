@@ -2021,6 +2021,15 @@ async function pushDocumentToQboAsCurrentActor(
   const openUrl = qbTxnOpenUrl(env, kind, qboId, integration?.realmId);
   const now = new Date().toISOString();
   const updated = Boolean(existing);
+  // When QuickBooks keeps a different invoice number (e.g. rename refused as a duplicate),
+  // adopt it so the customer, NurseryOS, and the books all show the same number.
+  const syncedDocumentNumber =
+    documentNumberOverride ||
+    (kind === 'invoice' &&
+    qboRawDocNumber &&
+    !qboDocNumbersEqual(qboRawDocNumber, doc.documentNumber)
+      ? qboRawDocNumber
+      : null);
 
   await docRef.set(
     {
@@ -2031,9 +2040,7 @@ async function pushDocumentToQboAsCurrentActor(
       qboInvoiceLink: qboInvoiceLink || null,
       qboSyncedAt: now,
       qboSyncedByUserId: uid,
-      ...(documentNumberOverride
-        ? { documentNumber: documentNumberOverride }
-        : {}),
+      ...(syncedDocumentNumber ? { documentNumber: syncedDocumentNumber } : {}),
       ...(existingId && existingId !== qboId
         ? { qboPaymentId: null, qboPaymentSyncedAt: null, qboPaymentNote: null }
         : {}),
@@ -2046,7 +2053,7 @@ async function pushDocumentToQboAsCurrentActor(
     qboInvoiceId: qboId,
     qboDocType: kind,
     qboDocNumber: qboRawDocNumber || null,
-    documentNumber: documentNumberOverride || String(doc.documentNumber || '') || null,
+    documentNumber: syncedDocumentNumber || String(doc.documentNumber || '') || null,
     qboInvoiceLink,
     qboOpenUrl: openUrl,
     customerName: verifiedCustomer,

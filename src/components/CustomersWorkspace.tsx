@@ -26,7 +26,6 @@ import {
 import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, repairCombinedCustomerAddresses, updateCustomer, withSplitCustomerAddresses } from '../lib/customers';
 import {
     listAllDocuments,
-    nextDocumentNumber,
     subscribeToCustomerDocuments,
     subscribeToDocuments,
     updateCustomerDocument,
@@ -890,13 +889,9 @@ export function CustomersWorkspace({
         throw new Error(t('customers.noLineItems'));
       }
 
-      const invoiceNumber =
-        doc.type === 'estimate'
-          ? await nextDocumentNumber('invoice', {
-              considerQuickbooks: permissions.canUseQuickbooks,
-              tenantId
-            })
-          : doc.documentNumber;
+      // Estimates get their invoice number when the invoice is saved; reserving one now
+      // lets another invoice claim the same number before this order ships.
+      const invoiceNumber = doc.type === 'estimate' ? undefined : doc.documentNumber;
       const convertedNotes = notesWithoutUnconvertedEstimate(doc.notes);
 
       const orderId = await addCustomerOrder({

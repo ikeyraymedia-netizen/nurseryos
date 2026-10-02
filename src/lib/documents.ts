@@ -365,6 +365,33 @@ export async function nextDocumentNumber(
   return String(next);
 }
 
+function sameDocNumber(a: string | undefined | null, b: string, type: CustomerDocumentType): boolean {
+  const x = String(a || '').trim();
+  if (!x) return false;
+  if (x.toLowerCase() === b.toLowerCase()) return true;
+  const nx = parseSequentialDocumentNumber(x, type);
+  const nb = parseSequentialDocumentNumber(b, type);
+  return nx != null && nb != null && nx === nb;
+}
+
+/** True when another document of this type already uses the number (here or in QuickBooks). */
+export async function isDocumentNumberTaken(
+  type: CustomerDocumentType,
+  documentNumber: string,
+  excludeDocumentId?: string | null
+): Promise<boolean> {
+  const wanted = String(documentNumber || '').trim();
+  if (!wanted) return false;
+  const docs = await listAllDocuments();
+  return docs.some(
+    (d) =>
+      d.type === type &&
+      d.id !== excludeDocumentId &&
+      (sameDocNumber(d.documentNumber, wanted, type) ||
+        sameDocNumber(d.qboDocNumber, wanted, type))
+  );
+}
+
 /** Sync fallback before async allocation finishes. */
 export function defaultDocumentNumber(
   type: CustomerDocumentType,

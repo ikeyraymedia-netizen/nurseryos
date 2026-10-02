@@ -555,6 +555,12 @@ const extra = {
     you: 'You',
     analyzing: 'Analyzing nursery data…',
     recentActivity: 'Recent activity',
+    activityFrom: 'From',
+    activityTo: 'To',
+    activityLastMonth: 'Last month',
+    activityRecent: 'Latest 25',
+    activitySearch: 'Search activity…',
+    activityCount: '{{n}} event(s)',
     activityHint: 'Key saves and conversions',
     noActivity: 'No activity yet.',
     noActivityDetail:

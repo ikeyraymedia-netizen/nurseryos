@@ -560,6 +560,12 @@ const extra = {
     you: 'Usted',
     analyzing: 'Analizando datos del vivero…',
     recentActivity: 'Actividad reciente',
+    activityFrom: 'Desde',
+    activityTo: 'Hasta',
+    activityLastMonth: 'Mes pasado',
+    activityRecent: 'Últimos 25',
+    activitySearch: 'Buscar actividad…',
+    activityCount: '{{n}} evento(s)',
     activityHint: 'Guardados y conversiones clave',
     noActivity: 'Aún no hay actividad.',
     noActivityDetail:

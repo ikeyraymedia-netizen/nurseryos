@@ -1,4 +1,4 @@
-import { addDoc, collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { addDoc, collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
 let activeTenantId: string | null = null;
@@ -44,6 +44,27 @@ export async function logAuditEvent(input: {
   } catch (err) {
     console.warn('Audit log write skipped:', err);
   }
+}
+
+/** Audit events between two local calendar days (YYYY-MM-DD, inclusive), newest first. */
+export async function listAuditEventsInRange(
+  fromDay: string,
+  toDay: string,
+  max = 2000
+): Promise<AuditEvent[]> {
+  const tenantId = requireTenantId();
+  const start = fromDay ? new Date(`${fromDay}T00:00:00`).toISOString() : '';
+  const endDate = toDay ? new Date(`${toDay}T00:00:00`) : null;
+  if (endDate) endDate.setDate(endDate.getDate() + 1);
+  const end = endDate ? endDate.toISOString() : '';
+  const constraints = [
+    ...(start ? [where('createdAt', '>=', start)] : []),
+    ...(end ? [where('createdAt', '<', end)] : []),
+    orderBy('createdAt', 'desc'),
+    limit(max)
+  ];
+  const snap = await getDocs(query(auditCol(tenantId), ...constraints));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AuditEvent, 'id'>) }));
 }
 
 export async function listRecentAuditEvents(max = 50): Promise<AuditEvent[]> {

@@ -25,7 +25,7 @@ import {
   resolveLineUnitCost
 } from '../lib/documents';
 import { authJsonHeaders } from '../lib/apiAuth';
-import { AuditEvent, listRecentAuditEvents } from '../lib/audit';
+import { AuditEvent, listAuditEventsInRange, listRecentAuditEvents } from '../lib/audit';
 import { subscribeToVendorBills } from '../lib/purchasing';
 import { AccountingReportsPanel } from './AccountingReportsPanel';
 
@@ -638,6 +638,9 @@ export function ReportsWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditFrom, setAuditFrom] = useState('');
+  const [auditTo, setAuditTo] = useState('');
+  const [auditSearch, setAuditSearch] = useState('');
   const [auditError, setAuditError] = useState<string | null>(null);
   const [vendorBills, setVendorBills] = useState<VendorBill[]>([]);
   const [viewMode, setViewMode] = useState<'sales' | 'accounting'>('sales');
@@ -682,9 +685,18 @@ export function ReportsWorkspace({
     }
   }
 
-  async function refreshAudit() {
+  const filteredAuditEvents = useMemo(() => {
+    const q = auditSearch.trim().toLowerCase();
+    if (!q) return auditEvents;
+    return auditEvents.filter((e) =>
+      [e.summary, e.action, e.actorEmail].join(' ').toLowerCase().includes(q)
+    );
+  }, [auditEvents, auditSearch]);
+
+  async function refreshAudit(from = auditFrom, to = auditTo) {
     try {
-      const events = await listRecentAuditEvents(25);
+      const events =
+        from || to ? await listAuditEventsInRange(from, to) : await listRecentAuditEvents(25);
       setAuditEvents(events);
       setAuditError(null);
     } catch (err: any) {
@@ -1503,15 +1515,79 @@ export function ReportsWorkspace({
               {t('reports.refresh')}
             </button>
           </div>
-          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 bg-slate-50/40">
+          <div className="flex flex-wrap items-end gap-2 px-4 py-2 border-b border-slate-200 bg-white text-xs">
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase text-gray-400">{t('reports.activityFrom')}</span>
+              <input
+                type="date"
+                value={auditFrom}
+                onChange={(e) => {
+                  setAuditFrom(e.target.value);
+                  void refreshAudit(e.target.value, auditTo);
+                }}
+                className="mt-0.5 block px-2 py-1 border border-gray-200 rounded-lg text-xs"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase text-gray-400">{t('reports.activityTo')}</span>
+              <input
+                type="date"
+                value={auditTo}
+                onChange={(e) => {
+                  setAuditTo(e.target.value);
+                  void refreshAudit(auditFrom, e.target.value);
+                }}
+                className="mt-0.5 block px-2 py-1 border border-gray-200 rounded-lg text-xs"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const last = new Date(now.getFullYear(), now.getMonth(), 0);
+                const key = (d: Date) =>
+                  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                setAuditFrom(key(first));
+                setAuditTo(key(last));
+                void refreshAudit(key(first), key(last));
+              }}
+              className="px-2.5 py-1 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50"
+            >
+              {t('reports.activityLastMonth')}
+            </button>
+            {(auditFrom || auditTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuditFrom('');
+                  setAuditTo('');
+                  void refreshAudit('', '');
+                }}
+                className="px-2.5 py-1 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50"
+              >
+                {t('reports.activityRecent')}
+              </button>
+            )}
+            <input
+              value={auditSearch}
+              onChange={(e) => setAuditSearch(e.target.value)}
+              placeholder={t('reports.activitySearch')}
+              className="flex-1 min-w-[140px] px-2 py-1 border border-gray-200 rounded-lg text-xs"
+            />
+            <span className="text-[11px] font-semibold text-gray-500">
+              {t('reports.activityCount', { n: filteredAuditEvents.length })}
+            </span>
+          </div>
+          <div className="max-h-[480px] overflow-y-auto divide-y divide-slate-100 bg-slate-50/40">
             {auditError ? (
               <p className="px-4 py-3 text-xs text-amber-800">
                 {auditError} {t('reports.auditFirestoreHint')}
               </p>
-            ) : auditEvents.length === 0 ? (
+            ) : filteredAuditEvents.length === 0 ? (
               <p className="px-4 py-3 text-xs text-gray-500">{t('reports.noActivityDetail')}</p>
             ) : (
-              auditEvents.map((event) => (
+              filteredAuditEvents.map((event) => (
                 <div key={event.id || `${event.action}-${event.createdAt}`} className="px-4 py-2.5">
                   <div className="flex items-start gap-2">
                     <FileText className="h-3.5 w-3.5 text-slate-400 mt-0.5 shrink-0" />

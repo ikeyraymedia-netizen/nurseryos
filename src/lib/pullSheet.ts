@@ -14,10 +14,6 @@ function normalizeVendor(vendor?: string | null): string {
   return normalizeVendorName(vendor);
 }
 
-function normalizeLineKey(plantName: string, containerSize: string, vendor: string): string {
-  return `${plantName.trim().toLowerCase()}::${containerSize.trim().toLowerCase()}::${vendor.toLowerCase()}`;
-}
-
 /** Draw a printable checkbox; optional X when already complete in the app. */
 function drawCheckbox(
   pdf: jsPDF,
@@ -116,7 +112,13 @@ export function buildVendorPullListsForTrucks(params: {
     ref: string | null;
     stagedLocation: string;
     truckName: string;
-    lines: Array<{ plantName: string; containerSize: string; quantity: number }>;
+    lines: Array<{
+      plantName: string;
+      containerSize: string;
+      quantity: number;
+      notes?: string;
+      isAddition?: boolean;
+    }>;
     quantity: number;
   };
 
@@ -142,7 +144,9 @@ export function buildVendorPullListsForTrucks(params: {
       section.lines.push({
         plantName: item.plantName,
         containerSize: item.containerSize,
-        quantity: item.quantity
+        quantity: item.quantity,
+        notes: item.notes,
+        isAddition: item.isAddition
       });
       section.quantity += item.quantity;
     }
@@ -196,36 +200,10 @@ export function buildVendorPullListsForTrucks(params: {
         [
           `— ${titleParts.join(' · ')}`,
           `  ${meta.join(' · ')}`,
-          ...section.lines
-            .sort(
-              (a, b) =>
-                a.plantName.localeCompare(b.plantName) ||
-                a.containerSize.localeCompare(b.containerSize)
-            )
-            .map((line) => `  • ${line.quantity} × ${line.containerSize}  ${line.plantName}`)
+          ...section.lines.map(vendorTextLine)
         ].join('\n')
       );
     }
-
-    // Combined totals so the vendor still sees one shopping list
-    const totals = new Map<string, { plantName: string; containerSize: string; quantity: number }>();
-    for (const section of sections) {
-      for (const line of section.lines) {
-        const key = normalizeLineKey(line.plantName, line.containerSize, vendor);
-        const existing = totals.get(key);
-        if (existing) existing.quantity += line.quantity;
-        else
-          totals.set(key, {
-            plantName: line.plantName,
-            containerSize: line.containerSize,
-            quantity: line.quantity
-          });
-      }
-    }
-    const totalLines = [...totals.values()].sort(
-      (a, b) =>
-        a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
-    );
 
     const text = [
       header,
@@ -233,9 +211,6 @@ export function buildVendorPullListsForTrucks(params: {
       '',
       'BY ORDER / STAGE',
       ...orderBlocks,
-      '',
-      'COMBINED TOTALS',
-      ...totalLines.map((line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`),
       '',
       `Total: ${quantity} plants`
     ]
@@ -273,7 +248,13 @@ export function buildVendorPullListsForOrders(params: {
     customerName: string;
     ref: string | null;
     stagedLocation: string;
-    lines: Array<{ plantName: string; containerSize: string; quantity: number }>;
+    lines: Array<{
+      plantName: string;
+      containerSize: string;
+      quantity: number;
+      notes?: string;
+      isAddition?: boolean;
+    }>;
     quantity: number;
   };
 
@@ -298,7 +279,9 @@ export function buildVendorPullListsForOrders(params: {
       section.lines.push({
         plantName: item.plantName,
         containerSize: item.containerSize,
-        quantity: item.quantity
+        quantity: item.quantity,
+        notes: item.notes,
+        isAddition: item.isAddition
       });
       section.quantity += item.quantity;
     }
@@ -344,35 +327,10 @@ export function buildVendorPullListsForOrders(params: {
         [
           `— ${titleParts.join(' · ')}`,
           `  ${meta.join(' · ')}`,
-          ...section.lines
-            .sort(
-              (a, b) =>
-                a.plantName.localeCompare(b.plantName) ||
-                a.containerSize.localeCompare(b.containerSize)
-            )
-            .map((line) => `  • ${line.quantity} × ${line.containerSize}  ${line.plantName}`)
+          ...section.lines.map(vendorTextLine)
         ].join('\n')
       );
     }
-
-    const totals = new Map<string, { plantName: string; containerSize: string; quantity: number }>();
-    for (const section of sections) {
-      for (const line of section.lines) {
-        const key = normalizeLineKey(line.plantName, line.containerSize, vendor);
-        const existing = totals.get(key);
-        if (existing) existing.quantity += line.quantity;
-        else
-          totals.set(key, {
-            plantName: line.plantName,
-            containerSize: line.containerSize,
-            quantity: line.quantity
-          });
-      }
-    }
-    const totalLines = [...totals.values()].sort(
-      (a, b) =>
-        a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
-    );
 
     const text = [
       header,
@@ -380,9 +338,6 @@ export function buildVendorPullListsForOrders(params: {
       '',
       'BY ORDER / STAGE',
       ...orderBlocks,
-      '',
-      'COMBINED TOTALS',
-      ...totalLines.map((line) => `• ${line.quantity} × ${line.containerSize}  ${line.plantName}`),
       '',
       `Total: ${quantity} plants`
     ]
@@ -462,7 +417,34 @@ type PullSheetLine = {
   quantity: number;
   pulled: number;
   loaded: number;
+  notes?: string;
+  isAddition?: boolean;
 };
+
+function pullSheetLineDetail(line: { notes?: string; isAddition?: boolean }): string {
+  return [line.isAddition ? 'ADDITION' : null, String(line.notes || '').trim() || null]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function pullSheetRowHeight(pdf: jsPDF, line: PullSheetLine): number {
+  const nameLines = pdf.splitTextToSize(line.plantName, 240);
+  const detail = pullSheetLineDetail(line);
+  const detailLines = detail ? pdf.splitTextToSize(detail, 240).length : 0;
+  return Math.max(16, nameLines.length * 11 + detailLines * 9 + 4);
+}
+
+/** Text-list line, keeping the order's line order, additions, and notes. */
+function vendorTextLine(line: {
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  notes?: string;
+  isAddition?: boolean;
+}): string {
+  const detail = pullSheetLineDetail(line);
+  return `  • ${line.quantity} × ${line.containerSize}  ${line.plantName}${detail ? `  (${detail})` : ''}`;
+}
 
 function drawPullSheetTableHeader(
   pdf: jsPDF,
@@ -491,7 +473,7 @@ function drawPullSheetLineRow(
   baseline: number
 ): number {
   const nameLines = pdf.splitTextToSize(line.plantName, 240);
-  const rowH = Math.max(16, nameLines.length * 11 + 4);
+  const rowH = pullSheetRowHeight(pdf, line);
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
@@ -499,6 +481,18 @@ function drawPullSheetLineRow(
   pdf.text(nameLines[0], col.plant + 2, baseline);
   for (let i = 1; i < nameLines.length; i++) {
     pdf.text(nameLines[i], col.plant + 2, baseline + i * 11);
+  }
+  const detail = pullSheetLineDetail(line);
+  if (detail) {
+    const detailLines = pdf.splitTextToSize(detail, 240);
+    pdf.setFontSize(7.5);
+    if (line.isAddition) pdf.setTextColor(180, 83, 9);
+    else pdf.setTextColor(90, 90, 90);
+    detailLines.forEach((text: string, i: number) => {
+      pdf.text(text, col.plant + 2, baseline + nameLines.length * 11 + i * 9 - 2);
+    });
+    pdf.setFontSize(9);
+    pdf.setTextColor(30, 30, 30);
   }
   pdf.text(line.containerSize, col.size, baseline);
   pdf.setFont('helvetica', 'bold');
@@ -592,10 +586,8 @@ export function downloadTruckPullSheetPdf(params: {
     const titleParts = [order.customerName];
     if (ref) titleParts.push(ref);
 
-    const items = [...order.items].sort(
-      (a, b) =>
-        a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
-    );
+    // Same line order as the order screen; like items stay separate.
+    const items = order.items;
     const orderQty = items.reduce((sum, item) => sum + item.quantity, 0);
     const minBlockHeight = 52 + items.length * 16;
 
@@ -619,10 +611,11 @@ export function downloadTruckPullSheetPdf(params: {
         containerSize: item.containerSize,
         quantity: item.quantity,
         pulled: item.pulledQuantity ?? 0,
-        loaded: item.loadedQuantity
+        loaded: item.loadedQuantity,
+        notes: item.notes,
+        isAddition: item.isAddition
       };
-      const nameLines = pdf.splitTextToSize(line.plantName, 240);
-      const rowH = Math.max(16, nameLines.length * 11 + 4);
+      const rowH = pullSheetRowHeight(pdf, line);
       ensureSpace(rowH);
       const baseline = y;
       y += drawPullSheetLineRow(pdf, col, line, baseline);

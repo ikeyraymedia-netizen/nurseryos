@@ -1064,6 +1064,43 @@ async function findOrCreateItemForLine(
   return String(id);
 }
 
+const surchargeInfoCache = new Map<string, { at: number; info: any | null }>();
+const SURCHARGE_CACHE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * QBO does not apply the company "pass card fee to customer" (surcharge) default to
+ * API-created invoices, and Preferences doesn't expose it. Mirror the setting from the
+ * most recent invoice that carries EnabledSurchargeInfo (minorversion 75+); null when
+ * the company has never used surcharging.
+ */
+async function getCompanySurchargeInfo(tenantId: string): Promise<any | null> {
+  const cached = surchargeInfoCache.get(tenantId);
+  if (cached && Date.now() - cached.at < SURCHARGE_CACHE_MS) return cached.info;
+  let info: any | null = null;
+  try {
+    const q = 'select * from Invoice ORDERBY MetaData.CreateTime DESC MAXRESULTS 100';
+    const res = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/query?query=${encodeURIComponent(q)}&minorversion=75`
+    );
+    const invoices: any[] = res?.QueryResponse?.Invoice || [];
+    const source = invoices.find((inv) => inv?.EnabledSurchargeInfo);
+    if (source) {
+      const s = source.EnabledSurchargeInfo;
+      info = {
+        Enabled: Boolean(s.Enabled),
+        Card: { Enabled: Boolean(s.Card?.Enabled) },
+        ACH: { Enabled: Boolean(s.ACH?.Enabled) }
+      };
+    }
+  } catch (err: any) {
+    console.warn('[quickbooks] could not read surcharge setting', err?.message || err);
+  }
+  surchargeInfoCache.set(tenantId, { at: Date.now(), info });
+  return info;
+}
+
 /**
  * QuickBooks Online has no native PO field on invoices — the "P.O. Number" that
  * appears on sales forms is a company-defined sales custom field. Look it up so we
@@ -1908,7 +1945,7 @@ async function pushDocumentToQboAsCurrentActor(
   if (existing && Array.isArray(payload.Line)) {
     payload.Line = mergeLinesForQboUpdate(existing.Line, payload.Line);
   }
-  const writeBody = existing
+  const writeBody: Record<string, any> = existing
     ? {
         ...payload,
         Id: String(existing.Id),
@@ -1916,15 +1953,48 @@ async function pushDocumentToQboAsCurrentActor(
         sparse: true
       }
     : payload;
+  if (kind === 'invoice') {
+    const surcharge = await getCompanySurchargeInfo(tenantId);
+    if (surcharge) {
+      let alreadySet = false;
+      if (existing) {
+        try {
+          const current = await qboRequest<any>(
+            tenantId,
+            'GET',
+            `/invoice/${encodeURIComponent(String(existing.Id))}?minorversion=75`
+          );
+          alreadySet = Boolean(current?.Invoice?.EnabledSurchargeInfo);
+        } catch {
+          alreadySet = true;
+        }
+      }
+      if (!alreadySet) writeBody.EnabledSurchargeInfo = surcharge;
+    }
+  }
   const attemptWrite = (body: any) =>
-    qboRequest<any>(tenantId, 'POST', `/${spec.path}?minorversion=65`, body);
+    qboRequest<any>(
+      tenantId,
+      'POST',
+      `/${spec.path}?minorversion=${body?.EnabledSurchargeInfo ? 75 : 65}`,
+      body
+    );
 
   let written: any;
   let documentNumberOverride: string | null = null;
-  const attemptWriteWithFallback = async (body: any) => {
+  const attemptWriteWithFallback = async (body: any): Promise<any> => {
     try {
       return await attemptWrite(body);
     } catch (err) {
+      if (body?.EnabledSurchargeInfo) {
+        const withoutSurcharge = { ...body };
+        delete withoutSurcharge.EnabledSurchargeInfo;
+        console.warn(
+          '[quickbooks] push with surcharge setting failed, retrying without it',
+          (err as any)?.message
+        );
+        return await attemptWriteWithFallback(withoutSurcharge);
+      }
       if (body?.CustomField) {
         const withoutCustomField = { ...body };
         delete withoutCustomField.CustomField;

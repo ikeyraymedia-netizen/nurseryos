@@ -34,7 +34,7 @@ const SIZE_RULES: Array<{ size: string; re: RegExp }> = [
   { size: '6 inch', re: /\b6(?:\.0)?\s*P\b/i },
   { size: '6 inch', re: /\b6\s*(?:inch|in|"|'')\b/i },
   { size: '4 inch', re: /\b4\s*(?:inch|in|"|'')\b/i },
-  { size: 'Tray', re: /\b(?:tray|flat|plug\s*tray)\b/i }
+  { size: 'Tray', re: /\b(?:trays?|flats?|plug\s*trays?)\b/i }
 ];
 
 /** Invoice / charge descriptions that are never plant lines. */
@@ -48,11 +48,16 @@ function noteSizePattern(): RegExp {
 
 /** Height ranges / feet notes: 6-7', 5-6 ft, 8'. */
 function heightNotePattern(): RegExp {
-  return /\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*(?:'|''|"|ft|feet|foot|′|″)?(?=\s|$|[^a-z0-9])|\b\d+(?:\.\d+)?\s*(?:'|ft|feet|foot|′)(?=\s|$|[^a-z0-9])/gi;
+  return /\b\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*(?:'|’|''|"|ft|feet|foot|′|″)?(?=\s|$|[^a-z0-9])|\b\d+(?:\.\d+)?\s*(?:'|’|ft|feet|foot|′)(?=\s|$|[^a-z0-9])/gi;
+}
+
+/** Availability marks on pasted lists: "SOLD", "10 SOLD". */
+function soldNotePattern(): RegExp {
+  return /\b(?:\d+\s+)?sold\b/gi;
 }
 
 function sizeTokenPattern(): RegExp {
-  return /#\s*\d{1,3}\b|\b(?:b\s*&\s*b|b\.?\s*&?\s*b\.?)\b|\b(?:\d+\s*)?(?:gallon|gal|g)\b|\b\d+(?:\.\d+)?\s*P\b|\b(?:4|6)\s*(?:inch|in|"|'')\b|\b(?:tray|flat)\b/i;
+  return /#\s*\d{1,3}\b|\b(?:b\s*&\s*b|b\.?\s*&?\s*b\.?)\b|\b(?:\d+\s*)?(?:gallon|gal|g)\b|\b\d+(?:\.\d+)?\s*P\b|\b(?:4|6)\s*(?:inch|in|"|'')\b|\b(?:trays?|flats?)\b/i;
 }
 
 function priceTokenPattern(): RegExp {
@@ -89,6 +94,11 @@ function extractNotes(raw: string): string | undefined {
       if (cleaned && !notes.includes(cleaned)) notes.push(cleaned);
     }
   }
+  const soldMatch = raw.match(soldNotePattern());
+  if (soldMatch) {
+    const cleaned = soldMatch[0].replace(/\s+/g, ' ').toUpperCase().trim();
+    if (!notes.includes(cleaned)) notes.push(cleaned);
+  }
   // Parenthetical notes: (special grade) — skip pure prices
   const paren = raw.match(/\(([^)]+)\)/g);
   if (paren) {
@@ -110,6 +120,8 @@ function cleanPlantName(raw: string): string {
   }
   name = name.replace(noteSizePattern(), ' ');
   name = name.replace(heightNotePattern(), ' ');
+  name = name.replace(soldNotePattern(), ' ');
+  name = name.replace(/\b(?:height|tall|ht\.?)\b/gi, ' ');
   name = name.replace(/\([^)]*\)/g, ' ');
   name = name.replace(priceTokenPattern(), ' ');
   // Leftover caliper / unit / invoice column words
@@ -352,7 +364,7 @@ function buildItem(quantity: number, rest: string): ParsedOrderItem | null {
   // Keep only short single-token leftovers when a size cue was present in the line.
   if (containerSize === 'Other') {
     const hasSizeCue =
-      /#\s*\d|\b(?:gal(?:lon)?|b\s*&\s*b|tray|flat|inch|in\b|["”]|cal)|\b\d+(?:\.\d+)?\s*P\b|\b\d+\s*G\b/i.test(
+      /#\s*\d|\b(?:gal(?:lon)?|b\s*&\s*b|trays?|flats?|inch|in\b|["”]|cal)|\b\d+(?:\.\d+)?\s*P\b|\b\d+\s*G\b/i.test(
         rest
       ) || noteSizePattern().test(rest);
     noteSizePattern().lastIndex = 0;
@@ -476,7 +488,11 @@ function explodeMultiQtyLine(line: string): string[] {
     }
     // Skip payment-terms "60 Days …" / calendar "11 September …" style false qty starts
     const afterQty = cleaned.slice(idx).replace(/^\d+\s+/, '');
-    if (MONTH_NAME_RE.test(afterQty.slice(0, 40)) || /^(?:net\s+)?days?\b/i.test(afterQty)) {
+    if (
+      MONTH_NAME_RE.test(afterQty.slice(0, 40)) ||
+      /^(?:net\s+)?days?\b/i.test(afterQty) ||
+      /^sold\b/i.test(afterQty)
+    ) {
       continue;
     }
     // Don't split on prices like "45.00 Boxwood" — require integer qty tokens only (already).
@@ -578,8 +594,15 @@ function parseVendorItemRefSizeQtyLine(line: string): ParsedOrderItem | null {
   return buildItem(qty, `${description} ${sizeRaw}`);
 }
 
+/** Strip list bullets and checklist boxes ("- [x] ", "☑ ", "* [ ] ") from a pasted line. */
+function stripListMarker(line: string): string {
+  return line
+    .replace(/^\s*(?:[-•*+]\s*)?(?:\[\s*[xX✓✔]?\s*\]|[☐☑☒✅✔✓])\s*/, '')
+    .trim();
+}
+
 function parseLineItem(line: string): ParsedOrderItem | null {
-  const cleaned = line.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, '').trim();
+  const cleaned = stripListMarker(line).replace(/^\s*(?:[-•*]|\d+[.)])\s*/, '').trim();
   if (!cleaned || cleaned.length < 3) return null;
   if (isMetaOrJunkLine(cleaned)) return null;
   // Pure money / total lines
@@ -704,7 +727,7 @@ export function parseOrderTextLocally(rawText: string): ParsedOrderFromText | nu
 
   const rawLines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => stripListMarker(line))
     .filter(Boolean);
 
   // If the paste collapsed to one/few lines, also try splitting on semicolons.
@@ -773,7 +796,7 @@ export function localParseLooksIncomplete(
 
   const lines = String(rawText || '')
     .split(/\r?\n/)
-    .map((l) => l.trim())
+    .map((l) => stripListMarker(l))
     .filter((l) => l && !isMetaOrJunkLine(l));
 
   const allSized =

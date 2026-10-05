@@ -1594,6 +1594,7 @@ const extra = {
     timeout: 'Order analysis timed out. Try a smaller file.',
     aiBusy: 'AI service is temporarily busy.',
     noPlants: 'No plant lines found in document.',
+    someFilesFailed: 'Some files could not be read and were skipped:\n{{files}}',
     pickCustomer: 'Pick a customer before saving an estimate.',
     pasteRequired: 'Paste the order text first.',
     saveFailed: 'Failed to save.',

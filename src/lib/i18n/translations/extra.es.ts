@@ -1610,6 +1610,7 @@ const extra = {
     timeout: 'El análisis del pedido expiró. Intente un archivo más pequeño.',
     aiBusy: 'El servicio de IA está ocupado temporalmente.',
     noPlants: 'No se encontraron líneas de plantas en el documento.',
+    someFilesFailed: 'Algunos archivos no se pudieron leer y se omitieron:\n{{files}}',
     pickCustomer: 'Seleccione un cliente antes de guardar un presupuesto.',
     pasteRequired: 'Pegue el texto del pedido primero.',
     saveFailed: 'Error al guardar.',

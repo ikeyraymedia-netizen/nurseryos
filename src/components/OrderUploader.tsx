@@ -319,16 +319,102 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     });
   };
 
-  const processFile = async (file: File, orderText?: string) => {
+  const processFile = (file: File, orderText?: string) => processFiles([file], orderText);
+
+  const processFiles = async (files: File[], orderText?: string) => {
+    if (files.length === 0) return;
     setLoading(true);
     setSaving(false);
     setErrorMessage(null);
     resetDraftState();
     setSavedOrderId(null);
     setSavedEstimateCustomerId(null);
-    setStatusMessage(orderText ? t('upload.readingPasted') : t('upload.readingFile'));
 
     try {
+      const results: any[] = [];
+      const failures: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          results.push(
+            await parseOneFile(file, orderText, files.length > 1 ? { index: i + 1, total: files.length } : null)
+          );
+        } catch (err: any) {
+          if (files.length === 1) throw err;
+          failures.push(`${file.name}: ${err?.message || t('upload.uploadError')}`);
+        }
+      }
+      if (results.length === 0) {
+        throw new Error(failures.join('\n') || t('upload.noPlants'));
+      }
+
+      const stamp = Date.now();
+      const itemsWithIds: PlantOrderItem[] = results.flatMap((result, fileIndex) =>
+        (Array.isArray(result.items) ? result.items : []).map((item: any, index: number) => ({
+          id: `item-${stamp}-${fileIndex}-${index}`,
+          plantName: item.plantName,
+          containerSize: item.containerSize,
+          quantity: item.quantity,
+          loadedQuantity: 0,
+          notes: item.notes || ''
+        }))
+      );
+
+      const originals: Record<string, { plantName: string; containerSize: string }> = {};
+      for (const item of itemsWithIds) {
+        originals[item.id] = {
+          plantName: item.plantName,
+          containerSize: item.containerSize
+        };
+      }
+
+      const firstWith = (key: string) =>
+        results
+          .map((r) => String(r[key] || '').trim())
+          .find((v) => v && !/^n\/?a$/i.test(v) && v !== 'Unknown Customer') || '';
+      const parsedCustomerName = firstWith('customerName') || t('upload.unknownCustomer');
+      const originalText =
+        results.length > 1
+          ? results
+              .map((r, i) => `--- ${files[i]?.name || `File ${i + 1}`} ---\n${r.plainText || ''}`)
+              .join('\n\n')
+          : results[0].plainText || orderText || '';
+
+      setPendingDraft({
+        customerName: parsedCustomerName,
+        poNumber: firstWith('poNumber'),
+        items: itemsWithIds,
+        originalText,
+        totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights)
+      });
+      setSelectedCustomerId('');
+      setCustomerQuery('');
+      setUploadKind(null);
+      setLinkedInventoryByItemId({});
+      setOriginalParsedByItemId(originals);
+      setAutoLinkedItemIds({});
+      setPastedText('');
+      setLoading(false);
+      setStatusMessage('');
+      if (failures.length) {
+        setErrorMessage(t('upload.someFilesFailed', { files: failures.join('\n') }));
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || t('upload.uploadError'));
+      setLoading(false);
+    }
+  };
+
+  /** Parse one file (or pasted text) via the server; returns the raw parse result. */
+  const parseOneFile = async (
+    file: File,
+    orderText: string | undefined,
+    progress: { index: number; total: number } | null
+  ): Promise<any> => {
+    const prefix = progress ? `(${progress.index}/${progress.total}) ` : '';
+    setStatusMessage(prefix + (orderText ? t('upload.readingPasted') : t('upload.readingFile')));
+    {
       const mimeType = inferUploadMimeType(file.name, file.type, orderText);
       if (!isAllowedOrderUploadMime(mimeType)) {
         throw new Error(
@@ -350,9 +436,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       }
 
       setStatusMessage(
-        orderText
-          ? t('upload.parsingPasted')
-          : t('upload.analyzingGemini')
+        prefix + (orderText ? t('upload.parsingPasted') : t('upload.analyzingGemini'))
       );
 
       const controller = new AbortController();
@@ -402,45 +486,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           t('upload.noPlants')
         );
       }
-      const itemsWithIds: PlantOrderItem[] = rawItems.map((item: any, index: number) => ({
-        id: `item-${Date.now()}-${index}`,
-        plantName: item.plantName,
-        containerSize: item.containerSize,
-        quantity: item.quantity,
-        loadedQuantity: 0,
-        notes: item.notes || ''
-      }));
-
-      const originals: Record<string, { plantName: string; containerSize: string }> = {};
-      for (const item of itemsWithIds) {
-        originals[item.id] = {
-          plantName: item.plantName,
-          containerSize: item.containerSize
-        };
-      }
-
-      const parsedCustomerName = result.customerName || t('upload.unknownCustomer');
-
-      setPendingDraft({
-        customerName: parsedCustomerName,
-        poNumber: String(result.poNumber || '').trim().replace(/^n\/?a$/i, ''),
-        items: itemsWithIds,
-        originalText: result.plainText || orderText || '',
-        totalWeightLbs: orderWeightLbs(itemsWithIds, containerWeights)
-      });
-      setSelectedCustomerId('');
-      setCustomerQuery('');
-      setUploadKind(null);
-      setLinkedInventoryByItemId({});
-      setOriginalParsedByItemId(originals);
-      setAutoLinkedItemIds({});
-      setPastedText('');
-      setLoading(false);
-      setStatusMessage('');
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message || t('upload.uploadError'));
-      setLoading(false);
+      return result;
     }
   };
 
@@ -760,14 +806,14 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setIsDragging(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      processFile(files[0]);
+      void processFiles(Array.from(files));
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      processFile(files[0]);
+      void processFiles(Array.from(files));
     }
     e.currentTarget.value = '';
   };
@@ -865,6 +911,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileChange}
+                multiple
                 accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
                 className="hidden"
               />
@@ -872,16 +919,16 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 <FileText className="h-6 w-6" />
               </div>
               <p className="text-sm font-semibold text-gray-800">
-                Drag & drop plant document here
+                Drag & drop plant documents here
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                Supports PDFs, photos, invoices up to 20MB
+                PDFs or photos up to 20MB each — pick several pages/files to combine into one order
               </p>
               <button
                 type="button"
                 className="mt-4 px-4 py-1.5 bg-ink-700 hover:bg-ink-800 text-white text-xs font-semibold rounded-lg shadow transition-colors"
               >
-                Choose File
+                Choose Files
               </button>
             </div>
           ) : inputMode === 'text' ? (

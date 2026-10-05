@@ -49,6 +49,7 @@ import {
   defaultDocumentNumber,
   isDocumentNumberTaken,
   nextDocumentNumber,
+  paidAtFromDateKey,
   isEstimateDocumentNumber,
   listAllDocuments,
   subscribeToDocument,
@@ -2854,7 +2855,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               setLiveDocument({
                 ...paymentDocument,
                 paymentStatus: 'paid',
-                paidAt: new Date().toISOString(),
+                paidAt: paidAtFromDateKey(payment.paidDate),
                 paymentMethod: payment.method,
                 paymentReference: payment.reference,
                 stripePaidAmountCents:

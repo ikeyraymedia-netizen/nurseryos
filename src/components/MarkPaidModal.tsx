@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
 import { PaymentMethod } from '../types';
 import { useT } from '../lib/i18n';
+import { localTodayKey } from '../lib/documents';
 
 export type ManualPaymentMethod = Exclude<PaymentMethod, 'stripe' | 'quickbooks'>;
 
@@ -13,8 +14,14 @@ interface MarkPaidModalProps {
   amountLabel?: string;
   busy?: boolean;
   onCancel: () => void;
-  onConfirm: (payment: { method: ManualPaymentMethod; reference?: string }) => void | Promise<void>;
+  onConfirm: (payment: {
+    method: ManualPaymentMethod;
+    reference?: string;
+    /** YYYY-MM-DD; may be in the future for scheduled payments. */
+    paidDate?: string;
+  }) => void | Promise<void>;
 }
+
 
 export function paymentMethodLabel(
   t: (key: string, vars?: Record<string, string | number>) => string,
@@ -51,11 +58,13 @@ export function MarkPaidModal({
   const t = useT();
   const [method, setMethod] = useState<ManualPaymentMethod>('check');
   const [reference, setReference] = useState('');
+  const [paidDate, setPaidDate] = useState(localTodayKey);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setMethod('check');
     setReference('');
+    setPaidDate(localTodayKey());
     setError(null);
   }, [title]);
 
@@ -75,7 +84,7 @@ export function MarkPaidModal({
       return;
     }
     setError(null);
-    await onConfirm({ method, reference: ref || undefined });
+    await onConfirm({ method, reference: ref || undefined, paidDate: paidDate || undefined });
   }
 
   return (
@@ -148,6 +157,21 @@ export function MarkPaidModal({
               className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
               autoFocus
             />
+          </label>
+
+          <label className="block text-xs">
+            <span className="font-bold text-slate-600">{t('paymentMethod.paidDate')}</span>
+            <input
+              type="date"
+              value={paidDate}
+              onChange={(e) => setPaidDate(e.target.value)}
+              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
+            />
+            {paidDate > localTodayKey() && (
+              <span className="block mt-1 text-[11px] text-amber-700">
+                {t('paymentMethod.paidDateScheduled')}
+              </span>
+            )}
           </label>
 
           {error && (

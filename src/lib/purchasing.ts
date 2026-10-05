@@ -24,6 +24,7 @@ import {
 } from './inventory';
 import { findMatchingInventoryPlants } from './inventoryMatch';
 import { deleteLinkedQuickbooksBill, pushBillPaymentToQuickbooks } from './quickbooks';
+import { paidAtFromDateKey } from './documents';
 
 let activeTenantId: string | null = null;
 
@@ -428,7 +429,11 @@ export async function updateVendorBill(bill: VendorBill): Promise<void> {
 
 export async function markVendorBillPaid(
   bill: VendorBill,
-  payment?: { method: Exclude<VendorBill['paymentMethod'], 'stripe' | undefined>; reference?: string }
+  payment?: {
+    method: Exclude<VendorBill['paymentMethod'], 'stripe' | undefined>;
+    reference?: string;
+    paidDate?: string;
+  }
 ): Promise<{
   qboPaymentSynced?: boolean;
   qboPaymentSkipped?: boolean;
@@ -438,7 +443,7 @@ export async function markVendorBillPaid(
   await updateVendorBill({
     ...bill,
     status: 'paid',
-    paidAt: new Date().toISOString(),
+    paidAt: paidAtFromDateKey(payment?.paidDate),
     paymentMethod: payment?.method,
     paymentReference: payment?.reference?.trim() || undefined
   });

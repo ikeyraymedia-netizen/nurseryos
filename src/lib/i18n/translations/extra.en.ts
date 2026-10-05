@@ -1504,6 +1504,8 @@ const extra = {
     checkNumber: 'Check number',
     checkNumberPlaceholder: 'e.g. 4521',
     checkNumberRequired: 'Enter the check number.',
+    paidDate: 'Payment date',
+    paidDateScheduled: 'Future date — recorded as a scheduled payment on that date (also in QuickBooks).',
     reference: 'Reference / confirmation #',
     ccReference: 'Auth / reference #',
     referencePlaceholder: 'Confirmation or reference number',

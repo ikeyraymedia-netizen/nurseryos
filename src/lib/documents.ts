@@ -175,11 +175,26 @@ export async function updateCustomerDocument(document: CustomerDocument): Promis
   );
 }
 
+export function localTodayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** ISO timestamp for a chosen paid date (YYYY-MM-DD); keeps the exact time when it is today. */
+export function paidAtFromDateKey(dateKey?: string | null): string {
+  const key = String(dateKey || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key === localTodayKey()) {
+    return new Date().toISOString();
+  }
+  return `${key}T12:00:00.000Z`;
+}
+
 export async function markCustomerInvoicePaid(
   document: CustomerDocument,
   payment: {
     method: Exclude<CustomerDocument['paymentMethod'], 'stripe' | 'quickbooks' | undefined>;
     reference?: string;
+    paidDate?: string;
   }
 ): Promise<void> {
   if (document.type !== 'invoice') {
@@ -188,7 +203,7 @@ export async function markCustomerInvoicePaid(
   await updateCustomerDocument({
     ...document,
     paymentStatus: 'paid',
-    paidAt: new Date().toISOString(),
+    paidAt: paidAtFromDateKey(payment.paidDate),
     paymentMethod: payment.method,
     paymentReference: payment.reference?.trim() || undefined,
     stripePaidAmountCents:

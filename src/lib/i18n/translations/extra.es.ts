@@ -1520,6 +1520,8 @@ const extra = {
     checkNumber: 'Número de cheque',
     checkNumberPlaceholder: 'ej. 4521',
     checkNumberRequired: 'Ingrese el número de cheque.',
+    paidDate: 'Fecha de pago',
+    paidDateScheduled: 'Fecha futura — se registra como pago programado en esa fecha (también en QuickBooks).',
     reference: 'Referencia / confirmación #',
     ccReference: 'Autorización / referencia #',
     referencePlaceholder: 'Número de confirmación o referencia',

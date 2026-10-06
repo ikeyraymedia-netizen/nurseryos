@@ -411,7 +411,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         unavailable: item.unavailable,
         includePhotoLink: item.includePhotoLink,
         photoUrl: item.photoUrl,
-        vendor: item.vendor
+        vendor:
+          item.vendor ||
+          (type === 'estimate'
+            ? undefined
+            : liveOrderItems.find((live) => live.id === item.id)?.vendor)
       });
 
       // Credit memos are intentional subsets — keep the saved snapshot as-is.
@@ -1857,7 +1861,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             unitPrice: fromWorking.unitPrice,
             unitCost: fromWorking.unitCost,
             notes: fromWorking.notes,
-            vendor: fromWorking.vendor
+            vendor: isEstimate ? fromWorking.vendor : fromWorking.vendor || item.vendor
           };
         });
         const previousDocLineIds = new Set(

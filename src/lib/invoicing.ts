@@ -25,6 +25,7 @@ export function orderHasPricing(order: CustomerOrder): boolean {
       (order.invoiceDetails.invoiceNumber ||
         order.invoiceDetails.invoiceDate ||
         (order.invoiceDetails.taxRate != null && order.invoiceDetails.taxRate > 0) ||
+        (order.invoiceDetails.taxAmount != null && order.invoiceDetails.taxAmount > 0) ||
         (order.invoiceDetails.freightCharge != null && order.invoiceDetails.freightCharge > 0) ||
         (order.invoiceDetails.discount != null && order.invoiceDetails.discount > 0) ||
         order.invoiceDetails.notes)

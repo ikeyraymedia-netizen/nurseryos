@@ -186,6 +186,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
   const [dueDate, setDueDate] = useState('');
   const [taxRate, setTaxRate] = useState<number>(0);
+  const [taxMode, setTaxMode] = useState<'percent' | 'amount'>('percent');
+  const [taxAmountInput, setTaxAmountInput] = useState<number>(0);
   const [freightCharge, setFreightCharge] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [invoiceNotes, setInvoiceNotes] = useState(t('invoice.defaultNotesInvoice'));
@@ -355,6 +357,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           ? details.taxRate
           : 0
     );
+    const savedTaxAmount = doc ? doc.taxAmount : details?.taxAmount;
+    setTaxMode(savedTaxAmount != null ? 'amount' : 'percent');
+    setTaxAmountInput(savedTaxAmount != null ? Number(savedTaxAmount) || 0 : 0);
     setFreightCharge(
       doc?.freightCharge !== undefined
         ? doc.freightCharge
@@ -855,7 +860,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   const discountAmount = Math.min(subtotal, discount);
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const salesTax = Number(((taxableAmount * taxRate) / 100).toFixed(2));
+  const salesTax =
+    taxMode === 'amount'
+      ? Number(Math.max(0, taxAmountInput).toFixed(2))
+      : Number(((taxableAmount * taxRate) / 100).toFixed(2));
+  /** Rate saved with the document; derived from the dollar total in amount mode. */
+  const effectiveTaxRate =
+    taxMode === 'amount'
+      ? taxableAmount > 0
+        ? Number(((salesTax / taxableAmount) * 100).toFixed(3))
+        : 0
+      : taxRate;
+  const salesTaxLabel = taxMode === 'amount' ? 'Sales Tax' : `Sales Tax (${taxRate}%)`;
+  const savedTaxAmount = taxMode === 'amount' ? salesTax : null;
   const grandTotal = subtotal - discountAmount + salesTax + freightCharge;
   const paymentDocument = liveDocument || existingDocument || fetchedDocument;
   const paymentStatus = localMarkedPaid ? 'paid' : paymentDocument?.paymentStatus;
@@ -1024,9 +1041,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; color: #b91c1c;">Discount:</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #b91c1c;">-$${discountAmount.toFixed(2)}</td>
             </tr>` : ''}
-            ${taxRate > 0 ? `
+            ${salesTax > 0 ? `
             <tr>
-              <td style="padding: 4px 0; color: #475569;">Sales Tax (${taxRate}%):</td>
+              <td style="padding: 4px 0; color: #475569;">${salesTaxLabel}:</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${salesTax.toFixed(2)}</td>
             </tr>` : ''}
             ${documentType === 'invoice' && isPaid ? `
@@ -1157,7 +1174,7 @@ ${
   isEstimate
     ? `Estimated Weight: ${estimatedWeightLbs.toLocaleString()} lbs\n`
     : ''
-}${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${taxRate > 0 ? `Sales Tax (${taxRate}%): $${salesTax.toFixed(2)}\n` : ''}${
+}${freightCharge > 0 ? `Freight / Shipping: $${freightCharge.toFixed(2)}\n` : ''}${discount > 0 ? `Discount: -$${discountAmount.toFixed(2)}\n` : ''}${salesTax > 0 ? `${salesTaxLabel}: $${salesTax.toFixed(2)}\n` : ''}${
       documentType === 'estimate'
         ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}`
         : isCreditMemo
@@ -1787,7 +1804,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         dueDate,
         poNumber: poNumber.trim() || undefined,
         paymentTerms,
-        taxRate,
+        taxRate: effectiveTaxRate,
+        taxAmount: savedTaxAmount,
         freightCharge: currentFreight,
         freightAllocation,
         discount,
@@ -1941,7 +1959,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             ? referencedInvoiceNumber.trim() || undefined
             : undefined,
           paymentTerms: isCreditMemo ? undefined : paymentTerms,
-          taxRate,
+          taxRate: effectiveTaxRate,
+          taxAmount: savedTaxAmount,
           freightCharge: isCreditMemo ? 0 : currentFreight,
           freightAllocation: isCreditMemo ? undefined : freightAllocation,
           discount: isCreditMemo ? 0 : discount,
@@ -2271,7 +2290,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           ...baseDoc,
           id: savedDocumentId,
           freightCharge: isCreditMemo ? 0 : freightCharge,
-          taxRate,
+          taxRate: effectiveTaxRate,
+          taxAmount: savedTaxAmount,
           salesTax,
           discount: isCreditMemo ? 0 : discount,
           grandTotal
@@ -2754,7 +2774,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       }
       if (discountAmount > 0) writeTotal(t('invoice.discountLabel'), `-${money(discountAmount)}`);
       if (freightCharge > 0) writeTotal(t('invoice.freightLabel'), money(freightCharge));
-      if (salesTax > 0) writeTotal(`Sales Tax (${taxRate}%)`, money(salesTax));
+      if (salesTax > 0) writeTotal(salesTaxLabel, money(salesTax));
       pdf.setDrawColor(180, 180, 180);
       pdf.setLineWidth(1);
       pdf.line(labelX, y - 4, rightX, y - 4);
@@ -3256,28 +3276,75 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               {/* Tax Rate */}
               <div>
                 <label className="flex items-center justify-between font-bold text-gray-600 mb-0.5">
-                  <span>{t('invoice.taxRate')}</span>
-                  <button 
-                    onClick={() => setTaxRate(taxRate === 0 ? 4.45 : 0)}
-                    className="text-[9px] text-ink-700 hover:underline"
-                  >
-                    {taxRate === 0 ? t('invoice.useTax') : t('invoice.exempt')}
-                  </button>
+                  <span>{taxMode === 'amount' ? t('invoice.taxTotal') : t('invoice.taxRate')}</span>
+                  {taxMode === 'percent' ? (
+                    <button
+                      type="button"
+                      onClick={() => setTaxRate(taxRate === 0 ? 4.45 : 0)}
+                      className="text-[9px] text-ink-700 hover:underline"
+                    >
+                      {taxRate === 0 ? t('invoice.useTax') : t('invoice.exempt')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setTaxAmountInput(0)}
+                      className="text-[9px] text-ink-700 hover:underline"
+                    >
+                      {t('invoice.exempt')}
+                    </button>
+                  )}
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400">
-                    <Percent className="h-3 w-3" />
+                <div className="flex items-stretch gap-1">
+                  <div className="inline-flex rounded-lg border border-gray-200 bg-white overflow-hidden shrink-0">
+                    <button
+                      type="button"
+                      title={t('invoice.taxByPercent')}
+                      onClick={() => {
+                        if (taxMode === 'percent') return;
+                        setTaxRate(effectiveTaxRate);
+                        setTaxMode('percent');
+                      }}
+                      className={`px-2 flex items-center ${taxMode === 'percent' ? 'bg-ink-700 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      <Percent className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title={t('invoice.taxByAmount')}
+                      onClick={() => {
+                        if (taxMode === 'amount') return;
+                        setTaxAmountInput(salesTax);
+                        setTaxMode('amount');
+                      }}
+                      className={`px-2 flex items-center ${taxMode === 'amount' ? 'bg-ink-700 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      <DollarSign className="h-3 w-3" />
+                    </button>
                   </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={taxRate || ''}
-                    placeholder="0"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
-                    className="w-full pl-7 pr-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
-                  />
+                  {taxMode === 'percent' ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={taxRate || ''}
+                      placeholder={t('invoice.taxExemptPlaceholder')}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
+                      className="w-full min-w-0 px-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={taxAmountInput || ''}
+                      placeholder={t('invoice.taxExemptPlaceholder')}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setTaxAmountInput(Number(e.target.value) || 0)}
+                      className="w-full min-w-0 px-3 py-1 border border-gray-200 rounded-lg focus:outline-none focus:border-ink-500 bg-white font-mono font-medium"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -4774,9 +4841,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   )}
 
                   {/* Sales Tax */}
-                  {taxRate > 0 && (
+                  {salesTax > 0 && (
                     <div className="flex justify-between py-1 border-b border-gray-150">
-                      <span className="text-gray-500 font-medium">Sales Tax ({taxRate}%):</span>
+                      <span className="text-gray-500 font-medium">{salesTaxLabel}:</span>
                       <span className="font-bold text-gray-950">${salesTax.toFixed(2)}</span>
                     </div>
                   )}

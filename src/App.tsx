@@ -755,6 +755,7 @@ function NurseryApp({
           dueDate: doc.dueDate,
           paymentTerms: doc.paymentTerms,
           taxRate: doc.taxRate,
+          taxAmount: doc.taxAmount ?? undefined,
           freightCharge: doc.freightCharge,
           discount: doc.discount,
           notes: doc.notes

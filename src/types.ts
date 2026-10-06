@@ -126,6 +126,8 @@ export interface InvoiceDetails {
   poNumber?: string; // Customer purchase order number
   paymentTerms?: string;
   taxRate?: number; // sales tax percentage, e.g. 4.45
+  /** Fixed sales tax in dollars; when set it overrides taxRate. */
+  taxAmount?: number | null;
   freightCharge?: number; // delivery / freight charge
   freightAllocation?: FreightAllocation;
   discount?: number; // flat discount amount
@@ -232,6 +234,8 @@ export interface CustomerDocument {
   referencedInvoiceNumber?: string;
   paymentTerms?: string;
   taxRate?: number;
+  /** Fixed sales tax in dollars; when set it overrides taxRate. */
+  taxAmount?: number | null;
   freightCharge?: number;
   freightAllocation?: FreightAllocation;
   discount?: number;

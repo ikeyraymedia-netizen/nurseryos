@@ -144,6 +144,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const printRef = useRef<HTMLDivElement | null>(null);
   /** Line ids whose price came from a saved doc, explicit unitPrice, or manual edit. */
   const pricesLockedRef = useRef<Set<string>>(new Set());
+  /** Lines whose price is only a computed fallback (never saved or typed), so inventory may replace it. */
+  const fallbackPricedRef = useRef<Set<string>>(new Set());
   const logoSrc = nurseryLogoSrc || resolveNurseryLogoSrc(nurseryName);
   const salesRepOptions = useSalesRepOptions(tenantId);
   const t = useT();
@@ -467,6 +469,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     const pricesMap: Record<string, number> = {};
     const locked = new Set<string>();
+    const fallbackPriced = new Set<string>();
     const lockExplicitPrice = (
       item: { id: string; unitPrice?: number },
       fallback?: () => number
@@ -480,6 +483,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         // Inventory list price / size default should show and save on the invoice.
         pricesMap[item.id] = fallback();
         locked.add(item.id);
+        fallbackPriced.add(item.id);
       }
     };
     if (doc?.items?.length) {
@@ -511,12 +515,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         const merged = { ...pricesMap, ...prev };
         for (const id of Object.keys(prev)) {
           locked.add(id);
+          fallbackPriced.delete(id);
         }
+        fallbackPricedRef.current = fallbackPriced;
         pricesLockedRef.current = locked;
         return merged;
       });
     } else {
       pricesLockedRef.current = locked;
+      fallbackPricedRef.current = fallbackPriced;
       setItemPrices(pricesMap);
     }
 
@@ -742,6 +749,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     ) {
       const nextPrice = defaultLineUnitPrice(nextLine, inventoryPlants, containerWeights);
       pricesLockedRef.current.add(id);
+      fallbackPricedRef.current.add(id);
       setItemPrices((prices) => ({
         ...prices,
         [id]: nextPrice
@@ -1416,10 +1424,13 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         const current = next[item.id];
         const sizeDefault = getDefaultPriceForSize(item.containerSize);
         // Fill blank lines, or replace a size-default placeholder once inventory matches.
-        if (current === undefined || current === sizeDefault) {
+        const isPlaceholder =
+          current === sizeDefault && fallbackPricedRef.current.has(item.id);
+        if (current === undefined || isPlaceholder) {
           if (current !== fromInv) {
             next[item.id] = fromInv;
             pricesLockedRef.current.add(item.id);
+            fallbackPricedRef.current.delete(item.id);
             changed = true;
           } else if (!pricesLockedRef.current.has(item.id)) {
             pricesLockedRef.current.add(item.id);
@@ -1536,6 +1547,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     const parsed = Number(raw);
     if (!Number.isFinite(parsed)) return;
     pricesLockedRef.current.add(itemId);
+    fallbackPricedRef.current.delete(itemId);
     pricesDirtyRef.current = true;
     setItemPrices((prev) => ({
       ...prev,
@@ -1609,6 +1621,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       locked.add(item.id);
     });
     pricesLockedRef.current = locked;
+    fallbackPricedRef.current = new Set(locked);
     pricesDirtyRef.current = true;
     setItemPrices(defaultPrices);
     setSaveSuccess(false);
@@ -1973,6 +1986,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           loadedQuantity: item.loadedQuantity ?? 0
         }))
       );
+      for (const item of updatedItems) {
+        if (item.unitPrice !== undefined) fallbackPricedRef.current.delete(item.id);
+      }
       setItemPrices((prev) => {
         const next = { ...prev };
         for (const item of updatedItems) {

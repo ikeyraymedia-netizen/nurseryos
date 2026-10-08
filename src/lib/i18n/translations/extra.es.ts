@@ -1556,6 +1556,36 @@ const extra = {
     dismiss: 'Descartar',
     dismissAll: 'Descartar todo ({{n}})'
   },
+  mfa: {
+    setupTitle: 'Active el inicio de sesión en dos pasos',
+    setupIntro:
+      'Los administradores necesitan inicio en dos pasos. NurseryOS pedirá un código de 6 dígitos de una app de autenticación (como Google Authenticator) cada vez que inicie sesión.',
+    step1: 'Instale Google Authenticator (u otra app de autenticación) en su teléfono.',
+    step2: 'En la app, toque + y escanee este código QR.',
+    step3: 'Escriba el código de 6 dígitos que muestra la app.',
+    qrAlt: 'Código QR para su app de autenticación',
+    openOnPhone: '¿En este teléfono? Toque para agregarlo a su app de autenticación',
+    manualKey: '¿No puede escanear? Ingrese esta clave:',
+    codeLabel: 'Código de 6 dígitos',
+    turnOn: 'Activar inicio en dos pasos',
+    wrongCode: 'Ese código no coincide. Revise la app y use el código más reciente.',
+    setupFailed: 'No se pudo configurar el inicio en dos pasos. Intente de nuevo.',
+    verifyEmailFirst:
+      'Primero confirme su correo ({{email}}). Envíe el correo de verificación, haga clic en el enlace y luego vuelva y toque "Ya verifiqué".',
+    sendVerify: 'Enviar correo de verificación',
+    resendVerify: 'Enviar de nuevo',
+    verifySent: 'Enviado — revise su bandeja (y spam).',
+    iVerified: 'Ya verifiqué',
+    recentLogin: 'Por seguridad, cierre sesión y vuelva a entrar, luego configure el inicio en dos pasos.',
+    notEnabled: 'El inicio en dos pasos aún no está activado en NurseryOS.',
+    continueWithout: 'Continuar por ahora',
+    signOut: 'Cerrar sesión',
+    signInTitle: 'Ingrese su código',
+    signInHint: 'Abra su app de autenticación y escriba el código de NurseryOS de 6 dígitos.',
+    verify: 'Verificar',
+    sessionExpired: 'Tardó demasiado. Regrese e inicie sesión de nuevo.',
+    backToSignIn: 'Volver a iniciar sesión'
+  },
   paymentMethod: {
     howPaid: '¿Cómo se pagó?',
     check: 'Cheque',

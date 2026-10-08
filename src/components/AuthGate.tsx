@@ -1,5 +1,14 @@
 import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { User } from 'firebase/auth';
+import { MultiFactorResolver, User } from 'firebase/auth';
+import { ShieldCheck } from 'lucide-react';
+import { MfaSetupScreen } from './MfaSetupScreen';
+import {
+  hasTotpEnrolled,
+  isMfaRequiredError,
+  memberRequiresMfa,
+  mfaResolverFor,
+  resolveSignInWithTotp
+} from '../lib/mfa';
 import { Tenant, UserProfile, TenantMember } from '../types';
 import {
   getTenant,
@@ -86,6 +95,11 @@ export function AuthGate({ children }: AuthGateProps) {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [requestSent, setRequestSent] = useState(false);
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [mfaSkipped, setMfaSkipped] = useState(false);
+  const [, setMfaEnrolledTick] = useState(0);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -305,16 +319,7 @@ export function AuthGate({ children }: AuthGateProps) {
       } else {
         const signedInUser = await signIn(email, password);
         nextUser = signedInUser;
-        if (signInWithInvite) {
-          await joinNurseryWithInvite({
-            user: signedInUser,
-            inviteCode,
-            displayName,
-            locale
-          });
-        } else {
-          await updateUserLocale(signedInUser.uid, locale);
-        }
+        await afterPasswordSignIn(signedInUser, locale);
       }
 
       suppressAuthLoadRef.current = false;
@@ -322,6 +327,11 @@ export function AuthGate({ children }: AuthGateProps) {
         await hydrateSession(nextUser);
       }
     } catch (err: any) {
+      if (isMfaRequiredError(err)) {
+        setMfaResolver(mfaResolverFor(err));
+        setMfaCode('');
+        return;
+      }
       console.error(err);
       const message =
         err?.code === 'auth/email-already-in-use'
@@ -338,6 +348,47 @@ export function AuthGate({ children }: AuthGateProps) {
     } finally {
       suppressAuthLoadRef.current = false;
       submitLockRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function afterPasswordSignIn(signedInUser: User, locale: AppLocale) {
+    if (signInWithInvite) {
+      await joinNurseryWithInvite({
+        user: signedInUser,
+        inviteCode,
+        displayName,
+        locale
+      });
+    } else {
+      await updateUserLocale(signedInUser.uid, locale);
+    }
+  }
+
+  async function handleMfaSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!mfaResolver || busy) return;
+    setBusy(true);
+    setMfaError(null);
+    suppressAuthLoadRef.current = true;
+    const locale = effectiveLocale;
+    try {
+      const signedInUser = await resolveSignInWithTotp(mfaResolver, mfaCode);
+      await afterPasswordSignIn(signedInUser, locale);
+      suppressAuthLoadRef.current = false;
+      setMfaResolver(null);
+      await hydrateSession(signedInUser);
+    } catch (err: any) {
+      console.error(err);
+      setMfaError(
+        err?.code === 'auth/invalid-verification-code'
+          ? translate(locale, 'mfa.wrongCode')
+          : err?.code === 'auth/code-expired' || err?.code === 'auth/multi-factor-auth-required'
+            ? translate(locale, 'mfa.sessionExpired')
+            : err?.message || translate(locale, 'auth.authFailed')
+      );
+    } finally {
+      suppressAuthLoadRef.current = false;
       setBusy(false);
     }
   }
@@ -361,8 +412,69 @@ export function AuthGate({ children }: AuthGateProps) {
             {translate(effectiveLocale, 'auth.loading')}
           </p>
         </div>
+      ) : session &&
+        !mfaSkipped &&
+        memberRequiresMfa(session.member) &&
+        !hasTotpEnrolled(session.user) ? (
+        <MfaSetupScreen
+          user={session.user}
+          onDone={() => setMfaEnrolledTick((n) => n + 1)}
+          onSignOut={session.onSignOut}
+          onSkip={() => setMfaSkipped(true)}
+        />
       ) : session ? (
         <>{children(session)}</>
+      ) : mfaResolver ? (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <BrandLogo variant="icon" size="lg" showText={false} />
+          <form
+            onSubmit={(e) => void handleMfaSubmit(e)}
+            className="mt-6 w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-6 space-y-4"
+          >
+            <div>
+              <h1 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                {translate(effectiveLocale, 'mfa.signInTitle')}
+              </h1>
+              <p className="text-xs text-slate-600 mt-1">
+                {translate(effectiveLocale, 'mfa.signInHint')}
+              </p>
+            </div>
+            <input
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-lg font-mono tracking-[0.4em] text-center"
+              autoFocus
+            />
+            {mfaError && (
+              <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                {mfaError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={busy || mfaCode.length !== 6}
+              className="w-full px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-700 hover:bg-emerald-800 text-white disabled:opacity-50"
+            >
+              {busy
+                ? translate(effectiveLocale, 'common.pleaseWait')
+                : translate(effectiveLocale, 'mfa.verify')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMfaResolver(null);
+                setMfaError(null);
+              }}
+              className="text-xs font-bold text-slate-500 hover:underline"
+            >
+              {translate(effectiveLocale, 'mfa.backToSignIn')}
+            </button>
+          </form>
+        </div>
       ) : (
         <WelcomePage
           authPanel={authPanel}

@@ -1540,6 +1540,36 @@ const extra = {
     dismiss: 'Dismiss',
     dismissAll: 'Dismiss all ({{n}})'
   },
+  mfa: {
+    setupTitle: 'Turn on two-step login',
+    setupIntro:
+      'Admins need two-step login. NurseryOS will ask for a 6-digit code from an authenticator app (like Google Authenticator) each time you sign in.',
+    step1: 'Install Google Authenticator (or any authenticator app) on your phone.',
+    step2: 'In the app, tap + and scan this QR code.',
+    step3: 'Type the 6-digit code the app shows.',
+    qrAlt: 'QR code for your authenticator app',
+    openOnPhone: 'On this phone? Tap to add to your authenticator app',
+    manualKey: "Can't scan? Enter this key:",
+    codeLabel: '6-digit code',
+    turnOn: 'Turn on two-step login',
+    wrongCode: "That code didn't match. Check the app and try the newest code.",
+    setupFailed: 'Could not set up two-step login. Please try again.',
+    verifyEmailFirst:
+      'First confirm your email ({{email}}). Send the verification email, click the link in it, then come back and tap "I verified".',
+    sendVerify: 'Send verification email',
+    resendVerify: 'Send again',
+    verifySent: 'Sent — check your inbox (and spam).',
+    iVerified: 'I verified',
+    recentLogin: 'For security, sign out and sign back in, then set up two-step login.',
+    notEnabled: 'Two-step login is not switched on for NurseryOS yet.',
+    continueWithout: 'Continue for now',
+    signOut: 'Sign out',
+    signInTitle: 'Enter your code',
+    signInHint: 'Open your authenticator app and type the 6-digit NurseryOS code.',
+    verify: 'Verify',
+    sessionExpired: 'That took too long. Go back and sign in again.',
+    backToSignIn: 'Back to sign in'
+  },
   paymentMethod: {
     howPaid: 'How was it paid?',
     check: 'Check',

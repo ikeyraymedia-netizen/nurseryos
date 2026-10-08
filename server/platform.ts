@@ -364,7 +364,9 @@ async function resolveOrCreateOwnerUser(params: {
     email,
     password,
     displayName: params.displayName.trim() || undefined,
-    emailVerified: false
+    // The random password is never shared; the owner can only get in through the welcome
+    // email link, which proves they control this inbox. Two-step login setup needs it verified.
+    emailVerified: true
   });
   return { uid: created.uid, created: true };
 }

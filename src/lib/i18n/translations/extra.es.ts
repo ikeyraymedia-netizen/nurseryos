@@ -1395,6 +1395,7 @@ const extra = {
     total: 'Total',
     markSelectedPaid: 'Marcar {{n}} pagadas · {{amount}}',
     markSelectedPaidTitle: 'Marcar {{n}} facturas pagadas',
+    syncPaymentToQb: 'Sincronizar pago con QuickBooks',
     checkPaymentView: 'Ver todas las facturas pagadas con este pago',
     checkPaymentBillsCount: '{{n}} facturas',
     checkPaymentSummary: '{{n}} factura(s) · {{total}}',

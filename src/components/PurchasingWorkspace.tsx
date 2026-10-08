@@ -88,7 +88,7 @@ import {
   payVendorBillMelio,
   refreshVendorBillMelioPayment
 } from '../lib/melio';
-import { pushVendorBillToQuickbooks } from '../lib/quickbooks';
+import { pushBillPaymentToQuickbooks, pushVendorBillToQuickbooks } from '../lib/quickbooks';
 import { logAuditEvent } from '../lib/audit';
 import { BankFeedPanel } from './BankFeedPanel';
 import { SourcingPanel } from './SourcingPanel';
@@ -1535,6 +1535,31 @@ export function PurchasingWorkspace({
                 {bill.qboBillId ? t('purchasing.openInQb') : t('purchasing.pushToQb')}
               </button>
             )}
+            {permissions.canUseQuickbooks &&
+              bill.status === 'paid' &&
+              bill.qboBillId &&
+              !bill.qboBillPaymentId && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      const result = await pushBillPaymentToQuickbooks({ tenantId, billId: bill.id });
+                      setStatus(
+                        !result.synced
+                          ? t('purchasing.qbBillPaymentSyncFailed', { error: result.reason || '' })
+                          : result.reason === 'already_paid_in_qbo'
+                            ? t('purchasing.qbBillPaymentAlreadySynced')
+                            : t('purchasing.qbBillPaymentSynced')
+                      );
+                    })
+                  }
+                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900"
+                >
+                  <Link2 className="h-3 w-3" />
+                  {t('purchasing.syncPaymentToQb')}
+                </button>
+              )}
             {bill.status !== 'paid' && bill.status !== 'payment_pending' && (
               <button
                 type="button"

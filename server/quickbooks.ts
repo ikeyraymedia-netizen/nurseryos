@@ -2291,10 +2291,80 @@ async function pushVendorBillToQboInternal(
   };
 }
 
+const billPaymentLocks = new Map<string, Promise<unknown>>();
+
+/** Serialize syncs that share a check number so they land on one QBO BillPayment. */
+async function withBillPaymentLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = billPaymentLocks.get(key) || Promise.resolve();
+  const run = prev.catch(() => undefined).then(fn);
+  billPaymentLocks.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (billPaymentLocks.get(key) === run) billPaymentLocks.delete(key);
+  }
+}
+
 /**
  * Create a QBO BillPayment for a NurseryOS vendor bill that is paid.
+ * Bills for the same vendor paid with the same check number share one BillPayment.
  */
 export async function syncPaidVendorBillPaymentToQbo(
+  tenantId: string,
+  billId: string,
+  opts?: { uid?: string }
+): Promise<{
+  synced: boolean;
+  skipped?: boolean;
+  reason?: string;
+  qboBillPaymentId?: string;
+}> {
+  if (!isFirebaseAdminConfigured()) {
+    return { synced: false, skipped: true, reason: 'firebase_admin' };
+  }
+  const snap = await getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`).get();
+  const ref = String(snap.data()?.paymentReference || '').trim().toLowerCase();
+  const key = ref ? `${tenantId}|ref|${ref}` : `${tenantId}|bill|${billId}`;
+  return withBillPaymentLock(key, () => syncPaidVendorBillPaymentUnlocked(tenantId, billId, opts));
+}
+
+/** Existing QBO BillPayment for the same vendor + method + check number, if any. */
+async function findSharedQboBillPayment(
+  tenantId: string,
+  billId: string,
+  bill: Record<string, any>,
+  vendorId: string
+): Promise<any | null> {
+  const reference = String(bill.paymentReference || '').trim();
+  if (!reference) return null;
+  const siblings = await getAdminDb()
+    .collection(`tenants/${tenantId}/vendorBills`)
+    .where('paymentReference', '==', reference)
+    .get();
+  const paymentIds = new Set<string>();
+  for (const doc of siblings.docs) {
+    const other = doc.data();
+    if (doc.id === billId || !other.qboBillPaymentId) continue;
+    if (String(other.paymentMethod || '') !== String(bill.paymentMethod || '')) continue;
+    paymentIds.add(String(other.qboBillPaymentId));
+  }
+  for (const paymentId of paymentIds) {
+    try {
+      const res = await qboRequest<any>(
+        tenantId,
+        'GET',
+        `/billpayment/${encodeURIComponent(paymentId)}?minorversion=65`
+      );
+      const payment = res?.BillPayment;
+      if (payment?.Id && String(payment.VendorRef?.value || '') === vendorId) return payment;
+    } catch (err) {
+      if (!isQboMissingError(err)) throw err;
+    }
+  }
+  return null;
+}
+
+async function syncPaidVendorBillPaymentUnlocked(
   tenantId: string,
   billId: string,
   opts?: { uid?: string }
@@ -2401,6 +2471,39 @@ export async function syncPaidVendorBillPaymentToQbo(
   }
 
   const rounded = Math.round(amount * 100) / 100;
+
+  const shared = await findSharedQboBillPayment(tenantId, billId, bill, vendorId);
+  if (shared) {
+    const lines: any[] = Array.isArray(shared.Line) ? shared.Line : [];
+    const alreadyLinked = lines.some((line) =>
+      (line?.LinkedTxn || []).some(
+        (lt: any) => lt?.TxnType === 'Bill' && String(lt.TxnId) === qboBillId
+      )
+    );
+    let paymentId = String(shared.Id);
+    if (!alreadyLinked) {
+      const total = Math.round((Number(shared.TotalAmt || 0) + rounded) * 100) / 100;
+      const updated = await qboRequest<any>(tenantId, 'POST', '/billpayment?minorversion=65', {
+        ...shared,
+        TotalAmt: total,
+        Line: [...lines, { Amount: rounded, LinkedTxn: [{ TxnId: qboBillId, TxnType: 'Bill' }] }]
+      });
+      paymentId = updated?.BillPayment?.Id ? String(updated.BillPayment.Id) : paymentId;
+    }
+    const now = new Date().toISOString();
+    await billRef.set(
+      {
+        qboBillPaymentId: paymentId,
+        qboBillPaymentSyncedAt: now,
+        qboBillPaymentSyncedByUserId: opts?.uid || 'system',
+        qboBillPaymentNote: null,
+        updatedAt: now
+      },
+      { merge: true }
+    );
+    return { synced: true, qboBillPaymentId: paymentId };
+  }
+
   const txnDate = String(bill.paidAt || new Date().toISOString()).slice(0, 10);
   const refNum = String(bill.paymentReference || bill.billNumber || '')
     .trim()

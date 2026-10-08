@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Trash2, Undo2, X } from 'lucide-react';
-import { InventoryPlant } from '../types';
+import { InventoryPlant, PLANT_TYPES, PlantType } from '../types';
 import {
   deleteInventoryPlants,
   InventoryBulkPatch,
@@ -32,6 +32,43 @@ function fieldText(plant: InventoryPlant, field: EditableField): string {
   return String(value);
 }
 
+function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: string) => void }) {
+  const [value, setValue] = useState(plant.plantName);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setValue(plant.plantName);
+  }, [plant.plantName]);
+
+  function commit() {
+    const next = value.trim();
+    if (!next) return setValue(plant.plantName);
+    if (next !== plant.plantName) onSave(next);
+  }
+
+  return (
+    <input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onFocus={() => (focused.current = true)}
+      onBlur={() => {
+        focused.current = false;
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setValue(plant.plantName);
+          focused.current = false;
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-full px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-sm font-semibold text-gray-900"
+    />
+  );
+}
+
 /** Full-screen table to delete and edit many inventory plants without opening each one. */
 export function InventoryManagerModal({ plants, onClose }: InventoryManagerModalProps) {
   const t = useT();
@@ -45,18 +82,20 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
   const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [bulkCategory, setBulkCategory] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [bulkType, setBulkType] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     searchRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !editing) onClose();
+      if (e.key === 'Escape' && !editing && !e.defaultPrevented) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [editing, onClose]);
 
-  useEffect(() => setVisibleCount(PAGE_SIZE), [search, categoryFilter]);
+  useEffect(() => setVisibleCount(PAGE_SIZE), [search, categoryFilter, typeFilter]);
 
   const categories = useMemo(
     () =>
@@ -74,15 +113,18 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
         const cat = (p.category || '').trim();
         if (categoryFilter === NO_CATEGORY && cat) return false;
         if (categoryFilter && categoryFilter !== NO_CATEGORY && cat !== categoryFilter) return false;
+        if (typeFilter === NO_CATEGORY && p.plantType) return false;
+        if (typeFilter && typeFilter !== NO_CATEGORY && p.plantType !== typeFilter) return false;
         if (words.length === 0) return true;
-        const hay = `${p.plantName} ${p.containerSize} ${cat} ${p.location || ''}`.toLowerCase();
+        const hay =
+          `${p.plantName} ${p.containerSize} ${cat} ${p.plantType || ''} ${p.location || ''}`.toLowerCase();
         return words.every((w) => hay.includes(w));
       })
       .sort(
         (a, b) =>
           a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
       );
-  }, [plants, search, categoryFilter, pendingDeleteIds]);
+  }, [plants, search, categoryFilter, typeFilter, pendingDeleteIds]);
 
   const checkedVisible = rows.filter((p) => checked.has(p.id));
   const allChecked = rows.length > 0 && checkedVisible.length === rows.length;
@@ -166,15 +208,25 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
     }
   }
 
-  async function applyBulkCategory() {
-    const ids = checkedVisible.map((p) => p.id);
+  async function savePatch(ids: string[], patch: InventoryBulkPatch) {
     if (ids.length === 0) return;
     setError(null);
     try {
-      await updateInventoryPlantsBulk(ids, { category: bulkCategory.trim() || null });
+      await updateInventoryPlantsBulk(ids, patch);
     } catch (err: any) {
       setError(err?.message || t('inventory.updateFailed'));
     }
+  }
+
+  function applyBulkCategory() {
+    void savePatch(checkedVisible.map((p) => p.id), { category: bulkCategory.trim() || null });
+  }
+
+  function applyBulkType() {
+    if (!bulkType) return;
+    void savePatch(checkedVisible.map((p) => p.id), {
+      plantType: bulkType === NO_CATEGORY ? null : (bulkType as PlantType)
+    });
   }
 
   function toggle(id: string) {
@@ -264,6 +316,19 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
               </option>
             ))}
           </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
+          >
+            <option value="">{t('inventory.managerAllTypes')}</option>
+            <option value={NO_CATEGORY}>{t('inventory.managerNoType')}</option>
+            {PLANT_TYPES.map((pt) => (
+              <option key={pt} value={pt}>
+                {pt}
+              </option>
+            ))}
+          </select>
           <span className="text-xs font-bold text-gray-500">
             {t('inventory.managerCount', { n: rows.length })}
           </span>
@@ -282,6 +347,27 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
               <Trash2 className="h-3.5 w-3.5" />
               {t('inventory.bulkDelete', { n: checkedVisible.length })}
             </button>
+            <select
+              value={bulkType}
+              onChange={(e) => setBulkType(e.target.value)}
+              className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
+            >
+              <option value="">{t('inventory.managerSetType')}</option>
+              {PLANT_TYPES.map((pt) => (
+                <option key={pt} value={pt}>
+                  {pt}
+                </option>
+              ))}
+              <option value={NO_CATEGORY}>{t('inventory.managerNoType')}</option>
+            </select>
+            <button
+              type="button"
+              disabled={!bulkType}
+              onClick={applyBulkType}
+              className="px-3 py-1.5 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-40"
+            >
+              {t('inventory.bulkApply', { n: checkedVisible.length })}
+            </button>
             <input
               value={bulkCategory}
               onChange={(e) => setBulkCategory(e.target.value)}
@@ -291,7 +377,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
             />
             <button
               type="button"
-              onClick={() => void applyBulkCategory()}
+              onClick={applyBulkCategory}
               className="px-3 py-1.5 rounded-lg bg-ink-700 text-white text-xs font-bold"
             >
               {t('inventory.bulkApply', { n: checkedVisible.length })}
@@ -352,6 +438,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                 </th>
                 <th className="px-2 py-2 text-left">{t('inventory.plantName')}</th>
                 <th className="px-2 py-2 text-left w-24">{t('inventory.managerSize')}</th>
+                <th className="px-2 py-2 text-left w-36">{t('inventory.managerType')}</th>
                 <th className="px-2 py-2 text-left w-40">{t('inventory.managerCategory')}</th>
                 <th className="px-2 py-2 text-left w-32">{t('inventory.managerLocation')}</th>
                 <th className="px-2 py-2 text-right w-24">{t('inventory.managerPrice')}</th>
@@ -373,8 +460,31 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                       className="h-4 w-4"
                     />
                   </td>
-                  <td className="px-1 py-1 font-semibold text-gray-900">{cell(plant, 'plantName')}</td>
+                  <td className="px-1 py-1">
+                    <NameInput
+                      plant={plant}
+                      onSave={(plantName) => void savePatch([plant.id], { plantName })}
+                    />
+                  </td>
                   <td className="px-1 py-1 font-mono text-xs">{cell(plant, 'containerSize')}</td>
+                  <td className="px-1 py-1">
+                    <select
+                      value={plant.plantType || ''}
+                      onChange={(e) =>
+                        void savePatch([plant.id], {
+                          plantType: (e.target.value as PlantType) || null
+                        })
+                      }
+                      className={`w-full px-1 py-1 rounded border border-gray-200 text-sm bg-white ${plant.plantType ? 'text-gray-900' : 'text-gray-400'}`}
+                    >
+                      <option value="">—</option>
+                      {PLANT_TYPES.map((pt) => (
+                        <option key={pt} value={pt}>
+                          {pt}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="px-1 py-1">{cell(plant, 'category')}</td>
                   <td className="px-1 py-1">{cell(plant, 'location')}</td>
                   <td className="px-1 py-1 font-mono text-right">

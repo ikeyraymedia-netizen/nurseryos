@@ -24,7 +24,15 @@ import {
   Download,
   Table2
 } from 'lucide-react';
-import { CustomerOrder, InventoryPlant, Tenant, Truck as TruckType, Vendor } from '../types';
+import {
+  CustomerOrder,
+  InventoryPlant,
+  PLANT_TYPES,
+  PlantType,
+  Tenant,
+  Truck as TruckType,
+  Vendor
+} from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addChemicalApplication,
@@ -1530,6 +1538,24 @@ export function InventoryWorkspace({
                     placeholder={t('inventory.sectionPlaceholder')}
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   />
+                </label>
+                <label className="block text-xs">
+                  <span className="font-bold text-gray-500 uppercase">{t('inventory.managerType')}</span>
+                  <select
+                    disabled={!permissions.canEditInventory}
+                    value={selected.plantType || ''}
+                    onChange={(e) =>
+                      saveSelected({ plantType: (e.target.value as PlantType) || null })
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">—</option>
+                    {PLANT_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {pt}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="block text-xs">
                   <span className="font-bold text-gray-500 uppercase">{t('inventory.plantedDate')}</span>

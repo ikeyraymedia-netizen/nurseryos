@@ -1227,7 +1227,8 @@ async function generateVendorInvoiceParseResponse(
   mimeType: string,
   cleanBase64: string,
   prompt: string,
-  invoiceText?: string
+  invoiceText?: string,
+  timeoutMs = GEMINI_REQUEST_TIMEOUT_MS
 ) {
   const contents = invoiceText
     ? [`${prompt}\n\n--- PASTED VENDOR INVOICE TEXT ---\n${invoiceText}`]
@@ -1247,9 +1248,13 @@ async function generateVendorInvoiceParseResponse(
       contents,
       config: getVendorInvoiceParseSchema()
     }),
-    `Vendor invoice parse (${model})`
+    `Vendor invoice parse (${model})`,
+    timeoutMs
   );
 }
+
+/** Stay under the browser's 180s abort so the user gets a real error, not an endless spinner. */
+const VENDOR_INVOICE_TOTAL_BUDGET_MS = 150_000;
 
 async function parseVendorInvoiceWithFallback(
   ai: GoogleGenAI,
@@ -1260,9 +1265,19 @@ async function parseVendorInvoiceWithFallback(
 ) {
   let lastError: any = null;
   const maxAttemptsPerModel = 2;
+  const deadline = Date.now() + VENDOR_INVOICE_TOTAL_BUDGET_MS;
 
   for (const model of PARSE_MODELS) {
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs < 15_000) {
+        throw Object.assign(
+          new Error(
+            'The AI took too long to read this bill. Try a clearer or smaller photo, or a PDF.'
+          ),
+          { cause: lastError }
+        );
+      }
       try {
         console.log(
           `Parsing vendor invoice with ${model} (attempt ${attempt}/${maxAttemptsPerModel})...`
@@ -1273,7 +1288,8 @@ async function parseVendorInvoiceWithFallback(
           mimeType,
           cleanBase64,
           prompt,
-          invoiceText
+          invoiceText,
+          Math.min(GEMINI_REQUEST_TIMEOUT_MS, remainingMs)
         );
         console.log(`Vendor invoice parsed successfully with ${model}`);
         return response;

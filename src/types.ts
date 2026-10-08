@@ -363,6 +363,9 @@ export interface FertilizerApplication {
   notes?: string;
 }
 
+export const PLANT_TYPES = ['Ground Cover', 'Grasses', 'Shrubs', 'Trees', 'Perennials'] as const;
+export type PlantType = (typeof PLANT_TYPES)[number];
+
 export interface InventoryPlant {
   id: string;
   plantName: string;
@@ -379,6 +382,7 @@ export interface InventoryPlant {
   location?: string;
   /** Catalog section e.g. Shrubs, Ground Cover, Grasses */
   category?: string;
+  plantType?: PlantType | null;
   /** List / wholesale price from catalog import */
   listPrice?: number | null;
   /** Where these plants/liners were purchased from (vendor or custom grower). */

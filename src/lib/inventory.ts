@@ -354,6 +354,7 @@ export type InventoryBulkPatch = Partial<
     InventoryPlant,
     | 'plantName'
     | 'category'
+    | 'plantType'
     | 'location'
     | 'listPrice'
     | 'containerSize'

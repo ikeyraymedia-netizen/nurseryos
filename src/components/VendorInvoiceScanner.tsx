@@ -16,6 +16,7 @@ import { findMatchingVendors } from '../lib/vendorMatch';
 import { createVendorBill } from '../lib/purchasing';
 import { addVendor } from '../lib/vendors';
 import { uploadVendorInvoiceAttachment } from '../lib/vendorInvoicePhotos';
+import { fileToCompressedJpegBlob } from '../lib/inventoryPhotos';
 import { authJsonHeaders } from '../lib/apiAuth';
 import {
   emptyBillLine,
@@ -154,21 +155,33 @@ export function VendorInvoiceScanner({
     setStatusMessage(invoiceText ? t('scanner.readingPasted') : t('scanner.readingFile'));
 
     try {
-      const mimeType = inferUploadMimeType(file.name, file.type, invoiceText);
+      let mimeType = inferUploadMimeType(file.name, file.type, invoiceText);
+      let uploadBlob: Blob = file;
+      const isPhoto =
+        !invoiceText &&
+        (file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || ''));
+      if (isPhoto) {
+        try {
+          uploadBlob = await fileToCompressedJpegBlob(file, 2000, 0.85);
+          mimeType = 'image/jpeg';
+        } catch {
+          uploadBlob = file;
+        }
+      }
       if (!isAllowedOrderUploadMime(mimeType)) {
         throw new Error(t('scanner.unsupportedFile'));
       }
 
       let base64Data: string | undefined;
       if (!invoiceText) {
-        if (file.size > 20 * 1024 * 1024) {
+        if (uploadBlob.size > 20 * 1024 * 1024) {
           throw new Error(t('scanner.fileTooLarge'));
         }
         base64Data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = (err) => reject(err);
-          reader.readAsDataURL(file);
+          reader.readAsDataURL(uploadBlob);
         });
         setPendingFile(file);
       }

@@ -349,6 +349,37 @@ export async function deleteInventoryPlant(plantId: string): Promise<void> {
   await deleteDoc(inventoryDoc(tenantId, plantId));
 }
 
+export type InventoryBulkPatch = Partial<
+  Pick<InventoryPlant, 'category' | 'location' | 'listPrice' | 'containerSize' | 'readyDate'>
+>;
+
+async function commitInBatches(ids: string[], apply: (batch: ReturnType<typeof writeBatch>, id: string) => void) {
+  for (let i = 0; i < ids.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const id of ids.slice(i, i + 450)) apply(batch, id);
+    await batch.commit();
+  }
+}
+
+export async function deleteInventoryPlants(plantIds: string[]): Promise<number> {
+  const tenantId = requireTenantId();
+  const ids = [...new Set(plantIds)];
+  await commitInBatches(ids, (batch, id) => batch.delete(inventoryDoc(tenantId, id)));
+  return ids.length;
+}
+
+/** Apply the same field changes to many plants (null clears a field). */
+export async function updateInventoryPlantsBulk(
+  plantIds: string[],
+  patch: InventoryBulkPatch
+): Promise<number> {
+  const tenantId = requireTenantId();
+  const ids = [...new Set(plantIds)];
+  const update = sanitizeForFirestore({ ...patch, dateUpdated: new Date().toISOString() });
+  await commitInBatches(ids, (batch, id) => batch.update(inventoryDoc(tenantId, id), update));
+  return ids.length;
+}
+
 export async function deleteAllInventoryPlants(): Promise<number> {
   const tenantId = requireTenantId();
   const snapshot = await getDocs(inventoryCol(tenantId));

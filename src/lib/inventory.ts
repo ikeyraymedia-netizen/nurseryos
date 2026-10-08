@@ -350,8 +350,27 @@ export async function deleteInventoryPlant(plantId: string): Promise<void> {
 }
 
 export type InventoryBulkPatch = Partial<
-  Pick<InventoryPlant, 'category' | 'location' | 'listPrice' | 'containerSize' | 'readyDate'>
+  Pick<
+    InventoryPlant,
+    | 'plantName'
+    | 'category'
+    | 'location'
+    | 'listPrice'
+    | 'containerSize'
+    | 'readyDate'
+    | 'quantityAvailable'
+  >
 >;
+
+/** Put deleted plants back with their original ids (undo). */
+export async function restoreInventoryPlants(plants: InventoryPlant[]): Promise<void> {
+  const tenantId = requireTenantId();
+  const byId = new Map(plants.map((p) => [p.id, p]));
+  await commitInBatches([...byId.keys()], (batch, id) => {
+    const { id: _id, ...rest } = byId.get(id)!;
+    batch.set(inventoryDoc(tenantId, id), sanitizeForFirestore(rest));
+  });
+}
 
 async function commitInBatches(ids: string[], apply: (batch: ReturnType<typeof writeBatch>, id: string) => void) {
   for (let i = 0; i < ids.length; i += 450) {

@@ -21,7 +21,8 @@ import {
   Link2,
   Globe,
   ChevronDown,
-  Download
+  Download,
+  Table2
 } from 'lucide-react';
 import { CustomerOrder, InventoryPlant, Tenant, Truck as TruckType, Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
@@ -32,14 +33,12 @@ import {
   bulkImportInventoryPlants,
   deleteAllInventoryPlants,
   deleteInventoryPlant,
-  deleteInventoryPlants,
-  InventoryBulkPatch,
   parseCsvInventory,
   parseExcelInventory,
   subscribeToInventory,
-  updateInventoryPlant,
-  updateInventoryPlantsBulk
+  updateInventoryPlant
 } from '../lib/inventory';
+import { InventoryManagerModal } from './InventoryManagerModal';
 import { subscribeToVendors } from '../lib/vendors';
 import { buildLowStockForUpcomingTrucks } from '../lib/lowStockAlerts';
 import {
@@ -158,12 +157,7 @@ export function InventoryWorkspace({
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkIds, setBulkIds] = useState<Set<string>>(new Set());
-  const [bulkField, setBulkField] = useState<'category' | 'location' | 'listPrice' | 'containerSize'>(
-    'category'
-  );
-  const [bulkValue, setBulkValue] = useState('');
+  const [showManager, setShowManager] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageIsError, setMessageIsError] = useState(false);
@@ -342,89 +336,6 @@ export function InventoryWorkspace({
     if (name !== 0) return name;
     return a.containerSize.localeCompare(b.containerSize);
   });
-
-  const visibleBulkIds = sortedFiltered.filter((p) => bulkIds.has(p.id)).map((p) => p.id);
-  const allVisibleSelected =
-    sortedFiltered.length > 0 && visibleBulkIds.length === sortedFiltered.length;
-
-  function toggleBulkId(id: string) {
-    setBulkIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAllVisible() {
-    setBulkIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) sortedFiltered.forEach((p) => next.delete(p.id));
-      else sortedFiltered.forEach((p) => next.add(p.id));
-      return next;
-    });
-  }
-
-  function exitBulkMode() {
-    setBulkMode(false);
-    setBulkIds(new Set());
-    setBulkValue('');
-  }
-
-  async function handleBulkDelete() {
-    if (!permissions.canEditInventory || bulkIds.size === 0) return;
-    if (!confirm(t('inventory.bulkDeleteConfirm', { n: bulkIds.size }))) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      const n = await deleteInventoryPlants([...bulkIds]);
-      if (selectedId && bulkIds.has(selectedId)) setSelectedId(null);
-      setBulkIds(new Set());
-      setMessageIsError(false);
-      setMessage(t('inventory.bulkDeleted', { n }));
-    } catch (err: any) {
-      setMessageIsError(true);
-      setMessage(err?.message || t('inventory.updateFailed'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleBulkApply() {
-    if (!permissions.canEditInventory || bulkIds.size === 0) return;
-    const raw = bulkValue.trim();
-    let patch: InventoryBulkPatch;
-    if (bulkField === 'listPrice') {
-      if (raw === '') {
-        patch = { listPrice: null };
-      } else {
-        const price = Number(raw.replace(/[$,]/g, ''));
-        if (!Number.isFinite(price) || price < 0) {
-          setMessageIsError(true);
-          setMessage(t('inventory.bulkInvalidPrice'));
-          return;
-        }
-        patch = { listPrice: Math.round(price * 100) / 100 };
-      }
-    } else if (bulkField === 'containerSize') {
-      if (!raw) return;
-      patch = { containerSize: raw };
-    } else {
-      patch = { [bulkField]: raw || null } as InventoryBulkPatch;
-    }
-    setBusy(true);
-    setMessage(null);
-    try {
-      const n = await updateInventoryPlantsBulk([...bulkIds], patch);
-      setMessageIsError(false);
-      setMessage(t('inventory.bulkUpdated', { n }));
-    } catch (err: any) {
-      setMessageIsError(true);
-      setMessage(err?.message || t('inventory.updateFailed'));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function handleAddPlant(e: FormEvent) {
     e.preventDefault();
@@ -1045,6 +956,16 @@ export function InventoryWorkspace({
                 {permissions.canEditInventory && plants.length > 0 && (
                   <button
                     type="button"
+                    onClick={() => setShowManager(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-ink-700 text-white text-xs font-bold hover:bg-ink-800"
+                  >
+                    <Table2 className="h-4 w-4" />
+                    {t('inventory.managerOpen')}
+                  </button>
+                )}
+                {permissions.canEditInventory && plants.length > 0 && (
+                  <button
+                    type="button"
                     disabled={busy}
                     onClick={handleClearAllInventory}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 disabled:opacity-50"
@@ -1418,111 +1339,16 @@ export function InventoryWorkspace({
             {permissions.canEditInventory && (
               <button
                 type="button"
-                onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
-                className={`shrink-0 px-3 py-2 rounded-xl text-xs font-bold border ${
-                  bulkMode
-                    ? 'bg-ink-700 text-white border-ink-700'
-                    : 'bg-white text-ink-800 border-ink-300 hover:bg-ink-50'
-                }`}
+                onClick={() => setShowManager(true)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-ink-700 text-white hover:bg-ink-800"
               >
-                {bulkMode ? t('inventory.bulkDone') : t('inventory.bulkSelect')}
+                <Table2 className="h-4 w-4" />
+                {t('inventory.managerOpen')}
               </button>
             )}
           </div>
 
-          {bulkMode && permissions.canEditInventory && (
-            <div className="bg-ink-50 border border-ink-200 rounded-2xl p-3 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <label className="flex items-center gap-2 text-xs font-bold text-ink-900">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleSelectAllVisible}
-                    className="h-4 w-4"
-                  />
-                  {t('inventory.bulkSelectShown', { n: sortedFiltered.length })}
-                </label>
-                <span className="text-xs font-bold text-ink-800">
-                  {t('inventory.bulkSelectedCount', { n: bulkIds.size })}
-                </span>
-              </div>
-              {bulkIds.size > visibleBulkIds.length && (
-                <p className="text-[11px] text-ink-700">
-                  {t('inventory.bulkHiddenSelected', { n: bulkIds.size - visibleBulkIds.length })}
-                </p>
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={bulkField}
-                  onChange={(e) => {
-                    setBulkField(e.target.value as typeof bulkField);
-                    setBulkValue('');
-                  }}
-                  className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
-                >
-                  <option value="category">{t('inventory.bulkFieldCategory')}</option>
-                  <option value="location">{t('inventory.bulkFieldLocation')}</option>
-                  <option value="listPrice">{t('inventory.bulkFieldPrice')}</option>
-                  <option value="containerSize">{t('inventory.bulkFieldSize')}</option>
-                </select>
-                <input
-                  value={bulkValue}
-                  onChange={(e) => setBulkValue(e.target.value)}
-                  list={bulkField === 'category' ? 'inventory-bulk-categories' : undefined}
-                  inputMode={bulkField === 'listPrice' ? 'decimal' : undefined}
-                  placeholder={
-                    bulkField === 'containerSize'
-                      ? '#3'
-                      : t('inventory.bulkValuePlaceholder')
-                  }
-                  className="flex-1 min-w-[8rem] px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
-                />
-                <datalist id="inventory-bulk-categories">
-                  {categoryOptions.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
-                <button
-                  type="button"
-                  disabled={busy || bulkIds.size === 0 || (bulkField === 'containerSize' && !bulkValue.trim())}
-                  onClick={handleBulkApply}
-                  className="px-3 py-1.5 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-50"
-                >
-                  {t('inventory.bulkApply', { n: bulkIds.size })}
-                </button>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  disabled={busy || bulkIds.size === 0}
-                  onClick={handleBulkDelete}
-                  className="px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 disabled:opacity-50"
-                >
-                  {t('inventory.bulkDelete', { n: bulkIds.size })}
-                </button>
-                {bulkIds.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setBulkIds(new Set())}
-                    className="text-xs font-bold text-ink-700 hover:underline"
-                  >
-                    {t('inventory.bulkClear')}
-                  </button>
-                )}
-              </div>
-              {message && (
-                <p className={`text-xs font-medium ${messageIsError ? 'text-red-700' : 'text-ink-900'}`}>
-                  {message}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div
-            className={`bg-white rounded-2xl border border-gray-150 overflow-y-auto ${
-              bulkMode ? 'max-h-[640px]' : 'max-h-[420px]'
-            }`}
-          >
+          <div className="bg-white rounded-2xl border border-gray-150 overflow-y-auto max-h-[420px]">
             {sortedFiltered.length === 0 ? (
               <p className="p-4 text-sm text-gray-500">{t('inventory.noInventory')}</p>
             ) : (
@@ -1530,26 +1356,11 @@ export function InventoryWorkspace({
                 <button
                   key={plant.id}
                   type="button"
-                  onClick={() => (bulkMode ? toggleBulkId(plant.id) : setSelectedId(plant.id))}
+                  onClick={() => setSelectedId(plant.id)}
                   className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-ink-50/50 flex items-start gap-3 ${
-                    bulkMode
-                      ? bulkIds.has(plant.id)
-                        ? 'bg-ink-50'
-                        : ''
-                      : selectedId === plant.id
-                        ? 'bg-ink-50'
-                        : ''
+                    selectedId === plant.id ? 'bg-ink-50' : ''
                   }`}
                 >
-                  {bulkMode && (
-                    <input
-                      type="checkbox"
-                      readOnly
-                      tabIndex={-1}
-                      checked={bulkIds.has(plant.id)}
-                      className="mt-0.5 h-4 w-4 shrink-0 pointer-events-none"
-                    />
-                  )}
                   <span className="min-w-0 flex-1">
                   <p className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
                     {plant.photoUrl ? (
@@ -1950,6 +1761,16 @@ export function InventoryWorkspace({
           blob={pdfSheet.blob}
           title={t('inventory.pdfReady')}
           onClose={() => setPdfSheet(null)}
+        />
+      )}
+
+      {showManager && permissions.canEditInventory && (
+        <InventoryManagerModal
+          plants={plants}
+          onClose={() => {
+            setShowManager(false);
+            if (selectedId && !plants.some((p) => p.id === selectedId)) setSelectedId(null);
+          }}
         />
       )}
 

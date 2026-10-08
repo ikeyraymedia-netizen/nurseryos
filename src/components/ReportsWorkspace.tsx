@@ -618,6 +618,136 @@ function buildDataSnapshot(params: {
   };
 }
 
+function localDateKey(raw?: string | null): string {
+  if (!raw) return '';
+  const value = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value.slice(0, 10);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+/** Full compact records for the report assistant's server-side query tools. */
+function buildReportLedger(params: {
+  orders: CustomerOrder[];
+  trucks: Truck[];
+  inventory: InventoryPlant[];
+  documents: CustomerDocument[];
+  vendorBills: VendorBill[] | null;
+}) {
+  const { orders, trucks, inventory, documents, vendorBills } = params;
+  const truckById = new Map(trucks.map((t) => [t.id, t]));
+  const ownerByOrderId = new Map<string, string>();
+  const orderCostByLine = new Map<string, number | undefined>();
+  const orderVendorByLine = new Map<string, string | undefined>();
+  for (const o of orders) {
+    if (o.owner) ownerByOrderId.set(o.id, o.owner);
+    for (const item of o.items || []) {
+      orderCostByLine.set(`${o.id}:${item.id}`, item.unitCost);
+      orderVendorByLine.set(`${o.id}:${item.id}`, item.vendor);
+    }
+  }
+  const orderNumberById = new Map(orders.map((o) => [o.id, o.orderNumber]));
+
+  return {
+    documents: documents.map((d) => ({
+      type: d.type,
+      number: d.documentNumber,
+      customer: d.customerName,
+      date: localDateKey(d.documentDate || d.createdAt),
+      dueDate: d.dueDate || null,
+      rep: resolveInvoiceRep(d, ownerByOrderId),
+      paymentStatus: d.type === 'invoice' ? d.paymentStatus || 'unpaid' : null,
+      paidAt: d.paidAt ? localDateKey(d.paidAt) : null,
+      orderNumber: d.orderNumber || null,
+      poNumber: d.poNumber || null,
+      subtotal: d.subtotal || 0,
+      tax: d.salesTax || 0,
+      freight: d.freightCharge || 0,
+      discount: d.discount || 0,
+      total: d.grandTotal || 0,
+      lines: (d.items || []).map((i) => {
+        const key = d.orderId ? `${d.orderId}:${i.id}` : '';
+        const orderCost = key ? orderCostByLine.get(key) : undefined;
+        const hasCost = typeof i.unitCost === 'number' || typeof orderCost === 'number';
+        return {
+          plant: i.plantName,
+          size: i.containerSize,
+          qty: i.quantity || 0,
+          price: i.unitPrice ?? null,
+          cost: hasCost ? resolveLineUnitCost(orderCost, i.unitCost) : null,
+          vendor: i.vendor || (key ? orderVendorByLine.get(key) : undefined) || null
+        };
+      })
+    })),
+    orders: orders.map((o) => {
+      const truck = o.truckId ? truckById.get(o.truckId) : undefined;
+      return {
+        orderNumber: o.orderNumber || orderNumberById.get(o.id) || o.id,
+        customer: o.customerName,
+        date: localDateKey(o.dateCreated),
+        status: o.status,
+        rep: o.owner || null,
+        truck: truck?.name || null,
+        loadingDate: truck?.loadingDate ? localDateKey(truck.loadingDate) : null,
+        directShip: Boolean(o.directShip),
+        items: (o.items || []).map((i) => ({
+          plant: i.plantName,
+          size: i.containerSize,
+          qty: i.quantity || 0,
+          loaded: i.loadedQuantity || 0,
+          pulled: i.pulledQuantity ?? 0,
+          invoiced: i.invoicedQuantity ?? 0,
+          price: i.unitPrice ?? null,
+          cost: i.unitCost ?? null,
+          vendor: i.vendor || null,
+          notes: i.notes || null,
+          isAddition: Boolean(i.isAddition)
+        }))
+      };
+    }),
+    inventory: inventory.map((p) => ({
+      plant: p.plantName,
+      size: p.containerSize,
+      qty: p.quantityAvailable || 0,
+      listPrice: p.listPrice ?? null,
+      category: p.category || null,
+      location: p.location || null,
+      readyDate: p.readyDate || null,
+      plantedDate: p.plantedDate || null,
+      source: p.sourceName || null
+    })),
+    trucks: trucks.map((t) => ({
+      name: t.name,
+      status: t.status,
+      loadingDate: t.loadingDate ? localDateKey(t.loadingDate) : null,
+      carrier: t.carrier || null,
+      rep: t.owner || null,
+      orderNumbers: (t.orderIds || []).map((id) => orderNumberById.get(id) || id)
+    })),
+    vendorBills: vendorBills
+      ? vendorBills.map((b) => ({
+          vendor: b.vendorName,
+          billNumber: b.billNumber,
+          vendorInvoiceNumber: b.vendorInvoiceNumber || null,
+          date: localDateKey(b.billDate),
+          dueDate: b.dueDate || null,
+          status: b.status,
+          paidAt: b.paidAt ? localDateKey(b.paidAt) : null,
+          paymentMethod: b.paymentMethod || null,
+          total: b.grandTotal || 0,
+          lines: (b.items || []).map((l) => ({
+            item: l.plantName,
+            size: l.containerSize,
+            qty: l.quantity || 0,
+            unitCost: l.unitCost || 0,
+            category: l.category || l.lineType || null
+          }))
+        }))
+      : undefined
+  };
+}
+
 export function ReportsWorkspace({
   orders,
   trucks,
@@ -799,12 +929,20 @@ export function ReportsWorkspace({
     try {
       const freshDocuments = await refreshDocuments();
       // Always include every invoice/credit memo for sales accuracy (filter only drops orphan estimates).
-      const data = buildDataSnapshot({
+      const liveDocuments = filterDocumentsForLiveOrders(freshDocuments, orders);
+      const snapshot = buildDataSnapshot({
         orders,
         trucks,
         customers,
         inventory,
-        documents: filterDocumentsForLiveOrders(freshDocuments, orders)
+        documents: liveDocuments
+      });
+      const ledger = buildReportLedger({
+        orders,
+        trucks,
+        inventory,
+        documents: liveDocuments,
+        vendorBills: permissions.canViewPurchasing ? vendorBills : null
       });
 
       const response = await fetch('/api/run-report', {
@@ -813,7 +951,10 @@ export function ReportsWorkspace({
         body: JSON.stringify({
           question: trimmed,
           nurseryName,
-          data,
+          data: { summary: snapshot.summary, sales: snapshot.sales },
+          ledger,
+          today: localDateKey(new Date().toISOString()),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           history
         })
       });

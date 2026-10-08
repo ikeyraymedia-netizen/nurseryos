@@ -35,6 +35,7 @@ import {
   coalesceOrderItems
 } from './server/orderTextParse';
 import { chunkPdfText, extractPdfText } from './server/pdfTextExtract';
+import { ReportLedger, runReportConversation } from './server/reportTools';
 
 dotenv.config();
 
@@ -176,6 +177,15 @@ const PARSE_MODELS = [
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-3.1-flash-lite'
+] as const;
+
+/** Reports need tool calling + reasoning, so lite models are only a last resort. */
+const REPORT_MODELS = [
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest'
 ] as const;
 
 function normalizeOrderMimeType(mimeType: string | undefined, fileName?: string): string {
@@ -1423,7 +1433,7 @@ app.get('/api/config-status', (req, res) => {
 app.post('/api/run-report', async (req, res) => {
   try {
     await requireAuthUid(req);
-    const { question, nurseryName, data, history } = req.body || {};
+    const { question, nurseryName, data, history, ledger, today, timeZone } = req.body || {};
     if (!question || typeof question !== 'string' || !question.trim()) {
       res.status(400).json({ error: 'Missing report question.' });
       return;
@@ -1435,86 +1445,40 @@ app.post('/api/run-report', async (req, res) => {
 
     const ai = getAiClient();
     const nursery = typeof nurseryName === 'string' && nurseryName.trim() ? nurseryName.trim() : 'Nursery';
-    const snapshot = JSON.stringify(data);
-
-    const priorTurns = Array.isArray(history)
-      ? history
-          .filter(
-            (turn: any) =>
-              turn &&
-              (turn.role === 'user' || turn.role === 'assistant') &&
-              typeof turn.content === 'string' &&
-              turn.content.trim()
-          )
-          .slice(-12)
-          .map((turn: { role: string; content: string }) => {
-            const label = turn.role === 'assistant' ? 'Assistant' : 'User';
-            return `${label}:\n${turn.content.trim()}`;
-          })
-          .join('\n\n')
-      : '';
-
-    const conversationBlock = priorTurns
-      ? `This is a continuing conversation. Use the prior turns for context, then answer the latest question. Still base every number on the JSON data below — never invent figures from memory of an earlier answer if the JSON differs.
-
-PRIOR TURNS:
-${priorTurns}
-
-LATEST QUESTION:
-"""
-${question.trim()}
-"""`
-      : `The user asked for this report:
-"""
-${question.trim()}
-"""`;
-
-    const prompt = `You are NurseryOS, an operations and sales analyst for a wholesale nursery named "${nursery}".
-
-${conversationBlock}
-
-Use ONLY the JSON nursery data below. Do not invent plants, customers, invoices, or dollar amounts. If data is missing, say so clearly.
-
-CRITICAL accuracy rules:
-- For ANY sales total, dollar figure, invoice count, or ranking, use the pre-aggregated fields in data.summary and data.sales EXACTLY. Do not re-add invoices[] samples.
-- data.invoices and data.estimates are SAMPLE arrays and may be truncated (see sampleTruncated / totalCount). Never sum the sample for totals.
-- Net sales = invoices minus credit memos. Prefer data.sales.invoiceSalesTotal (and thisMonth/lastMonth/thisYear/thisQuarter/thisWeek salesTotal).
-- Estimates are quotes only — do NOT count them as sales unless the user explicitly asks about estimates.
-- If invoiceCount is 0, say no invoices have been saved yet and remind them: open an order → Create Invoice → Save to Customer.
-- For "this month" use data.sales.thisMonth. For "last month" use data.sales.lastMonth. For year/quarter/week use data.sales.thisYear / thisQuarter / thisWeek.
-- Prefer data.sales.byCustomer, data.sales.byMonth, data.sales.topPlantsByRevenue, data.sales.salesByRepYear, and data.sales.paymentStatus when relevant.
-- Use invoice grandTotal (already baked into sales.*) unless asked for subtotal-only.
-- If thisMonth.salesTotal is 0 but invoiceSalesTotal > 0, say sales this month are $0 and also mention all-time net sales + which months appear in data.sales.byMonth.
-- Read data.accuracyNotes if present and follow them.
-
-Write a clear, practical report for nursery owners and managers:
-- Start with a short title line
-- Use plain text (no markdown code fences)
-- Prefer short sections, bullet lists, and totals with $ amounts when relevant
-- Call out risks, shortages, unfinished loads, and follow-ups when relevant
-- Keep it concise but useful
-- When stating a total, quote the exact figure from sales.* / summary.* (do not round differently)
-
-NURSERY DATA JSON:
-${snapshot}`;
+    const overview = {
+      summary: (data as any).summary,
+      sales: {
+        ...(data as any).sales,
+        byCustomer: ((data as any).sales?.byCustomer || []).slice(0, 25),
+        topPlantsByRevenue: ((data as any).sales?.topPlantsByRevenue || []).slice(0, 20)
+      }
+    };
+    const conversation = {
+      nursery,
+      question,
+      history,
+      overview,
+      ledger: (ledger && typeof ledger === 'object' ? ledger : {}) as ReportLedger,
+      today,
+      timeZone
+    };
+    const runConversation = (model: string) =>
+      runReportConversation(
+        ai as any,
+        model,
+        conversation,
+        (promise, label) => withTimeout(promise, label),
+        (name, args) => console.log(`[report] ${name} ${JSON.stringify(args || {})}`)
+      );
 
     let lastError: any = null;
     let reportText = '';
 
-    for (const model of PARSE_MODELS) {
+    for (const model of REPORT_MODELS) {
       try {
         console.log(`Running report with ${model}...`);
-        const response = await withTimeout(
-          ai.models.generateContent({
-            model,
-            contents: prompt
-          }),
-          `Report (${model})`,
-          GEMINI_REQUEST_TIMEOUT_MS
-        );
-        reportText = (response.text || '').trim();
+        reportText = await runConversation(model);
         if (reportText) break;
-        throw new Error('Gemini returned an empty report.');
       } catch (err: any) {
         lastError = err;
         if (isSkippableModelError(err)) {
@@ -1525,7 +1489,8 @@ ${snapshot}`;
           console.warn(`${model} busy for reports, trying fallback...`);
           continue;
         }
-        throw err;
+        if (String(err?.message || '').toLowerCase().includes('api key')) throw err;
+        console.warn(`${model} report failed, trying fallback...`, err?.message || err);
       }
     }
 

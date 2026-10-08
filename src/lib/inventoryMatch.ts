@@ -60,6 +60,52 @@ const WEAK_SOLO_MATCH_WORDS = new Set([
   'plant'
 ]);
 
+export interface PlantMatchContext {
+  /** Words used across several inventory names (genus / common words like "miscanthus"). */
+  sharedWords: Set<string>;
+}
+
+const matchContextCache = new WeakMap<InventoryPlant[], PlantMatchContext>();
+
+export function plantMatchContext(plants: InventoryPlant[]): PlantMatchContext {
+  const cached = matchContextCache.get(plants);
+  if (cached) return cached;
+  const namesByWord = new Map<string, Set<string>>();
+  for (const plant of plants) {
+    const name = normalizePlantName(plant.plantName || '');
+    if (!name) continue;
+    for (const word of normalizedWordSet(name)) {
+      const names = namesByWord.get(word) || new Set<string>();
+      names.add(name);
+      namesByWord.set(word, names);
+    }
+  }
+  const sharedWords = new Set<string>();
+  namesByWord.forEach((names, word) => {
+    if (names.size >= 2) sharedWords.add(word);
+  });
+  const context = { sharedWords };
+  matchContextCache.set(plants, context);
+  return context;
+}
+
+/**
+ * One-word cultivar inventory names ("Adagio") match orders that add only genus words
+ * ("Miscanthus Adagio"), but bare genus rows ("Hydrangea") still never absorb cultivars.
+ */
+function isSoloCultivarMatch(
+  orderWords: Set<string>,
+  inventoryWords: Set<string>,
+  context?: PlantMatchContext
+): boolean {
+  if (!context || inventoryWords.size !== 1 || orderWords.size < 2) return false;
+  const cultivar = [...inventoryWords][0];
+  if (!cultivar || !orderWords.has(cultivar)) return false;
+  if (WEAK_SOLO_MATCH_WORDS.has(cultivar) || cultivar.length < 5) return false;
+  if (context.sharedWords.has(cultivar)) return false;
+  return [...orderWords].every((w) => w === cultivar || context.sharedWords.has(w));
+}
+
 /**
  * Prefer specific cultivar matches over generic genus-only rows.
  * - Exact names match.
@@ -68,7 +114,11 @@ const WEAK_SOLO_MATCH_WORDS = new Set([
  *   ("Hydrangea Limelight" must not auto-link to bare "Hydrangea").
  * - Do NOT expand weak solo words ("Giant" must not become "Giant Ligularia").
  */
-export function plantNamesMatch(orderName: string, inventoryName: string): boolean {
+export function plantNamesMatch(
+  orderName: string,
+  inventoryName: string,
+  context?: PlantMatchContext
+): boolean {
   const a = normalizePlantName(orderName);
   const b = normalizePlantName(inventoryName);
   if (!a || !b) return false;
@@ -91,20 +141,25 @@ export function plantNamesMatch(orderName: string, inventoryName: string): boole
   const inventorySubsetOfOrder = [...inventoryWords].every((w) => orderWords.has(w));
   if (inventorySubsetOfOrder && inventoryWords.size >= 2) return true;
 
-  return false;
+  return isSoloCultivarMatch(orderWords, inventoryWords, context);
 }
 
 /** Higher is better. Exact name wins; then closer word coverage / specificity. */
-export function plantNameMatchScore(orderName: string, inventoryName: string): number {
+export function plantNameMatchScore(
+  orderName: string,
+  inventoryName: string,
+  context?: PlantMatchContext
+): number {
   const a = normalizePlantName(orderName);
   const b = normalizePlantName(inventoryName);
   if (!a || !b) return 0;
   if (a === b) return 10_000;
 
-  if (!plantNamesMatch(orderName, inventoryName)) return 0;
+  if (!plantNamesMatch(orderName, inventoryName, context)) return 0;
 
   const orderWords = normalizedWordSet(orderName);
   const inventoryWords = normalizedWordSet(inventoryName);
+  if (isSoloCultivarMatch(orderWords, inventoryWords, context)) return 200;
   let overlap = 0;
   orderWords.forEach((w) => {
     if (inventoryWords.has(w)) overlap += 1;
@@ -182,15 +237,17 @@ export function findMatchingInventoryPlants(
   weights: ContainerWeight[] = DEFAULT_CONTAINER_WEIGHTS
 ): InventoryPlant[] {
   const normSize = normalizeContainerSize(containerSize, weights);
+  const context = plantMatchContext(plants);
   return plants
     .filter(
       (p) =>
-        plantNamesMatch(plantName, p.plantName) &&
+        plantNamesMatch(plantName, p.plantName, context) &&
         normalizeContainerSize(p.containerSize, weights) === normSize
     )
     .sort(
       (a, b) =>
-        plantNameMatchScore(plantName, b.plantName) - plantNameMatchScore(plantName, a.plantName) ||
+        plantNameMatchScore(plantName, b.plantName, context) -
+          plantNameMatchScore(plantName, a.plantName, context) ||
         a.plantName.localeCompare(b.plantName)
     );
 }

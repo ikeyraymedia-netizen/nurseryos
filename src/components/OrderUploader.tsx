@@ -21,7 +21,11 @@ import {
   rememberInventoryAlias,
   subscribeToInventory
 } from '../lib/inventory';
-import { findMatchingInventoryPlants, plantNameMatchScore } from '../lib/inventoryMatch';
+import {
+  findMatchingInventoryPlants,
+  plantMatchContext,
+  plantNameMatchScore
+} from '../lib/inventoryMatch';
 import { addCustomerDocument, nextDocumentNumber } from '../lib/documents';
 import { defaultLineUnitPrice } from '../lib/pricing';
 import { authJsonHeaders } from '../lib/apiAuth';
@@ -174,7 +178,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       )[0];
       if (!plant) return item;
 
-      const score = plantNameMatchScore(item.plantName, plant.plantName);
+      const score = plantNameMatchScore(
+        item.plantName,
+        plant.plantName,
+        plantMatchContext(inventoryPlants)
+      );
       // plantNamesMatch already blocks weak solo words; require a real score to auto-rename.
       if (score < 150) return item;
 

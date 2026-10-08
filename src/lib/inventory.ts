@@ -16,6 +16,7 @@ import {
   findMatchingInventoryPlants,
   normalizeContainerSize,
   normalizePlantName,
+  plantMatchContext,
   plantNameMatchScore,
   plantNamesMatch
 } from './inventoryMatch';
@@ -159,15 +160,20 @@ export function getInventoryMatchSuggestions(
   if (plants.length === 0) return [];
 
   const normalizedSize = normalizeContainerSize(containerSize, weights);
+  const context = plantMatchContext(plants);
 
   return plants
     .map((plant) => {
       const sizeMatch =
         normalizeContainerSize(plant.containerSize, weights) === normalizedSize;
       let score = similarityScore(plantName, plant.plantName);
-      if (plantNamesMatch(plantName, plant.plantName)) {
+      const isMatch = plantNamesMatch(plantName, plant.plantName, context);
+      if (isMatch) {
         // Exact / specific cultivar beats a loose genus-only overlap.
-        const specificity = Math.min(1, plantNameMatchScore(plantName, plant.plantName) / 10_000);
+        const specificity = Math.min(
+          1,
+          plantNameMatchScore(plantName, plant.plantName, context) / 10_000
+        );
         score = Math.max(score, 0.75 + specificity * 0.2);
       }
       if (sizeMatch) {
@@ -175,14 +181,9 @@ export function getInventoryMatchSuggestions(
       } else {
         score *= 0.5;
       }
-      return { plant, score: Math.min(1, score), sizeMatch };
+      return { plant, score: Math.min(1, score), sizeMatch, isMatch };
     })
-    .filter(
-      (x) =>
-        x.score >= 0.12 ||
-        plantNamesMatch(plantName, x.plant.plantName) ||
-        x.sizeMatch
-    )
+    .filter((x) => x.score >= 0.12 || x.isMatch || x.sizeMatch)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ plant, score }) => ({ plant, score }));

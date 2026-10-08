@@ -907,6 +907,8 @@ export function CustomersWorkspace({
         totalWeightLbs: estimateWeightLbs(doc),
         customerEmail: doc.customerEmail || selectedCustomer.contactEmail,
         customerEmailCc: doc.customerEmailCc || selectedCustomer.contactEmailCc,
+        owner: doc.owner?.trim() || undefined,
+        source: 'converted',
         invoiceDetails: {
           invoiceNumber,
           invoiceDate: doc.documentDate,

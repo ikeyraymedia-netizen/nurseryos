@@ -75,6 +75,7 @@ import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
+import { billsInSamePayment, CheckPaymentModal } from './CheckPaymentModal';
 import { BillEditModal } from './BillEditModal';
 import { PoEditModal } from './PoEditModal';
 import {
@@ -270,6 +271,7 @@ export function PurchasingWorkspace({
   const [billNotes, setBillNotes] = useState('');
   const [billLines, setBillLines] = useState<BillFormLine[]>([emptyBillLine()]);
   const [markingPaidBills, setMarkingPaidBills] = useState<VendorBill[] | null>(null);
+  const [viewingPaymentBill, setViewingPaymentBill] = useState<VendorBill | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [billListMode, setBillListMode] = useState<BillListMode>('due');
   const [billFilterVendorId, setBillFilterVendorId] = useState('');
@@ -349,7 +351,7 @@ export function PurchasingWorkspace({
     return bills.filter((b) => {
       if (
         q &&
-        ![b.billNumber, b.vendorName, b.status, b.poNumber, b.vendorInvoiceNumber]
+        ![b.billNumber, b.vendorName, b.status, b.poNumber, b.vendorInvoiceNumber, b.paymentReference]
           .join(' ')
           .toLowerCase()
           .includes(q)
@@ -388,7 +390,7 @@ export function PurchasingWorkspace({
     let list = bills.filter((b) => b.vendorId === selectedVendorId);
     if (q) {
       list = list.filter((b) =>
-        [b.billNumber, b.vendorName, b.status, b.poNumber, b.vendorInvoiceNumber]
+        [b.billNumber, b.vendorName, b.status, b.poNumber, b.vendorInvoiceNumber, b.paymentReference]
           .join(' ')
           .toLowerCase()
           .includes(q)
@@ -1338,12 +1340,30 @@ export function PurchasingWorkspace({
               }
               return null;
             })()}
-            {bill.status === 'paid' && (bill.paymentMethod || bill.paymentReference) && (
-              <p className="text-[11px] font-bold text-emerald-800 mt-1">
-                {formatPaymentRecord(t, bill.paymentMethod, bill.paymentReference)}
-                {bill.paidAt ? ` · ${new Date(bill.paidAt).toLocaleDateString()}` : ''}
-              </p>
-            )}
+            {bill.status === 'paid' && (bill.paymentMethod || bill.paymentReference) && (() => {
+              const label = `${formatPaymentRecord(t, bill.paymentMethod, bill.paymentReference)}${
+                bill.paidAt ? ` · ${new Date(bill.paidAt).toLocaleDateString()}` : ''
+              }`;
+              if (!bill.paymentReference?.trim()) {
+                return <p className="text-[11px] font-bold text-emerald-800 mt-1">{label}</p>;
+              }
+              const groupSize = billsInSamePayment(bill, bills).length;
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setViewingPaymentBill(bill);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  className="text-[11px] font-bold text-emerald-800 mt-1 underline decoration-dotted underline-offset-2 hover:text-emerald-950 text-left"
+                  title={t('purchasing.checkPaymentView')}
+                >
+                  {label}
+                  {groupSize > 1 ? ` · ${t('purchasing.checkPaymentBillsCount', { n: groupSize })}` : ''}
+                </button>
+              );
+            })()}
             {bill.qboBillId && (
               <p className="text-[11px] font-bold text-sky-800 mt-1">
                 {t('purchasing.qbSynced', {
@@ -3006,6 +3026,22 @@ export function PurchasingWorkspace({
           onClose={() => setEditingPo(null)}
           onSave={handleSaveEditedPo}
           onDelete={() => handleDeletePo(editingPo)}
+        />
+      )}
+
+      {viewingPaymentBill && (
+        <CheckPaymentModal
+          bill={viewingPaymentBill}
+          bills={bills}
+          onClose={() => setViewingPaymentBill(null)}
+          onOpenBill={
+            permissions.canManageVendorBills
+              ? (b) => {
+                  setViewingPaymentBill(null);
+                  openEditBill(b);
+                }
+              : undefined
+          }
         />
       )}
 

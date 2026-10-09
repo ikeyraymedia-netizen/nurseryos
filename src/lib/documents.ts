@@ -60,12 +60,9 @@ export function subscribeToCustomerDocuments(
     return () => {};
   }
 
-  const tenantId = activeTenantId;
-  const q = query(
-    documentsCol(tenantId),
-    where('customerId', '==', customerId),
-    orderBy('createdAt', 'desc')
-  );
+  // Sort on the client: an orderBy here needs a composite index, and without it the
+  // listener fails and the list never updates after saves.
+  const q = query(documentsCol(activeTenantId), where('customerId', '==', customerId));
 
   return onSnapshot(
     q,
@@ -74,24 +71,12 @@ export function subscribeToCustomerDocuments(
       snapshot.forEach((snap) => {
         docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
       });
+      docs.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
       callback(docs);
     },
     (error) => {
       console.error('Error subscribing to customer documents:', error);
-      // Fallback without orderBy if composite index is missing
-      getDocs(query(documentsCol(tenantId), where('customerId', '==', customerId)))
-        .then((snapshot) => {
-          const docs: CustomerDocument[] = [];
-          snapshot.forEach((snap) => {
-            docs.push({ id: snap.id, ...(snap.data() as Omit<CustomerDocument, 'id'>) });
-          });
-          docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-          callback(docs);
-        })
-        .catch((err) => {
-          console.error('Fallback document fetch failed:', err);
-          callback([]);
-        });
+      callback([]);
     }
   );
 }

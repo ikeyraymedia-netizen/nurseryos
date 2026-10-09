@@ -8,6 +8,8 @@ import {
   updateInventoryPlantsBulk
 } from '../lib/inventory';
 import { useT } from '../lib/i18n';
+import { DEFAULT_CONTAINER_WEIGHTS } from '../data/defaultWeights';
+import { isSizeDerivedCategory } from '../lib/availabilityGrouping';
 
 type EditableField =
   | 'plantName'
@@ -69,6 +71,71 @@ function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: st
   );
 }
 
+/** Blank clears the price (null); invalid input returns undefined. */
+function parsePrice(raw: string): number | null | undefined {
+  const s = raw.trim().replace(/[$,]/g, '');
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
+function PriceInput({ plant, onSave }: { plant: InventoryPlant; onSave: (price: number | null) => void }) {
+  const display = plant.listPrice == null ? '' : Number(plant.listPrice).toFixed(2);
+  const [value, setValue] = useState(display);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setValue(display);
+  }, [display]);
+
+  function commit() {
+    const next = parsePrice(value);
+    if (next === undefined) return setValue(display);
+    if ((next ?? null) !== (plant.listPrice ?? null)) onSave(next);
+    setValue(next == null ? '' : next.toFixed(2));
+  }
+
+  return (
+    <div className="relative">
+      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        inputMode="decimal"
+        placeholder="—"
+        onFocus={() => (focused.current = true)}
+        onBlur={() => {
+          focused.current = false;
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setValue(display);
+            focused.current = false;
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="w-full pl-4 pr-1.5 py-1 rounded border border-gray-200 hover:border-gray-300 focus:border-ink-400 bg-white text-sm font-mono text-right"
+      />
+    </div>
+  );
+}
+
+const SIZE_OPTIONS = DEFAULT_CONTAINER_WEIGHTS.map((w) => w.label);
+const CUSTOM_SIZE = '__custom__';
+
+/** Size-based section label used by the catalog import (#3 → "3 gal", Tray → "Flats"). */
+function sectionForSize(size: string): string | null {
+  const gallons = size.match(/^#(\d+(?:\.\d+)?)$/);
+  if (gallons) return `${gallons[1]} gal`;
+  if (size === 'B&B') return 'B&B';
+  if (size === 'Tray') return 'Flats';
+  return null;
+}
+
 /** Full-screen table to delete and edit many inventory plants without opening each one. */
 export function InventoryManagerModal({ plants, onClose }: InventoryManagerModalProps) {
   const t = useT();
@@ -84,6 +151,9 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
   const [bulkCategory, setBulkCategory] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [bulkType, setBulkType] = useState('');
+  const [sizeFilter, setSizeFilter] = useState('');
+  const [bulkSize, setBulkSize] = useState('');
+  const [bulkPrice, setBulkPrice] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -95,7 +165,15 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
     return () => window.removeEventListener('keydown', onKey);
   }, [editing, onClose]);
 
-  useEffect(() => setVisibleCount(PAGE_SIZE), [search, categoryFilter, typeFilter]);
+  useEffect(() => setVisibleCount(PAGE_SIZE), [search, categoryFilter, typeFilter, sizeFilter]);
+
+  const sizesInUse = useMemo(
+    () =>
+      [...new Set<string>(plants.map((p) => (p.containerSize || '').trim()).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b, undefined, { numeric: true })
+      ),
+    [plants]
+  );
 
   const categories = useMemo(
     () =>
@@ -115,6 +193,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
         if (categoryFilter && categoryFilter !== NO_CATEGORY && cat !== categoryFilter) return false;
         if (typeFilter === NO_CATEGORY && p.plantType) return false;
         if (typeFilter && typeFilter !== NO_CATEGORY && p.plantType !== typeFilter) return false;
+        if (sizeFilter && (p.containerSize || '').trim() !== sizeFilter) return false;
         if (words.length === 0) return true;
         const hay =
           `${p.plantName} ${p.containerSize} ${cat} ${p.plantType || ''} ${p.location || ''}`.toLowerCase();
@@ -124,7 +203,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
         (a, b) =>
           a.plantName.localeCompare(b.plantName) || a.containerSize.localeCompare(b.containerSize)
       );
-  }, [plants, search, categoryFilter, typeFilter, pendingDeleteIds]);
+  }, [plants, search, categoryFilter, typeFilter, sizeFilter, pendingDeleteIds]);
 
   const checkedVisible = rows.filter((p) => checked.has(p.id));
   const allChecked = rows.length > 0 && checkedVisible.length === rows.length;
@@ -222,6 +301,36 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
     void savePatch(checkedVisible.map((p) => p.id), { category: bulkCategory.trim() || null });
   }
 
+  /** Change size; size-based (or empty) sections follow the new size, custom sections stay. */
+  async function applySize(targets: InventoryPlant[], size: string) {
+    const next = size.trim();
+    if (!next || targets.length === 0) return;
+    const followIds: string[] = [];
+    const keepIds: string[] = [];
+    for (const p of targets) {
+      if ((p.containerSize || '').trim() === next) continue;
+      const cat = (p.category || '').trim();
+      (!cat || isSizeDerivedCategory(cat) ? followIds : keepIds).push(p.id);
+    }
+    await savePatch(followIds, { containerSize: next, category: sectionForSize(next) });
+    await savePatch(keepIds, { containerSize: next });
+  }
+
+  function chooseSize(targets: InventoryPlant[], value: string) {
+    if (value === CUSTOM_SIZE) {
+      const custom = window.prompt(t('inventory.managerCustomSizePrompt'), targets[0]?.containerSize || '');
+      if (custom?.trim()) void applySize(targets, custom);
+      return;
+    }
+    void applySize(targets, value);
+  }
+
+  function applyBulkPrice() {
+    const price = parsePrice(bulkPrice);
+    if (price === undefined) return setError(t('inventory.bulkInvalidPrice'));
+    void savePatch(checkedVisible.map((p) => p.id), { listPrice: price });
+  }
+
   function applyBulkType() {
     if (!bulkType) return;
     void savePatch(checkedVisible.map((p) => p.id), {
@@ -317,6 +426,18 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
             ))}
           </select>
           <select
+            value={sizeFilter}
+            onChange={(e) => setSizeFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
+          >
+            <option value="">{t('inventory.managerAllSizes')}</option>
+            {sizesInUse.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
@@ -346,6 +467,42 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
             >
               <Trash2 className="h-3.5 w-3.5" />
               {t('inventory.bulkDelete', { n: checkedVisible.length })}
+            </button>
+            <select
+              value={bulkSize}
+              onChange={(e) => setBulkSize(e.target.value)}
+              className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
+            >
+              <option value="">{t('inventory.managerSetSize')}</option>
+              {SIZE_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+              <option value={CUSTOM_SIZE}>{t('inventory.managerCustomSize')}</option>
+            </select>
+            <button
+              type="button"
+              disabled={!bulkSize}
+              onClick={() => chooseSize(checkedVisible, bulkSize)}
+              className="px-3 py-1.5 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-40"
+            >
+              {t('inventory.bulkApply', { n: checkedVisible.length })}
+            </button>
+            <input
+              value={bulkPrice}
+              onChange={(e) => setBulkPrice(e.target.value)}
+              inputMode="decimal"
+              placeholder={t('inventory.managerSetPrice')}
+              className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white w-28"
+            />
+            <button
+              type="button"
+              disabled={!bulkPrice.trim()}
+              onClick={applyBulkPrice}
+              className="px-3 py-1.5 rounded-lg bg-ink-700 text-white text-xs font-bold disabled:opacity-40"
+            >
+              {t('inventory.bulkApply', { n: checkedVisible.length })}
             </button>
             <select
               value={bulkType}
@@ -466,7 +623,23 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                       onSave={(plantName) => void savePatch([plant.id], { plantName })}
                     />
                   </td>
-                  <td className="px-1 py-1 font-mono text-xs">{cell(plant, 'containerSize')}</td>
+                  <td className="px-1 py-1">
+                    <select
+                      value={plant.containerSize || ''}
+                      onChange={(e) => chooseSize([plant], e.target.value)}
+                      className="w-full px-1 py-1 rounded border border-gray-200 text-xs font-mono bg-white"
+                    >
+                      {!SIZE_OPTIONS.includes(plant.containerSize) && (
+                        <option value={plant.containerSize || ''}>{plant.containerSize || '—'}</option>
+                      )}
+                      {SIZE_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                      <option value={CUSTOM_SIZE}>{t('inventory.managerCustomSize')}</option>
+                    </select>
+                  </td>
                   <td className="px-1 py-1">
                     <select
                       value={plant.plantType || ''}
@@ -487,8 +660,11 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                   </td>
                   <td className="px-1 py-1">{cell(plant, 'category')}</td>
                   <td className="px-1 py-1">{cell(plant, 'location')}</td>
-                  <td className="px-1 py-1 font-mono text-right">
-                    {cell(plant, 'listPrice', 'text-right')}
+                  <td className="px-1 py-1">
+                    <PriceInput
+                      plant={plant}
+                      onSave={(listPrice) => void savePatch([plant.id], { listPrice })}
+                    />
                   </td>
                   <td className="px-1 py-1 font-mono text-right">
                     {cell(plant, 'quantityAvailable', 'text-right')}

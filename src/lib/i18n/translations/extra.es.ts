@@ -126,6 +126,11 @@ const extra = {
     managerAllTypes: 'Todos los tipos',
     managerNoType: 'Sin tipo',
     managerSetType: 'Asignar tipo…',
+    managerSetSize: 'Asignar tamaño…',
+    managerSetPrice: 'Asignar precio $',
+    managerAllSizes: 'Todos los tamaños',
+    managerCustomSize: 'Personalizado…',
+    managerCustomSizePrompt: 'Ingrese un tamaño (ej. #20, caja 24", calibre 3"):',
     managerOpen: 'Administrar plantas',
     managerTitle: 'Administrar plantas',
     managerHint:

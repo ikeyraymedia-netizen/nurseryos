@@ -267,6 +267,7 @@ const extra = {
     readyDate: 'Fecha listo',
     plantedShort: 'Plantado',
     readyShort: 'Listo',
+    photoShort: 'Foto',
     promoCreate: 'Crear publicación',
     promoTitle: 'Publicación de marketing',
     promoIntro:
@@ -2057,6 +2058,7 @@ const extra = {
     unavailable: 'Disponibilidad no disponible',
     notFound: 'Esta lista no se encontró o no está publicada.',
     currentAvailability: 'Disponibilidad actual',
+    photoTaken: 'Foto del {{date}}',
     tagline: 'Vea nuestra disponibilidad y arme su pedido aquí mismo.',
     updated: 'Actualizado {{date}}',
     empty: 'No hay plantas para mostrar ahora.',

@@ -393,6 +393,8 @@ export interface InventoryPlant {
   photoUrl?: string | null;
   /** Storage object path for delete/replace. */
   photoPath?: string | null;
+  /** ISO timestamp when the current photo was uploaded. */
+  photoDate?: string | null;
   dateCreated: string;
   dateUpdated: string;
 }

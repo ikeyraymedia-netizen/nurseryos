@@ -11,6 +11,7 @@ import {
   type JsPdfImageFormat
 } from './nurseryBranding';
 import { groupPlantsByAvailabilityCategory } from './availabilityGrouping';
+import { formatPhotoDate, isPhotoStale } from './photoDate';
 
 /** Compress an image file to a JPEG blob suitable for Storage upload. */
 export async function fileToCompressedJpegBlob(
@@ -73,6 +74,7 @@ export async function uploadInventoryPlantPhoto(params: {
     ...params.plant,
     photoUrl: url,
     photoPath: path,
+    photoDate: new Date().toISOString(),
     dateUpdated: new Date().toISOString()
   };
   await updateInventoryPlant(updated);
@@ -91,6 +93,7 @@ export async function removeInventoryPlantPhoto(plant: InventoryPlant): Promise<
     ...plant,
     photoUrl: null,
     photoPath: null,
+    photoDate: null,
     dateUpdated: new Date().toISOString()
   };
   await updateInventoryPlant(updated);
@@ -163,14 +166,18 @@ function todayLabel(): string {
   });
 }
 
-type AvailabilityCol = 'plant' | 'size' | 'qty' | 'price' | 'ready' | 'photo';
+type AvailabilityCol = 'plant' | 'size' | 'qty' | 'price' | 'ready' | 'photo' | 'photoDate';
 
 function availabilityColumns(includeQuantity: boolean, includePhotos: boolean): AvailabilityCol[] {
   const cols: AvailabilityCol[] = ['plant', 'size'];
   if (includeQuantity) cols.push('qty');
   cols.push('price', 'ready');
-  if (includePhotos) cols.push('photo');
+  if (includePhotos) cols.push('photo', 'photoDate');
   return cols;
+}
+
+function exportPhotoDate(plant: InventoryPlant): string {
+  return isHttpUrl(plant.photoUrl) ? formatPhotoDate(plant.photoDate) : '';
 }
 
 const COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -193,6 +200,8 @@ function availabilityHeaderLabel(col: AvailabilityCol): string {
       return 'Ready Date';
     case 'photo':
       return 'Photo';
+    case 'photoDate':
+      return 'Photo Date';
   }
 }
 
@@ -210,6 +219,8 @@ function availabilityPdfHeader(col: AvailabilityCol): string {
       return 'READY DATE';
     case 'photo':
       return 'PHOTO';
+    case 'photoDate':
+      return 'PHOTO DATE';
   }
 }
 
@@ -227,6 +238,8 @@ function plantCellValue(plant: InventoryPlant, col: AvailabilityCol): string | n
       return plant.readyDate?.trim() ? formatReadyDate(plant.readyDate) : '';
     case 'photo':
       return '';
+    case 'photoDate':
+      return exportPhotoDate(plant);
   }
 }
 
@@ -244,6 +257,8 @@ function plantPdfCellValue(plant: InventoryPlant, col: AvailabilityCol): string 
       return formatReadyDate(plant.readyDate);
     case 'photo':
       return isHttpUrl(plant.photoUrl) ? 'View photo' : '—';
+    case 'photoDate':
+      return exportPhotoDate(plant) || '—';
   }
 }
 
@@ -289,7 +304,8 @@ export async function exportAvailabilityExcel(params: {
     qty: 10,
     price: 12,
     ready: 14,
-    photo: 14
+    photo: 14,
+    photoDate: 13
   };
   sheet.columns = cols.map((key) => ({ key, width: widthByCol[key] }));
 
@@ -357,6 +373,7 @@ export async function exportAvailabilityExcel(params: {
 
   const priceCol = cols.indexOf('price') + 1;
   const photoCol = cols.indexOf('photo') + 1;
+  const photoDateCol = cols.indexOf('photoDate') + 1;
   const qtyCol = cols.indexOf('qty') + 1;
   const rightAlignCols = new Set(
     [qtyCol, priceCol].filter((n) => n > 0)
@@ -402,6 +419,15 @@ export async function exportAvailabilityExcel(params: {
 
       if (plant.listPrice != null && priceCol > 0) {
         row.getCell(priceCol).numFmt = '"$"#,##0.00';
+      }
+
+      if (photoDateCol > 0 && isHttpUrl(plant.photoUrl) && isPhotoStale(plant.photoDate)) {
+        row.getCell(photoDateCol).font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: 'FFB45309' }
+        };
       }
 
       if (includePhotos && photoCol > 0 && isHttpUrl(plant.photoUrl)) {
@@ -477,6 +503,7 @@ export async function exportAvailabilityPdf(params: {
   let cursor = margin;
   const usableWidth = pageWidth - margin * 2;
   const photoColIndex = cols.indexOf('photo');
+  const photoDateColIndex = cols.indexOf('photoDate');
 
   if (logo) {
     try {
@@ -517,8 +544,9 @@ export async function exportAvailabilityPdf(params: {
     size: 70,
     qty: 42,
     price: 55,
-    ready: 82,
-    photo: 90
+    ready: 70,
+    photo: 62,
+    photoDate: 62
   };
   const fixedSum = cols.reduce((sum, col) => {
     if (col === 'plant') return sum;
@@ -578,6 +606,18 @@ export async function exportAvailabilityPdf(params: {
       },
       columnStyles,
       didParseCell: (data) => {
+        if (
+          data.section === 'body' &&
+          photoDateColIndex >= 0 &&
+          data.column.index === photoDateColIndex
+        ) {
+          const plant = group.plants[data.row.index];
+          if (plant && isHttpUrl(plant.photoUrl) && isPhotoStale(plant.photoDate)) {
+            data.cell.styles.textColor = [180, 83, 9];
+            data.cell.styles.fontStyle = 'bold';
+          }
+          return;
+        }
         if (photoColIndex < 0) return;
         if (data.section === 'body' && data.column.index === photoColIndex) {
           const plant = group.plants[data.row.index];

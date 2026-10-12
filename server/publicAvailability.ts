@@ -17,6 +17,7 @@ type PublicPlant = {
   listPrice: number | null;
   readyDate: string | null;
   photoUrl: string | null;
+  photoDate: string | null;
 };
 
 type PublicAvailabilityPayload = {
@@ -169,6 +170,7 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
       listPrice?: number | null;
       readyDate?: string | null;
       photoUrl?: string | null;
+      photoDate?: string | null;
       dateUpdated?: string;
       dateCreated?: string;
     };
@@ -191,7 +193,8 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
           ? Number(data.listPrice)
           : null,
       readyDate: String(data.readyDate || '').trim() || null,
-      photoUrl: showPhotos && data.photoUrl ? String(data.photoUrl) : null
+      photoUrl: showPhotos && data.photoUrl ? String(data.photoUrl) : null,
+      photoDate: showPhotos && data.photoUrl && data.photoDate ? String(data.photoDate) : null
     });
   });
 

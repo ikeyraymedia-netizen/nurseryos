@@ -264,6 +264,7 @@ const extra = {
     readyDate: 'Ready date',
     plantedShort: 'Planted',
     readyShort: 'Ready',
+    photoShort: 'Photo',
     promoCreate: 'Create post',
     promoTitle: 'Marketing post',
     promoIntro:
@@ -2037,6 +2038,7 @@ const extra = {
     unavailable: 'Availability unavailable',
     notFound: 'This availability list was not found or is not published.',
     currentAvailability: 'Current availability',
+    photoTaken: 'Photo from {{date}}',
     tagline: 'View our availability and build your order right here.',
     updated: 'Updated {{date}}',
     empty: 'No plants to show right now.',

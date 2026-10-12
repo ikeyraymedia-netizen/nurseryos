@@ -65,6 +65,7 @@ import {
   savePublicAvailabilitySettings,
   suggestPublicAvailabilitySlug
 } from '../lib/publicAvailability';
+import { formatPhotoDate, isPhotoStale } from '../lib/photoDate';
 import { PdfShareSheet } from './PdfShareSheet';
 import { PlantPromoModal } from './PlantPromoModal';
 import { useT } from '../lib/i18n';
@@ -1383,6 +1384,11 @@ export function InventoryWorkspace({
                     {` · ${t('common.qty')} ${plant.quantityAvailable}`}
                     {plant.plantedDate ? ` · ${t('inventory.plantedShort')} ${plant.plantedDate}` : ''}
                     {plant.readyDate ? ` · ${t('inventory.readyShort')} ${plant.readyDate}` : ''}
+                    {plant.photoUrl && plant.photoDate ? (
+                      <span className={isPhotoStale(plant.photoDate) ? 'font-bold text-amber-700' : ''}>
+                        {` · ${t('inventory.photoShort')} ${formatPhotoDate(plant.photoDate)}`}
+                      </span>
+                    ) : null}
                   </p>
                   {plant.sourceName && (
                     <p className="text-[11px] text-ink-700 mt-0.5">
@@ -1432,13 +1438,22 @@ export function InventoryWorkspace({
                     href={selected.photoUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block"
+                    className="relative block"
                   >
                     <img
                       src={selected.photoUrl}
                       alt={dp.plant(selected.plantName)}
                       className="h-40 w-full object-cover rounded-lg border border-slate-200 bg-white"
                     />
+                    {selected.photoDate ? (
+                      <span
+                        className={`absolute bottom-2 right-2 rounded-md px-2 py-0.5 text-[11px] font-bold text-white ${
+                          isPhotoStale(selected.photoDate) ? 'bg-amber-600/90' : 'bg-black/65'
+                        }`}
+                      >
+                        {formatPhotoDate(selected.photoDate)}
+                      </span>
+                    ) : null}
                   </a>
                 ) : (
                   <div className="h-28 rounded-lg border border-dashed border-slate-300 bg-white flex items-center justify-center text-xs text-slate-400">

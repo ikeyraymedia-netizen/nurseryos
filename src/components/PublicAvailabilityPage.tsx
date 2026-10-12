@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LocaleProvider, normalizeLocale, readStoredLocale, useT } from '../lib/i18n';
+import { formatPhotoDate, formatPhotoDateShort } from '../lib/photoDate';
 
 type PublicPlant = {
   id: string;
@@ -11,6 +12,7 @@ type PublicPlant = {
   listPrice: number | null;
   readyDate: string | null;
   photoUrl: string | null;
+  photoDate?: string | null;
 };
 
 type PublicAvailabilityPayload = {
@@ -487,6 +489,34 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
     );
   }
 
+  const renderPhoto = (plant: PublicPlant) =>
+    plant.photoUrl ? (
+      <a
+        href={plant.photoUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="relative block h-12 w-12"
+        title={
+          plant.photoDate
+            ? t('publicAvailability.photoTaken', { date: formatPhotoDate(plant.photoDate) })
+            : undefined
+        }
+      >
+        <img
+          src={plant.photoUrl}
+          alt=""
+          className="h-12 w-12 object-cover rounded-lg border border-slate-100"
+        />
+        {plant.photoDate ? (
+          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/65 px-1 text-[8px] font-bold leading-tight text-white">
+            {formatPhotoDateShort(plant.photoDate)}
+          </span>
+        ) : null}
+      </a>
+    ) : (
+      <span className="inline-block h-12 w-12 rounded-lg bg-slate-100" />
+    );
+
   const renderAddControl = (plantId: string, qty: number) =>
     qty ? (
       <input
@@ -575,19 +605,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                       key={plant.id}
                       className={`flex items-center gap-3 px-3 py-2.5 ${qty ? 'bg-teal-50/70' : ''}`}
                     >
-                      {data.showPhotos ? (
-                        plant.photoUrl ? (
-                          <a href={plant.photoUrl} target="_blank" rel="noreferrer" className="shrink-0">
-                            <img
-                              src={plant.photoUrl}
-                              alt=""
-                              className="h-12 w-12 object-cover rounded-lg border border-slate-100"
-                            />
-                          </a>
-                        ) : (
-                          <span className="inline-block h-12 w-12 shrink-0 rounded-lg bg-slate-100" />
-                        )
-                      ) : null}
+                      {data.showPhotos ? <div className="shrink-0">{renderPhoto(plant)}</div> : null}
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-slate-900 break-words">{plant.plantName}</p>
                         <p className="text-xs text-slate-600">
@@ -632,19 +650,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                           className={`border-b border-slate-100 last:border-0 ${qty ? 'bg-teal-50/70' : ''}`}
                         >
                           {data.showPhotos ? (
-                            <td className="px-3 py-2.5">
-                              {plant.photoUrl ? (
-                                <a href={plant.photoUrl} target="_blank" rel="noreferrer">
-                                  <img
-                                    src={plant.photoUrl}
-                                    alt=""
-                                    className="h-12 w-12 object-cover rounded-lg border border-slate-100"
-                                  />
-                                </a>
-                              ) : (
-                                <span className="inline-block h-12 w-12 rounded-lg bg-slate-100" />
-                              )}
-                            </td>
+                            <td className="px-3 py-2.5">{renderPhoto(plant)}</td>
                           ) : null}
                           <td className="px-3 py-2.5 font-bold text-slate-900">{plant.plantName}</td>
                           <td className="px-3 py-2.5 text-slate-600">{plant.containerSize || '—'}</td>

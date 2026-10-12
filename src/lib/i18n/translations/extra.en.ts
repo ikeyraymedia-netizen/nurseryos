@@ -1056,6 +1056,7 @@ const extra = {
     sourceMatches: 'Where to get it',
     sourceOurStock: 'Our stock',
     sourceAvail: 'avail',
+    sourceMatchCount: 'matches — scroll for more',
     sourceUseVendor: 'Click to use this vendor and cost on the line',
     sourceUseStock: 'Click to mark this line as coming from our stock',
     quotedVendorPlaceholder: 'Who you quoted this plant from',

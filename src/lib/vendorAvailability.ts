@@ -379,12 +379,36 @@ export function matchPlantSources<T extends { plantName: string; containerSize: 
 ): T[] {
   if (!normalizePlantName(plantName) || rows.length === 0) return [];
   const context = plantMatchContext(rows as any);
-  const wantSize = containerSize.trim() ? normalizeContainerSize(containerSize) : '';
+  const normSize = (size: string) =>
+    normalizeContainerSize(
+      size
+        .replace(/[’‘′`]/g, "'")
+        .replace(/\s*(ft|feet|foot)\.?$/i, "'")
+        .replace(/\s+/g, '')
+    );
+  const wantSize = containerSize.trim() ? normSize(containerSize) : '';
+  const wordsOf = (name: string) =>
+    new Set(
+      normalizePlantName(name)
+        .split(' ')
+        .map((w) => w.replace(/[^a-z0-9]/g, ''))
+        .filter((w) => w.length >= 3)
+    );
+  const queryWords = wordsOf(plantName);
   const scored: Array<{ row: T; score: number; sameSize: boolean; price: number }> = [];
   for (const row of rows) {
-    const score = plantNameMatchScore(plantName, row.plantName, context);
-    if (score <= 0) continue;
-    const sameSize = !!wantSize && normalizeContainerSize(row.containerSize || '') === wantSize;
+    let score = plantNameMatchScore(plantName, row.plantName, context);
+    if (score <= 0) {
+      // Loose fallback: two shared words catches genus/spelling differences
+      // ("Thuja Green Giant" vs "'Green Giant' Arborvitae", "Arbovitae").
+      let overlap = 0;
+      wordsOf(row.plantName).forEach((w) => {
+        if (queryWords.has(w)) overlap += 1;
+      });
+      if (overlap < 2) continue;
+      score = overlap * 10;
+    }
+    const sameSize = !!wantSize && normSize(row.containerSize || '') === wantSize;
     const price = priceOf(row);
     scored.push({
       row,

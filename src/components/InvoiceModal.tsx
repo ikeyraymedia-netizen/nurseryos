@@ -856,14 +856,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               name,
               size,
               (p) => p.listPrice,
-              3
+              20
             ),
             vendor: matchPlantSources<VendorAvailabilityLine>(
               vendorAvailabilityLines,
               name,
               size,
               (l) => l.listPrice,
-              4
+              200
             )
           };
     cache.byKey.set(key, result);
@@ -900,7 +900,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ({t('invoice.internalOnly')})
           </span>
         </span>
-        <div className="mt-0.5 flex flex-wrap gap-1">
+        <div className="mt-0.5 flex flex-wrap gap-1 max-h-24 overflow-y-auto overscroll-contain pr-1">
+          {(stock.length + vendor.length) > 6 && (
+            <span className="w-full text-[9px] font-semibold text-indigo-400">
+              {stock.length + vendor.length} {t('invoice.sourceMatchCount')}
+            </span>
+          )}
           {stock.map((plant) => (
             <button
               key={`stock-${plant.id}`}

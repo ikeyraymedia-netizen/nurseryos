@@ -2094,6 +2094,9 @@ const extra = {
     pdfAttachedNote: 'Adjunto el PDF de esta lista.',
     moreInPdf: '…y {{count}} más (ver PDF)',
     sendTo: 'Enviar a:',
+    mailDidntOpen: '¿No se abrió tu correo? Usa:',
+    copyAddress: 'Copiar {{email}}',
+    copied: '¡Copiado!',
     downloading: 'Preparando PDF…',
     disclaimer:
       'Solo lista de plantas — precios y disponibilidad pueden cambiar hasta que el vivero lo confirme.',

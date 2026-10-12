@@ -293,6 +293,8 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
   const [showOrder, setShowOrder] = useState(false);
   const [contact, setContact] = useState<OrderContact>({ name: '', company: '', phone: '', notes: '' });
   const [downloading, setDownloading] = useState(false);
+  const [emailedTo, setEmailedTo] = useState<string | null>(null);
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -421,27 +423,49 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
     }
   };
 
-  const handleEmail = async (email: string) => {
+  const emailDraft = (email: string) => {
+    const subject = `${t('publicAvailability.orderTitle')} — ${
+      contact.company.trim() || contact.name.trim() || data?.nurseryName || ''
+    }`;
+    const body = plantListEmailBody({
+      lines: orderLines,
+      contact,
+      labels: {
+        emailIntro: t('publicAvailability.emailIntro'),
+        notes: t('publicAvailability.notes'),
+        pdfAttachedNote: t('publicAvailability.pdfAttachedNote'),
+        moreInPdf: t('publicAvailability.moreInPdf')
+      }
+    });
+    const s = encodeURIComponent(subject);
+    const b = encodeURIComponent(body);
+    const to = encodeURIComponent(email);
+    return {
+      mailto: `mailto:${email}?subject=${s}&body=${b}`,
+      gmail: `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${s}&body=${b}`,
+      outlook: `https://outlook.live.com/mail/0/deeplink/compose?to=${to}&subject=${s}&body=${b}`
+    };
+  };
+
+  const handleEmail = (email: string) => {
     if (!data || orderLines.length === 0) return;
+    // Open the mail app inside the click; browsers ignore mailto after an await.
+    const link = document.createElement('a');
+    link.href = emailDraft(email).mailto;
+    link.click();
+    setEmailedTo(email);
     setDownloading(true);
-    try {
-      const pdf = await buildPdf();
-      if (pdf) saveBlob(pdf.blob, pdf.filename);
-      const subject = `${t('publicAvailability.orderTitle')} — ${contact.company.trim() || contact.name.trim() || data.nurseryName}`;
-      const body = plantListEmailBody({
-        lines: orderLines,
-        contact,
-        labels: {
-          emailIntro: t('publicAvailability.emailIntro'),
-          notes: t('publicAvailability.notes'),
-          pdfAttachedNote: t('publicAvailability.pdfAttachedNote'),
-          moreInPdf: t('publicAvailability.moreInPdf')
-        }
-      });
-      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    } finally {
-      setDownloading(false);
-    }
+    window.setTimeout(() => {
+      void buildPdf()
+        .then((pdf) => {
+          if (pdf) saveBlob(pdf.blob, pdf.filename);
+        })
+        .finally(() => setDownloading(false));
+    }, 600);
+  };
+
+  const copyEmail = (email: string) => {
+    void navigator.clipboard?.writeText(email).then(() => setCopiedEmail(email)).catch(() => undefined);
   };
 
   if (loading) {
@@ -726,7 +750,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                     <button
                       key={c.email}
                       type="button"
-                      onClick={() => void handleEmail(c.email)}
+                      onClick={() => handleEmail(c.email)}
                       disabled={orderLines.length === 0 || downloading}
                       className="rounded-xl border border-teal-600 bg-teal-50 px-3 py-2 text-left hover:bg-teal-100 disabled:opacity-50"
                     >
@@ -738,6 +762,36 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                   ))}
                 </div>
                 <p className="text-[11px] text-slate-500">{t('publicAvailability.emailHelp')}</p>
+                {emailedTo ? (
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-[11px] text-slate-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-bold">{t('publicAvailability.mailDidntOpen')}</span>
+                    <a
+                      href={emailDraft(emailedTo).gmail}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-teal-800 underline"
+                    >
+                      Gmail
+                    </a>
+                    <a
+                      href={emailDraft(emailedTo).outlook}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-teal-800 underline"
+                    >
+                      Outlook
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => copyEmail(emailedTo)}
+                      className="font-bold text-teal-800 underline"
+                    >
+                      {copiedEmail === emailedTo
+                        ? t('publicAvailability.copied')
+                        : t('publicAvailability.copyAddress', { email: emailedTo })}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

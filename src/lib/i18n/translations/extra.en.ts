@@ -2074,6 +2074,9 @@ const extra = {
     pdfAttachedNote: 'PDF of this list is attached.',
     moreInPdf: '…and {{count}} more (see PDF)',
     sendTo: 'Send to:',
+    mailDidntOpen: 'Email app didn’t open? Use:',
+    copyAddress: 'Copy {{email}}',
+    copied: 'Copied!',
     downloading: 'Preparing PDF…',
     disclaimer:
       'Plant list only — prices and availability are subject to change until confirmed by the nursery.',

@@ -2037,6 +2037,7 @@ const extra = {
     unavailable: 'Availability unavailable',
     notFound: 'This availability list was not found or is not published.',
     currentAvailability: 'Current availability',
+    tagline: 'View our availability and build your order right here.',
     updated: 'Updated {{date}}',
     empty: 'No plants to show right now.',
     photo: 'Photo',

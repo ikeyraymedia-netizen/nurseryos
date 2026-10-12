@@ -505,6 +505,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
             <p className="text-sm font-bold text-teal-800 mt-0.5">
               {t('publicAvailability.currentAvailability')}
             </p>
+            <p className="text-sm text-slate-700 mt-1">{t('publicAvailability.tagline')}</p>
             {data.shippingAddress ? (
               <p className="text-xs text-slate-500 mt-1 whitespace-pre-line">{data.shippingAddress}</p>
             ) : null}

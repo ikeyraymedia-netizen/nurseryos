@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LocaleProvider, normalizeLocale, readStoredLocale, useT } from '../lib/i18n';
-import { formatPhotoDate, formatPhotoDateShort } from '../lib/photoDate';
-
 type PublicPlant = {
   id: string;
   plantName: string;
@@ -12,7 +10,6 @@ type PublicPlant = {
   listPrice: number | null;
   readyDate: string | null;
   photoUrl: string | null;
-  photoDate?: string | null;
 };
 
 type PublicAvailabilityPayload = {
@@ -491,27 +488,12 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
 
   const renderPhoto = (plant: PublicPlant) =>
     plant.photoUrl ? (
-      <a
-        href={plant.photoUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="relative block h-12 w-12"
-        title={
-          plant.photoDate
-            ? t('publicAvailability.photoTaken', { date: formatPhotoDate(plant.photoDate) })
-            : undefined
-        }
-      >
+      <a href={plant.photoUrl} target="_blank" rel="noreferrer" className="block h-12 w-12">
         <img
           src={plant.photoUrl}
           alt=""
           className="h-12 w-12 object-cover rounded-lg border border-slate-100"
         />
-        {plant.photoDate ? (
-          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/65 px-1 text-[8px] font-bold leading-tight text-white">
-            {formatPhotoDateShort(plant.photoDate)}
-          </span>
-        ) : null}
       </a>
     ) : (
       <span className="inline-block h-12 w-12 rounded-lg bg-slate-100" />

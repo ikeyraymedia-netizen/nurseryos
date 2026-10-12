@@ -13,12 +13,6 @@ export function formatPhotoDate(iso?: string | null): string {
   return d ? `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}` : '';
 }
 
-/** Compact label for small thumbnails, e.g. "3/26". */
-export function formatPhotoDateShort(iso?: string | null): string {
-  const d = parsePhotoDate(iso);
-  return d ? `${d.getMonth() + 1}/${String(d.getFullYear()).slice(-2)}` : '';
-}
-
 export function photoAgeMonths(iso?: string | null, now = new Date()): number | null {
   const d = parsePhotoDate(iso);
   if (!d) return null;

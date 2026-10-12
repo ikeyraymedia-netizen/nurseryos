@@ -1,4 +1,4 @@
-import type { InventoryPlant } from '../types';
+import type { InventoryPlant, PlantType } from '../types';
 
 export const AVAILABILITY_UNCATEGORIZED = 'Uncategorized';
 
@@ -61,18 +61,40 @@ export function sortAvailabilityPlants<T extends Pick<InventoryPlant, 'plantName
   return [...plants].sort(compareAvailabilityPlants);
 }
 
-/** Group by entered category (A–Z), plants A–Z within each group. Uncategorized last. */
+/** Export section order by plant type; untyped plants go last. */
+export const AVAILABILITY_TYPE_ORDER: readonly PlantType[] = [
+  'Ground Cover',
+  'Grasses',
+  'Shrubs',
+  'Perennials',
+  'Trees'
+];
+export const AVAILABILITY_OTHER = 'Other';
+
+/** Group by plant type (Ground Cover, Grasses, Shrubs, Perennials, Trees, Other), plants A–Z. */
 export function groupPlantsByAvailabilityCategory<
-  T extends Pick<InventoryPlant, 'plantName' | 'containerSize' | 'category'>
+  T extends Pick<InventoryPlant, 'plantName' | 'containerSize' | 'category' | 'plantType'>
 >(plants: T[]): Array<{ category: string; plants: T[] }> {
   const map = new Map<string, T[]>();
-  for (const plant of sortAvailabilityPlants(plants)) {
-    const category = availabilityCategoryLabel(plant.category);
-    const list = map.get(category) || [];
+  for (const plant of plants) {
+    const type = plant.plantType && AVAILABILITY_TYPE_ORDER.includes(plant.plantType)
+      ? plant.plantType
+      : AVAILABILITY_OTHER;
+    const list = map.get(type) || [];
     list.push(plant);
-    map.set(category, list);
+    map.set(type, list);
   }
+  const rank = (label: string) => {
+    const i = AVAILABILITY_TYPE_ORDER.indexOf(label as PlantType);
+    return i === -1 ? AVAILABILITY_TYPE_ORDER.length : i;
+  };
+  const byName = (a: T, b: T) =>
+    (a.plantName || '').localeCompare(b.plantName || '', undefined, { sensitivity: 'base' }) ||
+    (a.containerSize || '').localeCompare(b.containerSize || '', undefined, {
+      sensitivity: 'base',
+      numeric: true
+    });
   return Array.from(map.entries())
-    .sort(([a], [b]) => compareAvailabilityCategory(a, b))
-    .map(([category, grouped]) => ({ category, plants: grouped }));
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([category, grouped]) => ({ category, plants: [...grouped].sort(byName) }));
 }

@@ -487,8 +487,30 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
     );
   }
 
+  const renderAddControl = (plantId: string, qty: number) =>
+    qty ? (
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={qty}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setQty(plantId, Number(e.target.value))}
+        aria-label={t('publicAvailability.order')}
+        className="w-16 rounded-lg border border-teal-500 bg-white px-2 py-1 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600"
+      />
+    ) : (
+      <button
+        type="button"
+        onClick={() => setQty(plantId, 1)}
+        className="rounded-lg border border-teal-600 px-3 py-1 text-xs font-bold text-teal-800 hover:bg-teal-50"
+      >
+        {t('publicAvailability.add')}
+      </button>
+    );
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-5xl mx-auto px-4 py-6 flex items-start gap-4">
           {data.logoUrl ? (
@@ -544,7 +566,49 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
           groups.map(([group, plants]) => (
             <section key={group} className="space-y-3">
               <h2 className="text-xs font-black uppercase tracking-wider text-teal-800">{group}</h2>
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="sm:hidden divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                {plants.map((plant) => {
+                  const qty = cart[plant.id] || 0;
+                  const ready = formatReadyDate(plant.readyDate);
+                  return (
+                    <div
+                      key={plant.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 ${qty ? 'bg-teal-50/70' : ''}`}
+                    >
+                      {data.showPhotos ? (
+                        plant.photoUrl ? (
+                          <a href={plant.photoUrl} target="_blank" rel="noreferrer" className="shrink-0">
+                            <img
+                              src={plant.photoUrl}
+                              alt=""
+                              className="h-12 w-12 object-cover rounded-lg border border-slate-100"
+                            />
+                          </a>
+                        ) : (
+                          <span className="inline-block h-12 w-12 shrink-0 rounded-lg bg-slate-100" />
+                        )
+                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-900 break-words">{plant.plantName}</p>
+                        <p className="text-xs text-slate-600">
+                          {[
+                            plant.containerSize || null,
+                            data.showQty
+                              ? `${t('publicAvailability.qty')}: ${plant.quantityAvailable ?? 0}`
+                              : null,
+                            ready !== '—' ? `${t('publicAvailability.ready')} ${ready}` : null
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                        <p className="text-xs font-semibold text-teal-800">{money(plant.listPrice)}</p>
+                      </div>
+                      <div className="shrink-0">{renderAddControl(plant.id, qty)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden sm:block overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -595,28 +659,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                           <td className="px-3 py-2.5 text-slate-600">
                             {formatReadyDate(plant.readyDate)}
                           </td>
-                          <td className="px-3 py-2 text-center">
-                            {qty ? (
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                min={0}
-                                value={qty}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => setQty(plant.id, Number(e.target.value))}
-                                aria-label={t('publicAvailability.order')}
-                                className="w-16 rounded-lg border border-teal-500 bg-white px-2 py-1 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-600"
-                              />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setQty(plant.id, 1)}
-                                className="rounded-lg border border-teal-600 px-3 py-1 text-xs font-bold text-teal-800 hover:bg-teal-50"
-                              >
-                                {t('publicAvailability.add')}
-                              </button>
-                            )}
-                          </td>
+                          <td className="px-3 py-2 text-center">{renderAddControl(plant.id, qty)}</td>
                         </tr>
                       );
                     })}

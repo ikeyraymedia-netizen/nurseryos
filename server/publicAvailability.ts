@@ -12,6 +12,7 @@ type PublicPlant = {
   plantName: string;
   containerSize: string;
   category: string | null;
+  plantType: string | null;
   quantityAvailable?: number;
   listPrice: number | null;
   readyDate: string | null;
@@ -22,6 +23,8 @@ type PublicAvailabilityPayload = {
   nurseryName: string;
   logoUrl: string | null;
   shippingAddress: string | null;
+  contactEmail: string | null;
+  contacts: Array<{ name: string; email: string }>;
   slug: string;
   showQty: boolean;
   showPhotos: boolean;
@@ -101,6 +104,24 @@ function publicCategoryLabel(raw?: string | null): string | null {
   return v;
 }
 
+/** Same section order as availability exports. */
+const PLANT_TYPE_ORDER = ['Ground Cover', 'Grasses', 'Shrubs', 'Perennials', 'Trees'];
+
+async function loadPublicContactEmail(tenantId: string): Promise<string | null> {
+  const snap = await getAdminDb().doc(`tenants/${tenantId}/integrations/email`).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as {
+    fromEmail?: string;
+    identities?: Array<{ id?: string; fromEmail?: string }>;
+    defaultIdentityId?: string;
+  };
+  const identities = Array.isArray(data.identities) ? data.identities : [];
+  const chosen =
+    identities.find((row) => row.id === data.defaultIdentityId) || identities[0] || null;
+  const email = String(chosen?.fromEmail || data.fromEmail || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
 async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityPayload | null> {
   const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
   if (!tenantSnap.exists) return null;
@@ -113,9 +134,20 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
     publicAvailabilityShowQty?: boolean;
     publicAvailabilityShowPhotos?: boolean;
     publicAvailabilityInStockOnly?: boolean;
+    publicAvailabilityContacts?: Array<{ name?: string; email?: string }>;
   };
 
   if (!tenant.publicAvailabilityEnabled) return null;
+  const contacts = (Array.isArray(tenant.publicAvailabilityContacts)
+    ? tenant.publicAvailabilityContacts
+    : []
+  )
+    .map((c) => ({
+      name: String(c?.name || '').trim().slice(0, 60),
+      email: String(c?.email || '').trim().toLowerCase()
+    }))
+    .filter((c) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email))
+    .slice(0, 10);
   const slug = normalizePublicSlug(tenant.publicAvailabilitySlug || '');
   if (!slug) return null;
 
@@ -132,6 +164,7 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
       plantName?: string;
       containerSize?: string;
       category?: string | null;
+      plantType?: string | null;
       quantityAvailable?: number;
       listPrice?: number | null;
       readyDate?: string | null;
@@ -149,6 +182,9 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
       plantName: String(data.plantName || '').trim() || 'Plant',
       containerSize: String(data.containerSize || '').trim(),
       category: publicCategoryLabel(data.category),
+      plantType: PLANT_TYPE_ORDER.includes(String(data.plantType || ''))
+        ? String(data.plantType)
+        : null,
       ...(showQty ? { quantityAvailable: qty } : {}),
       listPrice:
         data.listPrice != null && Number.isFinite(Number(data.listPrice))
@@ -159,15 +195,13 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
     });
   });
 
+  const typeRank = (type: string | null) => {
+    const i = type ? PLANT_TYPE_ORDER.indexOf(type) : -1;
+    return i === -1 ? PLANT_TYPE_ORDER.length : i;
+  };
   plants.sort((a, b) => {
-    const aCat = a.category || 'Uncategorized';
-    const bCat = b.category || 'Uncategorized';
-    const aUncat = !a.category;
-    const bUncat = !b.category;
-    if (aUncat && !bUncat) return 1;
-    if (!aUncat && bUncat) return -1;
-    const cat = aCat.localeCompare(bCat, undefined, { sensitivity: 'base' });
-    if (cat !== 0) return cat;
+    const type = typeRank(a.plantType) - typeRank(b.plantType);
+    if (type !== 0) return type;
     const name = a.plantName.localeCompare(b.plantName, undefined, { sensitivity: 'base' });
     if (name !== 0) return name;
     return a.containerSize.localeCompare(b.containerSize, undefined, {
@@ -180,6 +214,8 @@ async function buildPublicPayload(tenantId: string): Promise<PublicAvailabilityP
     nurseryName: String(tenant.name || 'Nursery'),
     logoUrl: tenant.logoUrl?.trim() || null,
     shippingAddress: tenant.shippingAddress?.trim() || null,
+    contactEmail: await loadPublicContactEmail(tenantId),
+    contacts,
     slug,
     showQty,
     showPhotos,

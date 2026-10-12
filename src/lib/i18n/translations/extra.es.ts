@@ -2091,7 +2091,6 @@ const extra = {
     emailYourList: 'Envía tu lista a',
     emailHelp: 'Abre tu correo con la lista incluida y descarga el PDF para que lo adjuntes.',
     emailIntro: 'Esta es mi lista de plantas:',
-    pdfAttachedNote: 'Adjunto el PDF de esta lista.',
     moreInPdf: '…y {{count}} más (ver PDF)',
     sendTo: 'Enviar a:',
     mailDidntOpen: '¿No se abrió tu correo? Usa:',

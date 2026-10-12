@@ -268,8 +268,7 @@ function plantListEmailBody(params: {
     contact.notes.trim() ? `\n${labels.notes}: ${contact.notes.trim()}` : '',
     [contact.name, contact.company, contact.phone].some((v) => v.trim())
       ? `\n${[contact.name, contact.company, contact.phone].map((v) => v.trim()).filter(Boolean).join(' · ')}`
-      : '',
-    `\n\n${labels.pdfAttachedNote}`
+      : ''
   ];
   const footer = footerParts.join('');
   let body = header;
@@ -433,7 +432,6 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
       labels: {
         emailIntro: t('publicAvailability.emailIntro'),
         notes: t('publicAvailability.notes'),
-        pdfAttachedNote: t('publicAvailability.pdfAttachedNote'),
         moreInPdf: t('publicAvailability.moreInPdf')
       }
     });

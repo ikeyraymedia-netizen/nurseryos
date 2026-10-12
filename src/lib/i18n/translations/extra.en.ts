@@ -2071,7 +2071,6 @@ const extra = {
     emailYourList: 'Email your list to',
     emailHelp: 'Opens your email app with your list filled in and downloads the PDF so you can attach it.',
     emailIntro: 'Here is my plant list:',
-    pdfAttachedNote: 'PDF of this list is attached.',
     moreInPdf: '…and {{count}} more (see PDF)',
     sendTo: 'Send to:',
     mailDidntOpen: 'Email app didn’t open? Use:',

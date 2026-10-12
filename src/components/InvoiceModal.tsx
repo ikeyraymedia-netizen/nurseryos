@@ -208,6 +208,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   /** Inventory plants — used to resolve estimate photo links. */
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
   const [vendorAvailabilityLines, setVendorAvailabilityLines] = useState<VendorAvailabilityLine[]>([]);
+  /** Which source chip was tapped per estimate line (this session). */
+  const [selectedSourceByLine, setSelectedSourceByLine] = useState<Record<string, string>>({});
   /** Container weights — used for estimate shipping weight. */
   const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
   const [photoUploadBusyId, setPhotoUploadBusyId] = useState<string | null>(null);
@@ -870,7 +872,23 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     return result;
   };
 
+  const clearSource = (item: PlantOrderItem) => {
+    setSelectedSourceByLine((prev) => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+    updateDraftLine(item.id, { vendor: '' });
+    handleCostChange(item.id, 0);
+  };
+
   const applyVendorSource = (item: PlantOrderItem, line: VendorAvailabilityLine) => {
+    const key = `vendor-${line.id}`;
+    if (selectedSourceKeyFor(item) === key) {
+      clearSource(item);
+      return;
+    }
+    setSelectedSourceByLine((prev) => ({ ...prev, [item.id]: key }));
     const patch: Partial<PlantOrderItem> = { vendor: line.vendorName };
     if (!String(item.containerSize || '').trim()) patch.containerSize = line.containerSize;
     updateDraftLine(item.id, patch);
@@ -880,16 +898,45 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   const applyStockSource = (item: PlantOrderItem, plant: InventoryPlant) => {
+    const key = `stock-${plant.id}`;
+    if (selectedSourceKeyFor(item) === key) {
+      clearSource(item);
+      return;
+    }
+    setSelectedSourceByLine((prev) => ({ ...prev, [item.id]: key }));
     const patch: Partial<PlantOrderItem> = { vendor: t('invoice.sourceOurStock') };
     if (!String(item.containerSize || '').trim()) patch.containerSize = plant.containerSize;
     updateDraftLine(item.id, patch);
+  };
+
+  /** Chip key for the line's chosen source; after reopening, inferred from saved vendor + cost. */
+  const selectedSourceKeyFor = (item: PlantOrderItem): string | null => {
+    const explicit = selectedSourceByLine[item.id];
+    if (explicit) return explicit;
+    const chosenVendor = String(item.vendor || '').trim().toLowerCase();
+    if (!chosenVendor) return null;
+    const { stock, vendor } = sourceMatchesFor(item);
+    if (chosenVendor === t('invoice.sourceOurStock').toLowerCase()) {
+      return stock[0] ? `stock-${stock[0].id}` : null;
+    }
+    const cost = itemCosts[item.id];
+    const hit = vendor.find(
+      (line) =>
+        line.vendorName.trim().toLowerCase() === chosenVendor &&
+        typeof line.listPrice === 'number' &&
+        typeof cost === 'number' &&
+        Math.abs(line.listPrice - cost) < 0.005
+    );
+    return hit ? `vendor-${hit.id}` : null;
   };
 
   const renderSourceMatches = (item: PlantOrderItem) => {
     if (!isEstimate) return null;
     const { stock, vendor } = sourceMatchesFor(item);
     if (stock.length === 0 && vendor.length === 0) return null;
-    const chosenVendor = String(item.vendor || '').trim().toLowerCase();
+    const selectedKey = selectedSourceKeyFor(item);
+    const selectedStock = stock.find((p) => `stock-${p.id}` === selectedKey);
+    const selectedVendor = vendor.find((l) => `vendor-${l.id}` === selectedKey);
     const chipBase =
       'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold text-left transition-colors';
     return (
@@ -900,40 +947,64 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ({t('invoice.internalOnly')})
           </span>
         </span>
+        {(selectedStock || selectedVendor) && (
+          <p className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            <Check className="h-3 w-3" />
+            {t('invoice.sourceSelected')}:{' '}
+            {selectedStock
+              ? `${t('invoice.sourceOurStock')} · ${selectedStock.containerSize}`
+              : `${selectedVendor!.vendorName} · ${selectedVendor!.containerSize}${
+                  typeof selectedVendor!.listPrice === 'number'
+                    ? ` · $${selectedVendor!.listPrice.toFixed(2)}`
+                    : ''
+                }`}
+          </p>
+        )}
         <div className="mt-0.5 flex flex-wrap gap-1 max-h-24 overflow-y-auto overscroll-contain pr-1">
           {(stock.length + vendor.length) > 6 && (
             <span className="w-full text-[9px] font-semibold text-indigo-400">
               {stock.length + vendor.length} {t('invoice.sourceMatchCount')}
             </span>
           )}
-          {stock.map((plant) => (
+          {stock.map((plant) => {
+            const active = selectedKey === `stock-${plant.id}`;
+            return (
             <button
               key={`stock-${plant.id}`}
               type="button"
               onClick={() => applyStockSource(item, plant)}
               title={t('invoice.sourceUseStock')}
-              className={`${chipBase} border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100`}
+              aria-pressed={active}
+              className={`${chipBase} ${
+                active
+                  ? 'border-emerald-700 bg-emerald-600 text-white'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+              }`}
             >
+              {active && <Check className="h-3 w-3" />}
               <span className="font-black">{t('invoice.sourceOurStock')}</span>
               <span>
                 {plant.containerSize} · {plant.quantityAvailable} {t('invoice.sourceAvail')}
               </span>
             </button>
-          ))}
+            );
+          })}
           {vendor.map((line) => {
-            const active = chosenVendor && chosenVendor === line.vendorName.trim().toLowerCase();
+            const active = selectedKey === `vendor-${line.id}`;
             return (
               <button
                 key={`vendor-${line.id}`}
                 type="button"
                 onClick={() => applyVendorSource(item, line)}
                 title={`${line.plantName}${line.notes ? ` — ${line.notes}` : ''}\n${t('invoice.sourceUseVendor')}`}
+                aria-pressed={active}
                 className={`${chipBase} ${
                   active
-                    ? 'border-indigo-500 bg-indigo-100 text-indigo-950'
+                    ? 'border-indigo-700 bg-indigo-600 text-white'
                     : 'border-indigo-200 bg-indigo-50/60 text-indigo-900 hover:bg-indigo-100'
                 }`}
               >
+                {active && <Check className="h-3 w-3" />}
                 <span className="font-black">{line.vendorName}</span>
                 <span>
                   {line.containerSize}

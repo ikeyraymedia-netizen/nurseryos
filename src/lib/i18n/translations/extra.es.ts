@@ -1069,6 +1069,7 @@ const extra = {
     sourceMatches: 'Dónde conseguirlo',
     sourceOurStock: 'Nuestro inventario',
     sourceAvail: 'disp.',
+    sourceSelected: 'Seleccionado',
     sourceMatchCount: 'coincidencias — desliza para ver más',
     sourceUseVendor: 'Clic para usar este proveedor y costo en la línea',
     sourceUseStock: 'Clic para marcar esta línea como de nuestro inventario',

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { auth } from '../firebase';
 import {
   defaultIdentityEmail,
   fetchEmailStatus,
@@ -32,7 +33,11 @@ export function OutboundReplySelect({
         const current = value.trim().toLowerCase();
         const stillValid = rows.some((row) => row.fromEmail.toLowerCase() === current);
         if (!stillValid) {
-          const fallback = rows.find((row) => row.fromEmail === defaultIdentityEmail(status)) || rows[0];
+          const myEmail = String(auth.currentUser?.email || '').trim().toLowerCase();
+          const fallback =
+            (myEmail && rows.find((row) => row.fromEmail.toLowerCase() === myEmail)) ||
+            rows.find((row) => row.fromEmail === defaultIdentityEmail(status)) ||
+            rows[0];
           onChange(fallback?.fromEmail || '', fallback || null);
         }
       })

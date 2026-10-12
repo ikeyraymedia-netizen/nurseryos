@@ -1191,7 +1191,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>${docLabel} Date:</strong></td>
               <td style="padding: 2px 0; text-align: right; color: #0f172a;">${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</td>
-            </tr>
+            </tr>${
+              isEstimate
+                ? ''
+                : `
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Terms:</strong></td>
               <td style="padding: 2px 0; text-align: right; color: #0e7490; font-weight: bold;">${paymentTerms}</td>
@@ -1199,7 +1202,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>Due Date:</strong></td>
               <td style="padding: 2px 0; text-align: right; color: #0f172a; font-weight: bold;">${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}</td>
-            </tr>
+            </tr>`
+            }
           </table>
         </div>
 
@@ -1369,7 +1373,7 @@ ${poNumber.trim() ? `P.O. #: ${poNumber.trim()}\n` : ''}${
         ? `Ref Invoice #: ${referencedInvoiceNumber.trim()}\n`
         : ''
     }${
-      isCreditMemo
+      isCreditMemo || isEstimate
         ? ''
         : `Terms: ${paymentTerms}\nDue Date: ${dueDate ? new Date(dueDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : t('invoice.uponReceipt')}\n`
     }
@@ -2784,7 +2788,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       if (isCreditMemo && referencedInvoiceNumber.trim()) {
         metaLines.push(`Ref Invoice #: ${referencedInvoiceNumber.trim()}`);
       }
-      if (!isCreditMemo) {
+      if (!isCreditMemo && !isEstimate) {
         metaLines.push(`Terms: ${paymentTerms || '—'}`);
         metaLines.push(
           `Due: ${dueDate ? new Date(dueDate).toLocaleDateString() : t('invoice.uponReceipt')}`
@@ -3430,16 +3434,20 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 )}
               </select>
               <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-                Credits this invoice&apos;s profit to the rep in Reports. Options are Owners, Admins,
+                Credits this {docLabel.toLowerCase()}&apos;s profit to the rep in Reports. Options are Owners, Admins,
                 and team members with the Sales role.
               </p>
             </div>
 
             {/* Date and Terms */}
-            <div className={`grid gap-2 ${isCreditMemo ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            <div className={`grid gap-2 ${isCreditMemo || isEstimate ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <div>
                 <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                  {isCreditMemo ? t('invoice.creditMemoDate') : 'Invoice Date'}
+                  {isCreditMemo
+                    ? t('invoice.creditMemoDate')
+                    : isEstimate
+                      ? t('invoice.estimateDate')
+                      : t('invoice.invoiceDate')}
                 </label>
                 <input
                   type="date"
@@ -3448,7 +3456,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   className="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
                 />
               </div>
-              {!isCreditMemo && (
+              {!isCreditMemo && !isEstimate && (
               <div>
                 <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                   Terms
@@ -3470,7 +3478,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             </div>
 
             {/* Due Date */}
-            {!isCreditMemo && (
+            {!isCreditMemo && !isEstimate && (
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                 Due Date
@@ -4213,7 +4221,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         Paid
                       </span>
                     )}
-                    {!isPaid && paymentStatus === 'pending' && (
+                    {!isPaid && !isEstimate && paymentStatus === 'pending' && (
                       <span className="mt-2 inline-flex items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
                         Payment pending
                       </span>
@@ -4236,7 +4244,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         <span className="font-bold text-gray-950">{referencedInvoiceNumber}</span>
                       </p>
                     )}
-                    {!isCreditMemo && (
+                    {!isCreditMemo && !isEstimate && (
                       <>
                     <p className="text-gray-800">
                       <span className="font-bold text-gray-500">Terms:</span> <span className="font-bold text-ink-800">{paymentTerms}</span>

@@ -909,6 +909,7 @@ const extra = {
     salesRep: 'Representante',
     unassigned: 'Sin asignar',
     invoiceDate: 'Fecha de factura',
+    estimateDate: 'Fecha del presupuesto',
     terms: 'Términos',
     dueDate: 'Fecha de vencimiento',
     charges: 'Cargos y ajustes',

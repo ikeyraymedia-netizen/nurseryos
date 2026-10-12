@@ -898,6 +898,7 @@ const extra = {
     salesRep: 'Sales Rep',
     unassigned: 'Unassigned',
     invoiceDate: 'Invoice Date',
+    estimateDate: 'Estimate Date',
     terms: 'Terms',
     dueDate: 'Due Date',
     charges: 'Charges & Adjustments',

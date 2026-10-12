@@ -1170,6 +1170,8 @@ const extra = {
     emailOpenedMailClient: ' (opened in mail client)',
     customerNamePlaceholder: 'Customer Name',
     billingAddressPlaceholder: 'Billing Address',
+    deliverToLabel: 'Deliver To',
+    deliveryAddressPlaceholder: 'Delivery / job site address',
     termsCod: 'COD (Pickup)',
     qbSynced: 'Synced to {{where}}{{company}} · {{doc}}',
     qbPushedAlert:

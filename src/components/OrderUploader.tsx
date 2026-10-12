@@ -735,6 +735,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
           notes: t('upload.estimateNotesDefault'),
           billToName: linked.billingName || linked.name,
           billToAddress: linked.billingAddress || linked.shippingAddress || undefined,
+          deliveryAddress: linked.shippingAddress || linked.receiverAddress || undefined,
           customerEmail: linked.contactEmail || undefined,
           owner: salesRep.trim() || undefined,
           items: lineItems,

@@ -1183,6 +1183,8 @@ const extra = {
     emailOpenedMailClient: ' (abierto en cliente de correo)',
     customerNamePlaceholder: 'Nombre del cliente',
     billingAddressPlaceholder: 'Dirección de facturación',
+    deliverToLabel: 'Entregar en',
+    deliveryAddressPlaceholder: 'Dirección de entrega / obra',
     termsCod: 'COD (Recogida)',
     qbSynced: 'Sincronizado con {{where}}{{company}} · {{doc}}',
     qbPushedAlert: 'Factura enviada a {{where}}{{company}}.\n\n{{hint}}',

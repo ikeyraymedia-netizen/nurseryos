@@ -175,6 +175,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Customer billing details (inline editable)
   const [billToName, setBillToName] = useState(order.customerName);
   const [billToAddress, setBillToAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
 
   // Custom invoice properties (saved in invoiceDetails)
   const [invoiceNumber, setInvoiceNumber] = useState(
@@ -318,6 +319,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         customer?.billingAddress ||
         customer?.shippingAddress ||
         ''
+    );
+    setDeliveryAddress(
+      doc?.deliveryAddress ?? (customer?.shippingAddress || customer?.receiverAddress || '')
     );
 
     const details = order.invoiceDetails;
@@ -1203,6 +1207,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <h3 style="color: #0e7490; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">${t('invoice.billToCustomer')}</h3>
           <p style="margin: 0; font-weight: bold; font-size: 14px; color: #0f172a;">${billToName}</p>
           <p style="margin: 5px 0 0 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${billToAddress}</p>
+          ${
+            !isCreditMemo && deliveryAddress.trim()
+              ? `<h3 style="color: #0e7490; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin: 16px 0 10px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">${t('invoice.deliverToLabel')}</h3>
+          <p style="margin: 0; color: #475569; white-space: pre-wrap; line-height: 1.4;">${deliveryAddress.trim()}</p>`
+              : ''
+          }
         </div>
 
         <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 25px; font-family: Arial, sans-serif;">
@@ -1366,7 +1376,7 @@ ${poNumber.trim() ? `P.O. #: ${poNumber.trim()}\n` : ''}${
 BILL TO:
 ${billToName}
 ${billToAddress}
-
+${!isCreditMemo && deliveryAddress.trim() ? `\nDELIVER TO:\n${deliveryAddress.trim()}\n` : ''}
 --------------------------------------------------------------------------------
 PLANT ITEMS:
 --------------------------------------------------------------------------------
@@ -2184,6 +2194,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           notes: notesToSave,
           billToName,
           billToAddress: billToAddress || undefined,
+          deliveryAddress: isCreditMemo ? undefined : deliveryAddress.trim(),
           customerEmail: customerEmail || undefined,
           customerEmailCc: parseCcEmails(ccEmails, customerEmail).cc.join(', ') || undefined,
           owner: salesRep.trim() || undefined,
@@ -2807,6 +2818,20 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       let leftY = partiesTop + 28;
       if (billToAddress.trim()) {
         pdf.splitTextToSize(billToAddress.trim(), contentWidth / 2 - 10).forEach((l: string) => {
+          pdf.text(l, margin, leftY);
+          leftY += 12;
+        });
+      }
+      if (!isCreditMemo && deliveryAddress.trim()) {
+        leftY += 6;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(14, 116, 144);
+        pdf.text(t('invoice.deliverToLabel').toUpperCase(), margin, leftY);
+        leftY += 13;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(80, 80, 80);
+        pdf.splitTextToSize(deliveryAddress.trim(), contentWidth / 2 - 10).forEach((l: string) => {
           pdf.text(l, margin, leftY);
           leftY += 12;
         });
@@ -4248,6 +4273,20 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       placeholder={t('invoice.billingAddressPlaceholder')}
                     />
                   </div>
+                  {!isCreditMemo && (
+                    <div className={`mt-3 ${deliveryAddress.trim() ? '' : 'print:hidden'}`}>
+                      <h3 className="text-xs font-black font-mono uppercase text-ink-800 tracking-wider mb-1">
+                        {t('invoice.deliverToLabel')}:
+                      </h3>
+                      <textarea
+                        rows={2}
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        className="w-full text-xs text-gray-600 bg-transparent hover:bg-slate-50 border border-dashed border-slate-300 focus:border-ink-600 focus:bg-white focus:outline-none p-1 rounded leading-normal resize-none font-sans font-medium print:border-none print:p-0"
+                        placeholder={t('invoice.deliveryAddressPlaceholder')}
+                      />
+                    </div>
+                  )}
                 </div>
                 
                 {!isCreditMemo && (

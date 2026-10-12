@@ -242,6 +242,8 @@ export interface CustomerDocument {
   notes?: string;
   billToName: string;
   billToAddress?: string;
+  /** Where the plants are going (job site / ship-to). */
+  deliveryAddress?: string;
   customerEmail?: string;
   /** Comma-separated CC list for this document’s email. */
   customerEmailCc?: string;

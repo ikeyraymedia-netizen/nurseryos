@@ -1066,6 +1066,11 @@ const extra = {
     photoUploadFailed: 'No se pudo subir la foto.',
     photoUploadNeedTenant: 'Inicie sesión en un vivero antes de subir fotos del presupuesto.',
     quotedVendor: 'Proveedor',
+    sourceMatches: 'Dónde conseguirlo',
+    sourceOurStock: 'Nuestro inventario',
+    sourceAvail: 'disp.',
+    sourceUseVendor: 'Clic para usar este proveedor y costo en la línea',
+    sourceUseStock: 'Clic para marcar esta línea como de nuestro inventario',
     quotedVendorPlaceholder: 'De quién cotizó esta planta',
     internalOnly: 'solo interno',
     defaultNotesInvoice:

@@ -1053,6 +1053,11 @@ const extra = {
     photoUploadFailed: 'Could not upload photo.',
     photoUploadNeedTenant: 'Sign in to a nursery before uploading estimate photos.',
     quotedVendor: 'Vendor',
+    sourceMatches: 'Where to get it',
+    sourceOurStock: 'Our stock',
+    sourceAvail: 'avail',
+    sourceUseVendor: 'Click to use this vendor and cost on the line',
+    sourceUseStock: 'Click to mark this line as coming from our stock',
     quotedVendorPlaceholder: 'Who you quoted this plant from',
     internalOnly: 'internal only',
     defaultNotesInvoice:

@@ -15,7 +15,13 @@ import {
   parseInventorySpreadsheetArrayBuffer,
   SpreadsheetInventoryItem
 } from './inventorySpreadsheet';
-import { normalizePlantName, plantNamesMatch } from './inventoryMatch';
+import {
+  normalizeContainerSize,
+  normalizePlantName,
+  plantMatchContext,
+  plantNameMatchScore,
+  plantNamesMatch
+} from './inventoryMatch';
 import { authJsonHeaders } from './apiAuth';
 
 let activeTenantId: string | null = null;
@@ -358,6 +364,42 @@ export async function replaceVendorAvailabilityFromUpload(params: {
 export async function clearVendorAvailability(vendorId: string): Promise<number> {
   const tenantId = requireTenantId();
   return deleteLinesForVendor(tenantId, vendorId);
+}
+
+/**
+ * Rank items whose name matches an estimate line. Same-size rows sort first,
+ * then the closest name, then cheapest.
+ */
+export function matchPlantSources<T extends { plantName: string; containerSize: string }>(
+  rows: T[],
+  plantName: string,
+  containerSize: string,
+  priceOf: (row: T) => number | null | undefined = () => null,
+  limit = 4
+): T[] {
+  if (!normalizePlantName(plantName) || rows.length === 0) return [];
+  const context = plantMatchContext(rows as any);
+  const wantSize = containerSize.trim() ? normalizeContainerSize(containerSize) : '';
+  const scored: Array<{ row: T; score: number; sameSize: boolean; price: number }> = [];
+  for (const row of rows) {
+    const score = plantNameMatchScore(plantName, row.plantName, context);
+    if (score <= 0) continue;
+    const sameSize = !!wantSize && normalizeContainerSize(row.containerSize || '') === wantSize;
+    const price = priceOf(row);
+    scored.push({
+      row,
+      score,
+      sameSize,
+      price: typeof price === 'number' && Number.isFinite(price) ? price : Number.POSITIVE_INFINITY
+    });
+  }
+  scored.sort(
+    (a, b) =>
+      Number(b.sameSize) - Number(a.sameSize) ||
+      b.score - a.score ||
+      a.price - b.price
+  );
+  return scored.slice(0, limit).map((s) => s.row);
 }
 
 /** Search uploaded vendor availabilities — exact, contains, and close name matches. */

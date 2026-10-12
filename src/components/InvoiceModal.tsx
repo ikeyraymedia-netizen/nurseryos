@@ -8,7 +8,8 @@ import {
   CustomerDocument,
   FreightAllocation,
   InventoryPlant,
-  ContainerWeight
+  ContainerWeight,
+  VendorAvailabilityLine
 } from '../types';
 import {
   imageSrcToDataUrl,
@@ -65,6 +66,10 @@ import {
 import { DEFAULT_VENDORS } from '../data/vendors';
 import { subscribeToVendors } from '../lib/vendors';
 import { subscribeToInventory } from '../lib/inventory';
+import {
+  matchPlantSources,
+  subscribeToVendorAvailabilityLines
+} from '../lib/vendorAvailability';
 import { uploadEstimateLinePhoto } from '../lib/estimatePhotos';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
@@ -202,6 +207,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [costSaveNote, setCostSaveNote] = useState<string | null>(null);
   /** Inventory plants — used to resolve estimate photo links. */
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
+  const [vendorAvailabilityLines, setVendorAvailabilityLines] = useState<VendorAvailabilityLine[]>([]);
   /** Container weights — used for estimate shipping weight. */
   const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
   const [photoUploadBusyId, setPhotoUploadBusyId] = useState<string | null>(null);
@@ -816,6 +822,128 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setItemCosts((prev) => ({ ...prev, [id]: 0 }));
   };
 
+  const sourceMatchCacheRef = useRef<{
+    vendorLines: VendorAvailabilityLine[];
+    inventory: InventoryPlant[];
+    byKey: Map<string, { stock: InventoryPlant[]; vendor: VendorAvailabilityLine[] }>;
+  } | null>(null);
+
+  const sourceMatchesFor = (item: PlantOrderItem) => {
+    let cache = sourceMatchCacheRef.current;
+    if (
+      !cache ||
+      cache.vendorLines !== vendorAvailabilityLines ||
+      cache.inventory !== inventoryPlants
+    ) {
+      cache = {
+        vendorLines: vendorAvailabilityLines,
+        inventory: inventoryPlants,
+        byKey: new Map()
+      };
+      sourceMatchCacheRef.current = cache;
+    }
+    const name = String(item.plantName || '').trim();
+    const size = String(item.containerSize || '').trim();
+    const key = `${name.toLowerCase()}|${size.toLowerCase()}`;
+    const hit = cache.byKey.get(key);
+    if (hit) return hit;
+    const result =
+      name.length < 3
+        ? { stock: [], vendor: [] }
+        : {
+            stock: matchPlantSources<InventoryPlant>(
+              inventoryPlants.filter((p) => (Number(p.quantityAvailable) || 0) > 0),
+              name,
+              size,
+              (p) => p.listPrice,
+              3
+            ),
+            vendor: matchPlantSources<VendorAvailabilityLine>(
+              vendorAvailabilityLines,
+              name,
+              size,
+              (l) => l.listPrice,
+              4
+            )
+          };
+    cache.byKey.set(key, result);
+    return result;
+  };
+
+  const applyVendorSource = (item: PlantOrderItem, line: VendorAvailabilityLine) => {
+    const patch: Partial<PlantOrderItem> = { vendor: line.vendorName };
+    if (!String(item.containerSize || '').trim()) patch.containerSize = line.containerSize;
+    updateDraftLine(item.id, patch);
+    if (typeof line.listPrice === 'number' && Number.isFinite(line.listPrice)) {
+      handleCostChange(item.id, line.listPrice);
+    }
+  };
+
+  const applyStockSource = (item: PlantOrderItem, plant: InventoryPlant) => {
+    const patch: Partial<PlantOrderItem> = { vendor: t('invoice.sourceOurStock') };
+    if (!String(item.containerSize || '').trim()) patch.containerSize = plant.containerSize;
+    updateDraftLine(item.id, patch);
+  };
+
+  const renderSourceMatches = (item: PlantOrderItem) => {
+    if (!isEstimate) return null;
+    const { stock, vendor } = sourceMatchesFor(item);
+    if (stock.length === 0 && vendor.length === 0) return null;
+    const chosenVendor = String(item.vendor || '').trim().toLowerCase();
+    const chipBase =
+      'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold text-left transition-colors';
+    return (
+      <div className="mt-1 max-w-xl print:hidden" data-internal-only>
+        <span className="text-[9px] font-bold uppercase tracking-wide text-indigo-500">
+          {t('invoice.sourceMatches')}{' '}
+          <span className="normal-case tracking-normal font-semibold text-indigo-400">
+            ({t('invoice.internalOnly')})
+          </span>
+        </span>
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          {stock.map((plant) => (
+            <button
+              key={`stock-${plant.id}`}
+              type="button"
+              onClick={() => applyStockSource(item, plant)}
+              title={t('invoice.sourceUseStock')}
+              className={`${chipBase} border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100`}
+            >
+              <span className="font-black">{t('invoice.sourceOurStock')}</span>
+              <span>
+                {plant.containerSize} · {plant.quantityAvailable} {t('invoice.sourceAvail')}
+              </span>
+            </button>
+          ))}
+          {vendor.map((line) => {
+            const active = chosenVendor && chosenVendor === line.vendorName.trim().toLowerCase();
+            return (
+              <button
+                key={`vendor-${line.id}`}
+                type="button"
+                onClick={() => applyVendorSource(item, line)}
+                title={`${line.plantName}${line.notes ? ` — ${line.notes}` : ''}\n${t('invoice.sourceUseVendor')}`}
+                className={`${chipBase} ${
+                  active
+                    ? 'border-indigo-500 bg-indigo-100 text-indigo-950'
+                    : 'border-indigo-200 bg-indigo-50/60 text-indigo-900 hover:bg-indigo-100'
+                }`}
+              >
+                <span className="font-black">{line.vendorName}</span>
+                <span>
+                  {line.containerSize}
+                  {line.notes ? ` (${line.notes})` : ''}
+                  {typeof line.listPrice === 'number' ? ` · $${line.listPrice.toFixed(2)}` : ''}
+                  {line.quantityAvailable > 0 ? ` · ${line.quantityAvailable} ${t('invoice.sourceAvail')}` : ''}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const removeDraftLine = (id: string) => {
     setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
   };
@@ -1412,6 +1540,19 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
     return subscribeToInventory(setInventoryPlants);
   }, [isOpen, tenantId]);
+
+  useEffect(() => {
+    if (!isOpen || !tenantId || documentType !== 'estimate') {
+      setVendorAvailabilityLines([]);
+      return;
+    }
+    try {
+      return subscribeToVendorAvailabilityLines(setVendorAvailabilityLines);
+    } catch {
+      setVendorAvailabilityLines([]);
+      return;
+    }
+  }, [isOpen, tenantId, documentType]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -4303,6 +4444,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 className="min-w-0 flex-1 bg-transparent border-0 border-b border-slate-200 px-0 py-0.5 text-[11px] text-slate-600 italic placeholder:text-slate-300 focus:outline-none focus:border-ink-500"
                               />
                             </div>
+                            {renderSourceMatches(item)}
                           </div>
                         )}
                         {canEditLines && documentType !== 'estimate' && (
@@ -4647,6 +4789,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                   className="mt-0.5 w-full max-w-md rounded-lg border border-indigo-200 bg-indigo-50/50 px-2 py-1 text-[11px] font-normal text-indigo-950 placeholder:text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
                                 />
                               </label>
+                              {renderSourceMatches(item)}
                               </>
                             ) : canEditLines ? (
                               <div className="mt-1 flex items-center gap-2 min-w-0 max-w-md">

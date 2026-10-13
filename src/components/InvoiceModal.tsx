@@ -432,9 +432,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         photoUrl: item.photoUrl,
         vendor:
           item.vendor ||
-          (type === 'estimate'
-            ? undefined
-            : liveOrderItems.find((live) => live.id === item.id)?.vendor)
+          liveOrderItems.find((live) => live.id === item.id)?.vendor
       });
 
       // Credit memos are intentional subsets — keep the saved snapshot as-is.
@@ -2000,12 +1998,21 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               ? item.photoUrl.trim()
               : null
             : undefined,
-        vendor:
-          isEstimate
-            ? String(item.vendor || '').trim() || undefined
-            : isCreditMemo
-              ? undefined
-              : item.vendor
+        // A vendor saved on the order stays when the estimate is saved again,
+        // as long as this line's plant and quantity did not change.
+        vendor: (() => {
+          if (isCreditMemo) return undefined;
+          const orderLine = order.items.find((line) => line.id === item.id);
+          const savedVendor = String(orderLine?.vendor || '').trim();
+          const samePlantAndQty =
+            !!orderLine &&
+            String(orderLine.plantName || '').trim().toLowerCase() ===
+              String(item.plantName || '').trim().toLowerCase() &&
+            Number(orderLine.quantity) === Number(getItemQty(item));
+          if (isEstimate && savedVendor && samePlantAndQty) return savedVendor;
+          if (item.vendor === '') return undefined;
+          return String(item.vendor || '').trim() || savedVendor || undefined;
+        })()
       }));
 
       if (canEditLines) {
@@ -2114,6 +2121,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         setLinkedPlantOrderId(plantOrderId);
       }
 
+      let savedOrderItems: PlantOrderItem[] | undefined;
       if (!order.id.startsWith('preview-') && !isCreditOnly && plantOrderId === order.id) {
         const mergedItems = order.items.map((item) => {
           const fromWorking = updatedItems.find((w) => w.id === item.id);
@@ -2123,7 +2131,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             unitPrice: fromWorking.unitPrice,
             unitCost: fromWorking.unitCost,
             notes: fromWorking.notes,
-            vendor: isEstimate ? fromWorking.vendor : fromWorking.vendor || item.vendor
+            vendor: fromWorking.vendor
           };
         });
         const previousDocLineIds = new Set(
@@ -2145,6 +2153,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           documentType === 'invoice' && invoicedBumpLines.length > 0
             ? bumpInvoicedQuantities(mergedItems, invoicedBumpLines)
             : mergedItems;
+        savedOrderItems = itemsForOrder;
         await updateCustomerOrder({
           ...updatedOrder,
           items: itemsForOrder
@@ -2315,6 +2324,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       ) {
         await updateCustomerOrder({
           ...updatedOrder,
+          items: savedOrderItems || order.items,
           customerId,
           customerName: billToName || customer?.name || order.customerName
         });

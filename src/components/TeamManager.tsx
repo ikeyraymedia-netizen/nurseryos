@@ -6,8 +6,10 @@ import {
   listActiveInvites,
   listTeamMembers,
   removeTeamMember,
+  resolveNurseryRemittanceAddress,
   sendMemberPasswordReset,
-  updateMemberRoles
+  updateMemberRoles,
+  updateTenantRemittanceAddress
 } from '../lib/tenants';
 import {
   getAssignableRoles,
@@ -55,6 +57,8 @@ interface TeamManagerProps {
   onMemberUpdated?: (member: TenantMember) => void;
   /** Optional — opens container weight defaults (owner/admin). */
   onOpenWeights?: () => void;
+  /** Reload the nursery after a setting such as the remittance address is saved. */
+  onTenantUpdated?: () => Promise<void>;
 }
 
 const ASSIGNABLE = getAssignableRoles();
@@ -66,7 +70,8 @@ export function TeamManager({
   onUpdateLocale,
   onClose,
   onMemberUpdated,
-  onOpenWeights
+  onOpenWeights,
+  onTenantUpdated
 }: TeamManagerProps) {
   const t = useT();
   const { roleLabel } = useRoleLabel();
@@ -105,6 +110,30 @@ export function TeamManager({
   const [newEmailLabel, setNewEmailLabel] = useState('');
   const [newEmailFromName, setNewEmailFromName] = useState('');
   const [newEmailAddress, setNewEmailAddress] = useState('');
+  const [remittanceDraft, setRemittanceDraft] = useState(() =>
+    resolveNurseryRemittanceAddress(tenant)
+  );
+  const [savingRemittance, setSavingRemittance] = useState(false);
+  useEffect(() => {
+    setRemittanceDraft(resolveNurseryRemittanceAddress(tenant));
+  }, [tenant.remittanceAddress, tenant.name]);
+
+  async function saveRemittanceAddress() {
+    setSavingRemittance(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await updateTenantRemittanceAddress(tenant.id, remittanceDraft);
+      await onTenantUpdated?.();
+      setMessage(t('teamExtra.remittanceSaved'));
+    } catch (err: unknown) {
+      const text = err instanceof Error ? err.message : '';
+      setError(text || t('teamExtra.remittanceFailed'));
+    } finally {
+      setSavingRemittance(false);
+    }
+  }
+
   const paymentsEnabled = tenantHasModule(tenant, 'payments');
   const quickbooksEnabled = tenantHasModule(tenant, 'quickbooks');
   const melioEnabled =
@@ -728,6 +757,30 @@ export function TeamManager({
           </div>
 
           <PushNotificationPanel tenantId={tenant.id} disabled={busy} />
+
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <p className="text-xs font-bold uppercase text-slate-500">
+              {t('teamExtra.remittanceTitle')}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5 mb-2 leading-relaxed">
+              {t('teamExtra.remittanceHint')}
+            </p>
+            <textarea
+              value={remittanceDraft}
+              onChange={(e) => setRemittanceDraft(e.target.value)}
+              rows={3}
+              placeholder={t('teamExtra.remittancePlaceholder')}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-gray-900 placeholder:text-slate-400 focus:border-ink-500 focus:outline-none resize-none"
+            />
+            <button
+              type="button"
+              disabled={savingRemittance}
+              onClick={() => void saveRemittanceAddress()}
+              className="mt-2 inline-flex items-center rounded-lg bg-ink-800 hover:bg-ink-900 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white"
+            >
+              {savingRemittance ? t('common.pleaseWait') : t('teamExtra.remittanceSave')}
+            </button>
+          </div>
 
           {onOpenWeights && (
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">

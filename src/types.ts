@@ -27,6 +27,11 @@ export interface Tenant {
   ownerId: string;
   /** Ship-from / origin address shown on invoices and bills of lading. */
   shippingAddress?: string;
+  /**
+   * Where customers mail payment. Printed on invoices as “Remit Payments To”.
+   * Empty string means the nursery cleared it. Omit to use a built-in default.
+   */
+  remittanceAddress?: string;
   /** Optional nursery logo URL (HTTPS or data URL) for BOL/invoice headers. */
   logoUrl?: string;
   /**

@@ -110,10 +110,12 @@ export function linkMelioEntity(tenantId: string, entityId: string) {
   });
 }
 
+/** Caller must show Melio's terms disclosure on the same action that calls this. */
 export function createMelioEntity(tenantId: string, entity: MelioEntityInput) {
   return postJson<{ entityId: string; kycStatus: string | null }>('/api/melio/create-entity', {
     tenantId,
-    entity
+    entity,
+    termsAccepted: true
   });
 }
 

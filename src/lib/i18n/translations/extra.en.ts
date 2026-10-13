@@ -981,6 +981,7 @@ const extra = {
     keepFreight: 'Keep all freight on this invoice',
     billTo: 'BILL TO',
     shipFrom: 'SHIP FROM',
+    remitPaymentsTo: 'Remit Payments To:',
     plantVariety: 'PLANT VARIETY',
     unitPrice: 'UNIT PRICE',
     subtotal: 'Subtotal',
@@ -1517,6 +1518,8 @@ const extra = {
     unsupported: 'Unsupported file type.',
     tooLarge: 'File is too large.',
     aiBusy: 'AI service is temporarily busy. Try again in a moment.',
+    quotaUsed:
+      "Today's free AI scan limit is used up. It resets in about {{hours}} hours. To scan more bills today, turn on billing for the Gemini API key in Google AI Studio.",
     noLines: 'No purchase lines found.',
     vendorInv: 'Vendor inv #',
     billDate: 'Bill date',
@@ -1882,6 +1885,13 @@ const extra = {
     workspaceLegacy: ' This nursery is on a legacy plan (all standard modules).',
     workspaceNotActivatedYet: ' This nursery is not activated yet.',
     moduleOff: ' · off',
+    remittanceTitle: 'Remit payments to',
+    remittanceHint:
+      'Printed on invoices so customers know where to mail a check. Each nursery can change its own address.',
+    remittancePlaceholder: 'PO BOX 3\nJena, LA 71342',
+    remittanceSave: 'Save remittance address',
+    remittanceSaved: 'Remittance address saved. It will show on invoices.',
+    remittanceFailed: 'Could not save the remittance address.',
     containerWeights: 'Container weights',
     containerWeightsHint:
       'Default pounds per pot size used for truck load estimates. Rarely needs changing.',

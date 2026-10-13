@@ -117,6 +117,8 @@ interface InvoiceModalProps {
   nurseryName?: string;
   /** Ship-from / origin address for the nursery (invoice + BOL). */
   nurseryAddress?: string;
+  /** Mailing address printed on invoices as “Remit Payments To”. */
+  nurseryRemittanceAddress?: string;
   /** Nursery logo for invoice header / PDF / email (HTTPS or data URL). */
   nurseryLogoSrc?: string | null;
   tenantId?: string;
@@ -138,6 +140,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   truckOrders = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId,
   canViewProfit = false,
@@ -157,6 +160,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [documentType, setDocumentType] = useState<CustomerDocumentType>(
     existingDocument?.type || initialDocumentType
   );
+  const remitAddress =
+    documentType === 'invoice' ? nurseryRemittanceAddress.trim() : '';
   const [savedDocumentId, setSavedDocumentId] = useState<string | null>(
     existingDocument?.id || null
   );
@@ -1320,6 +1325,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             : ''
         }
 
+        ${
+          documentType === 'invoice' && nurseryRemittanceAddress.trim()
+            ? `<div style="margin-top: 24px; font-family: Arial, sans-serif; font-size: 13px; color: #0f172a;">
+          <p style="margin: 0 0 4px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: #0e7490;">${t('invoice.remitPaymentsTo')}</p>
+          <p style="margin: 0; white-space: pre-line; font-weight: 700;">${nurseryRemittanceAddress
+            .trim()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')}</p>
+        </div>`
+            : ''
+        }
+
         <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: Arial, sans-serif;">
           <p style="margin: 0 0 8px 0; color: #475569;">${t('invoice.emailPdfAttached', { docLabel: docLabel.toLowerCase() })}</p>
           <p style="margin: 0;">${nurseryName}</p>
@@ -1401,6 +1419,10 @@ ${
     }
 
 ${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}${
+      documentType === 'invoice' && nurseryRemittanceAddress.trim()
+        ? `\n${t('invoice.remitPaymentsTo')}\n${nurseryRemittanceAddress.trim()}\n`
+        : ''
+    }${
       payUrl
         ? `\nPAY ONLINE:\n${payUrl}\n`
         : ''
@@ -3044,6 +3066,29 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       }
 
       // Notes
+      if (documentType === 'invoice' && nurseryRemittanceAddress.trim()) {
+        y += 8;
+        ensureSpace(40);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(14, 116, 144);
+        pdf.text(t('invoice.remitPaymentsTo'), margin, y);
+        y += 12;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(20, 20, 20);
+        nurseryRemittanceAddress
+          .trim()
+          .split(/\n/)
+          .forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return;
+            ensureSpace(12);
+            pdf.text(trimmed, margin, y);
+            y += 12;
+          });
+      }
+
       if (invoiceNotes.trim()) {
         y += 10;
         ensureSpace(40);
@@ -5059,7 +5104,21 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         </>
                       ) : (
                         <>
-                          Please make check payable to <span className="font-bold text-gray-950">{nurseryName}</span> and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.
+                          Please make check payable to{' '}
+                          <span className="font-bold text-gray-950">{nurseryName}</span>
+                          {remitAddress
+                            ? '.'
+                            : ' and send to mailing office, or coordinate directly with our logistics team for convenient secure ACH/wire transfer credentials.'}
+                        </>
+                      )}
+                      {remitAddress && (
+                        <>
+                          <span className="mt-2 block font-black uppercase tracking-wider text-gray-950">
+                            {t('invoice.remitPaymentsTo')}
+                          </span>
+                          <span className="block whitespace-pre-line font-semibold text-gray-950">
+                            {remitAddress}
+                          </span>
                         </>
                       )}
                     </p>

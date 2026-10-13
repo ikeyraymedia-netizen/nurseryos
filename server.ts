@@ -165,19 +165,42 @@ function isQuotaError(error: any): boolean {
   return msg.includes('rate limit') || msg.includes('resource exhausted') || msg.includes('quota');
 }
 
-/** Gemini often says to wait a few seconds. Honor that instead of retrying immediately. */
-function retryAfterMs(error: any, attempt: number): number {
-  const blobs = [
+function errorBlob(error: any): string {
+  return [
     String(error?.message || ''),
     String(error?.error?.message || ''),
     JSON.stringify(error?.errorDetails || error?.details || error?.error || '')
   ].join(' ');
-  const seconds = blobs.match(/retry(?:Delay| in| after)?["'\s:]*(\d+(?:\.\d+)?)\s*s/i);
-  if (seconds) {
-    const ms = Math.round(Number(seconds[1]) * 1000);
-    if (ms > 0) return Math.min(ms, 12_000);
-  }
-  return Math.min(12_000, 2000 * attempt);
+}
+
+/** How long Gemini asked us to wait, in ms. Null when the error doesn't say. */
+function quotaRetryMs(error: any): number | null {
+  const seconds = errorBlob(error).match(/retry(?:Delay| in| after)?["'\s:]*(\d+(?:\.\d+)?)\s*s/i);
+  if (!seconds) return null;
+  const ms = Math.round(Number(seconds[1]) * 1000);
+  return ms > 0 ? ms : null;
+}
+
+/** Daily free-tier cap (hours), not a few-second rate limit. */
+function isDailyQuotaError(error: any): boolean {
+  const wait = quotaRetryMs(error);
+  if (wait != null && wait >= 60_000) return true;
+  const msg = errorBlob(error).toLowerCase();
+  return msg.includes('free_tier') || msg.includes('perday') || msg.includes('per day');
+}
+
+function dailyQuotaMessage(error: any): string {
+  const wait = quotaRetryMs(error);
+  const hours = wait ? Math.max(1, Math.round(wait / 3_600_000)) : null;
+  const when = hours ? ` It resets in about ${hours} hours.` : '';
+  return `Today's free AI scan limit is used up.${when} To scan more bills today, turn on billing for the Gemini API key in Google AI Studio.`;
+}
+
+/** Short waits only. A multi-hour retry delay means that model is done for the day. */
+function retryAfterMs(error: any, attempt: number): number {
+  const stated = quotaRetryMs(error);
+  if (stated != null && stated < 60_000) return stated;
+  return Math.min(8_000, 2000 * attempt);
 }
 
 function isSkippableModelError(error: any): boolean {
@@ -1280,12 +1303,17 @@ async function generateVendorInvoiceParseResponse(
 /** Stay under the browser's 180s abort so the user gets a real error, not an endless spinner. */
 const VENDOR_INVOICE_TOTAL_BUDGET_MS = 150_000;
 
-/** Lite models first — they have more capacity for short bill reads. */
+/**
+ * Each model has its own free-tier daily cap. gemini-flash-latest currently
+ * resolves to gemini-3.8-flash, which is capped at 20 scans a day, so bills
+ * use other models first.
+ */
 const VENDOR_INVOICE_MODELS = [
   'gemini-2.5-flash-lite',
-  'gemini-flash-lite-latest',
   'gemini-2.5-flash',
-  'gemini-flash-latest'
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest'
 ] as const;
 
 async function parseVendorInvoiceWithFallback(
@@ -1340,6 +1368,11 @@ async function parseVendorInvoiceWithFallback(
         // A missing model won't succeed on retry. A rate limit often clears if we wait.
         if (skippable && !quota && hasMoreModels) {
           console.warn(`${model} is unavailable, trying fallback model...`);
+          break;
+        }
+
+        if (quota && isDailyQuotaError(err)) {
+          console.warn(`${model} daily quota is used up, trying another model...`);
           break;
         }
 
@@ -1449,11 +1482,20 @@ Return structured JSON matching the schema.`;
       });
       return;
     }
+    if (isDailyQuotaError(error)) {
+      const wait = quotaRetryMs(error);
+      const hours = wait ? Math.max(1, Math.round(wait / 3_600_000)) : 8;
+      res.status(503).json({
+        error: dailyQuotaMessage(error),
+        code: 'AI_QUOTA',
+        retryHours: hours
+      });
+      return;
+    }
     const statusCode = getApiStatusCode(error);
     if (statusCode === 429 || statusCode === 503) {
       res.status(503).json({
-        error: 'AI service is temporarily busy. Please try again in a few seconds.',
-        details: msg
+        error: 'AI service is temporarily busy. Please try again in a few seconds.'
       });
       return;
     }

@@ -182,6 +182,16 @@ export async function updateTenantShippingAddress(
   });
 }
 
+/** Owner/admin: where customers should mail invoice payments. */
+export async function updateTenantRemittanceAddress(
+  tenantId: string,
+  remittanceAddress: string
+): Promise<void> {
+  await updateDoc(doc(db, 'tenants', tenantId), {
+    remittanceAddress: remittanceAddress.trim()
+  });
+}
+
 export async function updateTenantLogoUrl(
   tenantId: string,
   logoUrl: string | null
@@ -199,6 +209,11 @@ const KNOWN_TENANT_SHIPPING_ADDRESSES: Array<{ match: string; address: string }>
   { match: 'bayou', address: '11428 US 165\nForest Hill, LA' }
 ];
 
+/** Used until the nursery saves its own remittance address in Team. */
+const KNOWN_TENANT_REMITTANCE_ADDRESSES: Array<{ match: string; address: string }> = [
+  { match: 'bayou', address: 'PO BOX 3\nJena, LA 71342' }
+];
+
 /** Resolve the ship-from / origin address for a nursery. */
 export function resolveNurseryShippingAddress(
   tenant: Pick<Tenant, 'name' | 'shippingAddress'> | null | undefined
@@ -207,6 +222,16 @@ export function resolveNurseryShippingAddress(
   if (explicit) return explicit;
   const name = (tenant?.name || '').toLowerCase();
   const known = KNOWN_TENANT_SHIPPING_ADDRESSES.find((entry) => name.includes(entry.match));
+  return known ? known.address : '';
+}
+
+/** Address printed on invoices under “Remit Payments To”. */
+export function resolveNurseryRemittanceAddress(
+  tenant: Pick<Tenant, 'name' | 'remittanceAddress'> | null | undefined
+): string {
+  if (typeof tenant?.remittanceAddress === 'string') return tenant.remittanceAddress.trim();
+  const name = (tenant?.name || '').toLowerCase();
+  const known = KNOWN_TENANT_REMITTANCE_ADDRESSES.find((entry) => name.includes(entry.match));
   return known ? known.address : '';
 }
 

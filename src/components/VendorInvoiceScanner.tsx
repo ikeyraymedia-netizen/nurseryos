@@ -217,15 +217,14 @@ export function VendorInvoiceScanner({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const friendly =
-          response.status === 503
-            ? t('scanner.aiBusy')
-            : errorData.error || t('scanner.parseFailed');
-        const details =
-          typeof errorData.details === 'string' && errorData.details.trim()
-            ? ` ${errorData.details}`
-            : '';
-        throw new Error(`${friendly}${details}`);
+        if (errorData.code === 'AI_QUOTA') {
+          throw new Error(
+            t('scanner.quotaUsed', { hours: Number(errorData.retryHours) || 8 })
+          );
+        }
+        const serverError = String(errorData.error || '').trim();
+        const friendly = serverError || (response.status === 503 ? t('scanner.aiBusy') : t('scanner.parseFailed'));
+        throw new Error(friendly);
       }
 
       const result = await response.json();

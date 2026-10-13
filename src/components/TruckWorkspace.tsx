@@ -87,6 +87,7 @@ interface TruckWorkspaceProps {
   customers?: Customer[];
   nurseryName?: string;
   nurseryAddress?: string;
+  nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
   onEditTruck: () => void;
@@ -102,6 +103,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   customers = [],
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId,
   onEditTruck,
@@ -2224,6 +2226,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           )}
           nurseryName={nurseryName}
           nurseryAddress={nurseryAddress}
+          nurseryRemittanceAddress={nurseryRemittanceAddress}
           nurseryLogoSrc={nurseryLogoSrc}
           tenantId={tenantId}
           canViewProfit={permissions.canViewProfit}

@@ -68,6 +68,7 @@ interface LoaderWorkspaceProps {
   permissions: AppPermissions;
   nurseryName?: string;
   nurseryAddress?: string;
+  nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
 }
@@ -80,6 +81,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   permissions,
   nurseryName = 'NurseryOS',
   nurseryAddress = '',
+  nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId
 }) => {
@@ -1748,6 +1750,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         }
         nurseryName={nurseryName}
         nurseryAddress={nurseryAddress}
+        nurseryRemittanceAddress={nurseryRemittanceAddress}
         nurseryLogoSrc={nurseryLogoSrc}
         tenantId={tenantId}
         canViewProfit={permissions.canViewProfit}

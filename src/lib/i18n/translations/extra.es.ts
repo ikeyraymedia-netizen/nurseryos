@@ -994,6 +994,7 @@ const extra = {
     keepFreight: 'Mantener todo el flete en esta factura',
     billTo: 'FACTURAR A',
     shipFrom: 'ENVIAR DESDE',
+    remitPaymentsTo: 'Enviar pagos a:',
     plantVariety: 'VARIEDAD DE PLANTA',
     unitPrice: 'PRECIO UNITARIO',
     subtotal: 'Subtotal',
@@ -1533,6 +1534,8 @@ const extra = {
     unsupported: 'Tipo de archivo no compatible.',
     tooLarge: 'El archivo es demasiado grande.',
     aiBusy: 'El servicio de IA está ocupado. Intente de nuevo en un momento.',
+    quotaUsed:
+      'Se agotó el límite gratuito de escaneos de IA de hoy. Se restablece en unas {{hours}} horas. Para escanear más facturas hoy, active la facturación de la clave de Gemini en Google AI Studio.',
     noLines: 'No se encontraron líneas de compra.',
     vendorInv: 'Fact. proveedor #',
     billDate: 'Fecha de factura',
@@ -1901,6 +1904,13 @@ const extra = {
     workspaceLegacy: ' Este vivero está en un plan heredado (todos los módulos estándar).',
     workspaceNotActivatedYet: ' Este vivero aún no está activado.',
     moduleOff: ' · apagado',
+    remittanceTitle: 'Enviar pagos a',
+    remittanceHint:
+      'Se imprime en las facturas para que los clientes sepan adónde enviar el cheque. Cada vivero puede cambiar su propia dirección.',
+    remittancePlaceholder: 'PO BOX 3\nJena, LA 71342',
+    remittanceSave: 'Guardar dirección de pago',
+    remittanceSaved: 'Dirección de pago guardada. Aparecerá en las facturas.',
+    remittanceFailed: 'No se pudo guardar la dirección de pago.',
     containerWeights: 'Pesos de contenedores',
     containerWeightsHint:
       'Libras por tamaño de maceta para estimar el peso del camión. Casi no hace falta cambiarlas.',

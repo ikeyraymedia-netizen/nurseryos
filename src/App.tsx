@@ -47,7 +47,7 @@ import {
 } from './lib/paymentNotifications';
 import { confirmInvoicePayment } from './lib/stripe';
 import { PlatformDashboard } from './components/PlatformDashboard';
-import { resolveNurseryShippingAddress } from './lib/tenants';
+import { resolveNurseryRemittanceAddress, resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
 import { AppLocale, useT } from './lib/i18n';
 import { initPushNotifications } from './lib/pushNotifications';
@@ -338,6 +338,7 @@ function NurseryApp({
   const [tenant, setTenant] = useState(tenantProp);
   const [memberState, setMemberState] = useState(member);
   const nurseryAddress = resolveNurseryShippingAddress(tenant);
+  const nurseryRemittanceAddress = resolveNurseryRemittanceAddress(tenant);
   const nurseryLogoSrc = resolveNurseryLogoSrc(tenant);
   useEffect(() => {
     setTenant(tenantProp);
@@ -861,6 +862,7 @@ function NurseryApp({
             onUpdateLocale={onUpdateLocale}
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
+            onTenantUpdated={onRefreshTenant}
             onOpenWeights={
               permissions.canEditWeights
                 ? () => {
@@ -977,6 +979,7 @@ function NurseryApp({
             onUpdateLocale={onUpdateLocale}
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
+            onTenantUpdated={onRefreshTenant}
             onOpenWeights={
               permissions.canEditWeights
                 ? () => {
@@ -1319,6 +1322,7 @@ function NurseryApp({
               customers={customers}
               nurseryName={tenant.name}
               nurseryAddress={nurseryAddress}
+              nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
               onEditTruck={() => {
@@ -1342,6 +1346,7 @@ function NurseryApp({
               permissions={permissions}
               nurseryName={tenant.name}
               nurseryAddress={nurseryAddress}
+              nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
             />
@@ -1407,6 +1412,7 @@ function NurseryApp({
           }
           nurseryName={tenant.name}
           nurseryAddress={nurseryAddress}
+          nurseryRemittanceAddress={nurseryRemittanceAddress}
           nurseryLogoSrc={nurseryLogoSrc}
           tenantId={tenant.id}
           canViewProfit={permissions.canViewProfit}
@@ -1423,6 +1429,7 @@ function NurseryApp({
           onUpdateLocale={onUpdateLocale}
           onClose={() => setShowTeamManager(false)}
           onMemberUpdated={setMemberState}
+          onTenantUpdated={onRefreshTenant}
           onOpenWeights={
             permissions.canEditWeights
               ? () => {

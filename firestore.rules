@@ -177,6 +177,10 @@ service cloud.firestore {
               ? !('modules' in request.resource.data)
               : request.resource.data.modules == resource.data.modules
           )
+        )
+        || (
+          isAdminOrOwner(tenantId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remittanceAddress'])
         );
       allow delete: if isOwner(tenantId) || isPlatformAdmin();
 

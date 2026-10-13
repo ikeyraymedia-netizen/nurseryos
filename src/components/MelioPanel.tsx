@@ -211,7 +211,28 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                   <option value="partnership">Partnership</option>
                 </select>
               </label>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 space-y-2">
+                <p className="text-xs leading-relaxed text-indigo-950">
+                  By continuing, you accept Melio&apos;s{' '}
+                  <a
+                    href="https://melio.com/terms-of-service/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold underline"
+                  >
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    href="https://melio.com/privacy-policy/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold underline"
+                  >
+                    Privacy Policy
+                  </a>
+                  . Payment services provided by Melio Solutions Inc. (NMLS ID 2376858)
+                </p>
                 <button
                   type="button"
                   disabled={busy || !status.apiOk}

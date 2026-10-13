@@ -21,6 +21,10 @@ interface MelioIntegration {
   connectedAt: string;
   connectedByUserId: string;
   updatedAt: string;
+  /** Set when this nursery's owner accepted Melio's terms on business create. */
+  termsVersion?: string | null;
+  termsAcceptedAt?: string | null;
+  termsAcceptedByUserId?: string | null;
 }
 
 interface MelioAccount {
@@ -48,7 +52,10 @@ interface MelioPayment {
 const MELIO_BASE_URLS = {
   sandbox: 'https://api.staging01.melio.com/v2',
   production: 'https://api.melio.com/v2'
-} as const;
+};
+
+/** Published revision date of the Melio terms the owner is shown. Must match the version in force. */
+const MELIO_TERMS_VERSION = '2026-06-24';
 
 function melioEnvironment(): 'sandbox' | 'production' {
   return String(process.env.MELIO_ENV || 'sandbox').trim().toLowerCase() === 'production'
@@ -159,10 +166,16 @@ async function loadIntegration(tenantId: string): Promise<MelioIntegration | nul
   return snap.data() as MelioIntegration;
 }
 
-async function saveEntityLink(tenantId: string, uid: string, entity: any) {
+async function saveEntityLink(
+  tenantId: string,
+  uid: string,
+  entity: any,
+  terms?: { version: string; acceptedAt: string }
+) {
   const now = new Date().toISOString();
   const entityId = String(entity?.id || '').trim();
   if (!entityId) throw Object.assign(new Error('Melio did not return an entity id.'), { status: 502 });
+  const recorded = entity?.termsAcceptance;
   const integration: MelioIntegration = {
     provider: 'melio',
     entityId,
@@ -174,7 +187,14 @@ async function saveEntityLink(tenantId: string, uid: string, entity: any) {
     environment: melioEnvironment(),
     connectedAt: now,
     connectedByUserId: uid,
-    updatedAt: now
+    updatedAt: now,
+    ...(terms
+      ? {
+          termsVersion: String(recorded?.version || terms.version),
+          termsAcceptedAt: String(recorded?.acceptedAt || terms.acceptedAt),
+          termsAcceptedByUserId: uid
+        }
+      : {})
   };
   await integrationRef(tenantId).set(integration);
   await entityTenantRef(entityId).set({ tenantId, updatedAt: now }, { merge: true });
@@ -626,6 +646,14 @@ export function registerMelioRoutes(app: Express) {
         res.status(400).json({ error: `Missing: ${missing.join(', ')}` });
         return;
       }
+      if (req.body?.termsAccepted !== true) {
+        res.status(400).json({
+          error:
+            'The business owner must accept Melio’s Terms of Service before this business can be created.'
+        });
+        return;
+      }
+      const termsAcceptedAt = new Date().toISOString();
       const address = {
         line1: String(b.line1).trim(),
         city: String(b.city).trim(),
@@ -654,6 +682,11 @@ export function registerMelioRoutes(app: Express) {
           email: String(b.ownerEmail).trim(),
           dateOfBirth: String(b.ownerDateOfBirth).trim(),
           phoneNumber: String(b.ownerPhoneNumber || b.phoneNumber).trim()
+        },
+        termsAcceptance: {
+          accepted: true,
+          acceptedAt: termsAcceptedAt,
+          version: MELIO_TERMS_VERSION
         }
       };
       const entity = unwrap<any>(
@@ -663,7 +696,10 @@ export function registerMelioRoutes(app: Express) {
           idempotencyKey: `nos-entity-${tenantId}-${Date.now()}`
         })
       );
-      const integration = await saveEntityLink(tenantId, uid, entity);
+      const integration = await saveEntityLink(tenantId, uid, entity, {
+        version: MELIO_TERMS_VERSION,
+        acceptedAt: termsAcceptedAt
+      });
       res.json({ entityId: integration.entityId, kycStatus: integration.kycStatus });
     })
   );

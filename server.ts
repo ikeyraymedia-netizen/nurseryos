@@ -150,10 +150,34 @@ function isRetryableModelError(error: any): boolean {
   return (
     msg.includes('high demand') ||
     msg.includes('unavailable') ||
+    msg.includes('resource exhausted') ||
     msg.includes('rate limit') ||
+    msg.includes('quota') ||
     msg.includes('timed out') ||
     msg.includes('timeout')
   );
+}
+
+function isQuotaError(error: any): boolean {
+  const status = getApiStatusCode(error);
+  if (status === 429) return true;
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes('rate limit') || msg.includes('resource exhausted') || msg.includes('quota');
+}
+
+/** Gemini often says to wait a few seconds. Honor that instead of retrying immediately. */
+function retryAfterMs(error: any, attempt: number): number {
+  const blobs = [
+    String(error?.message || ''),
+    String(error?.error?.message || ''),
+    JSON.stringify(error?.errorDetails || error?.details || error?.error || '')
+  ].join(' ');
+  const seconds = blobs.match(/retry(?:Delay| in| after)?["'\s:]*(\d+(?:\.\d+)?)\s*s/i);
+  if (seconds) {
+    const ms = Math.round(Number(seconds[1]) * 1000);
+    if (ms > 0) return Math.min(ms, 12_000);
+  }
+  return Math.min(12_000, 2000 * attempt);
 }
 
 function isSkippableModelError(error: any): boolean {
@@ -1256,6 +1280,14 @@ async function generateVendorInvoiceParseResponse(
 /** Stay under the browser's 180s abort so the user gets a real error, not an endless spinner. */
 const VENDOR_INVOICE_TOTAL_BUDGET_MS = 150_000;
 
+/** Lite models first — they have more capacity for short bill reads. */
+const VENDOR_INVOICE_MODELS = [
+  'gemini-2.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+  'gemini-flash-latest'
+] as const;
+
 async function parseVendorInvoiceWithFallback(
   ai: GoogleGenAI,
   mimeType: string,
@@ -1264,10 +1296,10 @@ async function parseVendorInvoiceWithFallback(
   invoiceText?: string
 ) {
   let lastError: any = null;
-  const maxAttemptsPerModel = 2;
+  const maxAttemptsPerModel = 3;
   const deadline = Date.now() + VENDOR_INVOICE_TOTAL_BUDGET_MS;
 
-  for (const model of PARSE_MODELS) {
+  for (const model of VENDOR_INVOICE_MODELS) {
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
       const remainingMs = deadline - Date.now();
       if (remainingMs < 15_000) {
@@ -1298,27 +1330,29 @@ async function parseVendorInvoiceWithFallback(
         const retryable = isRetryableModelError(err);
         const skippable = isSkippableModelError(err);
         const hasMoreAttemptsOnModel = attempt < maxAttemptsPerModel;
-        const hasMoreModels = model !== PARSE_MODELS[PARSE_MODELS.length - 1];
+        const hasMoreModels = model !== VENDOR_INVOICE_MODELS[VENDOR_INVOICE_MODELS.length - 1];
+        const quota = isQuotaError(err);
 
         if (!retryable && !skippable) {
           throw err;
         }
 
-        if (skippable && hasMoreModels) {
+        // A missing model won't succeed on retry. A rate limit often clears if we wait.
+        if (skippable && !quota && hasMoreModels) {
           console.warn(`${model} is unavailable, trying fallback model...`);
           break;
         }
 
-        if (hasMoreAttemptsOnModel) {
-          const backoffMs = 800 * attempt + Math.floor(Math.random() * 300);
-          console.warn(`${model} busy (attempt ${attempt}), retrying in ${backoffMs}ms...`);
+        if (quota && hasMoreAttemptsOnModel && remainingMs > 20_000) {
+          const backoffMs = retryAfterMs(err, attempt);
+          console.warn(`${model} rate limited (attempt ${attempt}), waiting ${backoffMs}ms...`);
           await sleep(backoffMs);
           continue;
         }
 
         if (hasMoreModels) {
           console.warn(
-            `${model} unavailable after ${maxAttemptsPerModel} attempts, trying fallback model...`
+            `${model} failed after ${attempt} attempt(s), trying fallback model...`
           );
           break;
         }

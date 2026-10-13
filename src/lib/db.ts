@@ -18,6 +18,8 @@ import {
   inventorySyncSucceeded
 } from './inventory';
 import { notifyPushEvent } from './pushNotifications';
+import { syncInvoicesFromOrder } from './documents';
+import { orderInvoiceContentChanged } from './invoicing';
 
 let activeTenantId: string | null = null;
 
@@ -1058,6 +1060,11 @@ export async function resetOrderProgress(orderId: string, orderItems: any[]): Pr
 export async function updateCustomerOrder(order: CustomerOrder): Promise<void> {
   const tenantId = requireTenantId();
   const orders = getLocalOrders();
+  const previous = orders.find((existing) => existing.id === order.id);
+  const plantsChanged =
+    !order.id.startsWith('preview-') &&
+    !!previous &&
+    orderInvoiceContentChanged(previous.items, order.items);
   const updatedOrders = orders.map((o) => (o.id === order.id ? order : o));
   saveLocalOrders(updatedOrders);
 
@@ -1068,6 +1075,18 @@ export async function updateCustomerOrder(order: CustomerOrder): Promise<void> {
   } catch (error: any) {
     console.error('Error updating customer order on Firestore:', error);
     activateLocalFallback(error.message || 'Firestore write failed');
+    return;
+  }
+
+  if (!plantsChanged) return;
+  try {
+    const synced = await syncInvoicesFromOrder(order);
+    if (!synced) return;
+    const latest = getLocalOrders();
+    saveLocalOrders(latest.map((existing) => (existing.id === synced.id ? synced : existing)));
+    await setDoc(orderDoc(tenantId, synced.id), synced, { merge: true });
+  } catch (error: any) {
+    console.error('Error updating the invoice from the order:', error);
   }
 }
 

@@ -11,7 +11,11 @@ import {
   where
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { CustomerDocument, CustomerDocumentType } from '../types';
+import { CustomerDocument, CustomerDocumentType, CustomerOrder } from '../types';
+import {
+  projectOrderOntoInvoices,
+  withInvoicedQuantitiesFromInvoices
+} from './invoicing';
 import { deleteLinkedQuickbooksDocument, fetchHighestQuickbooksDocNumber } from './quickbooks';
 import { notifyPushEvent } from './pushNotifications';
 
@@ -146,6 +150,38 @@ export async function syncOrderLineCostToDocuments(
       });
     })
   );
+}
+
+/**
+ * After an order's plants change, rewrite the linked invoice so it shows the
+ * same plants, sizes, and quantities. Prices already on the invoice stay.
+ * Returns the order with invoiced quantities brought in line, when that changed.
+ */
+export async function syncInvoicesFromOrder(order: CustomerOrder): Promise<CustomerOrder | null> {
+  const tenantId = requireTenantId();
+  const linked = await listDocumentsForOrder(order.id);
+  const projection = projectOrderOntoInvoices(order.items, linked);
+  if (projection.updates.length === 0 && projection.invoicedById.size === 0) return null;
+
+  const now = new Date().toISOString();
+  await Promise.all(
+    projection.updates.map((update) =>
+      updateDoc(
+        documentDoc(tenantId, update.id),
+        sanitizeForFirestore({
+          items: update.items,
+          subtotal: update.subtotal,
+          salesTax: update.salesTax,
+          grandTotal: update.grandTotal,
+          updatedAt: now
+        })
+      )
+    )
+  );
+
+  const items = withInvoicedQuantitiesFromInvoices(order.items, projection.invoicedById);
+  if (!items) return null;
+  return { ...order, items };
 }
 
 export async function updateCustomerDocument(document: CustomerDocument): Promise<void> {

@@ -37,10 +37,28 @@ function fieldText(plant: InventoryPlant, field: EditableField): string {
 function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: string) => void }) {
   const [value, setValue] = useState(plant.plantName);
   const focused = useRef(false);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!focused.current) setValue(plant.plantName);
   }, [plant.plantName]);
+
+  useEffect(() => {
+    const el = fieldRef.current;
+    if (!el) return;
+    let lastWidth = -1;
+    const fit = () => {
+      const width = el.clientWidth;
+      if (width === lastWidth) return;
+      lastWidth = width;
+      el.style.height = '0px';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [value]);
 
   function commit() {
     const next = value.trim();
@@ -49,7 +67,9 @@ function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: st
   }
 
   return (
-    <input
+    <textarea
+      ref={fieldRef}
+      rows={1}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onFocus={() => (focused.current = true)}
@@ -58,15 +78,18 @@ function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: st
         commit();
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLTextAreaElement).blur();
+        }
         if (e.key === 'Escape') {
           e.preventDefault();
           setValue(plant.plantName);
           focused.current = false;
-          (e.target as HTMLInputElement).blur();
+          (e.target as HTMLTextAreaElement).blur();
         }
       }}
-      className="w-full px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-sm font-semibold text-gray-900"
+      className="block w-full min-w-0 resize-none overflow-hidden break-words px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-sm font-semibold leading-snug text-gray-900"
     />
   );
 }
@@ -579,10 +602,10 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
         </datalist>
 
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
             <thead className="sticky top-0 bg-gray-50 z-10 text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="w-10 px-3 py-2 text-left">
+                <th className="w-[4%] px-3 py-2 text-left">
                   <input
                     type="checkbox"
                     checked={allChecked}
@@ -593,14 +616,14 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                     title={t('inventory.bulkSelectShown', { n: rows.length })}
                   />
                 </th>
-                <th className="px-2 py-2 text-left">{t('inventory.plantName')}</th>
-                <th className="px-2 py-2 text-left w-24">{t('inventory.managerSize')}</th>
-                <th className="px-2 py-2 text-left w-36">{t('inventory.managerType')}</th>
-                <th className="px-2 py-2 text-left w-40">{t('inventory.managerCategory')}</th>
-                <th className="px-2 py-2 text-left w-32">{t('inventory.managerLocation')}</th>
-                <th className="px-2 py-2 text-right w-24">{t('inventory.managerPrice')}</th>
-                <th className="px-2 py-2 text-right w-20">{t('common.qty')}</th>
-                <th className="w-12 px-2 py-2" />
+                <th className="w-[34%] px-2 py-2 text-left">{t('inventory.plantName')}</th>
+                <th className="px-2 py-2 text-left w-[9%]">{t('inventory.managerSize')}</th>
+                <th className="px-2 py-2 text-left w-[13%]">{t('inventory.managerType')}</th>
+                <th className="px-2 py-2 text-left w-[12%]">{t('inventory.managerCategory')}</th>
+                <th className="px-2 py-2 text-left w-[10%]">{t('inventory.managerLocation')}</th>
+                <th className="px-2 py-2 text-right w-[8%]">{t('inventory.managerPrice')}</th>
+                <th className="px-2 py-2 text-right w-[6%]">{t('common.qty')}</th>
+                <th className="w-[4%] px-2 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -617,7 +640,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                       className="h-4 w-4"
                     />
                   </td>
-                  <td className="px-1 py-1">
+                  <td className="px-1 py-1 align-top min-w-0">
                     <NameInput
                       plant={plant}
                       onSave={(plantName) => void savePatch([plant.id], { plantName })}

@@ -231,6 +231,7 @@ export function InventoryWorkspace({
   const [newContainerSize, setNewContainerSize] = useState('#3');
   const [newQty, setNewQty] = useState(0);
   const [newLocation, setNewLocation] = useState('');
+  const [newPlantType, setNewPlantType] = useState<PlantType | ''>('');
   const [showAddPlant, setShowAddPlant] = useState(false);
 
   const [chemName, setChemName] = useState('');
@@ -361,12 +362,15 @@ export function InventoryWorkspace({
         fertilizers: [],
         cutBackAt: null,
         location: newLocation.trim() || undefined,
+        category: newPlantType || undefined,
+        plantType: newPlantType || null,
         notes: ''
       });
       setSelectedId(id);
       setNewPlantName('');
       setNewQty(0);
       setNewLocation('');
+      setNewPlantType('');
       setMessage(t('inventory.added'));
       setMessageIsError(false);
     } catch (err: any) {
@@ -951,7 +955,7 @@ export function InventoryWorkspace({
                 {permissions.canEditInventory && (
                   <button
                     type="button"
-                    onClick={() => setShowAddPlant((v) => !v)}
+                    onClick={() => setShowAddPlant((open) => !open)}
                     className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold ${
                       showAddPlant
                         ? 'bg-ink-100 text-ink-900 border border-ink-300'
@@ -1036,6 +1040,21 @@ export function InventoryWorkspace({
                   placeholder={t('inventory.location')}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 />
+                <label className="block text-xs">
+                  <span className="font-bold text-ink-900 uppercase">{t('inventory.managerType')}</span>
+                  <select
+                    value={newPlantType}
+                    onChange={(e) => setNewPlantType((e.target.value as PlantType) || '')}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">—</option>
+                    {PLANT_TYPES.map((plantType) => (
+                      <option key={plantType} value={plantType}>
+                        {plantType}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   type="submit"
                   disabled={busy}

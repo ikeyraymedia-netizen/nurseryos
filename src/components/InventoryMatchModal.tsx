@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { AlertCircle, Plus, Search, Sprout, X } from 'lucide-react';
-import { ContainerWeight, InventoryPlant } from '../types';
+import { ContainerWeight, InventoryPlant, PLANT_TYPES, PlantType } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import {
   addInventoryPlant,
@@ -44,6 +44,7 @@ export function InventoryMatchModal({
     defaultContainerSize(request, containerWeights)
   );
   const [createQty, setCreateQty] = useState(request.quantityHint ?? 0);
+  const [createPlantType, setCreatePlantType] = useState<PlantType | ''>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +107,8 @@ export function InventoryMatchModal({
         chemicals: [],
         fertilizers: [],
         cutBackAt: null,
+        category: createPlantType || undefined,
+        plantType: createPlantType || null,
         notes: ''
       });
       const created: InventoryPlant = {
@@ -116,6 +119,8 @@ export function InventoryMatchModal({
         chemicals: [],
         fertilizers: [],
         cutBackAt: null,
+        category: createPlantType || undefined,
+        plantType: createPlantType || null,
         notes: '',
         dateCreated: new Date().toISOString(),
         dateUpdated: new Date().toISOString()
@@ -336,6 +341,21 @@ export function InventoryMatchModal({
                     onFocus={(e) => e.target.select()}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                   />
+                  <label className="block text-xs">
+                    <span className="font-bold text-ink-900 uppercase">{t('inventory.managerType')}</span>
+                    <select
+                      value={createPlantType}
+                      onChange={(e) => setCreatePlantType((e.target.value as PlantType) || '')}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">—</option>
+                      {PLANT_TYPES.map((plantType) => (
+                        <option key={plantType} value={plantType}>
+                          {plantType}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   {error && (
                     <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />

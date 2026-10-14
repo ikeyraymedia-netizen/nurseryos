@@ -228,10 +228,13 @@ export function projectOrderOntoInvoices(
 
   if (linked.length === 1) {
     const invoice = linked[0];
+    const omitted = new Set(invoice.omittedItemIds || []);
     const existing = new Map(invoice.items.map((item) => [item.id, item]));
     nextById.set(
       invoice.id,
-      orderLines.map((line) => invoiceLineFromOrder(line, existing.get(line.id)))
+      orderLines
+        .filter((line) => !omitted.has(line.id))
+        .map((line) => invoiceLineFromOrder(line, existing.get(line.id)))
     );
   } else {
     const newest = invoicesNewestFirst(linked);
@@ -239,10 +242,13 @@ export function projectOrderOntoInvoices(
     const orderById = new Map(orderLines.map((line) => [line.id, line]));
 
     for (const [invoiceId, items] of nextById) {
+      const omitted = new Set(
+        linked.find((invoice) => invoice.id === invoiceId)?.omittedItemIds || []
+      );
       nextById.set(
         invoiceId,
         items
-          .filter((item) => orderById.has(item.id))
+          .filter((item) => orderById.has(item.id) && !omitted.has(item.id))
           .map((item) => {
             const orderLine = orderById.get(item.id)!;
             return {
@@ -259,6 +265,11 @@ export function projectOrderOntoInvoices(
       );
       const desired = Math.max(0, Number(orderLine.quantity) || 0);
       if (holders.length === 0) {
+        // A line removed from an invoice stays off, even if that plant is still loaded.
+        const omittedBySomeone = linked.some((invoice) =>
+          (invoice.omittedItemIds || []).includes(orderLine.id)
+        );
+        if (omittedBySomeone) continue;
         const target = newest[0];
         const items = nextById.get(target.id) || [];
         items.push(invoiceLineFromOrder(orderLine));

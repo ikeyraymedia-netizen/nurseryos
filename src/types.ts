@@ -254,6 +254,11 @@ export interface CustomerDocument {
   customerEmailCc?: string;
   owner?: string; // Sales rep credited for this invoice/estimate
   items: CustomerDocumentLineItem[];
+  /**
+   * Order line ids taken off this invoice on purpose.
+   * They stay removed even when the plant is still on the order and marked loaded.
+   */
+  omittedItemIds?: string[];
   subtotal: number;
   salesTax: number;
   grandTotal: number;

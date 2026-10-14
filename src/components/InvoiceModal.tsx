@@ -176,6 +176,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const pricesDirtyRef = useRef(false);
   // State for quantity basis: 'ordered' | 'pulled' | 'loaded'
   const [qtyBasis, setQtyBasis] = useState<'ordered' | 'pulled' | 'loaded'>('ordered');
+  /** Order lines the user removed from this invoice, including ones marked loaded. */
+  const [removedLineIds, setRemovedLineIds] = useState<Set<string>>(() => new Set());
 
   // Customer billing details (inline editable)
   const [billToName, setBillToName] = useState(order.customerName);
@@ -311,6 +313,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     if (!softDocAttach) {
       costsDirtyRef.current = false;
       pricesDirtyRef.current = false;
+      setRemovedLineIds(new Set());
     }
 
     setBillToName(
@@ -449,9 +452,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       // then append live order lines that were added after the last save.
       const merged: PlantOrderItem[] = fromDoc.map(toPlantLine);
       const seen = new Set(merged.map((line) => line.id));
+      const omitted = new Set(type === 'invoice' ? doc?.omittedItemIds || [] : []);
 
       for (const item of liveOrderItems) {
-        if (seen.has(item.id)) continue;
+        if (seen.has(item.id) || omitted.has(item.id)) continue;
         if (type === 'invoice') {
           const remaining = itemRemainingInvoiceQty(item);
           if (remaining <= 0) continue;
@@ -712,6 +716,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   /** Estimates, credit memos, and saved invoices allow add/edit/remove plant lines. */
   const canEditLines =
     isCreditMemo || isEstimate || (documentType === 'invoice' && Boolean(activeSavedDoc?.id));
+  /** Invoices can drop a line even before the first save, including loaded plants. */
+  const canRemoveLines = canEditLines || documentType === 'invoice';
   const docLabel =
     documentType === 'estimate'
       ? t('invoice.estimate')
@@ -719,8 +725,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         ? t('invoice.creditMemo')
         : t('invoice.invoice');
   const docLabelUpper = docLabel.toUpperCase();
-  const workingItems =
-    canEditLines && creditLines.length > 0 ? creditLines : order.items;
+  const workingItems = (
+    canEditLines && creditLines.length > 0 ? creditLines : order.items
+  ).filter((item) => !removedLineIds.has(item.id));
   const totalLabel =
     documentType === 'estimate'
       ? t('invoice.estimateTotal')
@@ -1028,7 +1035,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   const removeDraftLine = (id: string) => {
-    setCreditLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.id !== id)));
+    if (workingItems.length <= 1) return;
+    if (documentType === 'invoice') {
+      setRemovedLineIds((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    }
+    setCreditLines((prev) => prev.filter((line) => line.id !== id));
   };
 
   const reorderDraftLines = (fromId: string, toId: string) => {
@@ -2143,6 +2158,21 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         setLinkedPlantOrderId(plantOrderId);
       }
 
+      const previousInvoice = existingDocument || fetchedDocument || liveDocument;
+      const previousDocItems = previousInvoice?.items || [];
+      const previousDocLineIds = new Set(previousDocItems.map((item) => item.id));
+      const keptLineIds = new Set(updatedItems.map((item) => item.id));
+      const omittedItemIds =
+        documentType === 'invoice'
+          ? Array.from(
+              new Set([
+                ...(previousInvoice?.omittedItemIds || []),
+                ...removedLineIds,
+                ...previousDocItems.map((item) => item.id)
+              ])
+            ).filter((id) => !keptLineIds.has(id))
+          : [];
+
       let savedOrderItems: PlantOrderItem[] | undefined;
       if (!order.id.startsWith('preview-') && !isCreditOnly && plantOrderId === order.id) {
         const mergedItems = order.items.map((item) => {
@@ -2156,10 +2186,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             vendor: fromWorking.vendor
           };
         });
-        const previousDocLineIds = new Set(
-          (existingDocument || fetchedDocument || liveDocument)?.items?.map((item) => item.id) ||
-            []
-        );
         const invoicedBumpLines = creatingNewDocument
           ? updatedItems.map((item) => ({
               id: item.id,
@@ -2171,10 +2197,19 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 id: item.id,
                 quantity: getItemQty(item)
               }));
-        const itemsForOrder =
-          documentType === 'invoice' && invoicedBumpLines.length > 0
-            ? bumpInvoicedQuantities(mergedItems, invoicedBumpLines)
-            : mergedItems;
+        const removedFromInvoice = previousDocItems
+          .filter((item) => !keptLineIds.has(item.id))
+          .map((item) => ({ id: item.id, quantity: Number(item.quantity) || 0 }));
+        let itemsForOrder = mergedItems;
+        if (documentType === 'invoice' && removedFromInvoice.length > 0) {
+          itemsForOrder = restoreInvoicedQuantitiesAfterDelete(
+            itemsForOrder,
+            removedFromInvoice
+          );
+        }
+        if (documentType === 'invoice' && invoicedBumpLines.length > 0) {
+          itemsForOrder = bumpInvoicedQuantities(itemsForOrder, invoicedBumpLines);
+        }
         savedOrderItems = itemsForOrder;
         await updateCustomerOrder({
           ...updatedOrder,
@@ -2234,6 +2269,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           customerEmailCc: parseCcEmails(ccEmails, customerEmail).cc.join(', ') || undefined,
           owner: salesRep.trim() || undefined,
           items: lineItems,
+          omittedItemIds: documentType === 'invoice' ? omittedItemIds : undefined,
           subtotal,
           salesTax,
           grandTotal: savedGrandTotal
@@ -4477,12 +4513,12 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               </div>
                             ) : null}
                           </div>
-                          {canEditLines && (
+                          {canRemoveLines && (
                             <button
                               type="button"
                               onClick={() => removeDraftLine(item.id)}
                               disabled={workingItems.length <= 1}
-                              className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 shrink-0"
+                              className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 shrink-0 print:hidden"
                               title={t('invoice.removeLine')}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -4667,7 +4703,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       <th className="pb-1 text-center w-20">Quantity</th>
                       <th className="pb-1 text-right w-28">{t('invoice.unitPrice')}</th>
                       <th className="pb-1 text-right w-24">Total</th>
-                      {canEditLines && <th className="pb-1 w-10 print:hidden" />}
+                      {canRemoveLines && <th className="pb-1 w-10 print:hidden" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -5042,7 +5078,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                           <td className={`py-1.5 text-right font-mono font-black ${unavailable ? 'text-slate-400' : 'text-gray-950'}`}>
                             {unavailable ? '—' : `$${total.toFixed(2)}`}
                           </td>
-                          {canEditLines && (
+                          {canRemoveLines && (
                             <td className="py-1.5 text-right print:hidden">
                               <button
                                 type="button"

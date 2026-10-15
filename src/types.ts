@@ -397,6 +397,8 @@ export interface InventoryPlant {
   plantType?: PlantType | null;
   /** List / wholesale price from catalog import */
   listPrice?: number | null;
+  /** Shown grayed out as not available on the live list and availability export. */
+  notAvailable?: boolean;
   /** Where these plants/liners were purchased from (vendor or custom grower). */
   sourceVendorId?: string | null;
   sourceName?: string;

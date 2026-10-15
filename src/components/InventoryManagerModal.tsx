@@ -89,7 +89,7 @@ function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: st
           (e.target as HTMLTextAreaElement).blur();
         }
       }}
-      className="block w-full min-w-0 resize-none overflow-hidden break-words px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-sm font-semibold leading-snug text-gray-900"
+      className={`block w-full min-w-0 resize-none overflow-hidden break-words px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-sm font-semibold leading-snug ${plant.notAvailable ? 'text-gray-400' : 'text-gray-900'}`}
     />
   );
 }
@@ -616,13 +616,16 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                     title={t('inventory.bulkSelectShown', { n: rows.length })}
                   />
                 </th>
-                <th className="w-[34%] px-2 py-2 text-left">{t('inventory.plantName')}</th>
+                <th className="w-[30%] px-2 py-2 text-left">{t('inventory.plantName')}</th>
                 <th className="px-2 py-2 text-left w-[9%]">{t('inventory.managerSize')}</th>
                 <th className="px-2 py-2 text-left w-[13%]">{t('inventory.managerType')}</th>
                 <th className="px-2 py-2 text-left w-[12%]">{t('inventory.managerCategory')}</th>
                 <th className="px-2 py-2 text-left w-[10%]">{t('inventory.managerLocation')}</th>
                 <th className="px-2 py-2 text-right w-[8%]">{t('inventory.managerPrice')}</th>
                 <th className="px-2 py-2 text-right w-[6%]">{t('common.qty')}</th>
+                <th className="w-[4%] px-1 py-2 text-center" title={t('inventory.managerNotAvailable')}>
+                  N/A
+                </th>
                 <th className="w-[4%] px-2 py-2" />
               </tr>
             </thead>
@@ -630,7 +633,13 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
               {rows.slice(0, visibleCount).map((plant) => (
                 <tr
                   key={plant.id}
-                  className={`border-b border-gray-100 ${checked.has(plant.id) ? 'bg-ink-50/60' : 'hover:bg-gray-50'}`}
+                  className={`border-b border-gray-100 ${
+                    plant.notAvailable
+                      ? 'bg-gray-100 text-gray-400'
+                      : checked.has(plant.id)
+                        ? 'bg-ink-50/60'
+                        : 'hover:bg-gray-50'
+                  }`}
                 >
                   <td className="px-3 py-1">
                     <input
@@ -691,6 +700,18 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
                   </td>
                   <td className="px-1 py-1 font-mono text-right">
                     {cell(plant, 'quantityAvailable', 'text-right')}
+                  </td>
+                  <td className="px-1 py-1 text-center">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(plant.notAvailable)}
+                      onChange={(e) =>
+                        void savePatch([plant.id], { notAvailable: e.target.checked })
+                      }
+                      className="h-4 w-4"
+                      title={t('inventory.managerNotAvailable')}
+                      aria-label={t('inventory.managerNotAvailable')}
+                    />
                   </td>
                   <td className="px-2 py-1 text-right">
                     <button

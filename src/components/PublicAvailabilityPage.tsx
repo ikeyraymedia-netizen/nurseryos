@@ -10,6 +10,7 @@ type PublicPlant = {
   listPrice: number | null;
   readyDate: string | null;
   photoUrl: string | null;
+  notAvailable?: boolean;
 };
 
 type PublicAvailabilityPayload = {
@@ -42,7 +43,8 @@ function isSourcedBb(plant: Pick<PublicPlant, 'containerSize' | 'listPrice'>): b
   return bb && (plant.listPrice == null || Number.isNaN(plant.listPrice));
 }
 
-function priceLabel(plant: PublicPlant, sourced: string): string {
+function priceLabel(plant: PublicPlant, sourced: string, unavailable: string): string {
+  if (plant.notAvailable) return unavailable;
   if (isSourcedBb(plant)) return sourced;
   return money(plant.listPrice);
 }
@@ -193,7 +195,7 @@ async function buildPlantListPdf(params: {
   let anyPrice = false;
   const body = lines.map(({ plant, qty }) => {
     const price = plant.listPrice;
-    const lineTotal = price != null ? price * qty : null;
+    const lineTotal = plant.notAvailable || price == null ? null : price * qty;
     if (lineTotal != null) {
       total += lineTotal;
       anyPrice = true;
@@ -202,8 +204,8 @@ async function buildPlantListPdf(params: {
       plant.plantName,
       plant.containerSize || '—',
       String(qty),
-      priceLabel(plant, labels.sourced),
-      isSourcedBb(plant) ? '—' : money(lineTotal)
+      priceLabel(plant, labels.sourced, labels.notAvailable),
+      plant.notAvailable || isSourcedBb(plant) ? '—' : money(lineTotal)
     ];
   });
 
@@ -320,7 +322,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void fetch(`/api/public/availability/${encodeURIComponent(slug)}`)
+    void fetch(`/api/public/availability/${encodeURIComponent(slug)}`, { cache: 'no-store' })
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as {
           error?: string;
@@ -369,7 +371,11 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
 
   const orderUnits = orderLines.reduce((sum, line) => sum + line.qty, 0);
   const orderTotal = orderLines.reduce(
-    (sum, line) => sum + (line.plant.listPrice != null ? line.plant.listPrice * line.qty : 0),
+    (sum, line) =>
+      sum +
+      (line.plant.notAvailable || line.plant.listPrice == null
+        ? 0
+        : line.plant.listPrice * line.qty),
     0
   );
 
@@ -412,7 +418,8 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
           notes: t('publicAvailability.notes'),
           disclaimer: t('publicAvailability.disclaimer'),
           sourced: t('publicAvailability.sourced'),
-          sourcedNote: t('publicAvailability.sourcedNote')
+          sourcedNote: t('publicAvailability.sourcedNote'),
+          notAvailable: t('publicAvailability.notAvailable')
         }
       });
   };
@@ -523,8 +530,12 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
       <span className="inline-block h-12 w-12 rounded-lg bg-slate-100" />
     );
 
-  const renderAddControl = (plantId: string, qty: number) =>
-    qty ? (
+  const renderAddControl = (plantId: string, qty: number, unavailable = false) =>
+    unavailable ? (
+      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+        {t('publicAvailability.notAvailable')}
+      </span>
+    ) : qty ? (
       <input
         type="number"
         inputMode="numeric"
@@ -612,12 +623,24 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                   return (
                     <div
                       key={plant.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 ${qty ? 'bg-teal-50/70' : ''}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 ${
+                        plant.notAvailable ? 'bg-slate-100' : qty ? 'bg-teal-50/70' : ''
+                      }`}
                     >
-                      {data.showPhotos ? <div className="shrink-0">{renderPhoto(plant)}</div> : null}
+                      {data.showPhotos ? (
+                        <div className={`shrink-0 ${plant.notAvailable ? 'opacity-40' : ''}`}>
+                          {renderPhoto(plant)}
+                        </div>
+                      ) : null}
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-900 break-words">{plant.plantName}</p>
-                        <p className="text-xs text-slate-600">
+                        <p
+                          className={`text-sm font-bold break-words ${
+                            plant.notAvailable ? 'text-slate-400' : 'text-slate-900'
+                          }`}
+                        >
+                          {plant.plantName}
+                        </p>
+                        <p className={`text-xs ${plant.notAvailable ? 'text-slate-400' : 'text-slate-600'}`}>
                           {[
                             plant.containerSize || null,
                             data.showQty
@@ -630,13 +653,21 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                         </p>
                         <p
                           className={`text-xs font-semibold ${
-                            isSourcedBb(plant) ? 'text-slate-600' : 'text-teal-800'
+                            plant.notAvailable
+                              ? 'text-slate-400'
+                              : isSourcedBb(plant)
+                                ? 'text-slate-600'
+                                : 'text-teal-800'
                           }`}
                         >
-                          {priceLabel(plant, t('publicAvailability.sourced'))}
+                          {priceLabel(
+                            plant,
+                            t('publicAvailability.sourced'),
+                            t('publicAvailability.notAvailable')
+                          )}
                         </p>
                       </div>
-                      <div className="shrink-0">{renderAddControl(plant.id, qty)}</div>
+                      <div className="shrink-0">{renderAddControl(plant.id, qty, Boolean(plant.notAvailable))}</div>
                     </div>
                   );
                 })}
@@ -662,13 +693,23 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                       return (
                         <tr
                           key={plant.id}
-                          className={`border-b border-slate-100 last:border-0 ${qty ? 'bg-teal-50/70' : ''}`}
+                          className={`border-b border-slate-100 last:border-0 ${
+                            plant.notAvailable ? 'bg-slate-100 text-slate-400' : qty ? 'bg-teal-50/70' : ''
+                          }`}
                         >
                           {data.showPhotos ? (
                             <td className="px-3 py-2.5">{renderPhoto(plant)}</td>
                           ) : null}
-                          <td className="px-3 py-2.5 font-bold text-slate-900">{plant.plantName}</td>
-                          <td className="px-3 py-2.5 text-slate-600">{plant.containerSize || '—'}</td>
+                          <td
+                            className={`px-3 py-2.5 font-bold ${
+                              plant.notAvailable ? 'text-slate-400' : 'text-slate-900'
+                            }`}
+                          >
+                            {plant.plantName}
+                          </td>
+                          <td className={`px-3 py-2.5 ${plant.notAvailable ? 'text-slate-400' : 'text-slate-600'}`}>
+                            {plant.containerSize || '—'}
+                          </td>
                           {data.showQty ? (
                             <td className="px-3 py-2.5 text-right font-mono font-bold">
                               {plant.quantityAvailable ?? 0}
@@ -676,15 +717,25 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                           ) : null}
                           <td
                             className={`px-3 py-2.5 text-right font-semibold ${
-                              isSourcedBb(plant) ? 'text-slate-600' : 'text-teal-800'
+                              plant.notAvailable
+                                ? 'text-slate-400'
+                                : isSourcedBb(plant)
+                                  ? 'text-slate-600'
+                                  : 'text-teal-800'
                             }`}
                           >
-                            {priceLabel(plant, t('publicAvailability.sourced'))}
+                            {priceLabel(
+                              plant,
+                              t('publicAvailability.sourced'),
+                              t('publicAvailability.notAvailable')
+                            )}
                           </td>
-                          <td className="px-3 py-2.5 text-slate-600">
+                          <td className={`px-3 py-2.5 ${plant.notAvailable ? 'text-slate-400' : 'text-slate-600'}`}>
                             {formatReadyDate(plant.readyDate)}
                           </td>
-                          <td className="px-3 py-2 text-center">{renderAddControl(plant.id, qty)}</td>
+                          <td className="px-3 py-2 text-center">
+                            {renderAddControl(plant.id, qty, Boolean(plant.notAvailable))}
+                          </td>
                         </tr>
                       );
                     })}
@@ -751,7 +802,12 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-slate-900 truncate">{plant.plantName}</p>
                       <p className="text-xs text-slate-500">
-                        {plant.containerSize || '—'} · {priceLabel(plant, t('publicAvailability.sourced'))}
+                        {plant.containerSize || '—'} ·{' '}
+                        {priceLabel(
+                          plant,
+                          t('publicAvailability.sourced'),
+                          t('publicAvailability.notAvailable')
+                        )}
                       </p>
                     </div>
                     <input

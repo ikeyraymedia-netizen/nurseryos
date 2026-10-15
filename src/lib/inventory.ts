@@ -360,6 +360,7 @@ export type InventoryBulkPatch = Partial<
     | 'containerSize'
     | 'readyDate'
     | 'quantityAvailable'
+    | 'notAvailable'
   >
 >;
 

@@ -113,6 +113,7 @@ const extra = {
     exporting: 'Exportando…',
     exportIncludeQty: 'Incluir cantidad de inventario',
     exportIncludePhotos: 'Incluir enlaces de fotos',
+    exportIncludeReady: 'Incluir fecha de listo',
     exportPhotosOnly: 'Solo plantas con foto',
     inStockOnly: 'Solo en stock ({{n}})',
     uploadCsv: 'Subir CSV',
@@ -131,6 +132,7 @@ const extra = {
     managerAllSizes: 'Todos los tamaños',
     managerCustomSize: 'Personalizado…',
     managerCustomSizePrompt: 'Ingrese un tamaño (ej. #20, caja 24", calibre 3"):',
+    managerNotAvailable: 'No disponible',
     managerOpen: 'Administrar plantas',
     managerTitle: 'Administrar plantas',
     managerHint:
@@ -2112,6 +2114,7 @@ const extra = {
     copyAddress: 'Copiar {{email}}',
     copied: '¡Copiado!',
     downloading: 'Preparando PDF…',
+    notAvailable: 'No disponible',
     sourced: 'A pedido',
     sourcedNote: 'Los artículos a pedido se cotizan cuando los solicita.',
     disclaimer:

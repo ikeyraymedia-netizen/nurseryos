@@ -113,6 +113,7 @@ const extra = {
     exporting: 'Exporting…',
     exportIncludeQty: 'Include inventory qty',
     exportIncludePhotos: 'Include photo links',
+    exportIncludeReady: 'Include ready date',
     exportPhotosOnly: 'Only plants that have a photo',
     inStockOnly: 'In-stock only ({{n}})',
     uploadCsv: 'Upload CSV',
@@ -132,6 +133,7 @@ const extra = {
     managerAllSizes: 'All sizes',
     managerCustomSize: 'Custom…',
     managerCustomSizePrompt: 'Enter a size (e.g. #20, 24" box, 3" caliper):',
+    managerNotAvailable: 'Not available',
     managerOpen: 'Manage plants',
     managerTitle: 'Manage plants',
     managerHint:
@@ -2092,6 +2094,7 @@ const extra = {
     copyAddress: 'Copy {{email}}',
     copied: 'Copied!',
     downloading: 'Preparing PDF…',
+    notAvailable: 'Not available',
     sourced: 'Sourced',
     sourcedNote: 'Sourced items are quoted when you request them.',
     disclaimer:

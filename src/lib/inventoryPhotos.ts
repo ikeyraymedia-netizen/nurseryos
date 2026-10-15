@@ -281,6 +281,48 @@ function exportMetaLine(
   return bits.join(' · ');
 }
 
+/**
+ * exceljs writes the logo with a zero-size shape and `editAs="oneCell"` on a
+ * one-cell anchor. Excel then says it found a problem and offers to repair the
+ * file, and phones refuse to open it. Give the shape its real size and drop
+ * the attribute Excel strips when it repairs the drawing.
+ */
+async function repairExcelDrawingExtents(data: ArrayBuffer): Promise<ArrayBuffer> {
+  const loaded = (await import('jszip')) as {
+    default?: { loadAsync(input: ArrayBuffer): Promise<ExcelZip> };
+    loadAsync?(input: ArrayBuffer): Promise<ExcelZip>;
+  };
+  const zipLib = loaded.default ?? loaded;
+  if (!zipLib.loadAsync) return data;
+  const zip = await zipLib.loadAsync(data);
+  let changed = false;
+  for (const name of Object.keys(zip.files)) {
+    if (!/^xl\/drawings\/drawing\d+\.xml$/.test(name)) continue;
+    const entry = zip.file(name);
+    if (!entry) continue;
+    const xml = await entry.async('string');
+    let fixed = xml.replace(
+      /<xdr:ext cx="(\d+)" cy="(\d+)"\s*\/>[\s\S]*?<a:ext cx="0" cy="0"\s*\/>/g,
+      (match, cx: string, cy: string) =>
+        match.replace(/<a:ext cx="0" cy="0"\s*\/>/, `<a:ext cx="${cx}" cy="${cy}"/>`)
+    );
+    fixed = fixed.replace(/\s+editAs="(?:oneCell|absolute)"/g, '');
+    if (fixed !== xml) {
+      zip.file(name, fixed);
+      changed = true;
+    }
+  }
+  if (!changed) return data;
+  return zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+}
+
+type ExcelZip = {
+  files: Record<string, { dir: boolean }>;
+  file(name: string): { async(type: 'string'): Promise<string> } | null;
+  file(name: string, data: string): void;
+  generateAsync(options: { type: 'arraybuffer'; compression: 'DEFLATE' }): Promise<ArrayBuffer>;
+};
+
 /** Build & download a polished Excel availability list (logo, no raw photo URL column). */
 export async function exportAvailabilityExcel(params: {
   nurseryName: string;
@@ -487,7 +529,8 @@ export async function exportAvailabilityExcel(params: {
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
+  const fixed = await repairExcelDrawingExtents(buffer as ArrayBuffer);
+  const blob = new Blob([fixed], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   });
   const fileName = `${safeFileStem(params.nurseryName)}_availability.xlsx`;

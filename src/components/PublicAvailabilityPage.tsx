@@ -609,7 +609,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
             <p className="mt-1.5 text-xs text-slate-600">{t('publicAvailability.sourcedNote')}</p>
           ) : null}
           {groups.length > 0 ? (
-            <div className="mt-2 flex gap-2 overflow-x-auto">
+            <div className="mt-2 flex flex-wrap gap-2">
               {groups.map(([group]) => (
                 <button
                   key={group}
@@ -619,7 +619,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                       block: 'start'
                     })
                   }
-                  className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-bold text-teal-900 hover:bg-teal-100"
+                  className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-bold text-teal-900 hover:bg-teal-100"
                 >
                   {group}
                 </button>
@@ -636,7 +636,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
           </p>
         ) : (
           groups.map(([group, plants]) => (
-            <section id={categoryAnchor(group)} key={group} className="space-y-3 scroll-mt-36">
+            <section id={categoryAnchor(group)} key={group} className="space-y-3 scroll-mt-48">
               <h2 className="text-xs font-black uppercase tracking-wider text-teal-800">{group}</h2>
               <div className="sm:hidden divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {plants.map((plant) => {

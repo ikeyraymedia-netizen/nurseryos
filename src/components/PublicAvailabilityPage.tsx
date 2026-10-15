@@ -35,6 +35,18 @@ function money(n: number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
+/** B&B with no list price is quoted when the customer asks for it. */
+function isSourcedBb(plant: Pick<PublicPlant, 'containerSize' | 'listPrice'>): boolean {
+  const size = plant.containerSize.trim().toLowerCase().replace(/\s+/g, '');
+  const bb = size === 'b&b' || size === 'bb' || size === 'bandb';
+  return bb && (plant.listPrice == null || Number.isNaN(plant.listPrice));
+}
+
+function priceLabel(plant: PublicPlant, sourced: string): string {
+  if (isSourcedBb(plant)) return sourced;
+  return money(plant.listPrice);
+}
+
 function formatReadyDate(readyDate: string | null | undefined): string {
   const raw = (readyDate || '').trim();
   if (!raw) return '—';
@@ -186,7 +198,13 @@ async function buildPlantListPdf(params: {
       total += lineTotal;
       anyPrice = true;
     }
-    return [plant.plantName, plant.containerSize || '—', String(qty), money(price), money(lineTotal)];
+    return [
+      plant.plantName,
+      plant.containerSize || '—',
+      String(qty),
+      priceLabel(plant, labels.sourced),
+      isSourcedBb(plant) ? '—' : money(lineTotal)
+    ];
   });
 
   autoTable(pdf, {
@@ -219,7 +237,11 @@ async function buildPlantListPdf(params: {
   }
   pdf.setFontSize(8);
   pdf.setTextColor(100, 116, 139);
-  pdf.text(labels.disclaimer, margin, after + 4, { maxWidth: pageWidth - margin * 2 });
+  const notes = [labels.disclaimer];
+  if (lines.some(({ plant }) => isSourcedBb(plant)) && labels.sourcedNote) {
+    notes.push(labels.sourcedNote);
+  }
+  pdf.text(notes.join(' '), margin, after + 4, { maxWidth: pageWidth - margin * 2 });
 
   const who = contact.company.trim() || contact.name.trim();
   const date = new Date().toISOString().slice(0, 10);
@@ -388,7 +410,9 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
           total: t('publicAvailability.lineTotal'),
           estTotal: t('publicAvailability.estTotal'),
           notes: t('publicAvailability.notes'),
-          disclaimer: t('publicAvailability.disclaimer')
+          disclaimer: t('publicAvailability.disclaimer'),
+          sourced: t('publicAvailability.sourced'),
+          sourcedNote: t('publicAvailability.sourcedNote')
         }
       });
   };
@@ -566,6 +590,9 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
               {t('publicAvailability.searchResults', { count: filtered.length })}
             </p>
           ) : null}
+          {data.plants.some((plant) => isSourcedBb(plant)) ? (
+            <p className="mt-1.5 text-xs text-slate-600">{t('publicAvailability.sourcedNote')}</p>
+          ) : null}
         </div>
       </div>
 
@@ -601,7 +628,13 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                             .filter(Boolean)
                             .join(' · ')}
                         </p>
-                        <p className="text-xs font-semibold text-teal-800">{money(plant.listPrice)}</p>
+                        <p
+                          className={`text-xs font-semibold ${
+                            isSourcedBb(plant) ? 'text-slate-600' : 'text-teal-800'
+                          }`}
+                        >
+                          {priceLabel(plant, t('publicAvailability.sourced'))}
+                        </p>
                       </div>
                       <div className="shrink-0">{renderAddControl(plant.id, qty)}</div>
                     </div>
@@ -641,8 +674,12 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                               {plant.quantityAvailable ?? 0}
                             </td>
                           ) : null}
-                          <td className="px-3 py-2.5 text-right text-teal-800 font-semibold">
-                            {money(plant.listPrice)}
+                          <td
+                            className={`px-3 py-2.5 text-right font-semibold ${
+                              isSourcedBb(plant) ? 'text-slate-600' : 'text-teal-800'
+                            }`}
+                          >
+                            {priceLabel(plant, t('publicAvailability.sourced'))}
                           </td>
                           <td className="px-3 py-2.5 text-slate-600">
                             {formatReadyDate(plant.readyDate)}
@@ -714,7 +751,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-slate-900 truncate">{plant.plantName}</p>
                       <p className="text-xs text-slate-500">
-                        {plant.containerSize || '—'} · {money(plant.listPrice)}
+                        {plant.containerSize || '—'} · {priceLabel(plant, t('publicAvailability.sourced'))}
                       </p>
                     </div>
                     <input

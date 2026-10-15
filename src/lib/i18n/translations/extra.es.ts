@@ -2112,6 +2112,8 @@ const extra = {
     copyAddress: 'Copiar {{email}}',
     copied: '¡Copiado!',
     downloading: 'Preparando PDF…',
+    sourced: 'A pedido',
+    sourcedNote: 'Los artículos a pedido se cotizan cuando los solicita.',
     disclaimer:
       'Solo lista de plantas — precios y disponibilidad pueden cambiar hasta que el vivero lo confirme.',
     poweredBy: 'Con tecnología de NurseryOS'

@@ -29,6 +29,9 @@ export function getDefaultPriceForSize(size: string): number {
   if (cleanSize.includes('#100') || cleanSize.includes('100-gallon') || cleanSize.includes('100g')) {
     return 550;
   }
+  if (/^(b\s*&\s*b|b and b|bb|balled\s*(and|&)\s*burlapped)$/.test(cleanSize)) {
+    return 125;
+  }
   return 15;
 }
 

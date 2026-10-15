@@ -2092,6 +2092,8 @@ const extra = {
     copyAddress: 'Copy {{email}}',
     copied: 'Copied!',
     downloading: 'Preparing PDF…',
+    sourced: 'Sourced',
+    sourcedNote: 'Sourced items are quoted when you request them.',
     disclaimer:
       'Plant list only — prices and availability are subject to change until confirmed by the nursery.',
     poweredBy: 'Powered by NurseryOS'

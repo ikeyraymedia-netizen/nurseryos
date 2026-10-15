@@ -57,6 +57,10 @@ function formatReadyDate(readyDate: string | null | undefined): string {
   return raw.slice(0, 10);
 }
 
+function categoryAnchor(group: string): string {
+  return `avail-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
 function groupByPlantType(plants: PublicPlant[]): Array<[string, PublicPlant[]]> {
   const map = new Map<string, PublicPlant[]>();
   for (const plant of plants) {
@@ -557,7 +561,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
     );
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
+    <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-5xl mx-auto px-4 py-6 flex items-start gap-4">
           {data.logoUrl ? (
@@ -604,6 +608,24 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
           {data.plants.some((plant) => isSourcedBb(plant)) ? (
             <p className="mt-1.5 text-xs text-slate-600">{t('publicAvailability.sourcedNote')}</p>
           ) : null}
+          {groups.length > 0 ? (
+            <div className="mt-2 flex gap-2 overflow-x-auto">
+              {groups.map(([group]) => (
+                <button
+                  key={group}
+                  type="button"
+                  onClick={() =>
+                    document.getElementById(categoryAnchor(group))?.scrollIntoView({
+                      block: 'start'
+                    })
+                  }
+                  className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-bold text-teal-900 hover:bg-teal-100"
+                >
+                  {group}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -614,7 +636,7 @@ function PublicAvailabilityInner({ slug }: { slug: string }) {
           </p>
         ) : (
           groups.map(([group, plants]) => (
-            <section key={group} className="space-y-3">
+            <section id={categoryAnchor(group)} key={group} className="space-y-3 scroll-mt-36">
               <h2 className="text-xs font-black uppercase tracking-wider text-teal-800">{group}</h2>
               <div className="sm:hidden divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {plants.map((plant) => {

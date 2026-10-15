@@ -22,6 +22,17 @@ type EditableField =
 const NO_CATEGORY = '__none__';
 const PAGE_SIZE = 300;
 
+function useNarrowScreen() {
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 interface InventoryManagerModalProps {
   plants: InventoryPlant[];
   onClose: () => void;
@@ -89,7 +100,7 @@ function NameInput({ plant, onSave }: { plant: InventoryPlant; onSave: (name: st
           (e.target as HTMLTextAreaElement).blur();
         }
       }}
-      className={`block w-full min-w-0 resize-none overflow-hidden break-words px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-sm font-semibold leading-snug ${plant.notAvailable ? 'text-gray-400' : 'text-gray-900'}`}
+      className={`block w-full min-w-0 resize-none overflow-hidden break-words px-1.5 py-1 rounded border border-transparent hover:border-gray-200 focus:border-ink-400 focus:bg-white bg-transparent text-base md:text-sm font-semibold leading-snug ${plant.notAvailable ? 'text-gray-400' : 'text-gray-900'}`}
     />
   );
 }
@@ -141,7 +152,7 @@ function PriceInput({ plant, onSave }: { plant: InventoryPlant; onSave: (price: 
             (e.target as HTMLInputElement).blur();
           }
         }}
-        className="w-full pl-4 pr-1.5 py-1 rounded border border-gray-200 hover:border-gray-300 focus:border-ink-400 bg-white text-sm font-mono text-right"
+        className="w-full pl-4 pr-1.5 py-1 rounded border border-gray-200 hover:border-gray-300 focus:border-ink-400 bg-white text-base md:text-sm font-mono text-right"
       />
     </div>
   );
@@ -162,6 +173,7 @@ function sectionForSize(size: string): string | null {
 /** Full-screen table to delete and edit many inventory plants without opening each one. */
 export function InventoryManagerModal({ plants, onClose }: InventoryManagerModalProps) {
   const t = useT();
+  const narrow = useNarrowScreen();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -424,8 +436,8 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
           </button>
         </div>
 
-        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[12rem]">
+        <div className="px-3 py-3 sm:px-4 border-b border-gray-100 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="relative col-span-2 sm:flex-1 sm:min-w-[12rem]">
             <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               ref={searchRef}
@@ -438,7 +450,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
+            className="min-w-0 w-full sm:w-auto px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
           >
             <option value="">{t('inventory.allCategories')}</option>
             <option value={NO_CATEGORY}>{t('inventory.noCategory')}</option>
@@ -451,7 +463,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
           <select
             value={sizeFilter}
             onChange={(e) => setSizeFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
+            className="min-w-0 w-full sm:w-auto px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
           >
             <option value="">{t('inventory.managerAllSizes')}</option>
             {sizesInUse.map((s) => (
@@ -463,7 +475,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
+            className="min-w-0 w-full sm:w-auto px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white"
           >
             <option value="">{t('inventory.managerAllTypes')}</option>
             <option value={NO_CATEGORY}>{t('inventory.managerNoType')}</option>
@@ -473,7 +485,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
               </option>
             ))}
           </select>
-          <span className="text-xs font-bold text-gray-500">
+          <span className="col-span-2 sm:col-auto text-xs font-bold text-gray-500">
             {t('inventory.managerCount', { n: rows.length })}
           </span>
         </div>
@@ -602,6 +614,145 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
         </datalist>
 
         <div className="flex-1 overflow-auto">
+          {narrow ? (
+            <div>
+              {rows.length > 0 ? (
+                <label className="sticky top-0 z-10 flex items-center gap-2 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={() =>
+                      setChecked(allChecked ? new Set() : new Set(rows.map((p) => p.id)))
+                    }
+                    className="h-4 w-4"
+                  />
+                  {t('inventory.bulkSelectShown', { n: rows.length })}
+                </label>
+              ) : null}
+              <div className="divide-y divide-gray-100">
+                {rows.slice(0, visibleCount).map((plant) => (
+                  <div
+                    key={plant.id}
+                    className={`px-3 py-3 ${
+                      plant.notAvailable
+                        ? 'bg-gray-100'
+                        : checked.has(plant.id)
+                          ? 'bg-ink-50/60'
+                          : ''
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={checked.has(plant.id)}
+                        onChange={() => toggle(plant.id)}
+                        className="mt-2 h-4 w-4 shrink-0"
+                        aria-label={plant.plantName}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <NameInput
+                          plant={plant}
+                          onSave={(plantName) => void savePatch([plant.id], { plantName })}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void removePlants([plant.id])}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                        title={t('common.delete')}
+                        aria-label={t('common.delete')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <label className="block min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('inventory.managerSize')}
+                        </span>
+                        <select
+                          value={plant.containerSize || ''}
+                          onChange={(e) => chooseSize([plant], e.target.value)}
+                          className="mt-0.5 w-full px-2 py-1.5 rounded-lg border border-gray-200 text-base bg-white"
+                        >
+                          {!SIZE_OPTIONS.includes(plant.containerSize) && (
+                            <option value={plant.containerSize || ''}>
+                              {plant.containerSize || '—'}
+                            </option>
+                          )}
+                          {SIZE_OPTIONS.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                          <option value={CUSTOM_SIZE}>{t('inventory.managerCustomSize')}</option>
+                        </select>
+                      </label>
+                      <label className="block min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('inventory.managerType')}
+                        </span>
+                        <select
+                          value={plant.plantType || ''}
+                          onChange={(e) =>
+                            void savePatch([plant.id], {
+                              plantType: (e.target.value as PlantType) || null
+                            })
+                          }
+                          className={`mt-0.5 w-full px-2 py-1.5 rounded-lg border border-gray-200 text-base bg-white ${plant.plantType ? 'text-gray-900' : 'text-gray-400'}`}
+                        >
+                          <option value="">—</option>
+                          {PLANT_TYPES.map((pt) => (
+                            <option key={pt} value={pt}>
+                              {pt}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('inventory.managerCategory')}
+                        </span>
+                        {cell(plant, 'category')}
+                      </label>
+                      <label className="block min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('inventory.managerLocation')}
+                        </span>
+                        {cell(plant, 'location')}
+                      </label>
+                      <label className="block min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('inventory.managerPrice')}
+                        </span>
+                        <PriceInput
+                          plant={plant}
+                          onSave={(listPrice) => void savePatch([plant.id], { listPrice })}
+                        />
+                      </label>
+                      <label className="block min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                          {t('common.qty')}
+                        </span>
+                        {cell(plant, 'quantityAvailable')}
+                      </label>
+                    </div>
+                    <label className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(plant.notAvailable)}
+                        onChange={(e) =>
+                          void savePatch([plant.id], { notAvailable: e.target.checked })
+                        }
+                        className="h-4 w-4"
+                      />
+                      {t('inventory.managerNotAvailable')}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
           <table className="w-full table-fixed text-sm">
             <thead className="sticky top-0 bg-gray-50 z-10 text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
@@ -728,6 +879,7 @@ export function InventoryManagerModal({ plants, onClose }: InventoryManagerModal
               ))}
             </tbody>
           </table>
+          )}
           {rows.length === 0 && (
             <p className="p-6 text-center text-sm text-gray-500">{t('inventory.noInventory')}</p>
           )}

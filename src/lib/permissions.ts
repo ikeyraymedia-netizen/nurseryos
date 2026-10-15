@@ -44,6 +44,8 @@ export interface AppPermissions {
   canViewPurchasing: boolean;
   /** POs, vendors, bills, and bank feed. False keeps the purchasing tab on sourcing only. */
   canViewPurchasingDesk: boolean;
+  /** Upload or replace a vendor availability list. Does not include bills or purchase orders. */
+  canUploadVendorAvailability: boolean;
   canEditVendors: boolean;
   canEditPurchaseOrders: boolean;
   canReceivePurchases: boolean;
@@ -175,6 +177,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
                 canCompleteTasks: true,
         canViewPurchasing: true,
         canViewPurchasingDesk: true,
+        canUploadVendorAvailability: true,
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
@@ -221,6 +224,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
                 canCompleteTasks: true,
         canViewPurchasing: true,
         canViewPurchasingDesk: false,
+        canUploadVendorAvailability: true,
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: false,
@@ -266,6 +270,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
                 canCompleteTasks: false,
         canViewPurchasing: true,
         canViewPurchasingDesk: true,
+        canUploadVendorAvailability: true,
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
@@ -311,6 +316,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
                 canCompleteTasks: false,
         canViewPurchasing: true,
         canViewPurchasingDesk: true,
+        canUploadVendorAvailability: true,
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
@@ -355,6 +361,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
                 canCompleteTasks: true,
         canViewPurchasing: false,
         canViewPurchasingDesk: false,
+        canUploadVendorAvailability: false,
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: false,
@@ -399,6 +406,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
                 canCompleteTasks: true,
         canViewPurchasing: true,
         canViewPurchasingDesk: true,
+        canUploadVendorAvailability: false,
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: true,

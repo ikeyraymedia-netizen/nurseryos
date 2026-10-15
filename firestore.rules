@@ -83,6 +83,10 @@ service cloud.firestore {
       return canManagePurchasing(tenantId) || isSupervisor(tenantId);
     }
 
+    function canWriteSourcing(tenantId) {
+      return canManagePurchasingWrite(tenantId) || isSupervisor(tenantId);
+    }
+
     function canManagePurchasingWrite(tenantId) {
       return canWriteOps(tenantId) || isOffice(tenantId) || isSales(tenantId);
     }
@@ -291,7 +295,7 @@ service cloud.firestore {
 
       match /vendorAvailabilityLines/{docId} {
         allow read: if canReadSourcing(tenantId);
-        allow create, update, delete: if canManagePurchasingWrite(tenantId);
+        allow create, update, delete: if canWriteSourcing(tenantId);
       }
 
       match /auditLog/{eventId} {

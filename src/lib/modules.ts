@@ -257,6 +257,7 @@ export function applyModuleGates(
       (invoicing || purchasing),
     canViewPurchasing: permissions.canViewPurchasing && purchasing,
     canViewPurchasingDesk: permissions.canViewPurchasingDesk && purchasing,
+    canUploadVendorAvailability: permissions.canUploadVendorAvailability && purchasing,
     canEditVendors: permissions.canEditVendors && purchasing,
     canEditPurchaseOrders: permissions.canEditPurchaseOrders && purchasing,
     canReceivePurchases: permissions.canReceivePurchases && purchasing,

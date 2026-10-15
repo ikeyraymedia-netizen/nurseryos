@@ -28,7 +28,7 @@ export function SourcingPanel({
   onError
 }: SourcingPanelProps) {
   const t = useT();
-  const canWrite = permissions.canEditPurchaseOrders || permissions.canEditVendors;
+  const canWrite = permissions.canUploadVendorAvailability;
   const [lines, setLines] = useState<VendorAvailabilityLine[]>([]);
   const [uploadVendorId, setUploadVendorId] = useState('');
   const [busy, setBusy] = useState(false);

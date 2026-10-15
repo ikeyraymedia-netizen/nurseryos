@@ -256,6 +256,7 @@ export function applyModuleGates(
       quickbooks &&
       (invoicing || purchasing),
     canViewPurchasing: permissions.canViewPurchasing && purchasing,
+    canViewPurchasingDesk: permissions.canViewPurchasingDesk && purchasing,
     canEditVendors: permissions.canEditVendors && purchasing,
     canEditPurchaseOrders: permissions.canEditPurchaseOrders && purchasing,
     canReceivePurchases: permissions.canReceivePurchases && purchasing,

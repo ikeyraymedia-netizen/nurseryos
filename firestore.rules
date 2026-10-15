@@ -76,7 +76,11 @@ service cloud.firestore {
 
     function canManagePurchasing(tenantId) {
       return canWriteOps(tenantId) || isOffice(tenantId) || isSales(tenantId)
-        || isSupervisor(tenantId) || isField(tenantId);
+        || isField(tenantId);
+    }
+
+    function canReadSourcing(tenantId) {
+      return canManagePurchasing(tenantId) || isSupervisor(tenantId);
     }
 
     function canManagePurchasingWrite(tenantId) {
@@ -84,7 +88,7 @@ service cloud.firestore {
     }
 
     function canReceivePurchasing(tenantId) {
-      return canManagePurchasingWrite(tenantId) || isSupervisor(tenantId) || isField(tenantId);
+      return canManagePurchasingWrite(tenantId) || isField(tenantId);
     }
 
     function canWriteLoadingProgress(tenantId) {
@@ -265,7 +269,7 @@ service cloud.firestore {
       }
 
       match /vendors/{docId} {
-        allow read: if canManagePurchasing(tenantId);
+        allow read: if canReadSourcing(tenantId);
         allow create, update, delete: if canManagePurchasingWrite(tenantId);
       }
 
@@ -286,7 +290,7 @@ service cloud.firestore {
       }
 
       match /vendorAvailabilityLines/{docId} {
-        allow read: if canManagePurchasing(tenantId);
+        allow read: if canReadSourcing(tenantId);
         allow create, update, delete: if canManagePurchasingWrite(tenantId);
       }
 

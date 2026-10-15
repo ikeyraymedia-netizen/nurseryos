@@ -210,7 +210,8 @@ export function PurchasingWorkspace({
   nurseryName
 }: PurchasingWorkspaceProps) {
   const t = useT();
-  const [view, setView] = useState<PurchasingView>('orders');
+  const sourcingOnly = !permissions.canViewPurchasingDesk;
+  const [view, setView] = useState<PurchasingView>(sourcingOnly ? 'sourcing' : 'orders');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [bills, setBills] = useState<VendorBill[]>([]);
@@ -280,7 +281,12 @@ export function PurchasingWorkspace({
   const [billFilterTo, setBillFilterTo] = useState('');
 
   useEffect(() => {
+    if (sourcingOnly && view !== 'sourcing') setView('sourcing');
+  }, [sourcingOnly, view]);
+
+  useEffect(() => {
     const unsubV = subscribeToVendors(setVendors);
+    if (sourcingOnly) return () => unsubV();
     const unsubO = subscribeToPurchaseOrders(setOrders);
     const unsubB = subscribeToVendorBills(setBills);
     return () => {
@@ -288,7 +294,7 @@ export function PurchasingWorkspace({
       unsubO();
       unsubB();
     };
-  }, []);
+  }, [sourcingOnly]);
 
   useEffect(() => {
     if (!permissions.canPayVendorBills) {
@@ -1615,7 +1621,9 @@ export function PurchasingWorkspace({
               ['sourcing', t('purchasing.sourcingTab'), Trees],
               ['feed', t('purchasing.feedTab'), CreditCard]
             ] as const
-          ).map(([id, label, Icon]) => (
+          )
+            .filter(([id]) => !sourcingOnly || id === 'sourcing')
+            .map(([id, label, Icon]) => (
             <button
               key={id}
               type="button"

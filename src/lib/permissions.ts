@@ -42,6 +42,8 @@ export interface AppPermissions {
   canCompleteTasks: boolean;
   /** Purchasing workspace (gated by purchasing module). */
   canViewPurchasing: boolean;
+  /** POs, vendors, bills, and bank feed. False keeps the purchasing tab on sourcing only. */
+  canViewPurchasingDesk: boolean;
   canEditVendors: boolean;
   canEditPurchaseOrders: boolean;
   canReceivePurchases: boolean;
@@ -172,6 +174,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: true,
                 canCompleteTasks: true,
         canViewPurchasing: true,
+        canViewPurchasingDesk: true,
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
@@ -183,7 +186,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
       };
     case 'supervisor':
       // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
-      // No pricing, invoices, customers, uploads, deletes, or team/billing admin.
+      // Purchasing is sourcing only. No pricing, invoices, customers, uploads, deletes, or team/billing admin.
       return {
         canViewDirectShipOrders: false,
         canViewOrders: true,
@@ -217,9 +220,10 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: true,
                 canCompleteTasks: true,
         canViewPurchasing: true,
+        canViewPurchasingDesk: false,
         canEditVendors: false,
         canEditPurchaseOrders: false,
-        canReceivePurchases: true,
+        canReceivePurchases: false,
         canManageVendorBills: false,
         canManageBillPay: false,
         canPayVendorBills: false,
@@ -261,6 +265,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: false,
                 canCompleteTasks: false,
         canViewPurchasing: true,
+        canViewPurchasingDesk: true,
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
@@ -305,6 +310,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: false,
                 canCompleteTasks: false,
         canViewPurchasing: true,
+        canViewPurchasingDesk: true,
         canEditVendors: true,
         canEditPurchaseOrders: true,
         canReceivePurchases: true,
@@ -348,6 +354,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: false,
                 canCompleteTasks: true,
         canViewPurchasing: false,
+        canViewPurchasingDesk: false,
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: false,
@@ -391,6 +398,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canAssignTasks: false,
                 canCompleteTasks: true,
         canViewPurchasing: true,
+        canViewPurchasingDesk: true,
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: true,

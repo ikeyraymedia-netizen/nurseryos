@@ -1067,6 +1067,8 @@ const extra = {
     photoPickOrUpload: 'Vincule una foto de inventario o suba una.',
     photoNoInventoryMatch: 'No hay foto en inventario para esta planta y tamaño.',
     photoFromInventory: 'Del inventario: {{plant}}',
+    chooseSubstitutePhoto: 'Foto de sustituto',
+    chooseSubstitutePhotoPlaceholder: 'Seleccione la foto de un sustituto…',
     uploadPhoto: 'Subir foto',
     photoUploading: 'Subiendo…',
     clearPhoto: 'Quitar foto',

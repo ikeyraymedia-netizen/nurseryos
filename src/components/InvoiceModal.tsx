@@ -780,8 +780,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           patch.photoUrl === undefined &&
           patch.includePhotoLink !== true
         ) {
-          const previousWasInventory = !line.photoUrl || photoIsFromInventory(line.photoUrl);
-          if (previousWasInventory) {
+          const linePhotos = inventoryPhotoChoices(line);
+          const previousWasThisPlant =
+            !line.photoUrl || linePhotos.some((plant) => plant.photoUrl === line.photoUrl);
+          if (previousWasThisPlant) {
             next.photoUrl = matchedInventoryPhoto(next)?.photoUrl || null;
           }
         }
@@ -847,8 +849,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       });
   };
 
-  const photoIsFromInventory = (url: string | null | undefined): boolean =>
-    Boolean(url) && inventoryPlants.some((plant) => plant.photoUrl === url);
+  /** Every current inventory row that has a photo, for picking a substitute. */
+  const inventoryPhotos = inventoryPlants
+    .filter((plant) => isHttpUrl(plant.photoUrl))
+    .slice()
+    .sort(
+      (a, b) =>
+        a.plantName.localeCompare(b.plantName) ||
+        a.containerSize.localeCompare(b.containerSize, undefined, { numeric: true })
+    );
 
   /** Explicit photo only — filled from inventory when the line matches. */
   const linePhotoUrl = (item: PlantOrderItem): string | null => {
@@ -4924,7 +4933,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                         const selectedId =
                                           choices.find((plant) => plant.photoUrl === item.photoUrl)?.id ||
                                           '';
-                                        const fromInventory = choices.find(
+                                        const substituteId =
+                                          inventoryPhotos.find((plant) => plant.photoUrl === item.photoUrl)?.id ||
+                                          '';
+                                        const fromInventory = inventoryPhotos.find(
                                           (plant) => plant.photoUrl === photo
                                         );
                                         return (
@@ -5008,6 +5020,39 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                                 </select>
                                               </label>
                                             )}
+                                            <label className="block">
+                                              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                                                {t('invoice.chooseSubstitutePhoto')}
+                                              </span>
+                                              <select
+                                                value={substituteId}
+                                                onChange={(e) => {
+                                                  const plant = inventoryPhotos.find(
+                                                    (row) => row.id === e.target.value
+                                                  );
+                                                  if (!plant?.photoUrl) return;
+                                                  updateDraftLine(item.id, {
+                                                    includePhotoLink: true,
+                                                    photoUrl: plant.photoUrl
+                                                  });
+                                                }}
+                                                className="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-ink-600"
+                                              >
+                                                <option value="">
+                                                  {inventoryPhotos.length
+                                                    ? t('invoice.chooseSubstitutePhotoPlaceholder')
+                                                    : t('invoice.noInventoryPhotos')}
+                                                </option>
+                                                {inventoryPhotos.map((plant) => (
+                                                  <option key={plant.id} value={plant.id}>
+                                                    {plant.plantName}
+                                                    {plant.containerSize
+                                                      ? ` · ${plant.containerSize}`
+                                                      : ''}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </label>
                                           </>
                                         );
                                       })()}

@@ -745,16 +745,14 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
             <button
               type="button"
               onClick={() => setIsBOLOpen(true)}
-              className={`px-3 py-1.5 border border-white/50 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1 ${
+              className={`px-3 py-1.5 text-slate-950 border border-white/50 text-xs font-bold rounded-lg shadow-sm transition-all flex items-center space-x-1 ${
                 order.customerBolUrl
-                  ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
-                  : 'bg-coral-400 hover:bg-coral-300 text-slate-950'
+                  ? 'bg-yellow-300 hover:bg-yellow-200'
+                  : 'bg-coral-400 hover:bg-coral-300'
               }`}
             >
               <FileText className="h-3.5 w-3.5" />
-              <span>
-                {order.customerBolUrl ? t('loader.useCustomerBol') : t('loader.generateBol')}
-              </span>
+              <span>{t('loader.generateBol')}</span>
             </button>
           )}
 

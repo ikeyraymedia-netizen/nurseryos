@@ -123,7 +123,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   } | null>(null);
   const [bolUploadBusyId, setBolUploadBusyId] = useState<string | null>(null);
   const [bolUploadError, setBolUploadError] = useState<string | null>(null);
-  const [showGeneratedPreview, setShowGeneratedPreview] = useState(false);
   const customerBolInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const hydratedTruckIdRef = useRef<string | null>(null);
   const selectedBOLTypeRef = useRef(selectedBOLType);
@@ -322,7 +321,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       nextPos[nextType] !== undefined ? nextPos[nextType] : defaultPoForType(nextType)
     );
     setSaveDraftSuccess(false);
-    setShowGeneratedPreview(false);
   }
 
   async function handleSaveBolDraft() {
@@ -379,16 +377,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const currentBOLOrders = sortedOrders.filter((o) => o.id === selectedBOLType);
   const singleOrder = sortedOrders.find((o) => o.id === selectedBOLType) || null;
   const canUploadCustomerBol = Boolean(tenantId && onUpdateOrder);
-  const customerSuppliedBol =
-    currentBOLOrders.find((order) => Boolean(order.customerBolUrl)) || null;
-  const customerBolOnOtherStops = sortedOrders
-    .map((order, index) => ({ order, n: index + 1 }))
-    .filter((row) => Boolean(row.order.customerBolUrl) && row.order.id !== selectedBOLType);
-  const customerBolIsImage = Boolean(
-    customerSuppliedBol &&
-      ((customerSuppliedBol.customerBolContentType || '').startsWith('image/') ||
-        /\.(png|jpe?g|gif|webp|heic)$/i.test(customerSuppliedBol.customerBolFileName || ''))
-  );
 
   async function handleUploadCustomerBol(order: CustomerOrder, file: File) {
     if (!tenantId || !onUpdateOrder) return;
@@ -807,54 +795,21 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             </button>
           </div>
 
-          {customerSuppliedBol ? (
-            <a
-              href={customerSuppliedBol.customerBolUrl || undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="md:hidden w-full py-3 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black shadow-sm flex items-center justify-center space-x-2"
-            >
-              <ExternalLink className="h-4 w-4" />
-              <span>{t('bol.useCustomerBol')}</span>
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isGeneratingPdf}
-              className="md:hidden w-full py-3 px-4 bg-ink-800 hover:bg-ink-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center space-x-2"
-            >
-              <Printer className="h-4 w-4" />
-              <span>
-                {isGeneratingPdf
-                  ? t('bol.generating')
-                  : t('bol.downloadOrder')}
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isGeneratingPdf}
+            className="md:hidden w-full py-3 px-4 bg-ink-800 hover:bg-ink-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center space-x-2"
+          >
+            <Printer className="h-4 w-4" />
+            <span>
+              {isGeneratingPdf
+                ? t('bol.generating')
+                : t('bol.downloadOrder')}
+            </span>
+          </button>
 
           <div className="space-y-4 text-xs">
-            {customerBolOnOtherStops.map(({ order, n }) => (
-              <button
-                key={order.id}
-                type="button"
-                onClick={() => handleBolTypeChange(order.id)}
-                className="w-full rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-left"
-              >
-                <span className="block text-[11px] font-black uppercase tracking-wide text-amber-950">
-                  {t('bol.customerBol')}
-                </span>
-                <span className="mt-1 block text-[11px] font-semibold leading-snug text-amber-900">
-                  {t('bol.customerBolOtherStop', {
-                    n,
-                    customer: String(order.customerName || '').slice(0, 42)
-                  })}
-                </span>
-                <span className="mt-1.5 block text-[11px] font-black text-amber-950 underline">
-                  {t('bol.customerBolOtherStopAction')}
-                </span>
-              </button>
-            ))}
             {/* Blind BOL — hide customer name on printed document */}
             <button
               type="button"
@@ -898,7 +853,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         num: orderStopRef(order),
                         customer: String(order.customerName || t('reports.customer')).slice(0, 25)
                       })}
-                      {order.customerBolUrl ? ` · ${t('bol.customerBol')}` : ''}
                     </option>
                   ))}
                 </select>
@@ -933,25 +887,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             {canUploadCustomerBol && currentBOLOrders.length > 0 && (
               <div
                 className={`rounded-xl border p-3 space-y-2.5 ${
-                  customerSuppliedBol
-                    ? 'border-amber-400 bg-amber-50'
+                  currentBOLOrders.some((order) => order.customerBolUrl)
+                    ? 'border-yellow-400 bg-yellow-200'
                     : 'border-slate-200 bg-white'
                 }`}
               >
                 <div>
-                  <p
-                    className={`font-black font-mono uppercase tracking-wider text-[10px] ${
-                      customerSuppliedBol ? 'text-amber-950' : 'text-gray-700 font-bold'
-                    }`}
-                  >
-                    {customerSuppliedBol ? t('bol.useCustomerBol') : t('bol.customerBol')}
+                  <p className="font-bold text-gray-700 font-mono uppercase tracking-wider text-[10px]">
+                    {t('bol.customerBol')}
                   </p>
-                  <p
-                    className={`mt-0.5 text-[10px] leading-snug ${
-                      customerSuppliedBol ? 'text-amber-900' : 'text-slate-500'
-                    }`}
-                  >
-                    {customerSuppliedBol ? t('bol.useCustomerBolHint') : t('bol.customerBolHint')}
+                  <p className="mt-0.5 text-[10px] text-slate-500 leading-snug">
+                    {t('bol.customerBolHint')}
                   </p>
                 </div>
                 {currentBOLOrders.map((order) => {
@@ -960,7 +906,11 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   return (
                     <div
                       key={order.id}
-                      className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2 space-y-1.5"
+                      className={`rounded-lg border px-2.5 py-2 space-y-1.5 ${
+                        hasFile
+                          ? 'border-yellow-500 bg-yellow-300'
+                          : 'border-slate-100 bg-slate-50/80'
+                      }`}
                     >
                       {currentBOLOrders.length > 1 && (
                         <p className="text-[11px] font-semibold text-slate-700 truncate">
@@ -971,20 +921,16 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                         </p>
                       )}
                       {hasFile ? (
-                        <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <a
                             href={order.customerBolUrl || undefined}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-400 px-3 py-2 text-[11px] font-black text-slate-950 hover:bg-amber-300"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-ink-800 hover:underline"
                           >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            {t('bol.openCustomerBol')}
-                          </a>
-                          <div className="flex flex-wrap items-center gap-2">
-                          <span className="min-w-0 truncate text-[11px] font-semibold text-amber-950">
+                            <ExternalLink className="h-3 w-3" />
                             {order.customerBolFileName || t('bol.customerBolView')}
-                          </span>
+                          </a>
                           <button
                             type="button"
                             disabled={busy}
@@ -1002,7 +948,6 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                             <Trash2 className="h-3 w-3" />
                             {t('common.delete')}
                           </button>
-                          </div>
                         </div>
                       ) : (
                         <button
@@ -1174,41 +1119,19 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 )}
               </>
             )}
-            {customerSuppliedBol ? (
-              <>
-                <a
-                  href={customerSuppliedBol.customerBolUrl || undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3 px-4 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>{t('bol.useCustomerBol')}</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={handleDownloadPdf}
-                  disabled={isGeneratingPdf}
-                  className="w-full py-2 px-4 bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-60 text-slate-500 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center"
-                >
-                  {isGeneratingPdf ? t('bol.generating') : t('bol.downloadGenerated')}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={isGeneratingPdf}
-                className="w-full py-3 px-4 bg-ink-800 hover:bg-ink-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
-              >
-                <Printer className="h-4 w-4" />
-                <span>
-                  {isGeneratingPdf
-                    ? t('bol.generating')
-                    : t('bol.downloadOrder')}
-                </span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="w-full py-3 px-4 bg-ink-800 hover:bg-ink-900 disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+            >
+              <Printer className="h-4 w-4" />
+              <span>
+                {isGeneratingPdf
+                  ? t('bol.generating')
+                  : t('bol.downloadOrder')}
+              </span>
+            </button>
             <p className="text-[10px] text-slate-500 text-center md:hidden">{t('bol.phoneHint')}</p>
             <button
               type="button"
@@ -1237,33 +1160,17 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   </span>
                 )}
               </h2>
-              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                {customerSuppliedBol && !showGeneratedPreview
-                  ? t('bol.useCustomerBolHint')
-                  : t('bol.previewBody')}
-              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5 font-sans">{t('bol.previewBody')}</p>
             </div>
             <div className="flex items-center space-x-2">
-              {customerSuppliedBol && !showGeneratedPreview ? (
-                <a
-                  href={customerSuppliedBol.customerBolUrl || undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 bg-amber-100 border border-amber-300 rounded-xl text-amber-950 hover:bg-amber-200 transition-colors"
-                  title={t('bol.openCustomerBol')}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              ) : (
-                <button
-                  onClick={handleDownloadPdf}
-                  disabled={isGeneratingPdf}
-                  className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
-                  title={t('bol.downloadPdf')}
-                >
-                  <Printer className="h-4 w-4" />
-                </button>
-              )}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isGeneratingPdf}
+                className="p-2 bg-ink-50 border border-ink-100 rounded-xl text-ink-800 hover:bg-ink-100 transition-colors"
+                title={t('bol.downloadPdf')}
+              >
+                <Printer className="h-4 w-4" />
+              </button>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
@@ -1274,100 +1181,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
             </div>
           </div>
 
-          {customerSuppliedBol && !showGeneratedPreview && (
-            <div className="flex-1 overflow-y-auto pr-2 space-y-3 print:hidden">
-              <div className="rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3">
-                <p className="text-sm font-black uppercase tracking-wide text-amber-950">
-                  {t('bol.useCustomerBol')}
-                </p>
-                <p className="mt-1 text-xs font-medium leading-snug text-amber-900">
-                  {t('bol.useCustomerBolHint')}
-                </p>
-                <a
-                  href={customerSuppliedBol.customerBolUrl || undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2 text-xs font-black text-slate-950 hover:bg-amber-300"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  {t('bol.openCustomerBol')}
-                </a>
-              </div>
-              {customerBolIsImage ? (
-                <a
-                  href={customerSuppliedBol.customerBolUrl || undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={customerSuppliedBol.customerBolUrl || undefined}
-                    alt={t('bol.customerBolPreview')}
-                    className="max-h-[70vh] w-full rounded-lg border border-amber-200 bg-white object-contain"
-                  />
-                </a>
-              ) : (
-                <iframe
-                  title={t('bol.customerBolPreview')}
-                  src={customerSuppliedBol.customerBolUrl || undefined}
-                  className="h-[70vh] w-full rounded-lg border border-amber-200 bg-white"
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => setShowGeneratedPreview(true)}
-                className="text-[11px] font-semibold text-slate-500 underline"
-              >
-                {t('bol.showGeneratedBol')}
-              </button>
-            </div>
-          )}
-
           {/* Printable Document Sheet */}
-          <div
-            className={`flex-1 overflow-y-auto pr-2 print:overflow-visible print:pr-0 ${
-              customerSuppliedBol && !showGeneratedPreview ? 'hidden' : ''
-            }`}
-          >
-            {customerBolOnOtherStops.length > 0 && (
-              <div className="mb-3 space-y-2 print:hidden">
-                {customerBolOnOtherStops.map(({ order, n }) => (
-                  <button
-                    key={order.id}
-                    type="button"
-                    onClick={() => handleBolTypeChange(order.id)}
-                    className="w-full rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 text-left"
-                  >
-                    <span className="block text-sm font-black uppercase tracking-wide text-amber-950">
-                      {t('bol.useCustomerBol')}
-                    </span>
-                    <span className="mt-1 block text-xs font-semibold leading-snug text-amber-900">
-                      {t('bol.customerBolOtherStop', {
-                        n,
-                        customer: order.customerName
-                      })}
-                    </span>
-                    <span className="mt-2 inline-flex rounded-lg bg-amber-400 px-3 py-1.5 text-[11px] font-black text-slate-950">
-                      {t('bol.customerBolOtherStopAction')}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {customerSuppliedBol && showGeneratedPreview && (
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 print:hidden">
-                <p className="text-[11px] font-semibold text-amber-950">
-                  {t('bol.generatedBackupHint')}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowGeneratedPreview(false)}
-                  className="text-[11px] font-black text-amber-950 underline"
-                >
-                  {t('bol.backToCustomerBol')}
-                </button>
-              </div>
-            )}
+          <div className="flex-1 overflow-y-auto pr-2 print:overflow-visible print:pr-0">
             <div className="border border-gray-300 p-8 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal">
               
               {/* STYLE TAG FOR PRINT WORKAROUNDS */}

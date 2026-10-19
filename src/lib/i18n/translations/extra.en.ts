@@ -740,19 +740,6 @@ const extra = {
     customerBol: 'Customer BOL',
     customerBolHint:
       'Upload a bill of lading the customer sent (PDF or photo). Stored on the plant order.',
-    useCustomerBol: 'Use customer BOL',
-    useCustomerBolHint:
-      'This customer sent their own bill of lading. Hand this file to the driver. Do not use the generated BOL.',
-    openCustomerBol: 'Open customer BOL',
-    downloadGenerated: 'Download generated BOL instead',
-    showGeneratedBol: 'Show generated BOL',
-    backToCustomerBol: 'Back to customer BOL',
-    generatedBackupHint:
-      'This is the NurseryOS BOL. Use the customer BOL unless you only need a backup copy.',
-    customerBolPreview: 'Customer bill of lading',
-    customerBolOtherStop:
-      'Stop {{n}} ({{customer}}) has a customer BOL. Use that file for that stop.',
-    customerBolOtherStopAction: 'Open customer BOL',
     customerBolUpload: 'Upload customer BOL',
     customerBolUploading: 'Uploading…',
     customerBolReplace: 'Replace',

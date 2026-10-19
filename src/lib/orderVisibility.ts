@@ -1,6 +1,44 @@
 import { CustomerOrder, Truck } from '../types';
+import { parseDateKey, toDateKey } from './dates';
 import { orderRefLabel } from './orderLabels';
 import { AppPermissions } from './permissions';
+
+export const DIRECT_SHIP_TRUCK_PREFIX = 'direct-ship-';
+
+export function isDirectShipBoardTruckId(id: string | null | undefined): boolean {
+  return String(id || '').startsWith(DIRECT_SHIP_TRUCK_PREFIX);
+}
+
+export function directShipOrderIdFromBoardTruck(id: string): string {
+  return id.slice(DIRECT_SHIP_TRUCK_PREFIX.length);
+}
+
+/** One day-board card per direct-ship order. Not a saved truck. */
+export function directShipBoardTrucks(orders: CustomerOrder[], label = 'Direct ship'): Truck[] {
+  return orders
+    .filter((order) => isDirectShipOrder(order) && !order.truckId)
+    .map((order) => {
+      const created = new Date(order.dateCreated);
+      const loadingDate = parseDateKey(order.directShipDate || '')
+        ? order.directShipDate!
+        : Number.isNaN(created.getTime())
+          ? toDateKey(new Date())
+          : toDateKey(created);
+      const ref = orderRefLabel(order);
+      return {
+        id: `${DIRECT_SHIP_TRUCK_PREFIX}${order.id}`,
+        name: ref
+          ? `${label} · ${order.customerName} · ${ref}`
+          : `${label} · ${order.customerName}`,
+        dateCreated: order.dateCreated,
+        status: order.status,
+        orderIds: [order.id],
+        loadingDate,
+        truckType: label,
+        notes: 'Direct ship — vendor to customer'
+      };
+    });
+}
 
 export function isDirectShipOrder(order: Pick<CustomerOrder, 'directShip'>): boolean {
   return order.directShip === true;

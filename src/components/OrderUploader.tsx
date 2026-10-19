@@ -13,7 +13,8 @@ import {
   Search,
   Trash2
 } from 'lucide-react';
-import { addCustomerOrder } from '../lib/db';
+import { addCustomerOrder, setOrderDirectShip } from '../lib/db';
+import { parseDateKey, toDateKey } from '../lib/dates';
 import { notifyPushEvent } from '../lib/pushNotifications';
 import {
   getInventoryMatchSuggestions,
@@ -136,6 +137,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
   const customerSearchRef = useRef<HTMLDivElement>(null);
   const [salesRep, setSalesRep] = useState('');
   const [directShip, setDirectShip] = useState(false);
+  const [directShipDate, setDirectShipDate] = useState(() => toDateKey(new Date()));
   const [savedOrderId, setSavedOrderId] = useState<string | null>(null);
   const [savedEstimateCustomerId, setSavedEstimateCustomerId] = useState<string | null>(null);
   const [inventoryPlants, setInventoryPlants] = useState<InventoryPlant[]>([]);
@@ -269,6 +271,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
     setCustomerSearchOpen(false);
     setSalesRep('');
     setDirectShip(false);
+    setDirectShipDate(toDateKey(new Date()));
     setLinkedInventoryByItemId({});
     setOriginalParsedByItemId({});
     setAutoLinkedItemIds({});
@@ -685,6 +688,10 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
       setErrorMessage(t('upload.salesRepRequired'));
       return;
     }
+    if (uploadKind === 'order' && directShip && !parseDateKey(directShipDate)) {
+      setErrorMessage(t('upload.directShipDateRequired'));
+      return;
+    }
     setSaving(true);
     setErrorMessage(null);
     try {
@@ -765,7 +772,7 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         status: 'pending',
         totalWeightLbs: orderWeightLbs(namedItems, containerWeights),
         owner: salesRep.trim() || undefined,
-        ...(directShip ? { directShip: true } : {}),
+        ...(directShip ? { directShip: true, directShipDate } : {}),
         ...(pendingDraft.poNumber
           ? {
               invoiceDetails: {
@@ -781,7 +788,26 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
         meta: { orderId, customerId: linked?.id || null, directShip }
       });
 
-      if (!directShip) {
+      if (directShip) {
+        await setOrderDirectShip(
+          {
+            id: orderId,
+            customerName: linked?.name || pendingDraft.customerName,
+            orderNumber: '',
+            items: namedItems,
+            originalText: pendingDraft.originalText,
+            status: 'pending',
+            totalWeightLbs: orderWeightLbs(namedItems, containerWeights),
+            dateCreated: new Date().toISOString(),
+            owner: salesRep.trim() || undefined,
+            directShip: true,
+            directShipDate,
+            ...(pendingDraft.poNumber ? { invoiceDetails: { poNumber: pendingDraft.poNumber } } : {})
+          },
+          true,
+          directShipDate
+        );
+      } else {
         void notifyPushEvent({
           tenantId,
           type: 'order_uploaded',
@@ -1269,6 +1295,22 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 </span>
               </span>
             </label>
+          ) : null}
+
+          {uploadKind === 'order' && permissions.canViewDirectShipOrders && directShip ? (
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">
+                {t('upload.directShipDateLabel')}
+              </label>
+              <input
+                type="date"
+                value={directShipDate}
+                disabled={saving}
+                onChange={(e) => setDirectShipDate(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-ink-300 rounded-lg text-sm bg-white disabled:bg-gray-100"
+              />
+            </div>
           ) : null}
 
           {(uploadKind === 'order' || uploadKind === 'estimate') && (

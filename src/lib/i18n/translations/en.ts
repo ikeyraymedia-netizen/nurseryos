@@ -243,6 +243,11 @@ const en = {
     directShipToggleHint:
       'Vendor ships straight to the customer. Hidden from supervisors, loaders, and yard staff.',
     directShipRemovingFromTruck: 'Saving will remove this order from its truck.',
+    directShipDateLabel: 'Ship date',
+    directShipDateHint:
+      'Shows on Trucks by day for this date. Only owners and admins can see it.',
+    directShipDateSave: 'Save and open truck',
+    directShipDateCancel: 'Cancel',
     stagingLocation: 'Order Staging Location',
     stagingHint: 'Where this plant order is staged out in the yard',
     saving: 'SAVING…',

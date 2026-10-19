@@ -59,6 +59,7 @@ import { InventoryPlantPicker } from './InventoryPlantPicker';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { notifyPushEvent } from '../lib/pushNotifications';
+import { parseDateKey, toDateKey } from '../lib/dates';
 
 interface LoaderWorkspaceProps {
   order: CustomerOrder;
@@ -71,6 +72,7 @@ interface LoaderWorkspaceProps {
   nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
+  onOpenDirectShipTruck?: (truckId: string) => void;
 }
 
 export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
@@ -83,7 +85,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   nurseryAddress = '',
   nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
-  tenantId
+  tenantId,
+  onOpenDirectShipTruck
 }) => {
   const t = useT();
   const dp = usePlantDisplay();
@@ -248,6 +251,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const [stagedLocation, setStagedLocation] = useState(order.stagedLocation || '');
   const [savingStagedLocation, setSavingStagedLocation] = useState(false);
   const [directShipBusy, setDirectShipBusy] = useState(false);
+  const [shipDateDraft, setShipDateDraft] = useState<string | null>(null);
   const saveTimeoutRef = React.useRef<any>(null);
 
   React.useEffect(() => {
@@ -287,11 +291,30 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   const handleDirectShipToggle = async (enabled: boolean) => {
     if (!permissions.canViewDirectShipOrders || directShipBusy) return;
     if (enabled === isDirectShipOrder(order)) return;
+    if (enabled) {
+      setShipDateDraft(order.directShipDate || toDateKey(new Date()));
+      return;
+    }
+    setShipDateDraft(null);
     setDirectShipBusy(true);
     try {
-      await setOrderDirectShip(order, enabled);
+      await setOrderDirectShip(order, false);
     } catch (err) {
       console.error('Failed to update direct ship:', err);
+    } finally {
+      setDirectShipBusy(false);
+    }
+  };
+
+  const confirmDirectShipDate = async (date: string, openTruck: boolean) => {
+    if (!parseDateKey(date) || directShipBusy) return;
+    setDirectShipBusy(true);
+    try {
+      const truckId = await setOrderDirectShip(order, true, date);
+      setShipDateDraft(null);
+      if (openTruck && truckId) onOpenDirectShipTruck?.(truckId);
+    } catch (err) {
+      console.error('Failed to save direct ship date:', err);
     } finally {
       setDirectShipBusy(false);
     }
@@ -887,13 +910,61 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
               <span className="block text-[10px] text-gray-600 leading-snug mt-0.5">
                 {t('loader.directShipToggleHint')}
               </span>
-              {order.truckId && !isDirectShipOrder(order) ? (
+              {order.truckId && !isDirectShipOrder(order) && !order.directShip ? (
                 <span className="block text-[10px] text-amber-700 leading-snug mt-1">
                   {t('loader.directShipRemovingFromTruck')}
                 </span>
               ) : null}
             </span>
           </label>
+          {shipDateDraft !== null ? (
+            <div className="mt-3 pl-6 space-y-2">
+              <label className="block text-[10px] font-bold uppercase tracking-wide text-sky-900">
+                {t('loader.directShipDateLabel')}
+              </label>
+              <input
+                type="date"
+                value={shipDateDraft}
+                disabled={directShipBusy}
+                onChange={(e) => setShipDateDraft(e.target.value)}
+                className="block w-full max-w-xs px-3 py-2 border border-sky-200 rounded-lg text-sm bg-white"
+              />
+              <p className="text-[10px] text-gray-600 leading-snug">{t('loader.directShipDateHint')}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={directShipBusy || !parseDateKey(shipDateDraft)}
+                  onClick={() => void confirmDirectShipDate(shipDateDraft, true)}
+                  className="px-3 py-1.5 rounded-lg bg-sky-700 text-white text-xs font-bold disabled:opacity-50"
+                >
+                  {t('loader.directShipDateSave')}
+                </button>
+                <button
+                  type="button"
+                  disabled={directShipBusy}
+                  onClick={() => setShipDateDraft(null)}
+                  className="px-3 py-1.5 rounded-lg border border-sky-200 bg-white text-xs font-bold text-gray-700"
+                >
+                  {t('loader.directShipDateCancel')}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {isDirectShipOrder(order) && shipDateDraft === null ? (
+            <div className="mt-3 pl-6">
+              <label className="block text-[10px] font-bold uppercase tracking-wide text-sky-900 mb-1">
+                {t('loader.directShipDateLabel')}
+              </label>
+              <input
+                type="date"
+                value={order.directShipDate || ''}
+                disabled={directShipBusy}
+                onChange={(e) => void confirmDirectShipDate(e.target.value, true)}
+                className="block w-full max-w-xs px-3 py-2 border border-sky-200 rounded-lg text-sm bg-white"
+              />
+              <p className="text-[10px] text-gray-600 leading-snug mt-1">{t('loader.directShipDateHint')}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

@@ -24,6 +24,7 @@ import {
   weekDateKeysFromSunday
 } from '../lib/dates';
 import { useT } from '../lib/i18n';
+import { isDirectShipBoardTruckId } from '../lib/orderVisibility';
 
 interface TrucksListProps {
   trucks: Truck[];
@@ -566,8 +567,8 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                           )}
                         </div>
                       </div>
-                      {canDelete &&
-                        (deletingTruckId === truck.id ? (
+                      {canDelete && !isDirectShipBoardTruckId(truck.id) && (
+                        deletingTruckId === truck.id ? (
                           <div className="flex items-center space-x-1 shrink-0 z-10">
                             <button
                               onClick={(e) => {
@@ -599,7 +600,8 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                        ))}
+                        )
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2.5 pt-2 border-t border-gray-100/70 text-[11px] text-gray-500 font-mono">

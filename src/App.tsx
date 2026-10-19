@@ -51,7 +51,12 @@ import { resolveNurseryRemittanceAddress, resolveNurseryShippingAddress } from '
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
 import { AppLocale, useT } from './lib/i18n';
 import { initPushNotifications } from './lib/pushNotifications';
-import { filterOrdersForPermissions } from './lib/orderVisibility';
+import {
+  directShipBoardTrucks,
+  directShipOrderIdFromBoardTruck,
+  filterOrdersForPermissions,
+  isDirectShipBoardTruckId
+} from './lib/orderVisibility';
 import {
   CustomerOrder,
   ContainerWeight,
@@ -704,6 +709,16 @@ function NurseryApp({
     [dynamicOrders, permissions.canViewDirectShipOrders]
   );
 
+  const yardTrucks = useMemo(
+    () => (permissions.canViewDirectShipOrders ? trucks : trucks.filter((truck) => !truck.directShip)),
+    [trucks, permissions.canViewDirectShipOrders]
+  );
+
+  const boardTrucks = useMemo(() => {
+    if (!permissions.canViewDirectShipOrders) return yardTrucks;
+    return [...yardTrucks, ...directShipBoardTrucks(dynamicOrders, t('upload.directShipBadge'))];
+  }, [yardTrucks, dynamicOrders, permissions.canViewDirectShipOrders, t]);
+
   useEffect(() => {
     if (!selectedOrderId) return;
     const order = dynamicOrders.find((o) => o.id === selectedOrderId);
@@ -790,7 +805,7 @@ function NurseryApp({
       ) ||
       null
     : null;
-  const activeTruck = trucks.find((t) => t.id === selectedTruckId);
+  const activeTruck = yardTrucks.find((t) => t.id === selectedTruckId);
 
   const isBuildingTruck = selectedTruckId === 'new' || isEditingTruck;
   const showingTruckPanel =
@@ -945,7 +960,7 @@ function NurseryApp({
             ) : (
               <InventoryWorkspace
                 permissions={permissions}
-                trucks={trucks}
+                trucks={yardTrucks}
                 orders={visibleOrders}
                 tenantId={tenant.id}
                 tenant={tenant}
@@ -1061,7 +1076,7 @@ function NurseryApp({
                 }`}
               >
                 <TruckIcon className="h-4 w-4" />
-                <span>{t('nav.trucks')} ({trucks.length})</span>
+                <span>{t('nav.trucks')} ({boardTrucks.length})</span>
               </button>
             )}
             {permissions.canViewInventory && (
@@ -1192,7 +1207,7 @@ function NurseryApp({
             />
           ) : (
             <TrucksList
-              trucks={trucks}
+              trucks={boardTrucks}
               orders={visibleOrders}
               selectedTruckId={selectedTruckId}
               canDelete={permissions.canDeleteTrucks}
@@ -1200,6 +1215,13 @@ function NurseryApp({
               onStartBuild={startBuildTruck}
               onSelectTruck={(id) => {
                 if (!leaveTruckBuilderIfNeeded()) return;
+                if (id && isDirectShipBoardTruckId(id)) {
+                  setActiveTab('orders');
+                  setSelectedOrderId(directShipOrderIdFromBoardTruck(id));
+                  setSelectedTruckId(null);
+                  setIsEditingTruck(false);
+                  return;
+                }
                 setActiveTab('trucks');
                 setSelectedTruckId(id);
                 setSelectedOrderId(null);
@@ -1232,7 +1254,7 @@ function NurseryApp({
           {activeTab === 'inventory' ? (
             <InventoryWorkspace
               permissions={permissions}
-              trucks={trucks}
+              trucks={yardTrucks}
               orders={visibleOrders}
               tenantId={tenant.id}
               tenant={tenant}
@@ -1244,7 +1266,7 @@ function NurseryApp({
             <CustomersWorkspace
               customers={customers}
               orders={visibleOrders}
-              trucks={trucks}
+              trucks={yardTrucks}
               permissions={permissions}
               nurseryName={tenant.name}
               tenantId={tenant.id}
@@ -1275,7 +1297,7 @@ function NurseryApp({
           ) : activeTab === 'reports' ? (
             <ReportsWorkspace
               orders={visibleOrders}
-              trucks={trucks}
+              trucks={yardTrucks}
               customers={customers}
               permissions={permissions}
               nurseryName={tenant.name}
@@ -1315,7 +1337,7 @@ function NurseryApp({
           ) : selectedTruckId && activeTruck ? (
             <TruckWorkspace
               truck={activeTruck}
-              trucks={trucks}
+              trucks={yardTrucks}
               orders={visibleOrders}
               containerWeights={containerWeights}
               permissions={permissions}
@@ -1349,6 +1371,12 @@ function NurseryApp({
               nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
+              onOpenDirectShipTruck={(truckId) => {
+                setActiveTab('trucks');
+                setSelectedTruckId(truckId);
+                setSelectedOrderId(null);
+                setIsEditingTruck(false);
+              }}
             />
           ) : (
             <div className="bg-white rounded-2xl border border-ink-100 p-12 text-center min-h-[400px] flex flex-col items-center justify-center">

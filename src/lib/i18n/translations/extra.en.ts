@@ -1736,6 +1736,8 @@ const extra = {
     directShipHint:
       'Vendor ships straight to the customer. Hidden from supervisors, loaders, and yard staff — owner/admin only.',
     directShipBadge: 'Direct ship',
+    directShipDateLabel: 'Ship date',
+    directShipDateRequired: 'Choose a ship date for this direct ship order.',
     linkedTo: '✓ Linked to {{name}} ({{size}})',
     autoMatchedSuffix: ' — auto-matched',
     noInventoryLoaded: 'No inventory plants loaded yet.',

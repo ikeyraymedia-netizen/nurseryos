@@ -1753,6 +1753,8 @@ const extra = {
     directShipHint:
       'El proveedor envía directo al cliente. Oculto para supervisores, cargadores y personal de patio — solo propietario/admin.',
     directShipBadge: 'Envío directo',
+    directShipDateLabel: 'Fecha de envío',
+    directShipDateRequired: 'Elija una fecha de envío para este pedido de envío directo.',
     linkedTo: '✓ Vinculado a {{name}} ({{size}})',
     autoMatchedSuffix: ' — auto-vinculado',
     noInventoryLoaded: 'Aún no hay plantas de inventario cargadas.',

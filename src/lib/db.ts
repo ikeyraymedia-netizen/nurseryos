@@ -20,6 +20,8 @@ import {
 import { notifyPushEvent } from './pushNotifications';
 import { syncInvoicesFromOrder } from './documents';
 import { orderInvoiceContentChanged } from './invoicing';
+import { parseDateKey } from './dates';
+import { orderRefLabel } from './orderLabels';
 
 let activeTenantId: string | null = null;
 
@@ -1090,50 +1092,175 @@ export async function updateCustomerOrder(order: CustomerOrder): Promise<void> {
   }
 }
 
-/** Mark/unmark direct ship; removes the order from any truck when enabled. */
-export async function setOrderDirectShip(order: CustomerOrder, directShip: boolean): Promise<void> {
+function directShipTruckName(order: CustomerOrder): string {
+  const ref = orderRefLabel(order);
+  return ref ? `Direct ship · ${order.customerName} · ${ref}` : `Direct ship · ${order.customerName}`;
+}
+
+/**
+ * Mark or clear direct ship.
+ * Enabling requires a ship date and puts the order on its own truck for that day.
+ * Returns the direct-ship truck id when enabled.
+ */
+export async function setOrderDirectShip(
+  order: CustomerOrder,
+  directShip: boolean,
+  shipDate?: string | null
+): Promise<string | null> {
   const tenantId = requireTenantId();
   const trucks = getLocalTrucks();
-  const affectedTrucks: Truck[] = [];
-  const updatedTrucks = directShip
-    ? trucks.map((t) => {
-        if (!(t.orderIds || []).includes(order.id)) return t;
-        const next = { ...t, orderIds: t.orderIds.filter((id) => id !== order.id) };
-        affectedTrucks.push(next);
-        return next;
-      })
-    : trucks;
-
-  const updatedOrder: CustomerOrder = {
-    ...order,
-    directShip: directShip ? true : undefined,
-    truckId: directShip ? null : order.truckId
-  };
-
   const orders = getLocalOrders();
-  saveLocalOrders(orders.map((o) => (o.id === order.id ? updatedOrder : o)));
-  if (affectedTrucks.length > 0) saveLocalTrucks(updatedTrucks);
+  const existing = orders.find((o) => o.id === order.id) || order;
 
-  if (fallbackActive) return;
+  if (directShip) {
+    const date = String(shipDate || '').trim();
+    if (!parseDateKey(date)) throw new Error('Choose a ship date');
 
-  try {
-    const batch = writeBatch(db);
-    batch.set(
-      orderDoc(tenantId, order.id),
-      {
-        directShip: directShip ? true : null,
-        truckId: directShip ? null : order.truckId || null
-      },
-      { merge: true }
+    const name = directShipTruckName(existing);
+    const currentDirect = trucks.find(
+      (t) => t.directShip && (t.id === existing.truckId || (t.orderIds || []).includes(existing.id))
     );
-    for (const truck of affectedTrucks) {
-      batch.update(truckDoc(tenantId, truck.id), { orderIds: truck.orderIds });
+    const otherTrucks = trucks.filter(
+      (t) => t.id !== currentDirect?.id && (t.orderIds || []).includes(existing.id)
+    );
+
+    let nextTrucks = trucks.map((t) => {
+      if (!otherTrucks.some((other) => other.id === t.id)) return t;
+      return { ...t, orderIds: (t.orderIds || []).filter((id) => id !== existing.id) };
+    });
+
+    let truckId = currentDirect?.id;
+    if (currentDirect) {
+      nextTrucks = nextTrucks.map((t) =>
+        t.id === currentDirect.id
+          ? {
+              ...t,
+              name,
+              loadingDate: date,
+              truckType: t.truckType || 'Direct ship',
+              directShip: true,
+              orderIds: [existing.id]
+            }
+          : t
+      );
+    } else {
+      truckId = `truck-${Date.now()}`;
+      const created: Truck = {
+        id: truckId,
+        name,
+        dateCreated: new Date().toISOString(),
+        status: 'pending',
+        orderIds: [existing.id],
+        loadingDate: date,
+        truckType: 'Direct ship',
+        notes: 'Direct ship — vendor to customer',
+        directShip: true,
+        owner: existing.owner
+      };
+      nextTrucks = [created, ...nextTrucks];
     }
-    await batch.commit();
-  } catch (error: any) {
-    console.error('Error updating direct ship on Firestore:', error);
-    activateLocalFallback(error.message || 'Firestore update failed');
+
+    const updatedOrder: CustomerOrder = {
+      ...existing,
+      directShip: true,
+      directShipDate: date,
+      truckId
+    };
+    saveLocalOrders(orders.map((o) => (o.id === existing.id ? updatedOrder : o)));
+    saveLocalTrucks(nextTrucks);
+
+    if (!fallbackActive) {
+      try {
+        const batch = writeBatch(db);
+        batch.set(
+          orderDoc(tenantId, existing.id),
+          { directShip: true, directShipDate: date, truckId },
+          { merge: true }
+        );
+        if (currentDirect) {
+          batch.set(
+            truckDoc(tenantId, currentDirect.id),
+            {
+              name,
+              loadingDate: date,
+              truckType: currentDirect.truckType || 'Direct ship',
+              directShip: true,
+              orderIds: [existing.id]
+            },
+            { merge: true }
+          );
+        } else {
+          const created = nextTrucks.find((t) => t.id === truckId)!;
+          batch.set(truckDoc(tenantId, truckId!), {
+            name: created.name,
+            carrier: '',
+            truckType: 'Direct ship',
+            notes: created.notes || '',
+            loadingDate: date,
+            owner: created.owner || '',
+            dateCreated: created.dateCreated,
+            status: 'pending',
+            orderIds: [existing.id],
+            directShip: true
+          });
+        }
+        for (const truck of otherTrucks) {
+          batch.update(truckDoc(tenantId, truck.id), {
+            orderIds: (truck.orderIds || []).filter((id) => id !== existing.id)
+          });
+        }
+        await batch.commit();
+      } catch (error: any) {
+        console.error('Error updating direct ship on Firestore:', error);
+        activateLocalFallback(error.message || 'Firestore update failed');
+      }
+    }
+    return truckId || null;
   }
+
+  const hosts = trucks.filter(
+    (t) => t.directShip && (t.id === existing.truckId || (t.orderIds || []).includes(existing.id))
+  );
+  const hostIds = new Set(hosts.map((t) => t.id));
+  const nextTrucks = trucks.flatMap((t) => {
+    if (!hostIds.has(t.id)) return [t];
+    const orderIds = (t.orderIds || []).filter((id) => id !== existing.id);
+    if (orderIds.length === 0) return [];
+    return [{ ...t, orderIds }];
+  });
+  const updatedOrder: CustomerOrder = {
+    ...existing,
+    directShip: undefined,
+    directShipDate: undefined,
+    truckId: hostIds.has(existing.truckId || '') ? null : existing.truckId
+  };
+  saveLocalOrders(orders.map((o) => (o.id === existing.id ? updatedOrder : o)));
+  saveLocalTrucks(nextTrucks);
+
+  if (!fallbackActive) {
+    try {
+      const batch = writeBatch(db);
+      batch.set(
+        orderDoc(tenantId, existing.id),
+        {
+          directShip: null,
+          directShipDate: null,
+          truckId: updatedOrder.truckId || null
+        },
+        { merge: true }
+      );
+      for (const truck of hosts) {
+        const orderIds = (truck.orderIds || []).filter((id) => id !== existing.id);
+        if (orderIds.length === 0) batch.delete(truckDoc(tenantId, truck.id));
+        else batch.update(truckDoc(tenantId, truck.id), { orderIds });
+      }
+      await batch.commit();
+    } catch (error: any) {
+      console.error('Error clearing direct ship on Firestore:', error);
+      activateLocalFallback(error.message || 'Firestore update failed');
+    }
+  }
+  return null;
 }
 
 export async function deleteCustomerOrder(orderId: string): Promise<void> {
@@ -1225,6 +1352,7 @@ export async function addTruck(truck: Omit<Truck, 'id' | 'dateCreated' | 'status
       notes: truck.notes || '',
       loadingDate: truck.loadingDate || '',
       owner: truck.owner || '',
+      ...(truck.directShip ? { directShip: true } : {}),
       dateCreated,
       status: 'pending',
       orderIds: truck.orderIds

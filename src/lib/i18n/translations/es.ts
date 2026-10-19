@@ -249,6 +249,11 @@ const es: TranslationDict = {
     directShipToggleHint:
       'El proveedor envía directo al cliente. Oculto para supervisores, cargadores y personal de patio.',
     directShipRemovingFromTruck: 'Al guardar se quitará este pedido del camión.',
+    directShipDateLabel: 'Fecha de envío',
+    directShipDateHint:
+      'Aparece en Camiones por día en esta fecha. Solo propietarios y administradores lo ven.',
+    directShipDateSave: 'Guardar y abrir camión',
+    directShipDateCancel: 'Cancelar',
     stagingLocation: 'Ubicación de preparación',
     stagingHint: 'Dónde se prepara este pedido en el patio',
     saving: 'GUARDANDO…',

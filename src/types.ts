@@ -166,6 +166,8 @@ export interface CustomerOrder {
   owner?: string; // Sales rep this order/invoice is credited to
   /** Vendor ships straight to customer — hidden from yard roles (owner/admin only). */
   directShip?: boolean;
+  /** Calendar day (YYYY-MM-DD) this direct ship shows on Trucks by day. */
+  directShipDate?: string;
   /** How this order was created. */
   source?: 'upload' | 'manual' | 'retail' | 'converted';
   /** Customer-provided bill of lading (PDF or photo) stored in Firebase Storage. */
@@ -341,6 +343,8 @@ export interface Truck {
   owner?: string; // Sales rep this truck is credited to
 
   loadingDate?: string; // The date when the truck is scheduled to be loaded
+  /** Vendor-to-customer truck. Hidden from loaders and other non-admin roles. */
+  directShip?: boolean;
   /** ISO time of first plant loaded on this truck (admin load-duration timer). */
   loadingStartedAt?: string;
   /** ISO time of most recent plant load increase (last plant when truck is 100%). */

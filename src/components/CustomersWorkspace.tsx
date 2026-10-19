@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { syncQboPayments } from '../lib/quickbooks';
+import { pushPaymentToQuickbooks, syncQboPayments } from '../lib/quickbooks';
 import {
   Upload,
   Users,
@@ -26,6 +26,7 @@ import {
 import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, repairCombinedCustomerAddresses, updateCustomer, withSplitCustomerAddresses } from '../lib/customers';
 import {
     listAllDocuments,
+    markCustomerInvoicePaid,
     subscribeToCustomerDocuments,
     subscribeToDocuments,
     updateCustomerDocument,
@@ -48,7 +49,7 @@ import {
   buildCustomerStatementModel,
   defaultCustomerStatementSubject
 } from '../lib/customerStatementEmail';
-import { formatPaymentRecord } from './MarkPaidModal';
+import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { MergeCustomersModal } from './MergeCustomersModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
@@ -153,6 +154,8 @@ export function CustomersWorkspace({
   const [invoiceCustomerId, setInvoiceCustomerId] = useState<string>('all');
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [allDocuments, setAllDocuments] = useState<CustomerDocument[]>([]);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
+  const [markingPaidInvoices, setMarkingPaidInvoices] = useState<CustomerDocument[] | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -230,9 +233,39 @@ export function CustomersWorkspace({
     return t('customers.estimate');
   }
 
+  function invoiceCustomerKey(doc: CustomerDocument): string {
+    return (doc.customerId || doc.customerName || '').trim().toLowerCase();
+  }
+
+  function isPayableInvoice(doc: CustomerDocument): boolean {
+    return doc.type === 'invoice' && doc.paymentStatus !== 'paid';
+  }
+
+  function toggleInvoiceSelection(id: string) {
+    setSelectedInvoiceIds((prev) =>
+      prev.includes(id) ? prev.filter((row) => row !== id) : [...prev, id]
+    );
+  }
+
+  function setVisibleInvoiceSelection(docs: CustomerDocument[], on: boolean) {
+    const ids = docs.filter(isPayableInvoice).map((doc) => doc.id);
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return [...next];
+    });
+  }
+
   useEffect(() => {
     return subscribeToDocuments(setAllDocuments);
   }, []);
+
+  useEffect(() => {
+    setSelectedInvoiceIds([]);
+  }, [selectedCustomerId, workspaceView]);
 
   useEffect(() => {
     if (!tenantId || !permissions.canUseQuickbooks) return;
@@ -562,6 +595,58 @@ export function CustomersWorkspace({
     }
     return { total, outstanding, overdue, count: filteredInvoices.length };
   }, [filteredInvoices]);
+
+  const selectedInvoices = useMemo(() => {
+    const byId = new Map<string, CustomerDocument>();
+    for (const doc of [...allDocuments, ...customerDocuments]) {
+      if (selectedInvoiceIds.includes(doc.id) && isPayableInvoice(doc)) byId.set(doc.id, doc);
+    }
+    return [...byId.values()];
+  }, [allDocuments, customerDocuments, selectedInvoiceIds]);
+
+  function beginMarkSelectedPaid() {
+    if (selectedInvoices.length === 0) return;
+    if (new Set(selectedInvoices.map(invoiceCustomerKey)).size > 1) {
+      setMessage(t('customers.markPaidSameCustomer'));
+      return;
+    }
+    setMessage(null);
+    setMarkingPaidInvoices(selectedInvoices);
+  }
+
+  function renderInvoicePayBar() {
+    if (!permissions.canViewInvoices || selectedInvoices.length === 0) return null;
+    const total = selectedInvoices.reduce((sum, doc) => sum + (doc.grandTotal || 0), 0);
+    return (
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2">
+        <p className="text-[11px] font-bold text-ink-800">
+          {t('customers.selectInvoicesToPay')}
+          {` · ${selectedInvoices.length} · ${formatMoney(total)}`}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setSelectedInvoiceIds([])}
+            className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700"
+          >
+            {t('customers.clearInvoiceSelection')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={beginMarkSelectedPaid}
+            className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white disabled:opacity-50"
+          >
+            {t('customers.markSelectedPaid', {
+              n: selectedInvoices.length,
+              amount: formatMoney(total)
+            })}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!initialSelectedCustomerId) return;
@@ -1348,10 +1433,36 @@ export function CustomersWorkspace({
                 <p className="text-xs text-gray-500 mb-3">{t('customers.noDocsFiltered')}</p>
               ) : (
                 <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 mb-3">
+                  {renderInvoicePayBar()}
+                  {filteredCustomerDocuments.some(isPayableInvoice) && (
+                    <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={filteredCustomerDocuments
+                          .filter(isPayableInvoice)
+                          .every((doc) => selectedInvoiceIds.includes(doc.id))}
+                        onChange={(e) =>
+                          setVisibleInvoiceSelection(filteredCustomerDocuments, e.target.checked)
+                        }
+                        className="h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
+                      />
+                      {t('customers.selectUnpaid')}
+                    </label>
+                  )}
                   {filteredCustomerDocuments.map((doc) => (
                     <div key={doc.id} className="border border-gray-100 rounded-xl p-3">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="flex items-start gap-2 min-w-0">
+                          {isPayableInvoice(doc) && (
+                            <input
+                              type="checkbox"
+                              checked={selectedInvoiceIds.includes(doc.id)}
+                              onChange={() => toggleInvoiceSelection(doc.id)}
+                              className="mt-1 h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
+                              aria-label={t('customers.selectInvoice')}
+                            />
+                          )}
+                          <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-900 truncate">{doc.documentNumber}</p>
                           <p className="text-xs text-gray-500">
                             {new Date(doc.documentDate).toLocaleDateString()} • ${doc.grandTotal.toFixed(2)}
@@ -1364,6 +1475,7 @@ export function CustomersWorkspace({
                               ? ` • ${t('customers.balance')}`
                               : ''}
                           </p>
+                          </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span
@@ -1589,6 +1701,11 @@ export function CustomersWorkspace({
 
             {workspaceView === 'invoices' ? (
               <div className="space-y-4">
+                {message && (
+                  <p className="text-xs font-medium text-ink-800 bg-ink-50 border border-ink-100 rounded-lg px-3 py-2">
+                    {message}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {invoicePeriodLabels.map(([id, label]) => (
                     <button
@@ -1668,6 +1785,20 @@ export function CustomersWorkspace({
                 </div>
 
                 <div className="space-y-2 max-h-[480px] overflow-y-auto">
+                  {renderInvoicePayBar()}
+                  {filteredInvoices.some((doc) => doc.paymentStatus !== 'paid') && (
+                    <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={filteredInvoices
+                          .filter((doc) => doc.paymentStatus !== 'paid')
+                          .every((doc) => selectedInvoiceIds.includes(doc.id))}
+                        onChange={(e) => setVisibleInvoiceSelection(filteredInvoices, e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
+                      />
+                      {t('customers.selectUnpaid')}
+                    </label>
+                  )}
                   {filteredInvoices.length === 0 ? (
                     <p className="text-xs text-gray-500 py-6 text-center">
                       {t('customers.noInvoices')}
@@ -1676,10 +1807,24 @@ export function CustomersWorkspace({
                     filteredInvoices.map((doc) => (
                       <div
                         key={doc.id}
-                        className="border border-gray-100 rounded-xl p-3 hover:border-ink-200 hover:bg-ink-50/40 transition"
+                        className={`border rounded-xl p-3 transition ${
+                          selectedInvoiceIds.includes(doc.id)
+                            ? 'border-ink-300 bg-ink-50/40'
+                            : 'border-gray-100 hover:border-ink-200 hover:bg-ink-50/40'
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
+                          <div className="flex items-start gap-2 min-w-0">
+                            {doc.paymentStatus !== 'paid' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedInvoiceIds.includes(doc.id)}
+                                onChange={() => toggleInvoiceSelection(doc.id)}
+                                className="mt-1 h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
+                                aria-label={t('customers.selectInvoice')}
+                              />
+                            )}
+                            <div className="min-w-0">
                             <p className="text-sm font-bold text-gray-900 truncate">
                               {doc.documentNumber}
                               <span className="font-semibold text-gray-500"> · {doc.customerName}</span>
@@ -1689,6 +1834,7 @@ export function CustomersWorkspace({
                               {(doc.grandTotal || 0).toFixed(2)}
                               {doc.orderNumber ? ` • ${t('customers.orderNum')}${doc.orderNumber}` : ''}
                             </p>
+                            </div>
                           </div>
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             {doc.paymentStatus === 'paid' ? (
@@ -1984,6 +2130,69 @@ export function CustomersWorkspace({
             )}
           </div>
         </div>
+      )}
+      {markingPaidInvoices && markingPaidInvoices.length > 0 && (
+        <MarkPaidModal
+          title={
+            markingPaidInvoices.length > 1
+              ? t('customers.markSelectedPaidTitle', { n: markingPaidInvoices.length })
+              : t('invoice.markAsPaid')
+          }
+          subtitle={
+            markingPaidInvoices.length > 1
+              ? `${markingPaidInvoices[0].customerName} · ${markingPaidInvoices
+                  .map((doc) => doc.documentNumber)
+                  .join(', ')}`
+              : `${markingPaidInvoices[0].documentNumber} · ${markingPaidInvoices[0].customerName}`
+          }
+          amountLabel={formatMoney(
+            markingPaidInvoices.reduce((sum, doc) => sum + (doc.grandTotal || 0), 0)
+          )}
+          busy={busy}
+          onCancel={() => setMarkingPaidInvoices(null)}
+          onConfirm={async (payment) => {
+            const targets = markingPaidInvoices;
+            setBusy(true);
+            try {
+              const qboErrors: string[] = [];
+              for (const doc of targets) {
+                await markCustomerInvoicePaid(doc, payment);
+                if (tenantId && permissions.canUseQuickbooks) {
+                  try {
+                    await pushPaymentToQuickbooks({ tenantId, documentId: doc.id });
+                  } catch (err: unknown) {
+                    qboErrors.push(err instanceof Error ? err.message : t('invoice.qbPaymentSyncFailed'));
+                  }
+                }
+              }
+              await logAuditEvent({
+                action: 'invoice.marked_paid',
+                summary: `Marked ${targets.map((doc) => doc.documentNumber).join(', ')} paid via ${payment.method}${
+                  payment.reference ? ` (${payment.reference})` : ''
+                }`,
+                meta: {
+                  documentIds: targets.map((doc) => doc.id),
+                  method: payment.method,
+                  reference: payment.reference || null
+                }
+              });
+              setMarkingPaidInvoices(null);
+              setSelectedInvoiceIds((prev) => prev.filter((id) => !targets.some((doc) => doc.id === id)));
+              setMessage(
+                qboErrors.length > 0
+                  ? qboErrors[0]
+                  : t('customers.markSelectedPaidDone', {
+                      n: targets.length,
+                      ref: formatPaymentRecord(t, payment.method, payment.reference)
+                    })
+              );
+            } catch (err: unknown) {
+              setMessage(err instanceof Error ? err.message : t('invoice.markPaidFailed'));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
       )}
       {showMergeModal && selectedCustomer && (
         <MergeCustomersModal

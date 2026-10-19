@@ -233,6 +233,7 @@ const en = {
     createEstimate: 'Create Estimate',
     createInvoice: 'Create Invoice',
     generateBol: 'Generate Bill of Lading',
+    useCustomerBol: 'Use customer BOL',
     resetCounts: 'Reset counts?',
     loadAllPlants: 'Load all plants?',
     resetTruck: 'Reset Truck',

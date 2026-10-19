@@ -239,6 +239,7 @@ const es: TranslationDict = {
     createEstimate: 'Crear presupuesto',
     createInvoice: 'Crear factura',
     generateBol: 'Generar conocimiento de embarque',
+    useCustomerBol: 'Usar BOL del cliente',
     resetCounts: '¿Restablecer conteos?',
     loadAllPlants: '¿Cargar todas las plantas?',
     resetTruck: 'Restablecer camión',

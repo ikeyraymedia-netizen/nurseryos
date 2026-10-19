@@ -747,6 +747,19 @@ const extra = {
     customerBol: 'BOL del cliente',
     customerBolHint:
       'Suba el conocimiento de embarque que envió el cliente (PDF o foto). Se guarda en el pedido.',
+    useCustomerBol: 'Usar BOL del cliente',
+    useCustomerBolHint:
+      'Este cliente envió su propio conocimiento de embarque. Entregue este archivo al conductor. No use el BOL generado.',
+    openCustomerBol: 'Abrir BOL del cliente',
+    downloadGenerated: 'Descargar el BOL generado',
+    showGeneratedBol: 'Ver BOL generado',
+    backToCustomerBol: 'Volver al BOL del cliente',
+    generatedBackupHint:
+      'Este es el BOL de NurseryOS. Use el BOL del cliente salvo que solo necesite una copia de respaldo.',
+    customerBolPreview: 'Conocimiento de embarque del cliente',
+    customerBolOtherStop:
+      'La parada {{n}} ({{customer}}) tiene un BOL del cliente. Use ese archivo para esa parada.',
+    customerBolOtherStopAction: 'Abrir BOL del cliente',
     customerBolUpload: 'Subir BOL del cliente',
     customerBolUploading: 'Subiendo…',
     customerBolReplace: 'Reemplazar',

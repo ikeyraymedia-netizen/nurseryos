@@ -1437,6 +1437,16 @@ const extra = {
     melioProcessing: 'Melio payment to vendor bank ••••{{last4}}',
     melioNeedsBank:
       'Add this vendor’s routing and account numbers in Vendors before paying via Melio.',
+    melioPayTitle: 'Pay via Melio',
+    melioPayTo: '{{vendor}} · ••••{{last4}}',
+    melioBillAmount: 'Bill amount',
+    melioFee: 'Melio fee',
+    melioTotalDebit: 'Total debit',
+    melioDeliveryEstimate: 'Estimated delivery',
+    melioConfirmPay: 'Pay via Melio',
+    melioQuoteLoading: 'Getting the Melio fee and delivery date…',
+    melioSonarMissing:
+      'Sonar is not set yet. Add MELIO_SONAR_PUBLISHABLE_KEY from the Melio dashboard before the live review.',
     selectSameVendor: 'Selected bills must be for the same vendor.',
     pushToQb: 'Push to QuickBooks',
     openInQb: 'Open in QuickBooks',

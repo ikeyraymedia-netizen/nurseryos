@@ -77,6 +77,7 @@ import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { billsInSamePayment, CheckPaymentModal } from './CheckPaymentModal';
 import { BillEditModal } from './BillEditModal';
+import { MelioPayModal } from './MelioPayModal';
 import { PoEditModal } from './PoEditModal';
 import {
   fetchStripeTreasuryReady,
@@ -247,6 +248,7 @@ export function PurchasingWorkspace({
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [stripeTreasuryReady, setStripeTreasuryReady] = useState(false);
   const [melioReady, setMelioReady] = useState(false);
+  const [melioPayBills, setMelioPayBills] = useState<VendorBill[] | null>(null);
 
   // PO form
   const [showPoForm, setShowPoForm] = useState(false);
@@ -1125,30 +1127,8 @@ export function PurchasingWorkspace({
       setError(t('purchasing.melioNeedsBank'));
       return;
     }
-    const amount = money(targetBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0));
-    const last4 = vendor?.bankAccountLast4 || '****';
-    const ok = window.confirm(
-      targetBills.length > 1
-        ? t('purchasing.melioPayConfirmMulti', {
-            amount,
-            n: targetBills.length,
-            vendor: first.vendorName,
-            last4
-          })
-        : t('purchasing.melioPayConfirm', { amount, vendor: first.vendorName, last4 })
-    );
-    if (!ok) return;
-    const result = await payVendorBillMelio({
-      tenantId,
-      billIds: targetBills.map((b) => b.id)
-    });
-    setSelectedBillIds([]);
-    const sentLast4 = result.last4 || last4;
-    setStatus(
-      targetBills.length > 1
-        ? t('purchasing.melioPaymentSentMulti', { n: targetBills.length, last4: sentLast4 })
-        : t('purchasing.melioPaymentSent', { last4: sentLast4 })
-    );
+    setMelioPayBills(targetBills);
+    return;
   }
 
   async function refreshBillAch(bill: VendorBill) {
@@ -1260,7 +1240,7 @@ export function PurchasingWorkspace({
             <button
               type="button"
               disabled={busy || unpaidSelected.length === 0}
-              onClick={() => void run(async () => payBillsMelio(unpaidSelected))}
+              onClick={() => void payBillsMelio(unpaidSelected)}
               className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-indigo-700 text-white disabled:opacity-50"
             >
               {t('purchasing.paySelectedMelio', {
@@ -1469,7 +1449,7 @@ export function PurchasingWorkspace({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void run(async () => payBillsMelio([bill]))}
+                onClick={() => void payBillsMelio([bill])}
                 className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-indigo-700 text-white"
               >
                 {t('purchasing.payViaMelio')}
@@ -3075,6 +3055,42 @@ export function PurchasingWorkspace({
                 }
               : undefined
           }
+        />
+      )}
+
+      {melioPayBills && melioPayBills.length > 0 && (
+        <MelioPayModal
+          tenantId={tenantId}
+          bills={melioPayBills}
+          busy={busy}
+          onCancel={() => {
+            if (!busy) setMelioPayBills(null);
+          }}
+          onConfirm={async (sonarToken) => {
+            const targets = melioPayBills;
+            setBusy(true);
+            setError(null);
+            try {
+              const result = await payVendorBillMelio({
+                tenantId,
+                billIds: targets.map((b) => b.id),
+                sonarToken
+              });
+              setSelectedBillIds([]);
+              setMelioPayBills(null);
+              const sentLast4 = result.last4 || '****';
+              setStatus(
+                targets.length > 1
+                  ? t('purchasing.melioPaymentSentMulti', {
+                      n: targets.length,
+                      last4: sentLast4
+                    })
+                  : t('purchasing.melioPaymentSent', { last4: sentLast4 })
+              );
+            } finally {
+              setBusy(false);
+            }
+          }}
         />
       )}
 

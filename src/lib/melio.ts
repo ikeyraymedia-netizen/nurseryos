@@ -79,6 +79,7 @@ export async function fetchMelioConfig(): Promise<{
   melio: boolean;
   firebaseAdmin: boolean;
   environment: 'sandbox' | 'production';
+  sonarPublishableKey: string | null;
 }> {
   const res = await fetch('/api/melio/config-status');
   if (!res.ok) throw new Error(await readApiError(res));
@@ -95,12 +96,19 @@ export async function fetchMelioStatus(tenantId: string): Promise<MelioStatus> {
 
 /** For Purchasing bill pay — available to office (not only admin). */
 export async function fetchMelioReady(tenantId: string): Promise<boolean> {
+  const ctx = await fetchMelioPayContext(tenantId);
+  return ctx.ready;
+}
+
+export async function fetchMelioPayContext(
+  tenantId: string
+): Promise<{ ready: boolean; entityId: string | null }> {
   const res = await fetch(`/api/melio/ready?tenantId=${encodeURIComponent(tenantId)}`, {
     headers: await authHeaders()
   });
-  if (!res.ok) return false;
-  const data = (await res.json()) as { ready?: boolean };
-  return Boolean(data.ready);
+  if (!res.ok) return { ready: false, entityId: null };
+  const data = (await res.json()) as { ready?: boolean; entityId?: string | null };
+  return { ready: Boolean(data.ready), entityId: data.entityId || null };
 }
 
 export function linkMelioEntity(tenantId: string, entityId: string) {
@@ -111,24 +119,31 @@ export function linkMelioEntity(tenantId: string, entityId: string) {
 }
 
 /** Caller must show Melio's terms disclosure on the same action that calls this. */
-export function createMelioEntity(tenantId: string, entity: MelioEntityInput) {
+export function createMelioEntity(
+  tenantId: string,
+  entity: MelioEntityInput,
+  sonarToken?: string
+) {
   return postJson<{ entityId: string; kycStatus: string | null }>('/api/melio/create-entity', {
     tenantId,
     entity,
-    termsAccepted: true
+    termsAccepted: true,
+    ...(sonarToken ? { sonarToken } : {})
   });
 }
 
-export function createMelioFundingLink(tenantId: string) {
+export function createMelioFundingLink(tenantId: string, sonarToken?: string) {
   return postJson<{ url: string; expiration: string | null }>('/api/melio/funding-link', {
-    tenantId
+    tenantId,
+    ...(sonarToken ? { sonarToken } : {})
   });
 }
 
-export function createMelioVerifyLink(tenantId: string, accountId: string) {
+export function createMelioVerifyLink(tenantId: string, accountId: string, sonarToken?: string) {
   return postJson<{ url: string; expiration: string | null }>('/api/melio/verify-link', {
     tenantId,
-    accountId
+    accountId,
+    ...(sonarToken ? { sonarToken } : {})
   });
 }
 
@@ -147,7 +162,30 @@ export function disconnectMelio(tenantId: string) {
   return postJson<{ ok: boolean }>('/api/melio/disconnect', { tenantId });
 }
 
-export function payVendorBillMelio(params: { tenantId: string; billIds: string[] }) {
+export interface MelioPayQuote {
+  amountCents: number;
+  feeCents: number;
+  totalCents: number;
+  deliveryDate: string | null;
+  deliveryPreference: string;
+  vendorName: string;
+  last4: string | null;
+  billCount: number;
+}
+
+export function quoteVendorBillMelio(params: {
+  tenantId: string;
+  billIds: string[];
+  sonarToken?: string;
+}) {
+  return postJson<MelioPayQuote>('/api/melio/quote-bill', params);
+}
+
+export function payVendorBillMelio(params: {
+  tenantId: string;
+  billIds: string[];
+  sonarToken?: string;
+}) {
   return postJson<{
     paymentId: string;
     status: string;

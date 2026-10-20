@@ -104,6 +104,7 @@ async function melioFetch<T>(
     entityId?: string | null;
     body?: unknown;
     idempotencyKey?: string;
+    sonarToken?: string | null;
   } = {}
 ): Promise<T> {
   const headers: Record<string, string> = {
@@ -111,6 +112,7 @@ async function melioFetch<T>(
     Accept: 'application/json'
   };
   if (options.entityId) headers['Melio-Entity-Id'] = options.entityId;
+  if (options.sonarToken) headers['Melio-Sonar-Token'] = options.sonarToken;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
 
@@ -362,6 +364,7 @@ async function ensureVendorPayeeAccount(params: {
   accountType: 'checking' | 'savings';
   existingAccountId?: string | null;
   existingFingerprint?: string | null;
+  sonarToken?: string | null;
 }): Promise<string> {
   const fingerprint = crypto
     .createHash('sha256')
@@ -392,7 +395,8 @@ async function ensureVendorPayeeAccount(params: {
       method: 'POST',
       entityId: params.entityId,
       body: { ...head, externalId, bankAccount: bank },
-      idempotencyKey: `nos-payee-${fingerprint}`
+      idempotencyKey: `nos-payee-${fingerprint}`,
+      sonarToken: params.sonarToken
     })
   );
   if (!created?.id) {
@@ -409,6 +413,150 @@ async function ensureVendorPayeeAccount(params: {
       { merge: true }
     );
   return created.id;
+}
+
+function sonarTokenFrom(req: Request): string | undefined {
+  const token = String(req.body?.sonarToken || '').trim();
+  return token || undefined;
+}
+
+function asList<T>(json: any, key: string): T[] {
+  const raw = unwrap<any>(json);
+  if (Array.isArray(raw)) return raw as T[];
+  if (Array.isArray(raw?.[key])) return raw[key] as T[];
+  if (Array.isArray(raw?.items)) return raw.items as T[];
+  return [];
+}
+
+type PreparedMelioPay = {
+  entityId: string;
+  fundingAccountId: string;
+  bills: Array<{ id: string; data: Record<string, any> }>;
+  amountCents: number;
+  receivingAccountId: string;
+  last4: string;
+  vendorName: string;
+};
+
+async function prepareMelioPayment(
+  tenantId: string,
+  billIds: string[],
+  sonarToken?: string
+): Promise<PreparedMelioPay> {
+  const integration = await loadIntegration(tenantId);
+  if (!integration?.entityId || !integration.fundingAccountId) {
+    throw Object.assign(
+      new Error('Connect Melio and choose a funding account in Team before paying bills.'),
+      { status: 400 }
+    );
+  }
+  const funding = unwrap<MelioAccount>(
+    await melioFetch<any>(`/accounts/${encodeURIComponent(integration.fundingAccountId)}`, {
+      entityId: integration.entityId
+    })
+  );
+  if (funding?.isVerified === false) {
+    throw Object.assign(
+      new Error('The Melio funding account is not verified. Finish verification in Team.'),
+      { status: 400 }
+    );
+  }
+
+  const uniqueIds = [...new Set(billIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    throw Object.assign(new Error('billIds is required.'), { status: 400 });
+  }
+  const snaps = await Promise.all(
+    uniqueIds.map((id) => getAdminDb().doc(`tenants/${tenantId}/vendorBills/${id}`).get())
+  );
+  const bills = snaps
+    .filter((snap) => snap.exists)
+    .map((snap) => ({ id: snap.id, data: (snap.data() || {}) as Record<string, any> }));
+  if (bills.length !== uniqueIds.length) {
+    throw Object.assign(new Error('One or more bills were not found.'), { status: 404 });
+  }
+  const vendorIds = new Set(bills.map((b) => b.data.vendorId));
+  if (vendorIds.size !== 1) {
+    throw Object.assign(new Error('Selected bills must be for the same vendor.'), { status: 400 });
+  }
+  for (const bill of bills) {
+    if (bill.data.status === 'paid' || bill.data.status === 'void') {
+      throw Object.assign(new Error(`Bill ${bill.data.billNumber || bill.id} is already closed.`), {
+        status: 400
+      });
+    }
+    if (bill.data.status === 'payment_pending' || bill.data.melioPaymentId) {
+      throw Object.assign(
+        new Error(`Bill ${bill.data.billNumber || bill.id} already has a Melio payment in progress.`),
+        { status: 400 }
+      );
+    }
+  }
+  const amount = Number(bills.reduce((sum, b) => sum + (Number(b.data.grandTotal) || 0), 0).toFixed(2));
+  if (!(amount > 0)) {
+    throw Object.assign(new Error('Bill total must be greater than zero.'), { status: 400 });
+  }
+
+  const vendorId = String(bills[0].data.vendorId || '');
+  const vendorSnap = await getAdminDb().doc(`tenants/${tenantId}/vendors/${vendorId}`).get();
+  if (!vendorSnap.exists) {
+    throw Object.assign(new Error('Vendor not found.'), { status: 404 });
+  }
+  const vendor = (vendorSnap.data() || {}) as Record<string, any>;
+  const routing = String(vendor.bankRoutingNumber || '').replace(/\D/g, '');
+  const accountNumber = String(vendor.bankAccountNumber || '').replace(/\s/g, '');
+  if (routing.length !== 9 || accountNumber.length < 4) {
+    throw Object.assign(
+      new Error(
+        'Add the vendor’s bank routing and account numbers in Purchasing → Vendors before paying via Melio.'
+      ),
+      { status: 400 }
+    );
+  }
+  const vendorName = String(vendor.name || bills[0].data.vendorName || 'Vendor');
+  const email = String(vendor.contactEmail || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .find((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
+  if (!email) {
+    throw Object.assign(
+      new Error(
+        `Add an email for ${vendorName} in Purchasing → Vendors. Melio uses it to notify the vendor about the payment.`
+      ),
+      { status: 400 }
+    );
+  }
+  const last4 =
+    String(vendor.bankAccountLast4 || '').replace(/\D/g, '').slice(-4) ||
+    accountNumber.replace(/\D/g, '').slice(-4);
+
+  const receivingAccountId = await ensureVendorPayeeAccount({
+    tenantId,
+    entityId: integration.entityId,
+    vendorId,
+    vendorName,
+    holderName: String(vendor.bankAccountHolderName || vendor.contactName || '').trim(),
+    email,
+    routing,
+    accountNumber,
+    accountType:
+      String(vendor.bankAccountType || 'checking').toLowerCase() === 'savings'
+        ? 'savings'
+        : 'checking',
+    existingAccountId: vendor.melioPayeeAccountId,
+    existingFingerprint: vendor.melioPayeeFingerprint,
+    sonarToken
+  });
+
+  return {
+    entityId: integration.entityId,
+    fundingAccountId: integration.fundingAccountId,
+    bills,
+    amountCents: Math.round(amount * 100),
+    receivingAccountId,
+    last4,
+    vendorName
+  };
 }
 
 function verifyMelioSignature(rawBody: Buffer, signature: string): boolean {
@@ -501,7 +649,8 @@ export function registerMelioRoutes(app: Express) {
       melio: isMelioConfigured(),
       firebaseAdmin: isFirebaseAdminConfigured(),
       environment: melioEnvironment(),
-      baseUrl: melioBaseUrl()
+      baseUrl: melioBaseUrl(),
+      sonarPublishableKey: process.env.MELIO_SONAR_PUBLISHABLE_KEY?.trim() || null
     });
   });
 
@@ -593,7 +742,8 @@ export function registerMelioRoutes(app: Express) {
       res.json({
         ready:
           isMelioConfigured() &&
-          Boolean(integration?.entityId && integration?.fundingAccountId)
+          Boolean(integration?.entityId && integration?.fundingAccountId),
+        entityId: integration?.entityId || null
       });
     })
   );
@@ -693,7 +843,8 @@ export function registerMelioRoutes(app: Express) {
         await melioFetch<any>('/entities', {
           method: 'POST',
           body,
-          idempotencyKey: `nos-entity-${tenantId}-${Date.now()}`
+          idempotencyKey: `nos-entity-${tenantId}-${Date.now()}`,
+          sonarToken: sonarTokenFrom(req)
         })
       );
       const integration = await saveEntityLink(tenantId, uid, entity, {
@@ -723,7 +874,8 @@ export function registerMelioRoutes(app: Express) {
           method: 'POST',
           entityId: integration.entityId,
           body: { type },
-          idempotencyKey: `nos-link-${tenantId}-${Date.now()}`
+          idempotencyKey: `nos-link-${tenantId}-${Date.now()}`,
+          sonarToken: sonarTokenFrom(req)
         })
       );
       if (!link?.url) {
@@ -752,7 +904,8 @@ export function registerMelioRoutes(app: Express) {
           method: 'POST',
           entityId: integration.entityId,
           body: {},
-          idempotencyKey: `nos-verify-${accountId}-${Date.now()}`
+          idempotencyKey: `nos-verify-${accountId}-${Date.now()}`,
+          sonarToken: sonarTokenFrom(req)
         })
       );
       if (!link?.url) {
@@ -846,6 +999,68 @@ export function registerMelioRoutes(app: Express) {
     })
   );
 
+  app.post('/api/melio/quote-bill', (req, res) =>
+    withAuth(req, res, async (uid) => {
+      const tenantId = tenantIdFrom(req);
+      const billIdsRaw = Array.isArray(req.body?.billIds) ? req.body.billIds : [];
+      const billIds = [
+        ...new Set(billIdsRaw.map((id: unknown) => String(id || '').trim()).filter(Boolean))
+      ];
+      if (!tenantId || billIds.length === 0) {
+        res.status(400).json({ error: 'tenantId and billIds are required.' });
+        return;
+      }
+      await assertCanPayVendorBills(tenantId, uid);
+      const prepared = await prepareMelioPayment(tenantId, billIds, sonarTokenFrom(req));
+      const deductionDate = todayIsoDate();
+      const [feeJson, etaJson] = await Promise.all([
+        melioFetch<any>('/tools/fee-calculator', {
+          method: 'POST',
+          entityId: prepared.entityId,
+          body: {
+            originatingAccountId: prepared.fundingAccountId,
+            receivingAccountId: prepared.receivingAccountId,
+            deliveryPreference: 'standard-ach',
+            amount: prepared.amountCents,
+            currency: 'USD'
+          }
+        }),
+        melioFetch<any>('/tools/delivery-eta', {
+          method: 'POST',
+          entityId: prepared.entityId,
+          body: {
+            originatingAccountId: prepared.fundingAccountId,
+            receivingAccountId: prepared.receivingAccountId,
+            amount: prepared.amountCents,
+            deductionDate,
+            currency: 'USD'
+          }
+        })
+      ]);
+      const fees = asList<{ amount?: number; chargeTo?: string }>(feeJson, 'fees');
+      const feeCents = fees.reduce((sum, fee) => {
+        if (fee.chargeTo && fee.chargeTo !== 'originator') return sum;
+        const n = Number(fee.amount);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+      const eta = unwrap<any>(etaJson);
+      const estimates = Array.isArray(eta?.estimates) ? eta.estimates : [];
+      const standard = estimates.find(
+        (row: { deliveryPreference?: string }) => row.deliveryPreference === 'standard-ach'
+      );
+      res.json({
+        amountCents: prepared.amountCents,
+        feeCents,
+        totalCents: prepared.amountCents + feeCents,
+        deliveryDate: standard?.deliveryDate || null,
+        deliveryPreference: 'standard-ach',
+        vendorName: prepared.vendorName,
+        last4: prepared.last4 || null,
+        billCount: prepared.bills.length
+      });
+    })
+  );
+
   app.post('/api/melio/pay-bill', (req, res) =>
     withAuth(req, res, async (uid) => {
       const tenantId = tenantIdFrom(req);
@@ -863,133 +1078,11 @@ export function registerMelioRoutes(app: Express) {
         return;
       }
       await assertCanPayVendorBills(tenantId, uid);
-
-      const integration = await loadIntegration(tenantId);
-      if (!integration?.entityId || !integration.fundingAccountId) {
-        throw Object.assign(
-          new Error('Finish Melio setup in Team settings (business and funding bank) first.'),
-          { status: 400 }
-        );
-      }
-
-      type BillRow = {
-        id: string;
-        status?: string;
-        vendorId?: string;
-        vendorName?: string;
-        billNumber?: string;
-        grandTotal?: number;
-        stripeOutboundPaymentId?: string;
-        melioPaymentId?: string;
-      };
-      const bills: BillRow[] = [];
-      for (const billId of billIds) {
-        const snap = await getAdminDb().doc(`tenants/${tenantId}/vendorBills/${billId}`).get();
-        if (!snap.exists) {
-          throw Object.assign(new Error(`Vendor bill not found (${billId}).`), { status: 404 });
-        }
-        bills.push({ id: billId, ...(snap.data() as Omit<BillRow, 'id'>) });
-      }
-      for (const bill of bills) {
-        if (bill.status === 'paid') {
-          throw Object.assign(
-            new Error(`Bill ${bill.billNumber || bill.id} is already marked paid.`),
-            { status: 400 }
-          );
-        }
-        if (bill.status === 'payment_pending') {
-          throw Object.assign(
-            new Error(
-              `Bill ${bill.billNumber || bill.id} already has a payment in progress. Refresh status instead.`
-            ),
-            { status: 400 }
-          );
-        }
-      }
-
-      const vendorIds = [
-        ...new Set(bills.map((b) => String(b.vendorId || '').trim()).filter(Boolean))
-      ];
-      if (vendorIds.length !== 1) {
-        throw Object.assign(new Error('All selected bills must be for the same vendor.'), {
-          status: 400
-        });
-      }
-      const amount = bills.reduce((sum, bill) => {
-        const n = Number(bill.grandTotal || 0);
-        return sum + (Number.isFinite(n) ? n : 0);
-      }, 0);
-      const amountCents = Math.round(amount * 100);
-      if (!Number.isFinite(amountCents) || amountCents < 1) {
-        throw Object.assign(new Error('Combined bill total must be greater than zero.'), {
-          status: 400
-        });
-      }
-
-      const vendorId = vendorIds[0];
-      const vendorSnap = await getAdminDb().doc(`tenants/${tenantId}/vendors/${vendorId}`).get();
-      if (!vendorSnap.exists) {
-        throw Object.assign(new Error('Vendor not found.'), { status: 404 });
-      }
-      const vendor = vendorSnap.data() as {
-        name?: string;
-        bankRoutingNumber?: string;
-        bankAccountNumber?: string;
-        bankAccountLast4?: string;
-        bankAccountType?: string;
-        bankAccountHolderName?: string;
-        contactName?: string;
-        contactEmail?: string;
-        melioPayeeAccountId?: string;
-        melioPayeeFingerprint?: string;
-      };
-      const routing = String(vendor.bankRoutingNumber || '').replace(/\D/g, '');
-      const accountNumber = String(vendor.bankAccountNumber || '').replace(/\s/g, '');
-      if (routing.length !== 9 || accountNumber.length < 4) {
-        throw Object.assign(
-          new Error(
-            'Add the vendor’s bank routing and account numbers in Purchasing → Vendors before paying via Melio.'
-          ),
-          { status: 400 }
-        );
-      }
-      const vendorName = String(vendor.name || bills[0]?.vendorName || 'Vendor');
-      const vendorEmail = String(vendor.contactEmail || '')
-        .split(/[,;\s]+/)
-        .map((s) => s.trim())
-        .find((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s));
-      if (!vendorEmail) {
-        throw Object.assign(
-          new Error(
-            `Add an email for ${vendorName} in Purchasing → Vendors. Melio uses it to notify the vendor about the payment.`
-          ),
-          { status: 400 }
-        );
-      }
-      const accountType =
-        String(vendor.bankAccountType || 'checking').toLowerCase() === 'savings'
-          ? 'savings'
-          : 'checking';
-      const last4 =
-        String(vendor.bankAccountLast4 || '').replace(/\D/g, '').slice(-4) ||
-        accountNumber.replace(/\D/g, '').slice(-4);
-
-      const receivingAccountId = await ensureVendorPayeeAccount({
-        tenantId,
-        entityId: integration.entityId,
-        vendorId,
-        vendorName,
-        holderName: String(vendor.bankAccountHolderName || vendor.contactName || '').trim(),
-        email: vendorEmail,
-        routing,
-        accountNumber,
-        accountType,
-        existingAccountId: vendor.melioPayeeAccountId,
-        existingFingerprint: vendor.melioPayeeFingerprint
-      });
+      const prepared = await prepareMelioPayment(tenantId, billIds, sonarTokenFrom(req));
+      const { bills, amountCents, receivingAccountId, last4, vendorName } = prepared;
 
       const billNumbers = bills
-        .map((b) => String(b.billNumber || b.id).trim())
+        .map((b) => String(b.data.billNumber || b.id).trim())
         .filter(Boolean)
         .slice(0, 6);
       const memo = (
@@ -999,7 +1092,7 @@ export function registerMelioRoutes(app: Express) {
       ).slice(0, 140);
 
       const body = {
-        originatingAccountId: integration.fundingAccountId,
+        originatingAccountId: prepared.fundingAccountId,
         receivingAccountId,
         amount: amountCents,
         currency: 'USD',
@@ -1012,9 +1105,10 @@ export function registerMelioRoutes(app: Express) {
       const payment = unwrap<MelioPayment>(
         await melioFetch<any>('/payments', {
           method: 'POST',
-          entityId: integration.entityId,
+          entityId: prepared.entityId,
           body: { ...body, metadata: { tenantId, billIds: billIds.join(',').slice(0, 450) } },
-          idempotencyKey: `nos-pay-${crypto.randomUUID()}`
+          idempotencyKey: `nos-pay-${crypto.randomUUID()}`,
+          sonarToken: sonarTokenFrom(req)
         })
       );
       if (!payment?.id) {

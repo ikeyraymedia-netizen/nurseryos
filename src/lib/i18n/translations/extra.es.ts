@@ -1447,6 +1447,16 @@ const extra = {
     melioProcessing: 'Pago Melio al banco del proveedor ••••{{last4}}',
     melioNeedsBank:
       'Agregue el routing y número de cuenta del proveedor en Proveedores antes de pagar con Melio.',
+    melioPayTitle: 'Pagar con Melio',
+    melioPayTo: '{{vendor}} · ••••{{last4}}',
+    melioBillAmount: 'Monto de la factura',
+    melioFee: 'Cargo de Melio',
+    melioTotalDebit: 'Débito total',
+    melioDeliveryEstimate: 'Entrega estimada',
+    melioConfirmPay: 'Pagar con Melio',
+    melioQuoteLoading: 'Obteniendo el cargo y la fecha de entrega de Melio…',
+    melioSonarMissing:
+      'Sonar aún no está configurado. Agregue MELIO_SONAR_PUBLISHABLE_KEY del panel de Melio antes de la revisión.',
     achNeedsBank:
       'Agregue el routing y número de cuenta del proveedor en Proveedores antes de pagar por ACH de Stripe.',
     achNeedsTreasury:

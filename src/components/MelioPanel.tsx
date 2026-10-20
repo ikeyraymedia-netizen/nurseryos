@@ -13,6 +13,7 @@ import {
   registerMelioWebhook,
   selectMelioFunding
 } from '../lib/melio';
+import { mintMelioSonarToken } from '../lib/melioSonar';
 
 const EMPTY_ENTITY: MelioEntityInput = {
   legalName: '',
@@ -60,7 +61,18 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
   const [showCreate, setShowCreate] = useState(false);
   const [entity, setEntity] = useState<MelioEntityInput>(EMPTY_ENTITY);
   const [fundingChoice, setFundingChoice] = useState('');
+  const [sonarKey, setSonarKey] = useState<string | null>(null);
+  const [sonarEnv, setSonarEnv] = useState<'sandbox' | 'production'>('sandbox');
   const selectedAccount = status?.accounts.find((a) => a.id === fundingChoice) || null;
+
+  async function sonarToken(entityId?: string | null) {
+    if (!sonarKey) return undefined;
+    return mintMelioSonarToken({
+      publishableKey: sonarKey,
+      environment: sonarEnv,
+      businessEntityId: entityId
+    });
+  }
 
   async function refresh() {
     try {
@@ -75,6 +87,8 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
         return;
       }
       setConfigMessage(null);
+      setSonarKey(cfg.sonarPublishableKey);
+      setSonarEnv(cfg.environment);
       const next = await fetchMelioStatus(tenantId);
       setStatus(next);
       setFundingChoice(
@@ -133,6 +147,12 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
       <p className="text-[11px] text-indigo-950/80 leading-relaxed">
         Pay vendor bills by ACH through Melio. Vendors don’t need a Melio account.
       </p>
+      {status && !sonarKey && (
+        <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+          Sonar is required on create-business, bank linking, and payments. Add
+          MELIO_SONAR_PUBLISHABLE_KEY from the Melio dashboard, then restart.
+        </p>
+      )}
 
       {configMessage && (
         <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
@@ -238,7 +258,8 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                   disabled={busy || !status.apiOk}
                   onClick={() =>
                     void run(async () => {
-                      const result = await createMelioEntity(tenantId, entity);
+                      const token = await sonarToken(null);
+                      const result = await createMelioEntity(tenantId, entity, token);
                       setShowCreate(false);
                       setEntity(EMPTY_ENTITY);
                       return `Business created in Melio (${result.kycStatus || 'pending review'}).`;
@@ -296,7 +317,8 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
-                      const link = await createMelioVerifyLink(tenantId, selectedAccount.id);
+                      const token = await sonarToken(status?.entityId);
+                      const link = await createMelioVerifyLink(tenantId, selectedAccount.id, token);
                       window.open(link.url, '_blank', 'noopener,noreferrer');
                       return 'Finish verifying the bank in the Melio tab, then tap refresh here.';
                     })
@@ -334,7 +356,8 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  const link = await createMelioFundingLink(tenantId);
+                  const token = await sonarToken(status?.entityId);
+                  const link = await createMelioFundingLink(tenantId, token);
                   window.open(link.url, '_blank', 'noopener,noreferrer');
                   return 'Finish linking the bank in the Melio tab, then tap refresh here.';
                 })

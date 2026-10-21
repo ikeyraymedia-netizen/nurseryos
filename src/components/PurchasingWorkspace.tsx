@@ -79,11 +79,7 @@ import { billsInSamePayment, CheckPaymentModal } from './CheckPaymentModal';
 import { BillEditModal } from './BillEditModal';
 import { MelioPayModal } from './MelioPayModal';
 import { PoEditModal } from './PoEditModal';
-import {
-  fetchStripeTreasuryReady,
-  payVendorBillStripeAch,
-  refreshVendorBillStripePayment
-} from '../lib/stripe';
+import { refreshVendorBillStripePayment } from '../lib/stripe';
 import {
   fetchMelioReady,
   payVendorBillMelio,
@@ -246,7 +242,6 @@ export function PurchasingWorkspace({
   const [vendorBankType, setVendorBankType] = useState<'checking' | 'savings'>('checking');
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
-  const [stripeTreasuryReady, setStripeTreasuryReady] = useState(false);
   const [melioReady, setMelioReady] = useState(false);
   const [melioPayBills, setMelioPayBills] = useState<VendorBill[] | null>(null);
 
@@ -297,24 +292,6 @@ export function PurchasingWorkspace({
       unsubB();
     };
   }, [sourcingOnly]);
-
-  useEffect(() => {
-    if (!permissions.canPayVendorBills) {
-      setStripeTreasuryReady(false);
-      return;
-    }
-    let cancelled = false;
-    void fetchStripeTreasuryReady(tenantId)
-      .then((ready) => {
-        if (!cancelled) setStripeTreasuryReady(ready);
-      })
-      .catch(() => {
-        if (!cancelled) setStripeTreasuryReady(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantId, permissions.canPayVendorBills]);
 
   useEffect(() => {
     if (!permissions.canPayVendorBillsMelio) {
@@ -1060,58 +1037,6 @@ export function PurchasingWorkspace({
     );
   }
 
-  async function payBillsAch(targetBills: VendorBill[]) {
-    if (targetBills.length === 0) return;
-    const vendorIds = new Set(targetBills.map((b) => b.vendorId));
-    if (vendorIds.size > 1) {
-      setError(t('purchasing.selectSameVendor'));
-      return;
-    }
-    if (!stripeTreasuryReady) {
-      setError(t('purchasing.achNeedsTreasury'));
-      return;
-    }
-    const first = targetBills[0];
-    const vendor = vendors.find((v) => v.id === first.vendorId);
-    const amount = money(targetBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0));
-    const hasBank =
-      Boolean(vendor?.bankRoutingNumber?.replace(/\D/g, '').length === 9) &&
-      Boolean(vendor?.bankAccountNumber || vendor?.bankAccountLast4);
-    if (!hasBank) {
-      setError(t('purchasing.achNeedsBank'));
-      return;
-    }
-    const last4 = vendor?.bankAccountLast4 || '****';
-    const ok = window.confirm(
-      targetBills.length > 1
-        ? t('purchasing.achPayConfirmStripeMulti', {
-            amount,
-            n: targetBills.length,
-            vendor: first.vendorName,
-            last4
-          })
-        : t('purchasing.achPayConfirmStripe', {
-            amount,
-            vendor: first.vendorName,
-            last4
-          })
-    );
-    if (!ok) return;
-    await payVendorBillStripeAch({
-      tenantId,
-      billIds: targetBills.map((b) => b.id)
-    });
-    setSelectedBillIds([]);
-    setStatus(
-      targetBills.length > 1
-        ? t('purchasing.achPaymentSentStripeMulti', {
-            n: targetBills.length,
-            last4
-          })
-        : t('purchasing.achPaymentSentStripe', { last4 })
-    );
-  }
-
   async function payBillsMelio(targetBills: VendorBill[]) {
     if (targetBills.length === 0) return;
     if (new Set(targetBills.map((b) => b.vendorId)).size > 1) {
@@ -1153,8 +1078,7 @@ export function PurchasingWorkspace({
   }
 
   function renderBillSelectionBar() {
-    const canPayStripe = permissions.canPayVendorBills;
-    const canPay = canPayStripe || canPayMelio;
+    const canPay = canPayMelio;
     const canDelete = permissions.canManageVendorBills;
     if ((!canPay && !canDelete) || selectedBills.length === 0) return null;
     const unpaidSelected = selectedBills.filter((b) => b.status === 'unpaid');
@@ -1223,19 +1147,6 @@ export function PurchasingWorkspace({
               })}
             </button>
           )}
-          {canPayStripe && (
-            <button
-              type="button"
-              disabled={busy || unpaidSelected.length === 0}
-              onClick={() => void run(async () => payBillsAch(unpaidSelected))}
-              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white disabled:opacity-50"
-            >
-              {t('purchasing.paySelectedAch', {
-                n: unpaidSelected.length,
-                amount: money(unpaidTotal)
-              })}
-            </button>
-          )}
           {canPayMelio && (
             <button
               type="button"
@@ -1258,7 +1169,7 @@ export function PurchasingWorkspace({
     const isSelected = selectedBillIds.includes(bill.id);
     const canSelect =
       permissions.canManageVendorBills ||
-      (bill.status === 'unpaid' && (permissions.canPayVendorBills || canPayMelio));
+      (bill.status === 'unpaid' && canPayMelio);
     return (
       <div
         key={bill.id}
@@ -1434,16 +1345,6 @@ export function PurchasingWorkspace({
               <Pencil className="h-3 w-3" />
               {t('purchasing.edit')}
             </button>
-            )}
-            {bill.status === 'unpaid' && permissions.canPayVendorBills && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void run(async () => payBillsAch([bill]))}
-                className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-ink-700 text-white"
-              >
-                {t('purchasing.payViaAch')}
-              </button>
             )}
             {bill.status === 'unpaid' && canPayMelio && (
               <button
@@ -2784,9 +2685,7 @@ export function PurchasingWorkspace({
                     const selectable = group.bills.filter(
                       (b) =>
                         b.status === 'unpaid' &&
-                        (permissions.canManageVendorBills ||
-                          permissions.canPayVendorBills ||
-                          canPayMelio)
+                        (permissions.canManageVendorBills || canPayMelio)
                     );
                     const allSelected =
                       selectable.length > 0 &&

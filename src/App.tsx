@@ -29,6 +29,7 @@ import {
 import { subscribeToCustomers } from './lib/customers';
 import { getPermissionsForMember } from './lib/permissions';
 import { applyModuleGates, tenantHasAnyWorkspace } from './lib/modules';
+import { tenantCalledInEnabled } from './lib/calledIn';
 import { listAllDocuments, subscribeToDocuments } from './lib/documents';
 import { buildOrdersNeedingInvoiceSet } from './lib/invoicing';
 import {
@@ -1347,6 +1348,7 @@ function NurseryApp({
               nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
+              showCalledIn={tenantCalledInEnabled(tenant)}
               onEditTruck={() => {
                 setActiveTab('trucks');
                 setIsEditingTruck(true);
@@ -1371,6 +1373,7 @@ function NurseryApp({
               nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
+              showCalledIn={tenantCalledInEnabled(tenant)}
               onOpenDirectShipTruck={(truckId) => {
                 setActiveTab('trucks');
                 setSelectedTruckId(truckId);

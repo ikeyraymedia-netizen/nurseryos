@@ -44,6 +44,11 @@ export interface Tenant {
   publicAvailabilityEnabled?: boolean;
   /** URL slug for public availability, e.g. bayou-state → /a/bayou-state */
   publicAvailabilitySlug?: string;
+  /**
+   * Bayou State only. Line-item “Called in” checkoff next to Pulled and Loaded.
+   * Omit or true = on for that nursery. false = hidden.
+   */
+  calledInEnabled?: boolean;
   /** Include qty on the public availability page/API. Default true. */
   publicAvailabilityShowQty?: boolean;
   /** Include photos on the public availability page/API. Default true. */
@@ -106,6 +111,8 @@ export interface PlantOrderItem {
   inventoryDeductedQty?: number; // Qty removed from live inventory after confirmed sync
   inventorySyncConfirmed?: boolean; // True only after inventory write succeeded
   pulledQuantity?: number; // To track pulled/delivered progress
+  /** Bayou State: vendor was called about this line. Never printed on pull sheets. */
+  calledIn?: boolean;
   notes?: string;
   /** Possible substitute plant material (shown on estimates). Free text, e.g. "Boxwood, Holly". */
   substitutes?: string;

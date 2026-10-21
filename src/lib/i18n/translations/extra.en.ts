@@ -1912,6 +1912,11 @@ const extra = {
     workspaceNotActivatedYet: ' This nursery is not activated yet.',
     moduleOff: ' · off',
     remittanceTitle: 'Remit payments to',
+    calledInTitle: 'Called in',
+    calledInHint:
+      'Shows a Called in toggle next to Pulled and Loaded on orders and trucks. It is not printed on pull sheets.',
+    calledInOn: 'On',
+    calledInOff: 'Off',
     remittanceHint:
       'Printed on invoices so customers know where to mail a check. Each nursery can change its own address.',
     remittancePlaceholder: 'PO BOX 3\nJena, LA 71342',

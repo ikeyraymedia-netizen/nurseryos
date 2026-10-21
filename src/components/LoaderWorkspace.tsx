@@ -30,6 +30,7 @@ import { orderRefLabel } from '../lib/orderLabels';
 import {
   updateOrderItemProgress,
   updateOrderItemPulledProgress,
+  updateOrderItemCalledIn,
   updateOrderItemVendor,
   updateOrderItemCost,
   markAllItemsAsLoaded,
@@ -72,6 +73,8 @@ interface LoaderWorkspaceProps {
   nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
+  /** Bayou State: Called in toggle beside Pulled and Loaded. */
+  showCalledIn?: boolean;
   onOpenDirectShipTruck?: (truckId: string) => void;
 }
 
@@ -86,6 +89,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId,
+  showCalledIn = false,
   onOpenDirectShipTruck
 }) => {
   const t = useT();
@@ -558,6 +562,14 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
       order.items,
       order.items.length
     ).catch((err) => console.error('Failed to mark item fully pulled:', err));
+  };
+
+  const handleToggleCalledIn = (itemId: string) => {
+    const item = order.items.find((i) => i.id === itemId);
+    if (!item) return;
+    void updateOrderItemCalledIn(order.id, itemId, !item.calledIn, order.items).catch((err) =>
+      console.error('Failed to toggle called in:', err)
+    );
   };
 
   const handleLoadAll = async () => {
@@ -1410,7 +1422,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         </div>
 
                         {/* Twin Checkboxes / Progress Controls */}
-                        <div className="grid grid-cols-2 gap-2 w-full min-w-0 border-t border-gray-100 pt-2 sm:flex sm:w-auto sm:ml-auto sm:border-0 sm:pt-0">
+                        <div className={`grid gap-2 w-full min-w-0 border-t border-gray-100 pt-2 sm:flex sm:w-auto sm:ml-auto sm:border-0 sm:pt-0 ${showCalledIn ? 'grid-cols-3' : 'grid-cols-2'}`}>
                           {/* Delivered / Pulled Box */}
                           <div className="flex flex-col items-center bg-teal-50/30 border border-teal-500/20 rounded-lg p-1.5 min-w-0 sm:min-w-[10.5rem] sm:shrink-0">
                             <label className="text-[9px] font-black text-teal-800 uppercase tracking-wider mb-1 cursor-pointer select-none">
@@ -1480,6 +1492,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               </button>
                             </div>
                           </div>
+                          {showCalledIn && (
+                            <button
+                              type="button"
+                              disabled={!permissions.canCheckOffLoading}
+                              aria-pressed={Boolean(item.calledIn)}
+                              onClick={() => handleToggleCalledIn(item.id)}
+                              className={`flex flex-col items-center justify-center rounded-lg p-1.5 min-w-0 sm:min-w-[6.5rem] sm:shrink-0 text-[10px] font-black uppercase tracking-wider border touch-manipulation disabled:opacity-30 ${
+                                item.calledIn
+                                  ? 'bg-amber-600 border-amber-700 text-white'
+                                  : 'bg-white border-amber-200 text-amber-800'
+                              }`}
+                            >
+                              {t('loader.calledIn')}
+                            </button>
+                          )}
                         </div>
                       </div>
                       </div>

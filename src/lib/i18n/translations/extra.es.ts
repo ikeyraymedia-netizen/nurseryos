@@ -1931,6 +1931,11 @@ const extra = {
     workspaceNotActivatedYet: ' Este vivero aún no está activado.',
     moduleOff: ' · apagado',
     remittanceTitle: 'Enviar pagos a',
+    calledInTitle: 'Llamado',
+    calledInHint:
+      'Muestra un interruptor de Llamado junto a Extraído y Cargado en pedidos y camiones. No se imprime en las hojas de extracción.',
+    calledInOn: 'Activado',
+    calledInOff: 'Apagado',
     remittanceHint:
       'Se imprime en las facturas para que los clientes sepan adónde enviar el cheque. Cada vivero puede cambiar su propia dirección.',
     remittancePlaceholder: 'PO BOX 3\nJena, LA 71342',

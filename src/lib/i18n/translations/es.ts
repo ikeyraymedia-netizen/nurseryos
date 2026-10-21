@@ -285,6 +285,7 @@ const es: TranslationDict = {
     checkoff: 'Verificación',
     loaded: 'Cargado',
     pulled: 'Extraído',
+    calledIn: 'Llamado',
     qty: 'Cant.',
     plant: 'Planta',
     size: 'Tamaño',

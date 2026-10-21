@@ -9,6 +9,7 @@ import {
   resolveNurseryRemittanceAddress,
   sendMemberPasswordReset,
   updateMemberRoles,
+  updateTenantCalledInEnabled,
   updateTenantRemittanceAddress
 } from '../lib/tenants';
 import {
@@ -45,6 +46,7 @@ import {
   EmailStatus
 } from '../lib/email';
 import { tenantHasModule } from '../lib/modules';
+import { isBayouStateTenant } from '../lib/calledIn';
 import { AppLocale, useRoleLabel, useT } from '../lib/i18n';
 import { PushNotificationPanel } from './PushNotificationPanel';
 
@@ -757,6 +759,46 @@ export function TeamManager({
           </div>
 
           <PushNotificationPanel tenantId={tenant.id} disabled={busy} />
+
+          {isBayouStateTenant(tenant) && (
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500">
+                  {t('teamExtra.calledInTitle')}
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                  {t('teamExtra.calledInHint')}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                aria-pressed={tenant.calledInEnabled !== false}
+                onClick={() => {
+                  const next = tenant.calledInEnabled === false;
+                  setBusy(true);
+                  setError(null);
+                  setMessage(null);
+                  void updateTenantCalledInEnabled(tenant.id, next)
+                    .then(() => onTenantUpdated?.())
+                    .then(() =>
+                      setMessage(next ? t('teamExtra.calledInOn') : t('teamExtra.calledInOff'))
+                    )
+                    .catch(() => setError(t('team.languageFailed')))
+                    .finally(() => setBusy(false));
+                }}
+                className={`shrink-0 px-3 py-2 rounded-lg text-xs font-bold border ${
+                  tenant.calledInEnabled !== false
+                    ? 'bg-amber-600 border-amber-700 text-white'
+                    : 'bg-white border-slate-200 text-slate-600'
+                }`}
+              >
+                {tenant.calledInEnabled !== false
+                  ? t('teamExtra.calledInOn')
+                  : t('teamExtra.calledInOff')}
+              </button>
+            </div>
+          )}
 
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
             <p className="text-xs font-bold uppercase text-slate-500">

@@ -842,6 +842,47 @@ export async function updateOrderItemPulledProgress(
   }
 }
 
+export async function updateOrderItemCalledIn(
+  orderId: string,
+  itemId: string,
+  calledIn: boolean,
+  orderItems: any[]
+): Promise<void> {
+  const tenantId = requireTenantId();
+  const updatedItems = orderItems.map((item) => {
+    if (item.id === itemId) {
+      return { ...item, calledIn };
+    }
+    return item;
+  });
+
+  pendingOrderWriteIds.add(orderId);
+  const orders = getLocalOrders();
+  const updatedOrders = orders.map((o) => {
+    if (o.id === orderId) {
+      return { ...o, items: updatedItems };
+    }
+    return o;
+  });
+  saveLocalOrders(updatedOrders);
+
+  if (fallbackActive) {
+    pendingOrderWriteIds.delete(orderId);
+    return;
+  }
+
+  try {
+    await updateDoc(orderDoc(tenantId, orderId), {
+      items: updatedItems
+    });
+  } catch (error: any) {
+    console.error('Error updating called-in on Firestore:', error);
+    activateLocalFallback(error.message || 'Firestore update failed');
+  } finally {
+    pendingOrderWriteIds.delete(orderId);
+  }
+}
+
 export async function updateOrderItemVendor(
   orderId: string,
   itemId: string,

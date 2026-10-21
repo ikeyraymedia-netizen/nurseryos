@@ -192,6 +192,15 @@ export async function updateTenantRemittanceAddress(
   });
 }
 
+export async function updateTenantCalledInEnabled(
+  tenantId: string,
+  enabled: boolean
+): Promise<void> {
+  await updateDoc(doc(db, 'tenants', tenantId), {
+    calledInEnabled: enabled
+  });
+}
+
 export async function updateTenantLogoUrl(
   tenantId: string,
   logoUrl: string | null

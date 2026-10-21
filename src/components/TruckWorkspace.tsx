@@ -5,6 +5,7 @@ import { notifyInventorySyncIssue, subscribeToInventory } from '../lib/inventory
 import {
   updateOrderItemProgress,
   updateOrderItemPulledProgress,
+  updateOrderItemCalledIn,
   updateOrderItemVendor,
   markAllItemsAsLoaded,
   resetOrderProgress,
@@ -90,6 +91,8 @@ interface TruckWorkspaceProps {
   nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
+  /** Bayou State: Called in toggle beside Pulled and Loaded. */
+  showCalledIn?: boolean;
   onEditTruck: () => void;
   onSelectOrder: (orderId: string) => void;
 }
@@ -106,6 +109,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId,
+  showCalledIn = false,
   onEditTruck,
   onSelectOrder
 }) => {
@@ -469,6 +473,14 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
 
     void updateOrderItemPulledProgress(orderId, itemId, newQty, order.items, order.items.length).catch(
       (err) => console.error('Failed to mark item fully pulled:', err)
+    );
+  };
+
+  const handleToggleCalledIn = (orderId: string, order: CustomerOrder, itemId: string) => {
+    const item = order.items.find((i) => i.id === itemId);
+    if (!item) return;
+    void updateOrderItemCalledIn(orderId, itemId, !item.calledIn, order.items).catch((err) =>
+      console.error('Failed to toggle called in:', err)
     );
   };
 
@@ -1923,7 +1935,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                   </div>
 
                                   {/* Pulled + Loaded — stacked on mobile so controls aren't clipped */}
-                                  <div className="grid grid-cols-2 gap-2 w-full border-t border-gray-100 pt-1.5 sm:flex sm:items-start sm:justify-end sm:gap-3 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto">
+                                  <div className={`grid gap-2 w-full border-t border-gray-100 pt-1.5 sm:flex sm:items-start sm:justify-end sm:gap-3 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto ${showCalledIn ? 'grid-cols-3' : 'grid-cols-2'}`}>
                                     <div className="flex flex-col items-center gap-1 bg-teal-50/40 border border-teal-200/60 rounded-lg p-1.5">
                                       <label className="text-[10px] font-bold text-teal-700 uppercase tracking-wide cursor-pointer select-none">
                                         {t('loader.pulled')}
@@ -1990,6 +2002,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         </button>
                                       </div>
                                     </div>
+                                    {showCalledIn && (
+                                      <button
+                                        type="button"
+                                        disabled={!permissions.canCheckOffLoading}
+                                        aria-pressed={Boolean(item.calledIn)}
+                                        onClick={() => handleToggleCalledIn(order.id, order, item.id)}
+                                        className={`flex flex-col items-center justify-center rounded-lg p-1.5 min-w-0 text-[10px] font-black uppercase tracking-wide border touch-manipulation disabled:opacity-30 ${
+                                          item.calledIn
+                                            ? 'bg-amber-600 border-amber-700 text-white'
+                                            : 'bg-white border-amber-200 text-amber-800'
+                                        }`}
+                                      >
+                                        {t('loader.calledIn')}
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               )}

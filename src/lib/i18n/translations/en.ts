@@ -279,6 +279,7 @@ const en = {
     checkoff: 'Checkoff',
     loaded: 'Loaded',
     pulled: 'Pulled',
+    calledIn: 'Called in',
     qty: 'Qty',
     plant: 'Plant',
     size: 'Size',

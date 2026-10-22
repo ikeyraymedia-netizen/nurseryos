@@ -37,7 +37,15 @@ interface MelioAccount {
   last4?: string;
   nickname?: string;
   name?: string;
+  institutionName?: string;
   externalId?: string;
+  bankAccount?: {
+    accountType?: string;
+    accountNumberLast4?: string;
+    institutionName?: string;
+    bankName?: string;
+    name?: string;
+  };
 }
 
 interface MelioPayment {
@@ -343,8 +351,27 @@ async function listAccounts(entityId: string): Promise<MelioAccount[]> {
   return [];
 }
 
+function accountLast4(acct: MelioAccount): string | null {
+  const raw = acct.last4 || acct.bankAccount?.accountNumberLast4 || '';
+  const digits = String(raw).replace(/\D/g, '').slice(-4);
+  return digits || null;
+}
+
 function accountLabel(acct: MelioAccount): string {
-  return String(acct.nickname || acct.name || acct.type || 'Account');
+  const nick = String(acct.nickname || acct.name || '').trim();
+  if (nick && !/^(ach|plaid|bank)$/i.test(nick)) return nick;
+  const bank = acct.bankAccount;
+  const institution = String(
+    acct.institutionName || bank?.institutionName || bank?.bankName || bank?.name || ''
+  ).trim();
+  const kind = String(bank?.accountType || '').toLowerCase();
+  const kindLabel =
+    kind === 'checking'
+      ? 'Checking account'
+      : kind === 'savings'
+        ? 'Savings account'
+        : 'Bank account';
+  return institution ? `${institution} ${kindLabel.toLowerCase()}` : kindLabel;
 }
 
 function todayIsoDate(): string {
@@ -692,7 +719,7 @@ export function registerMelioRoutes(app: Express) {
             .map((a) => ({
               id: a.id,
               label: accountLabel(a),
-              last4: a.last4 || null,
+              last4: accountLast4(a),
               isVerified: a.isVerified !== false,
               type: a.type || null
             }));
@@ -945,7 +972,7 @@ export function registerMelioRoutes(app: Express) {
       await integrationRef(tenantId).set(
         {
           fundingAccountId: account.id,
-          fundingAccountLast4: account.last4 || null,
+          fundingAccountLast4: accountLast4(account),
           fundingAccountName: accountLabel(account),
           updatedAt: new Date().toISOString()
         },

@@ -319,7 +319,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                     void run(async () => {
                       const token = await sonarToken(status?.entityId);
                       const link = await createMelioVerifyLink(tenantId, selectedAccount.id, token);
-                      window.open(link.url, '_blank', 'noopener,noreferrer');
+                      window.open(link.url, '_blank');
                       return 'Finish verifying the bank in the Melio tab, then tap refresh here.';
                     })
                   }
@@ -358,7 +358,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                 void run(async () => {
                   const token = await sonarToken(status?.entityId);
                   const link = await createMelioFundingLink(tenantId, token);
-                  window.open(link.url, '_blank', 'noopener,noreferrer');
+                  window.open(link.url, '_blank');
                   return 'Finish linking the bank in the Melio tab, then tap refresh here.';
                 })
               }

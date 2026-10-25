@@ -1602,7 +1602,7 @@ const extra = {
   mfa: {
     setupTitle: 'Active el inicio de sesión en dos pasos',
     setupIntro:
-      'Los administradores necesitan inicio en dos pasos. NurseryOS pedirá un código de 6 dígitos de una app de autenticación (como Google Authenticator) cada vez que inicie sesión.',
+      'Todos necesitan inicio en dos pasos. NurseryOS pedirá un código de 6 dígitos de una app de autenticación (como Google Authenticator) cada vez que inicie sesión.',
     step1: 'Instale Google Authenticator (u otra app de autenticación) en su teléfono.',
     step2: 'En la app, toque + y escanee este código QR.',
     step3: 'Escriba el código de 6 dígitos que muestra la app.',

@@ -162,9 +162,10 @@ describe('sessions', () => {
 });
 
 describe('MFA requirement', () => {
-  it('keeps owner/admin-only MFA when the flag is off', () => {
+  it('requires MFA for every signed-in user when the flag is off', () => {
     assert.equal(accountRequiresMfa({ strict: false, signedIn: true, isOwnerOrAdmin: true }), true);
-    assert.equal(accountRequiresMfa({ strict: false, signedIn: true, isOwnerOrAdmin: false }), false);
+    assert.equal(accountRequiresMfa({ strict: false, signedIn: true, isOwnerOrAdmin: false }), true);
+    assert.equal(accountRequiresMfa({ strict: false, signedIn: false, isOwnerOrAdmin: true }), false);
     assert.equal(mfaSkipAllowed(false), true);
     assert.equal(
       mfaStepUpRequired({

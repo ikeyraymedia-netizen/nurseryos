@@ -174,18 +174,15 @@ export function sessionFreshness(input: {
   return 'ok';
 }
 
-/**
- * Flag off: owners and admins only (today's rule).
- * Flag on: every signed-in person, with no role exception.
- */
+/** Every signed-in person must use an authenticator app. Role does not waive it. */
 export function accountRequiresMfa(input: {
   strict: boolean;
   signedIn: boolean;
   isOwnerOrAdmin: boolean;
 }): boolean {
-  if (!input.signedIn) return false;
-  if (input.strict) return true;
-  return input.isOwnerOrAdmin;
+  void input.strict;
+  void input.isOwnerOrAdmin;
+  return input.signedIn;
 }
 
 export function mfaSkipAllowed(strict: boolean): boolean {

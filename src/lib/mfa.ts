@@ -11,14 +11,12 @@ import {
 import QRCode from 'qrcode';
 import { auth } from '../firebase';
 import { TenantMember } from '../types';
-import { memberHasRole } from './permissions';
 
 const ISSUER = 'NurseryOS';
 
-/** Owners and admins must use two-step login. */
+/** Every nursery member must use two-step login. */
 export function memberRequiresMfa(member: Pick<TenantMember, 'role' | 'roles'> | null): boolean {
-  if (!member) return false;
-  return memberHasRole(member, 'owner') || memberHasRole(member, 'admin');
+  return !!member;
 }
 
 export function hasTotpEnrolled(user: User): boolean {

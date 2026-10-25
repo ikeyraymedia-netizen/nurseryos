@@ -1586,7 +1586,7 @@ const extra = {
   mfa: {
     setupTitle: 'Turn on two-step login',
     setupIntro:
-      'Admins need two-step login. NurseryOS will ask for a 6-digit code from an authenticator app (like Google Authenticator) each time you sign in.',
+      'Everyone needs two-step login. NurseryOS will ask for a 6-digit code from an authenticator app (like Google Authenticator) each time you sign in.',
     step1: 'Install Google Authenticator (or any authenticator app) on your phone.',
     step2: 'In the app, tap + and scan this QR code.',
     step3: 'Type the 6-digit code the app shows.',

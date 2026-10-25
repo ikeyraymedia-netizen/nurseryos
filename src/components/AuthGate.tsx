@@ -3,14 +3,11 @@ import { MultiFactorResolver, User } from 'firebase/auth';
 import { ShieldCheck } from 'lucide-react';
 import { MfaSetupScreen } from './MfaSetupScreen';
 import {
-  hasPhoneFactor,
   hasTotpEnrolled,
   isMfaRequiredError,
   memberRequiresMfa,
   mfaResolverFor,
-  resolveSignInWithPhone,
-  resolveSignInWithTotp,
-  sendPhoneSignInCode
+  resolveSignInWithTotp
 } from '../lib/mfa';
 import {
   accountRequiresMfa,
@@ -142,10 +139,8 @@ export function AuthGate({ children }: AuthGateProps) {
   const [resetAsk, setResetAsk] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetMessage, setResetMessage] = useState<string | null>(null);
-  const [phoneVerificationId, setPhoneVerificationId] = useState('');
   const challengeRef = useRef<{ id: string; at: number; purpose: string } | null>(null);
   const ticketRef = useRef('');
-  const phoneBoxRef = useRef<HTMLDivElement | null>(null);
   const [, setMfaEnrolledTick] = useState(0);
 
   const [email, setEmail] = useState('');
@@ -523,7 +518,6 @@ export function AuthGate({ children }: AuthGateProps) {
       if (isMfaRequiredError(err)) {
         setMfaResolver(mfaResolverFor(err));
         setMfaCode('');
-        setPhoneVerificationId('');
         return;
       }
       if (ticketRef.current) {
@@ -574,9 +568,7 @@ export function AuthGate({ children }: AuthGateProps) {
     suppressAuthLoadRef.current = true;
     const locale = effectiveLocale;
     try {
-      const signedInUser = phoneVerificationId
-        ? await resolveSignInWithPhone(mfaResolver, phoneVerificationId, mfaCode)
-        : await resolveSignInWithTotp(mfaResolver, mfaCode);
+      const signedInUser = await resolveSignInWithTotp(mfaResolver, mfaCode);
       await afterPasswordSignIn(signedInUser, locale);
       if (securityStrict && ticketRef.current) {
         await securityLoginResult({
@@ -587,7 +579,6 @@ export function AuthGate({ children }: AuthGateProps) {
       }
       suppressAuthLoadRef.current = false;
       setMfaResolver(null);
-      setPhoneVerificationId('');
       await hydrateSession(signedInUser, true);
     } catch (err: any) {
       if (securityStrict && ticketRef.current) {
@@ -719,28 +710,6 @@ export function AuthGate({ children }: AuthGateProps) {
               <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
                 {mfaError}
               </p>
-            )}
-            <div ref={phoneBoxRef} />
-            {hasPhoneFactor(mfaResolver) && !phoneVerificationId && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  const node = phoneBoxRef.current;
-                  if (!node) return;
-                  setBusy(true);
-                  setMfaError(null);
-                  void sendPhoneSignInCode(mfaResolver, node)
-                    .then((id) => setPhoneVerificationId(id))
-                    .catch((err: unknown) =>
-                      setMfaError(err instanceof Error ? err.message : translate(effectiveLocale, 'auth.authFailed'))
-                    )
-                    .finally(() => setBusy(false));
-                }}
-                className="w-full px-3 py-2 rounded-xl text-sm font-bold border border-slate-200"
-              >
-                {translate(effectiveLocale, 'mfa.addSms')}
-              </button>
             )}
             <button
               type="submit"

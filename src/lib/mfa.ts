@@ -3,9 +3,6 @@ import {
   multiFactor,
   MultiFactorError,
   MultiFactorResolver,
-  PhoneAuthProvider,
-  PhoneMultiFactorGenerator,
-  RecaptchaVerifier,
   sendEmailVerification,
   TotpMultiFactorGenerator,
   TotpSecret,
@@ -65,60 +62,6 @@ export function isMfaRequiredError(err: unknown): err is MultiFactorError {
 
 export function mfaResolverFor(err: MultiFactorError): MultiFactorResolver {
   return getMultiFactorResolver(auth, err);
-}
-
-export function hasPhoneFactor(resolver: MultiFactorResolver): boolean {
-  return resolver.hints.some((hint) => hint.factorId === PhoneMultiFactorGenerator.FACTOR_ID);
-}
-
-export async function sendPhoneEnrollmentCode(
-  user: User,
-  phoneNumber: string,
-  container: HTMLElement
-): Promise<string> {
-  const session = await multiFactor(user).getSession();
-  const verifier = new RecaptchaVerifier(auth, container, { size: 'invisible' });
-  try {
-    return await new PhoneAuthProvider(auth).verifyPhoneNumber({ phoneNumber, session }, verifier);
-  } finally {
-    verifier.clear();
-  }
-}
-
-export async function confirmPhoneEnrollment(
-  user: User,
-  verificationId: string,
-  code: string
-): Promise<void> {
-  const cred = PhoneAuthProvider.credential(verificationId, code.replace(/\s+/g, ''));
-  await multiFactor(user).enroll(PhoneMultiFactorGenerator.assertion(cred), 'Text message');
-}
-
-export async function sendPhoneSignInCode(
-  resolver: MultiFactorResolver,
-  container: HTMLElement
-): Promise<string> {
-  const hint = resolver.hints.find((item) => item.factorId === PhoneMultiFactorGenerator.FACTOR_ID);
-  if (!hint) throw new Error('No text-message sign-in is set up for this account.');
-  const verifier = new RecaptchaVerifier(auth, container, { size: 'invisible' });
-  try {
-    return await new PhoneAuthProvider(auth).verifyPhoneNumber(
-      { multiFactorHint: hint, session: resolver.session },
-      verifier
-    );
-  } finally {
-    verifier.clear();
-  }
-}
-
-export async function resolveSignInWithPhone(
-  resolver: MultiFactorResolver,
-  verificationId: string,
-  code: string
-): Promise<User> {
-  const cred = PhoneAuthProvider.credential(verificationId, code.replace(/\s+/g, ''));
-  const result = await resolver.resolveSignIn(PhoneMultiFactorGenerator.assertion(cred));
-  return result.user;
 }
 
 export async function resolveSignInWithTotp(resolver: MultiFactorResolver, code: string): Promise<User> {

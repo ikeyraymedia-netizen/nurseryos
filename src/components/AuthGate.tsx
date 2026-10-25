@@ -9,6 +9,13 @@ import {
   mfaResolverFor,
   resolveSignInWithTotp
 } from '../lib/mfa';
+import {
+  accountRequiresMfa,
+  IDLE_TIMEOUT_MS,
+  MAX_SESSION_MS,
+  mfaSkipAllowed,
+  PASSWORD_MIN_LENGTH
+} from '../lib/securityPolicy';
 import { Tenant, UserProfile, TenantMember } from '../types';
 import {
   getTenant,
@@ -99,6 +106,7 @@ export function AuthGate({ children }: AuthGateProps) {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [mfaSkipped, setMfaSkipped] = useState(false);
+  const [securityStrict, setSecurityStrict] = useState(false);
   const [, setMfaEnrolledTick] = useState(0);
 
   const [email, setEmail] = useState('');
@@ -189,6 +197,21 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   useEffect(() => {
+    let cancelled = false;
+    fetch('/api/security/config')
+      .then((res) => (res.ok ? res.json() : { strict: false }))
+      .then((data) => {
+        if (!cancelled) setSecurityStrict(data?.strict === true);
+      })
+      .catch(() => {
+        if (!cancelled) setSecurityStrict(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const join = params.get('join')?.trim();
     if (join) {
@@ -259,6 +282,27 @@ export function AuthGate({ children }: AuthGateProps) {
     };
   }, [user, profile, tenant, member, guestLocale]);
 
+  useEffect(() => {
+    if (!securityStrict || !session) return;
+    let lastActivity = Date.now();
+    const started = Date.now();
+    const mark = () => {
+      lastActivity = Date.now();
+    };
+    const events = ['pointerdown', 'keydown'] as const;
+    events.forEach((name) => window.addEventListener(name, mark));
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      if (now - started >= MAX_SESSION_MS || now - lastActivity >= IDLE_TIMEOUT_MS) {
+        void session.onSignOut();
+      }
+    }, 30_000);
+    return () => {
+      events.forEach((name) => window.removeEventListener(name, mark));
+      window.clearInterval(timer);
+    };
+  }, [securityStrict, session]);
+
   // Before NurseryApp mounts after Firebase auth, mirror storage ↔ URL so
   // refresh restore cannot be lost during the auth loading gap.
   useLayoutEffect(() => {
@@ -306,6 +350,11 @@ export function AuthGate({ children }: AuthGateProps) {
     suppressAuthLoadRef.current = true;
     const locale = effectiveLocale;
     try {
+      if (securityStrict && authPanel === 'join' && password.length < PASSWORD_MIN_LENGTH) {
+        setFormError(`Use at least ${PASSWORD_MIN_LENGTH} characters.`);
+        suppressAuthLoadRef.current = false;
+        return;
+      }
       let nextUser: User | null = null;
       if (authPanel === 'join') {
         const joined = await signUpAndJoinNursery({
@@ -414,13 +463,17 @@ export function AuthGate({ children }: AuthGateProps) {
         </div>
       ) : session &&
         !mfaSkipped &&
-        memberRequiresMfa(session.member) &&
+        accountRequiresMfa({
+          strict: securityStrict,
+          signedIn: true,
+          isOwnerOrAdmin: memberRequiresMfa(session.member)
+        }) &&
         !hasTotpEnrolled(session.user) ? (
         <MfaSetupScreen
           user={session.user}
           onDone={() => setMfaEnrolledTick((n) => n + 1)}
           onSignOut={session.onSignOut}
-          onSkip={() => setMfaSkipped(true)}
+          onSkip={mfaSkipAllowed(securityStrict) ? () => setMfaSkipped(true) : undefined}
         />
       ) : session ? (
         <>{children(session)}</>

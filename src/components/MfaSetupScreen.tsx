@@ -15,7 +15,7 @@ interface MfaSetupScreenProps {
   onDone: () => void;
   onSignOut: () => void | Promise<void>;
   /** Shown only when two-step login is not switched on for the project yet. */
-  onSkip: () => void;
+  onSkip?: () => void;
 }
 
 type Blocker = 'verify_email' | 'recent_login' | 'not_enabled' | null;
@@ -131,13 +131,15 @@ export function MfaSetupScreen({ user, onDone, onSignOut, onSkip }: MfaSetupScre
         {blocker === 'not_enabled' && (
           <div className="space-y-3">
             <p className="text-sm text-slate-700">{t('mfa.notEnabled')}</p>
-            <button
-              type="button"
-              onClick={onSkip}
-              className="px-3 py-2 rounded-xl text-xs font-bold bg-ink-700 text-white"
-            >
-              {t('mfa.continueWithout')}
-            </button>
+            {onSkip && (
+              <button
+                type="button"
+                onClick={onSkip}
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-ink-700 text-white"
+              >
+                {t('mfa.continueWithout')}
+              </button>
+            )}
           </div>
         )}
 

@@ -157,9 +157,19 @@ export function getAdminDb(): Firestore {
   return db;
 }
 
+type StrictSessionGuard = (decoded: admin.auth.DecodedIdToken) => Promise<void>;
+let strictSessionGuard: StrictSessionGuard | null = null;
+
+/** Registered by the Melio security routes. No-op until that module sets it, and the guard itself returns immediately while MELIO_SECURITY_STRICT is off. */
+export function setStrictSessionGuard(guard: StrictSessionGuard): void {
+  strictSessionGuard = guard;
+}
+
 export async function verifyFirebaseIdToken(idToken: string): Promise<admin.auth.DecodedIdToken> {
   getAdminDb();
-  return admin.auth().verifyIdToken(idToken);
+  const decoded = await admin.auth().verifyIdToken(idToken);
+  if (strictSessionGuard) await strictSessionGuard(decoded);
+  return decoded;
 }
 
 export type MemberRoleName =

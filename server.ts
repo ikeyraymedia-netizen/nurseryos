@@ -10,6 +10,8 @@ import {
   isStripeConfigured
 } from './server/stripe';
 import { registerMelioRoutes, registerMelioWebhookRoute } from './server/melio';
+import { registerSecurityRoutes } from './server/security';
+import { requestContext } from './server/requestContext';
 import { registerEmailRoutes } from './server/email';
 import { registerPushRoutes } from './server/push';
 import { registerPlatformRoutes } from './server/platform';
@@ -48,12 +50,16 @@ registerMelioWebhookRoute(app);
 // Increase payload limit to handle base64 PDFs and images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use((req, _res, next) => {
+  requestContext.run({ req }, () => next());
+});
 
 const PORT = Number(process.env.PORT) || 3000;
 
 registerQuickbooksRoutes(app);
 registerStripeRoutes(app);
 registerMelioRoutes(app);
+registerSecurityRoutes(app);
 registerEmailRoutes(app);
 registerPushRoutes(app);
 registerPlatformRoutes(app);

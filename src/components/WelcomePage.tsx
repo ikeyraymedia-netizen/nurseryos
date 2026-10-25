@@ -54,6 +54,10 @@ interface WelcomePageProps {
   requestSent: boolean;
   onSubmit: (e: FormEvent) => void;
   onRequestAccess: () => void | Promise<void>;
+  securityStrict?: boolean;
+  onForgotPassword?: () => void;
+  faxNumber?: string;
+  onFaxChange?: (value: string) => void;
 }
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -106,7 +110,11 @@ export function WelcomePage({
   bootError,
   requestSent,
   onSubmit,
-  onRequestAccess
+  onRequestAccess,
+  securityStrict = false,
+  onForgotPassword,
+  faxNumber = '',
+  onFaxChange
 }: WelcomePageProps) {
   const t = useT();
   const submitLabel =
@@ -399,13 +407,26 @@ export function WelcomePage({
                       <input
                         required
                         type="password"
-                        minLength={6}
+                        minLength={securityStrict && authPanel === 'join' ? 12 : 6}
+                        maxLength={256}
                         value={password}
                         onChange={(e) => onPasswordChange(e.target.value)}
-                        placeholder={t('welcome.atLeast6Chars')}
+                        placeholder={
+                          securityStrict && authPanel === 'join'
+                            ? 'At least 12 characters'
+                            : t('welcome.atLeast6Chars')
+                        }
                         className={inputClassName}
                       />
                     </label>
+                    <input
+                      tabIndex={-1}
+                      autoComplete="off"
+                      aria-hidden="true"
+                      value={faxNumber}
+                      onChange={(e) => onFaxChange?.(e.target.value)}
+                      className="absolute -left-[9999px] h-0 w-0 opacity-0"
+                    />
 
                     {(formError || bootError) && (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -413,7 +434,16 @@ export function WelcomePage({
                       </div>
                     )}
 
-                    {authPanel === 'signin' && !signInWithInvite && (
+                    {authPanel === 'signin' && !signInWithInvite && securityStrict && onForgotPassword && (
+                      <button
+                        type="button"
+                        onClick={onForgotPassword}
+                        className="text-[11px] font-bold text-ink-100 underline"
+                      >
+                        {t('mfa.resetSend')}
+                      </button>
+                    )}
+                    {authPanel === 'signin' && !signInWithInvite && !securityStrict && (
                       <p className="text-[11px] text-slate-500 leading-relaxed">{t('welcome.forgotPassword')}</p>
                     )}
 

@@ -1,14 +1,17 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { BrandLogo } from './BrandLogo';
 import { useT } from '../lib/i18n';
 import {
+  confirmPhoneEnrollment,
   finishTotpEnrollment,
+  sendPhoneEnrollmentCode,
   sendVerificationEmail,
   startTotpEnrollment,
   TotpEnrollment
 } from '../lib/mfa';
+import { registerPasskey } from '../lib/securityClient';
 
 interface MfaSetupScreenProps {
   user: User;
@@ -16,11 +19,13 @@ interface MfaSetupScreenProps {
   onSignOut: () => void | Promise<void>;
   /** Shown only when two-step login is not switched on for the project yet. */
   onSkip?: () => void;
+  /** After the authenticator app is on, offer a passkey and a text-message code. */
+  offerMoreFactors?: boolean;
 }
 
 type Blocker = 'verify_email' | 'recent_login' | 'not_enabled' | null;
 
-export function MfaSetupScreen({ user, onDone, onSignOut, onSkip }: MfaSetupScreenProps) {
+export function MfaSetupScreen({ user, onDone, onSignOut, onSkip, offerMoreFactors }: MfaSetupScreenProps) {
   const t = useT();
   const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null);
   const [blocker, setBlocker] = useState<Blocker>(null);
@@ -28,6 +33,12 @@ export function MfaSetupScreen({ user, onDone, onSignOut, onSkip }: MfaSetupScre
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verifySent, setVerifySent] = useState(false);
+  const [totpDone, setTotpDone] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [smsVerificationId, setSmsVerificationId] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [extraMessage, setExtraMessage] = useState<string | null>(null);
+  const recaptchaNode = useRef<HTMLDivElement | null>(null);
 
   const begin = useCallback(async () => {
     setBusy(true);
@@ -72,7 +83,8 @@ export function MfaSetupScreen({ user, onDone, onSignOut, onSkip }: MfaSetupScre
     setError(null);
     try {
       await finishTotpEnrollment(user, enrollment, code);
-      onDone();
+      if (offerMoreFactors) setTotpDone(true);
+      else onDone();
     } catch (err: any) {
       const errCode = String(err?.code || '');
       setError(
@@ -199,6 +211,92 @@ export function MfaSetupScreen({ user, onDone, onSignOut, onSkip }: MfaSetupScre
           <p className="text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
             {error}
           </p>
+        )}
+
+        {totpDone && (
+          <div className="space-y-3 border-t border-slate-100 pt-3">
+            <p className="text-xs text-slate-600">{t('mfa.alsoAvailable')}</p>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                setError(null);
+                void registerPasskey()
+                  .then(() => setExtraMessage(t('mfa.passkeyAdded')))
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : t('mfa.setupFailed')))
+                  .finally(() => setBusy(false));
+              }}
+              className="w-full px-3 py-2 rounded-xl text-sm font-bold border border-slate-200 hover:bg-slate-50"
+            >
+              {t('mfa.addPasskey')}
+            </button>
+            <div ref={recaptchaNode} />
+            <label className="block text-xs">
+              <span className="font-bold text-slate-600">{t('mfa.smsPhone')}</span>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+15551234567"
+                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl"
+              />
+            </label>
+            {!smsVerificationId ? (
+              <button
+                type="button"
+                disabled={busy || !phone.trim()}
+                onClick={() => {
+                  const node = recaptchaNode.current;
+                  if (!node) return;
+                  setBusy(true);
+                  setError(null);
+                  void sendPhoneEnrollmentCode(user, phone.trim(), node)
+                    .then((id) => setSmsVerificationId(id))
+                    .catch((err: unknown) => setError(err instanceof Error ? err.message : t('mfa.setupFailed')))
+                    .finally(() => setBusy(false));
+                }}
+                className="w-full px-3 py-2 rounded-xl text-sm font-bold border border-slate-200 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {t('mfa.smsSend')}
+              </button>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setBusy(true);
+                  setError(null);
+                  void confirmPhoneEnrollment(user, smsVerificationId, smsCode)
+                    .then(() => setExtraMessage(t('mfa.smsAdded')))
+                    .catch((err: unknown) => setError(err instanceof Error ? err.message : t('mfa.setupFailed')))
+                    .finally(() => setBusy(false));
+                }}
+                className="space-y-2"
+              >
+                <input
+                  value={smsCode}
+                  onChange={(e) => setSmsCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                  inputMode="numeric"
+                  placeholder="123456"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-center font-mono tracking-[0.4em]"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || smsCode.length !== 6}
+                  className="w-full px-3 py-2 rounded-xl text-sm font-bold bg-ink-700 text-white disabled:opacity-50"
+                >
+                  {t('mfa.addSms')}
+                </button>
+              </form>
+            )}
+            {extraMessage && <p className="text-xs font-bold text-emerald-700">{extraMessage}</p>}
+            <button
+              type="button"
+              onClick={onDone}
+              className="w-full px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-700 text-white"
+            >
+              {t('mfa.continueToNursery')}
+            </button>
+          </div>
         )}
 
         <button

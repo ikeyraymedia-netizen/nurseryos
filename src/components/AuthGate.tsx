@@ -3,19 +3,39 @@ import { MultiFactorResolver, User } from 'firebase/auth';
 import { ShieldCheck } from 'lucide-react';
 import { MfaSetupScreen } from './MfaSetupScreen';
 import {
+  hasPhoneFactor,
   hasTotpEnrolled,
   isMfaRequiredError,
   memberRequiresMfa,
   mfaResolverFor,
-  resolveSignInWithTotp
+  resolveSignInWithPhone,
+  resolveSignInWithTotp,
+  sendPhoneSignInCode
 } from '../lib/mfa';
 import {
   accountRequiresMfa,
   IDLE_TIMEOUT_MS,
   MAX_SESSION_MS,
   mfaSkipAllowed,
+  mfaStepUpRequired,
   PASSWORD_MIN_LENGTH
 } from '../lib/securityPolicy';
+import {
+  passkeyCount,
+  securityChallenge,
+  securityCompleteReset,
+  securityConfig,
+  securityLoginGate,
+  securityLoginResult,
+  securityLogout,
+  securityLogoutAll,
+  securityMfaOk,
+  securityMfaStatus,
+  securityOpenSession,
+  securityPasswordCheck,
+  securityRequestReset,
+  verifyPasskey
+} from '../lib/securityClient';
 import { Tenant, UserProfile, TenantMember } from '../types';
 import {
   getTenant,
@@ -61,7 +81,12 @@ interface AuthSession {
 }
 
 interface AuthGateProps {
-  children: (session: AuthSession & { onSignOut: () => Promise<void> }) => ReactNode;
+  children: (
+    session: AuthSession & {
+      onSignOut: () => Promise<void>;
+      onSignOutAll: () => Promise<void>;
+    }
+  ) => ReactNode;
 }
 
 function clearTenantContexts() {
@@ -107,6 +132,20 @@ export function AuthGate({ children }: AuthGateProps) {
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [mfaSkipped, setMfaSkipped] = useState(false);
   const [securityStrict, setSecurityStrict] = useState(false);
+  const [stepUp, setStepUp] = useState(false);
+  const [passkeys, setPasskeys] = useState(0);
+  const [securityBlocked, setSecurityBlocked] = useState(false);
+  const [faxNumber, setFaxNumber] = useState('');
+  const [resetToken, setResetToken] = useState(
+    () => new URLSearchParams(window.location.search).get('melioReset') || ''
+  );
+  const [resetAsk, setResetAsk] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [phoneVerificationId, setPhoneVerificationId] = useState('');
+  const challengeRef = useRef<{ id: string; at: number; purpose: string } | null>(null);
+  const ticketRef = useRef('');
+  const phoneBoxRef = useRef<HTMLDivElement | null>(null);
   const [, setMfaEnrolledTick] = useState(0);
 
   const [email, setEmail] = useState('');
@@ -125,7 +164,54 @@ export function AuthGate({ children }: AuthGateProps) {
   const submitLockRef = useRef(false);
   const authLoadGenRef = useRef(0);
 
-  async function hydrateSession(nextUser: User): Promise<void> {
+  async function readyChallenge(purpose: 'login' | 'signup' | 'reset'): Promise<string> {
+    const current = challengeRef.current;
+    if (!current || current.purpose !== purpose) {
+      const id = await securityChallenge(purpose);
+      challengeRef.current = { id, at: Date.now(), purpose };
+    }
+    const row = challengeRef.current;
+    if (!row) throw new Error('Please try again.');
+    const wait = 1600 - (Date.now() - row.at);
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    challengeRef.current = null;
+    return row.id;
+  }
+
+  async function applySecuritySession(nextUser: User, rotate: boolean): Promise<void> {
+    const strict = await securityConfig();
+    setSecurityStrict(strict);
+    if (!strict) {
+      setStepUp(false);
+      setSecurityBlocked(false);
+      return;
+    }
+    await securityOpenSession(rotate);
+    if (!hasTotpEnrolled(nextUser)) {
+      setStepUp(false);
+      setSecurityBlocked(false);
+      return;
+    }
+    if (rotate) {
+      await securityMfaOk();
+      setStepUp(false);
+    } else {
+      const status = await securityMfaStatus();
+      setPasskeys(await passkeyCount().catch(() => 0));
+      setStepUp(
+        mfaStepUpRequired({
+          strict: true,
+          totpEnrolled: true,
+          deviceKnown: status.deviceKnown,
+          lastMfaAt: status.lastMfaAt,
+          now: Date.now()
+        })
+      );
+    }
+    setSecurityBlocked(false);
+  }
+
+  async function hydrateSession(nextUser: User, rotate = false): Promise<void> {
     const loadGen = ++authLoadGenRef.current;
     setBootError(null);
     setUser(nextUser);
@@ -152,6 +238,12 @@ export function AuthGate({ children }: AuthGateProps) {
         setTenant(null);
         setMember(null);
         clearTenantContexts();
+        try {
+          await applySecuritySession(nextUser, rotate);
+        } catch (err) {
+          setBootError(err instanceof Error ? err.message : 'Sign in again.');
+          setSecurityBlocked(true);
+        }
         setAuthReady(true);
         return;
       }
@@ -174,6 +266,12 @@ export function AuthGate({ children }: AuthGateProps) {
         setTenant(null);
         setMember(null);
         clearTenantContexts();
+        try {
+          await applySecuritySession(nextUser, rotate);
+        } catch (err) {
+          setBootError(err instanceof Error ? err.message : 'Sign in again.');
+          setSecurityBlocked(true);
+        }
         setAuthReady(true);
         return;
       }
@@ -193,6 +291,12 @@ export function AuthGate({ children }: AuthGateProps) {
     setTenant(resolvedTenant);
     setMember(nextMember);
     bindTenantContexts(resolvedTenant.id);
+    try {
+      await applySecuritySession(nextUser, rotate);
+    } catch (err) {
+      setBootError(err instanceof Error ? err.message : 'Sign in again.');
+      setSecurityBlocked(true);
+    }
     setAuthReady(true);
   }
 
@@ -276,11 +380,25 @@ export function AuthGate({ children }: AuthGateProps) {
         setProfile((p) => (p ? { ...p, locale: next } : p));
       },
       onSignOut: async () => {
+        try {
+          if (securityStrict) await securityLogout();
+        } catch {
+          /* still sign out of Firebase */
+        }
+        clearTenantContexts();
+        await logOut();
+      },
+      onSignOutAll: async () => {
+        try {
+          if (securityStrict) await securityLogoutAll();
+        } catch {
+          /* still sign out of Firebase */
+        }
         clearTenantContexts();
         await logOut();
       }
     };
-  }, [user, profile, tenant, member, guestLocale]);
+  }, [user, profile, tenant, member, guestLocale, securityStrict]);
 
   useEffect(() => {
     if (!securityStrict || !session) return;
@@ -349,11 +467,34 @@ export function AuthGate({ children }: AuthGateProps) {
     setBusy(true);
     suppressAuthLoadRef.current = true;
     const locale = effectiveLocale;
+    ticketRef.current = '';
     try {
-      if (securityStrict && authPanel === 'join' && password.length < PASSWORD_MIN_LENGTH) {
-        setFormError(`Use at least ${PASSWORD_MIN_LENGTH} characters.`);
+      const strict = await securityConfig();
+      setSecurityStrict(strict);
+      if (strict && faxNumber.trim()) {
+        setFormError(translate(locale, 'auth.authFailed'));
         suppressAuthLoadRef.current = false;
         return;
+      }
+      if (strict && authPanel === 'join') {
+        if (password.length < PASSWORD_MIN_LENGTH) {
+          setFormError(`Use at least ${PASSWORD_MIN_LENGTH} characters.`);
+          suppressAuthLoadRef.current = false;
+          return;
+        }
+        await securityPasswordCheck(password);
+      }
+      let ticket = '';
+      if (strict) {
+        const purpose = authPanel === 'join' ? 'signup' : 'login';
+        const challengeId = await readyChallenge(purpose);
+        ticket = await securityLoginGate({
+          purpose,
+          email,
+          challengeId,
+          faxNumber
+        });
+        ticketRef.current = ticket;
       }
       let nextUser: User | null = null;
       if (authPanel === 'join') {
@@ -371,15 +512,26 @@ export function AuthGate({ children }: AuthGateProps) {
         await afterPasswordSignIn(signedInUser, locale);
       }
 
+      if (strict && ticket) {
+        await securityLoginResult({ outcome: 'success', email, ticket }).catch(() => undefined);
+      }
       suppressAuthLoadRef.current = false;
       if (nextUser) {
-        await hydrateSession(nextUser);
+        await hydrateSession(nextUser, true);
       }
     } catch (err: any) {
       if (isMfaRequiredError(err)) {
         setMfaResolver(mfaResolverFor(err));
         setMfaCode('');
+        setPhoneVerificationId('');
         return;
+      }
+      if (ticketRef.current) {
+        await securityLoginResult({
+          outcome: 'failure',
+          email,
+          ticket: ticketRef.current
+        }).catch(() => undefined);
       }
       console.error(err);
       const message =
@@ -422,12 +574,29 @@ export function AuthGate({ children }: AuthGateProps) {
     suppressAuthLoadRef.current = true;
     const locale = effectiveLocale;
     try {
-      const signedInUser = await resolveSignInWithTotp(mfaResolver, mfaCode);
+      const signedInUser = phoneVerificationId
+        ? await resolveSignInWithPhone(mfaResolver, phoneVerificationId, mfaCode)
+        : await resolveSignInWithTotp(mfaResolver, mfaCode);
       await afterPasswordSignIn(signedInUser, locale);
+      if (securityStrict && ticketRef.current) {
+        await securityLoginResult({
+          outcome: 'mfa_success',
+          email,
+          ticket: ticketRef.current
+        }).catch(() => undefined);
+      }
       suppressAuthLoadRef.current = false;
       setMfaResolver(null);
-      await hydrateSession(signedInUser);
+      setPhoneVerificationId('');
+      await hydrateSession(signedInUser, true);
     } catch (err: any) {
+      if (securityStrict && ticketRef.current) {
+        await securityLoginResult({
+          outcome: 'mfa_failure',
+          email,
+          ticket: ticketRef.current
+        }).catch(() => undefined);
+      }
       console.error(err);
       setMfaError(
         err?.code === 'auth/invalid-verification-code'
@@ -471,10 +640,54 @@ export function AuthGate({ children }: AuthGateProps) {
         !hasTotpEnrolled(session.user) ? (
         <MfaSetupScreen
           user={session.user}
-          onDone={() => setMfaEnrolledTick((n) => n + 1)}
+          offerMoreFactors={securityStrict}
+          onDone={() => {
+            void securityMfaOk()
+              .catch(() => undefined)
+              .finally(() => {
+                setStepUp(false);
+                setMfaEnrolledTick((n) => n + 1);
+              });
+          }}
           onSignOut={session.onSignOut}
           onSkip={mfaSkipAllowed(securityStrict) ? () => setMfaSkipped(true) : undefined}
         />
+      ) : session && (stepUp || securityBlocked) ? (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <BrandLogo variant="icon" size="lg" showText={false} />
+          <div className="mt-6 w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-6 space-y-4">
+            <h1 className="text-lg font-black text-slate-900">{translate(effectiveLocale, 'mfa.stepUpTitle')}</h1>
+            <p className="text-xs text-slate-600">
+              {securityBlocked ? bootError : translate(effectiveLocale, 'mfa.stepUpHint')}
+            </p>
+            {stepUp && passkeys > 0 && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void verifyPasskey()
+                    .then(() => securityMfaOk())
+                    .then(() => setStepUp(false))
+                    .catch((err: unknown) =>
+                      setBootError(err instanceof Error ? err.message : translate(effectiveLocale, 'auth.authFailed'))
+                    )
+                    .finally(() => setBusy(false));
+                }}
+                className="w-full px-3 py-2.5 rounded-xl text-sm font-bold border border-slate-200"
+              >
+                {translate(effectiveLocale, 'mfa.usePasskey')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void session.onSignOut()}
+              className="w-full px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-700 text-white"
+            >
+              {translate(effectiveLocale, 'mfa.signInAgain')}
+            </button>
+          </div>
+        </div>
       ) : session ? (
         <>{children(session)}</>
       ) : mfaResolver ? (
@@ -507,6 +720,28 @@ export function AuthGate({ children }: AuthGateProps) {
                 {mfaError}
               </p>
             )}
+            <div ref={phoneBoxRef} />
+            {hasPhoneFactor(mfaResolver) && !phoneVerificationId && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const node = phoneBoxRef.current;
+                  if (!node) return;
+                  setBusy(true);
+                  setMfaError(null);
+                  void sendPhoneSignInCode(mfaResolver, node)
+                    .then((id) => setPhoneVerificationId(id))
+                    .catch((err: unknown) =>
+                      setMfaError(err instanceof Error ? err.message : translate(effectiveLocale, 'auth.authFailed'))
+                    )
+                    .finally(() => setBusy(false));
+                }}
+                className="w-full px-3 py-2 rounded-xl text-sm font-bold border border-slate-200"
+              >
+                {translate(effectiveLocale, 'mfa.addSms')}
+              </button>
+            )}
             <button
               type="submit"
               disabled={busy || mfaCode.length !== 6}
@@ -524,6 +759,88 @@ export function AuthGate({ children }: AuthGateProps) {
               }}
               className="text-xs font-bold text-slate-500 hover:underline"
             >
+              {translate(effectiveLocale, 'mfa.backToSignIn')}
+            </button>
+          </form>
+        </div>
+      ) : resetToken ? (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setBusy(true);
+              setFormError(null);
+              void securityCompleteReset(resetToken, resetPassword, faxNumber)
+                .then(() => {
+                  setResetToken('');
+                  setResetMessage(translate(effectiveLocale, 'mfa.resetSent'));
+                  window.history.replaceState({}, '', window.location.pathname);
+                })
+                .catch((err: unknown) =>
+                  setFormError(err instanceof Error ? err.message : translate(effectiveLocale, 'auth.authFailed'))
+                )
+                .finally(() => setBusy(false));
+            }}
+            className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-6 space-y-4"
+          >
+            <h1 className="text-lg font-black text-slate-900">{translate(effectiveLocale, 'mfa.resetTitle')}</h1>
+            <input
+              type="password"
+              required
+              minLength={12}
+              maxLength={256}
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              placeholder={translate(effectiveLocale, 'mfa.newPassword')}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+            />
+            {formError && <p className="text-xs text-rose-700">{formError}</p>}
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-700 text-white disabled:opacity-50"
+            >
+              {translate(effectiveLocale, 'mfa.savePassword')}
+            </button>
+          </form>
+        </div>
+      ) : resetAsk ? (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setBusy(true);
+              setFormError(null);
+              void securityRequestReset(email, faxNumber)
+                .then((message) => {
+                  setResetMessage(message);
+                  setResetAsk(false);
+                })
+                .catch((err: unknown) =>
+                  setFormError(err instanceof Error ? err.message : translate(effectiveLocale, 'auth.authFailed'))
+                )
+                .finally(() => setBusy(false));
+            }}
+            className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-6 space-y-4"
+          >
+            <h1 className="text-lg font-black text-slate-900">{translate(effectiveLocale, 'mfa.resetTitle')}</h1>
+            <p className="text-xs text-slate-600">{translate(effectiveLocale, 'mfa.resetHint')}</p>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+            />
+            {formError && <p className="text-xs text-rose-700">{formError}</p>}
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-700 text-white disabled:opacity-50"
+            >
+              {translate(effectiveLocale, 'mfa.resetSend')}
+            </button>
+            <button type="button" onClick={() => setResetAsk(false)} className="text-xs font-bold text-slate-500">
               {translate(effectiveLocale, 'mfa.backToSignIn')}
             </button>
           </form>
@@ -552,11 +869,19 @@ export function AuthGate({ children }: AuthGateProps) {
           requestMessage={requestMessage}
           onRequestMessageChange={setRequestMessage}
           busy={busy}
-          formError={formError}
+          formError={resetMessage || formError}
           bootError={bootError}
           requestSent={requestSent}
           onSubmit={handleSubmit}
           onRequestAccess={handleRequestAccess}
+          securityStrict={securityStrict}
+          onForgotPassword={() => {
+            setFormError(null);
+            setResetMessage(null);
+            setResetAsk(true);
+          }}
+          faxNumber={faxNumber}
+          onFaxChange={setFaxNumber}
         />
       )}
     </LocaleProvider>

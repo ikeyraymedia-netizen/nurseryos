@@ -325,6 +325,7 @@ function NurseryApp({
   locale: _locale,
   isPlatformAdmin = false,
   onSignOut,
+  onSignOutAll,
   onRefreshTenant,
   onUpdateLocale,
   onBackToSeller
@@ -336,6 +337,7 @@ function NurseryApp({
   locale: AppLocale;
   isPlatformAdmin?: boolean;
   onSignOut: () => Promise<void>;
+  onSignOutAll?: () => Promise<void>;
   onRefreshTenant?: () => Promise<void>;
   onUpdateLocale: (locale: AppLocale) => Promise<void>;
   onBackToSeller?: () => void;
@@ -852,6 +854,7 @@ function NurseryApp({
           role={memberState.role}
           member={memberState}
           onSignOut={onSignOut}
+          onSignOutAll={onSignOutAll}
           onNotificationSettings={() => setShowPushSettings(true)}
           onManageTeam={
             permissions.canManageTeam ? () => setShowTeamManager(true) : undefined
@@ -919,6 +922,7 @@ function NurseryApp({
             role={memberState.role}
             member={memberState}
             onSignOut={onSignOut}
+            onSignOutAll={onSignOutAll}
             onNotificationSettings={() => setShowPushSettings(true)}
             onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
             onManagePackages={undefined}
@@ -1035,6 +1039,7 @@ function NurseryApp({
         role={memberState.role}
         member={memberState}
         onSignOut={onSignOut}
+        onSignOutAll={onSignOutAll}
         onNotificationSettings={() => setShowPushSettings(true)}
         onManageTeam={permissions.canManageTeam ? () => setShowTeamManager(true) : undefined}
         onManagePackages={undefined}
@@ -1546,8 +1551,11 @@ function RootApp({
     profile: { isPlatformAdmin?: boolean; activeTenantId: string | null };
     tenant: Tenant | null;
     member: TenantMember | null;
+    locale: AppLocale;
     onSignOut: () => Promise<void>;
+    onSignOutAll: () => Promise<void>;
     onRefreshTenant: () => Promise<void>;
+    onUpdateLocale: (locale: AppLocale) => Promise<void>;
   };
 }) {
   const t = useT();
@@ -1631,6 +1639,7 @@ function RootApp({
       locale={session.locale}
       isPlatformAdmin={isPlatformAdmin}
       onSignOut={session.onSignOut}
+      onSignOutAll={session.onSignOutAll}
       onRefreshTenant={session.onRefreshTenant}
       onUpdateLocale={session.onUpdateLocale}
       onBackToSeller={isPlatformAdmin ? goPlatform : undefined}

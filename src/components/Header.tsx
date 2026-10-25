@@ -13,6 +13,7 @@ interface HeaderProps {
   role?: MemberRole;
   member?: Pick<TenantMember, 'role' | 'roles'> | null;
   onSignOut?: () => Promise<void> | void;
+  onSignOutAll?: () => Promise<void> | void;
   onManageTeam?: () => void;
   onNotificationSettings?: () => void;
   onManagePackages?: () => void;
@@ -55,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   role,
   member,
   onSignOut,
+  onSignOutAll,
   onManageTeam,
   onNotificationSettings,
   onManagePackages,
@@ -192,6 +194,15 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <LogOut className="h-3.5 w-3.5 shrink-0" />
                   {t('common.signOut')}
+                </button>
+              )}
+              {onSignOutAll && (
+                <button
+                  type="button"
+                  onClick={() => onSignOutAll()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
+                >
+                  {t('common.signOutAll')}
                 </button>
               )}
             </div>

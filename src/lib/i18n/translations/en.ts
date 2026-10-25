@@ -22,6 +22,7 @@ const en = {
     order: 'Order',
     orders: 'Orders',
     signOut: 'Sign out',
+    signOutAll: 'Sign out all devices',
     email: 'Email',
     password: 'Password',
     yourName: 'Your name',

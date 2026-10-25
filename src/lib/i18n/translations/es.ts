@@ -23,6 +23,7 @@ const es: TranslationDict = {
     order: 'Pedido',
     orders: 'Pedidos',
     signOut: 'Cerrar sesión',
+    signOutAll: 'Cerrar sesión en todos',
     email: 'Correo',
     password: 'Contraseña',
     yourName: 'Su nombre',

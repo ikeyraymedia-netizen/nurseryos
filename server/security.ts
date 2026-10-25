@@ -10,6 +10,7 @@ import {
   verifyFirebaseIdToken
 } from './firebaseAdmin';
 import { isMelioSecurityStrict } from './securityFlag';
+import { registerPasskeyRoutes } from './passkeys';
 import { requestContext } from './requestContext';
 import { sendSecurityNotice } from './securityMail';
 import {
@@ -437,6 +438,29 @@ export function registerSecurityRoutes(app: Express): void {
   app.get('/api/security/config', (_req, res) => {
     res.json({ strict: isMelioSecurityStrict() });
   });
+
+  app.post('/api/security/password-check', async (req, res) => {
+    try {
+      requireStrict();
+      const password = String(req.body?.password || '');
+      const assessed = await assessPassword(password, lookupHibpRange);
+      if (!assessed.ok && assessed.reason) {
+        throw httpError(400, passwordPolicyMessage(assessed.reason), assessed.reason);
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      sendErr(res, err);
+    }
+  });
+
+  registerPasskeyRoutes(
+    app,
+    async (req) => {
+      const decoded = await requireSessionUser(req);
+      return { uid: decoded.uid, email: decoded.email || '' };
+    },
+    sendErr
+  );
 
   app.post('/api/security/challenge', async (req, res) => {
     try {

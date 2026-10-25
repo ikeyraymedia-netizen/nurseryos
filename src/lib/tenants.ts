@@ -328,6 +328,8 @@ export async function updateMemberRoles(params: {
     roles
   };
   await updateDoc(memberRef, { role: next.role, roles: next.roles });
+  const { securityPermissionChanged } = await import('./securityClient');
+  await securityPermissionChanged(params.tenantId, params.memberUserId, roles);
   return next;
 }
 
@@ -346,6 +348,8 @@ export async function removeTeamMember(params: {
   if (memberHasRole({ role: memberRole, roles: memberRoles }, 'owner')) {
     throw new Error('Owner cannot be removed from the nursery.');
   }
+  const { securityRevokeMember } = await import('./securityClient');
+  await securityRevokeMember(tenantId, memberUserId);
   await deleteDoc(doc(db, 'tenants', tenantId, 'members', memberUserId));
 }
 
@@ -356,6 +360,11 @@ export async function removeTeamMember(params: {
 export async function sendMemberPasswordReset(memberEmail: string): Promise<void> {
   const email = memberEmail.trim();
   if (!email) throw new Error('This team member has no email on file.');
+  const { securityConfig, securityRequestReset } = await import('./securityClient');
+  if (await securityConfig()) {
+    await securityRequestReset(email);
+    return;
+  }
   try {
     await sendPasswordResetEmail(auth, email);
   } catch (err: any) {

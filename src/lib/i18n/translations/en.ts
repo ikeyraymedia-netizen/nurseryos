@@ -166,7 +166,7 @@ const en = {
   orders: {
     title: 'Plant Orders',
     searchPlaceholder: 'Search customer, PO, plant, or vendor…',
-    filterThisWeek: 'This week',
+    filterThisWeek: 'This Week',
     filterAll: 'All orders',
     filterPending: 'To load',
     filterLoading: 'In progress',

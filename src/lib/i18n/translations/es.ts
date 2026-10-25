@@ -172,7 +172,8 @@ const es: TranslationDict = {
   orders: {
     title: 'Pedidos de plantas',
     searchPlaceholder: 'Buscar cliente, OC, planta o proveedor…',
-    filterAll: 'Todos',
+    filterThisWeek: 'Esta semana',
+    filterAll: 'Todos los pedidos',
     filterPending: 'Por cargar',
     filterLoading: 'En progreso',
     filterCompleted: 'Cargados',
@@ -182,6 +183,8 @@ const es: TranslationDict = {
     deleteConfirm: '¿Eliminar este pedido?',
     noOrders: 'Aún no hay pedidos',
     noOrdersHint: 'Suba un pedido de cliente para comenzar.',
+    noThisWeek: 'Nada esta semana',
+    noThisWeekHint: 'De domingo a sábado, más los pedidos anteriores que aún hay que cargar.',
     noSearchResults: 'No hay pedidos coincidentes',
     noSearchResultsHint: 'Pruebe otro cliente, OC, planta o proveedor.',
     plantMatchSummary: '{{qty}} por cargar · {{lines}} línea(s)',

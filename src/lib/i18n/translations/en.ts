@@ -166,7 +166,8 @@ const en = {
   orders: {
     title: 'Plant Orders',
     searchPlaceholder: 'Search customer, PO, plant, or vendor…',
-    filterAll: 'All',
+    filterThisWeek: 'This week',
+    filterAll: 'All orders',
     filterPending: 'To load',
     filterLoading: 'In progress',
     filterCompleted: 'Loaded',
@@ -176,6 +177,8 @@ const en = {
     deleteConfirm: 'Delete this order?',
     noOrders: 'No orders yet',
     noOrdersHint: 'Upload a customer order to get started.',
+    noThisWeek: 'Nothing this week',
+    noThisWeekHint: 'Sunday through Saturday, plus older orders that still need to be loaded.',
     noSearchResults: 'No matching orders',
     noSearchResultsHint: 'Try a different customer, PO, plant, or vendor name.',
     plantMatchSummary: '{{qty}} still to load · {{lines}} line(s)',

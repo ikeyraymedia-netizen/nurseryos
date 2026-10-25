@@ -48,6 +48,28 @@ function lineMatchesQuery(item: PlantOrderItem, q: string): boolean {
   return plantHay.includes(q) || Boolean(vendorHay && vendorHay.includes(q));
 }
 
+function startOfWeekSunday(now = new Date()): Date {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
+function endOfWeekSaturday(start: Date): Date {
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+
+/** This week (Sunday–Saturday), plus older orders that still have not been loaded. */
+function orderInThisWeek(order: CustomerOrder, weekStart: Date, weekEnd: Date): boolean {
+  const created = new Date(order.dateCreated);
+  if (Number.isNaN(created.getTime())) return order.status !== 'completed';
+  if (created >= weekStart && created <= weekEnd) return true;
+  return created < weekStart && order.status !== 'completed';
+}
+
 function lineRemaining(item: PlantOrderItem): number {
   return Math.max(0, item.quantity - (Number(item.loadedQuantity) || 0));
 }
@@ -82,6 +104,8 @@ function lineHitsForQuery(items: PlantOrderItem[], q: string): PlantSearchHit[] 
   return hits;
 }
 
+type OrderListFilter = 'week' | 'all' | 'pending' | 'loading' | 'completed';
+
 export const OrdersList: React.FC<OrdersListProps> = ({
   orders,
   selectedOrderId,
@@ -92,7 +116,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({
   const t = useT();
   const dp = usePlantDisplay();
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'loading' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<OrderListFilter>('week');
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const handleDeleteConfirm = async (orderId: string) => {
@@ -106,9 +130,14 @@ export const OrdersList: React.FC<OrdersListProps> = ({
 
   const filteredOrders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const weekStart = startOfWeekSunday();
+    const weekEnd = endOfWeekSaturday(weekStart);
     return orders
       .map((order) => {
-        const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'week' && orderInThisWeek(order, weekStart, weekEnd)) ||
+          (statusFilter !== 'week' && order.status === statusFilter);
         if (!matchesStatus) return null;
 
         if (!q) {
@@ -216,23 +245,25 @@ export const OrdersList: React.FC<OrdersListProps> = ({
       </div>
 
       <div className="flex border-b border-slate-300/80 pb-2 mb-4 overflow-x-auto gap-1">
-        {(['all', 'pending', 'loading', 'completed'] as const).map((tab) => (
+        {(['week', 'all', 'pending', 'loading', 'completed'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setStatusFilter(tab)}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg capitalize whitespace-nowrap transition-all duration-150 ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-all duration-150 ${
               statusFilter === tab
                 ? 'bg-ink-700 text-white shadow-sm'
                 : 'text-slate-600 hover:text-ink-800 hover:bg-ink-50'
             }`}
           >
-            {tab === 'all'
-              ? t('orders.filterAll')
-              : tab === 'loading'
-                ? t('orders.filterLoading')
-                : tab === 'completed'
-                  ? t('orders.filterCompleted')
-                  : t('orders.filterPending')}
+            {tab === 'week'
+              ? t('orders.filterThisWeek')
+              : tab === 'all'
+                ? t('orders.filterAll')
+                : tab === 'loading'
+                  ? t('orders.filterLoading')
+                  : tab === 'completed'
+                    ? t('orders.filterCompleted')
+                    : t('orders.filterPending')}
           </button>
         ))}
       </div>
@@ -241,10 +272,18 @@ export const OrdersList: React.FC<OrdersListProps> = ({
         {filteredOrders.length === 0 ? (
           <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-300">
             <p className="text-sm font-semibold text-gray-700">
-              {searching ? t('orders.noSearchResults') : t('orders.noOrders')}
+              {searching
+                ? t('orders.noSearchResults')
+                : statusFilter === 'week'
+                  ? t('orders.noThisWeek')
+                  : t('orders.noOrders')}
             </p>
             <p className="text-xs text-slate-500 mt-1 max-w-[220px] mx-auto leading-normal">
-              {searching ? t('orders.noSearchResultsHint') : t('orders.noOrdersHint')}
+              {searching
+                ? t('orders.noSearchResultsHint')
+                : statusFilter === 'week'
+                  ? t('orders.noThisWeekHint')
+                  : t('orders.noOrdersHint')}
             </p>
           </div>
         ) : (

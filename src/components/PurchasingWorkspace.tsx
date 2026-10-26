@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Building2,
@@ -124,6 +124,14 @@ function todayKey() {
   return toDateKey(new Date());
 }
 
+function isBillOutstanding(bill: VendorBill): boolean {
+  return bill.status !== 'paid' && bill.status !== 'payment_pending';
+}
+
+function isBillOverdue(bill: VendorBill, today = todayKey()): boolean {
+  return isBillOutstanding(bill) && Boolean(bill.dueDate) && bill.dueDate < today;
+}
+
 /** Whole days from `fromKey` to `toKey` (YYYY-MM-DD); negative when `toKey` is earlier. */
 function daysBetweenKeys(fromKey: string, toKey: string): number {
   const a = Date.parse(`${fromKey}T00:00:00Z`);
@@ -133,6 +141,7 @@ function daysBetweenKeys(fromKey: string, toKey: string): number {
 }
 
 type BillListMode = 'due' | 'paid' | 'all';
+type BillBalanceFilter = 'all' | 'outstanding' | 'overdue';
 type BillDueBucket = 'overdue' | 'thisWeek' | 'nextWeek' | 'later' | 'noDue';
 const BILL_DUE_BUCKETS: BillDueBucket[] = ['overdue', 'thisWeek', 'nextWeek', 'later', 'noDue'];
 
@@ -272,6 +281,8 @@ export function PurchasingWorkspace({
   const [viewingPaymentBill, setViewingPaymentBill] = useState<VendorBill | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [billListMode, setBillListMode] = useState<BillListMode>('due');
+  const [billBalanceFilter, setBillBalanceFilter] = useState<BillBalanceFilter>('all');
+  const billListAnchorRef = useRef<HTMLDivElement>(null);
   const [billFilterVendorId, setBillFilterVendorId] = useState('');
   const [billFilterDateField, setBillFilterDateField] = useState<'dueDate' | 'billDate'>('dueDate');
   const [billFilterFrom, setBillFilterFrom] = useState('');
@@ -463,12 +474,38 @@ export function PurchasingWorkspace({
     let overdue = 0;
     const today = todayKey();
     for (const bill of bills) {
-      if (bill.status === 'paid' || bill.status === 'payment_pending') continue;
+      if (!isBillOutstanding(bill)) continue;
       outstanding += bill.grandTotal || 0;
-      if (bill.dueDate && bill.dueDate < today) overdue += bill.grandTotal || 0;
+      if (isBillOverdue(bill, today)) overdue += bill.grandTotal || 0;
     }
     return { outstanding, overdue, count: bills.length };
   }, [bills]);
+
+  const balanceBills = useMemo(() => {
+    if (billBalanceFilter === 'all') return [];
+    const today = todayKey();
+    return bills
+      .filter((bill) =>
+        billBalanceFilter === 'overdue' ? isBillOverdue(bill, today) : isBillOutstanding(bill)
+      )
+      .sort(
+        (a, b) =>
+          (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99') ||
+          a.vendorName.localeCompare(b.vendorName)
+      );
+  }, [bills, billBalanceFilter]);
+
+  function toggleBillBalanceFilter(next: Exclude<BillBalanceFilter, 'all'>) {
+    setBillBalanceFilter((current) => {
+      const value = current === next ? 'all' : next;
+      if (value !== 'all') {
+        window.setTimeout(() => {
+          billListAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
+      }
+      return value;
+    });
+  }
 
   const monthKey = todayKey().slice(0, 7);
 
@@ -1586,14 +1623,32 @@ export function PurchasingWorkspace({
               <p className="text-[10px] font-bold uppercase text-slate-500">{t('purchasing.bills')}</p>
               <p className="text-sm font-black text-slate-900">{billTotals.count}</p>
             </div>
-            <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
+            <button
+              type="button"
+              aria-pressed={billBalanceFilter === 'outstanding'}
+              onClick={() => toggleBillBalanceFilter('outstanding')}
+              className={`rounded-xl border px-3 py-2 text-left transition ${
+                billBalanceFilter === 'outstanding'
+                  ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200'
+                  : 'border-amber-100 bg-amber-50/60 hover:border-amber-300'
+              }`}
+            >
               <p className="text-[10px] font-bold uppercase text-amber-700">{t('purchasing.outstanding')}</p>
               <p className="text-sm font-black text-amber-900">{money(billTotals.outstanding)}</p>
-            </div>
-            <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
+            </button>
+            <button
+              type="button"
+              aria-pressed={billBalanceFilter === 'overdue'}
+              onClick={() => toggleBillBalanceFilter('overdue')}
+              className={`rounded-xl border px-3 py-2 text-left transition ${
+                billBalanceFilter === 'overdue'
+                  ? 'border-rose-400 bg-rose-100 ring-2 ring-rose-200'
+                  : 'border-rose-100 bg-rose-50/60 hover:border-rose-300'
+              }`}
+            >
               <p className="text-[10px] font-bold uppercase text-rose-700">{t('purchasing.overdue')}</p>
               <p className="text-sm font-black text-rose-900">{money(billTotals.overdue)}</p>
-            </div>
+            </button>
           </div>
 
           <div className="rounded-xl border border-ink-100 bg-ink-50/30 p-3 space-y-2">
@@ -2577,13 +2632,16 @@ export function PurchasingWorkspace({
             </form>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div ref={billListAnchorRef} className="flex flex-wrap items-center justify-between gap-2">
             <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden">
               {(['due', 'paid', 'all'] as BillListMode[]).map((mode) => (
                 <button
                   key={mode}
                   type="button"
-                  onClick={() => setBillListMode(mode)}
+                  onClick={() => {
+                    setBillListMode(mode);
+                    setBillBalanceFilter('all');
+                  }}
                   className={`px-3 py-1.5 text-[11px] font-bold ${
                     billListMode === mode ? 'bg-ink-700 text-white' : 'bg-white text-ink-800'
                   }`}
@@ -2675,7 +2733,13 @@ export function PurchasingWorkspace({
 
           <div className="space-y-2 max-h-[640px] overflow-y-auto">
             {renderBillSelectionBar()}
-            {billListMode === 'due' ? (
+            {billBalanceFilter !== 'all' ? (
+              balanceBills.length === 0 ? (
+                <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noUnpaidBills')}</p>
+              ) : (
+                balanceBills.map((bill) => renderBillCard(bill))
+              )
+            ) : billListMode === 'due' ? (
               billDueGroups.every((g) => g.bills.length === 0) ? (
                 <p className="text-xs text-gray-500 py-8 text-center">{t('purchasing.noUnpaidBills')}</p>
               ) : (

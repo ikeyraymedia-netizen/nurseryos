@@ -18,6 +18,7 @@ import {
 } from './invoicing';
 import { deleteLinkedQuickbooksDocument, fetchHighestQuickbooksDocNumber } from './quickbooks';
 import { notifyPushEvent } from './pushNotifications';
+import { applyManualInvoicePayment } from './manualPayment';
 
 let activeTenantId: string | null = null;
 
@@ -164,19 +165,23 @@ export async function syncInvoicesFromOrder(order: CustomerOrder): Promise<Custo
   if (projection.updates.length === 0 && projection.invoicedById.size === 0) return null;
 
   const now = new Date().toISOString();
+  const invoiceById = new Map(linked.map((doc) => [doc.id, doc]));
   await Promise.all(
-    projection.updates.map((update) =>
-      updateDoc(
+    projection.updates.map((update) => {
+      const invoice = invoiceById.get(update.id);
+      const payment = invoice ? paymentFieldsAfterInvoiceTotal(invoice, update.grandTotal) : null;
+      return updateDoc(
         documentDoc(tenantId, update.id),
         sanitizeForFirestore({
           items: update.items,
           subtotal: update.subtotal,
           salesTax: update.salesTax,
           grandTotal: update.grandTotal,
+          ...(payment || {}),
           updatedAt: now
         })
-      )
-    )
+      );
+    })
   );
 
   const items = withInvoicedQuantitiesFromInvoices(order.items, projection.invoicedById);
@@ -201,7 +206,58 @@ export function localTodayKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** ISO timestamp for a chosen paid date (YYYY-MM-DD); keeps the exact time when it is today. */
+/** Cash already recorded on an invoice. A paid invoice with no stored amount used its total. */
+export function invoiceAmountPaid(
+  doc: Pick<CustomerDocument, 'type' | 'paymentStatus' | 'stripePaidAmountCents' | 'grandTotal'>
+): number {
+  if (doc.type !== 'invoice') return 0;
+  if (typeof doc.stripePaidAmountCents === 'number' && Number.isFinite(doc.stripePaidAmountCents)) {
+    return doc.stripePaidAmountCents / 100;
+  }
+  if (doc.paymentStatus === 'paid') return Number(doc.grandTotal) || 0;
+  return 0;
+}
+
+/** What is still owed. A payment that covers the current total leaves this at zero. */
+export function invoiceBalanceDue(
+  doc: Pick<CustomerDocument, 'type' | 'paymentStatus' | 'stripePaidAmountCents' | 'grandTotal'>
+): number {
+  if (doc.type !== 'invoice') return Math.max(0, Number(doc.grandTotal) || 0);
+  return Math.max(0, Number(((Number(doc.grandTotal) || 0) - invoiceAmountPaid(doc)).toFixed(2)));
+}
+
+/**
+ * Adding lines (or otherwise raising the total) past the recorded payment
+ * reopens the invoice. The original payment stays on the document.
+ */
+export function paymentFieldsAfterInvoiceTotal(
+  doc: CustomerDocument,
+  newGrandTotal: number
+): {
+  paymentStatus: 'paid' | 'unpaid';
+  stripePaidAmountCents: number;
+  overpaidAmount: number;
+} | null {
+  if (doc.type !== 'invoice') return null;
+  const paid = invoiceAmountPaid(doc);
+  if (paid <= 0.009 && doc.paymentStatus !== 'paid') return null;
+  const paidCents = Math.round(paid * 100);
+  const newCents = Math.round((Number(newGrandTotal) || 0) * 100);
+  if (newCents <= paidCents) {
+    const over = (paidCents - newCents) / 100;
+    return {
+      paymentStatus: 'paid',
+      stripePaidAmountCents: paidCents,
+      overpaidAmount: over > 0.009 ? Number(over.toFixed(2)) : 0
+    };
+  }
+  return {
+    paymentStatus: 'unpaid',
+    stripePaidAmountCents: paidCents,
+    overpaidAmount: 0
+  };
+}
+
 export function paidAtFromDateKey(dateKey?: string | null): string {
   const key = String(dateKey || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key === localTodayKey()) {
@@ -216,35 +272,50 @@ export async function markCustomerInvoicePaid(
     method: Exclude<CustomerDocument['paymentMethod'], 'stripe' | 'quickbooks' | undefined>;
     reference?: string;
     paidDate?: string;
+    /** Dollars received on this payment. Omitted means the remaining balance. */
+    amount?: number;
   }
-): Promise<void> {
+): Promise<{
+  paymentStatus: 'paid' | 'unpaid';
+  stripePaidAmountCents: number;
+  overpaidAmount: number;
+  paidAt: string;
+  amountReceived: number;
+}> {
   if (document.type !== 'invoice') {
     throw new Error('Only invoices can be marked paid.');
   }
+  const remaining = invoiceBalanceDue(document);
+  const amount =
+    payment.amount != null && Number.isFinite(payment.amount) ? payment.amount : remaining;
+  if (!(amount > 0)) {
+    throw new Error('Enter the amount that was paid.');
+  }
+  const applied = applyManualInvoicePayment(
+    document.grandTotal || 0,
+    invoiceAmountPaid(document),
+    amount
+  );
+  const paidAt = paidAtFromDateKey(payment.paidDate);
   await updateCustomerDocument({
     ...document,
-    paymentStatus: 'paid',
-    paidAt: paidAtFromDateKey(payment.paidDate),
+    paymentStatus: applied.paymentStatus,
+    paidAt,
     paymentMethod: payment.method,
     paymentReference: payment.reference?.trim() || undefined,
-    stripePaidAmountCents:
-      typeof document.stripePaidAmountCents === 'number'
-        ? document.stripePaidAmountCents
-        : Math.round((document.grandTotal || 0) * 100)
+    stripePaidAmountCents: applied.stripePaidAmountCents,
+    overpaidAmount: applied.overpaidAmount
   });
 
   const tenantId = requireTenantId();
-  const amount =
-    typeof document.stripePaidAmountCents === 'number'
-      ? document.stripePaidAmountCents / 100
-      : document.grandTotal || 0;
   void notifyPushEvent({
     tenantId,
     type: 'invoice_paid',
     title: `Payment received · ${document.documentNumber}`,
-    body: `${document.billToName || document.customerName || 'Customer'} · $${amount.toFixed(2)}`,
+    body: `${document.billToName || document.customerName || 'Customer'} · $${applied.amountReceived.toFixed(2)}`,
     url: '/?tab=customers'
   });
+  return { ...applied, paidAt };
 }
 
 export async function deleteCustomerDocument(documentId: string): Promise<void> {

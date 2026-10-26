@@ -1009,6 +1009,11 @@ const extra = {
     downloadPdfTitle: 'Download PDF to print',
     closeWindowTitle: 'Close Window',
     paidBadge: 'Paid',
+    notFullyPaid: 'Not paid in full · ${{balance}} still due',
+    notFullyPaidShort: 'Balance due',
+    amountAlreadyPaid: '${{amount}} already paid',
+    paymentReceivedBalance:
+      'A payment of ${{paid}} was received. Balance due is ${{balance}}.',
     markAsPaid: 'Mark as paid',
     markPaidFailed: 'Could not mark invoice as paid.',
     paymentPendingBadge: 'Payment pending',
@@ -1645,7 +1650,13 @@ const extra = {
     referencePlaceholder: 'Confirmation or reference number',
     checkWithNumber: 'Check #{{number}}',
     ref: 'Ref {{ref}}',
-    confirmPaid: 'Mark paid'
+    confirmPaid: 'Mark paid',
+    balanceDue: 'Balance due {{amount}}',
+    amountPaid: 'Amount paid',
+    amountHint: 'Change this if they paid a different amount than the balance due.',
+    amountShort: 'Less than the balance due. The invoice stays open for the rest.',
+    amountOver: 'More than the balance due. The extra is recorded as overpaid.',
+    amountInvalid: 'Enter the amount that was paid.'
   },
   whatsNew: {
     title: 'Since you were last here',

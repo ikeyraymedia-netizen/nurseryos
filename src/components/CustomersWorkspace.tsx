@@ -26,6 +26,8 @@ import {
 import { addCustomer, bulkImportCustomers, countDuplicateCustomerNames, deduplicateCustomersByName, deleteAllCustomers, parseCsvCustomers, repairCombinedCustomerAddresses, updateCustomer, withSplitCustomerAddresses } from '../lib/customers';
 import {
     listAllDocuments,
+    invoiceAmountPaid,
+    invoiceBalanceDue,
     markCustomerInvoicePaid,
     subscribeToCustomerDocuments,
     subscribeToDocuments,
@@ -1466,6 +1468,11 @@ export function CustomersWorkspace({
                           <p className="text-sm font-bold text-gray-900 truncate">{doc.documentNumber}</p>
                           <p className="text-xs text-gray-500">
                             {new Date(doc.documentDate).toLocaleDateString()} • ${doc.grandTotal.toFixed(2)}
+                            {doc.type === 'invoice' &&
+                            invoiceAmountPaid(doc) > 0.009 &&
+                            invoiceBalanceDue(doc) > 0.009
+                              ? ` • ${t('invoice.notFullyPaid', { balance: invoiceBalanceDue(doc).toFixed(2) })}`
+                              : ''}
                             {doc.orderNumber ? ` • ${t('customers.orderNum')}${doc.orderNumber}` : ''}
                             {doc.referencedInvoiceNumber
                               ? ` • ${t('customers.refInvoice')}${doc.referencedInvoiceNumber}`
@@ -1492,6 +1499,13 @@ export function CustomersWorkspace({
                           {doc.type === 'invoice' && doc.paymentStatus === 'paid' && (
                             <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-emerald-700 text-white">
                               {t('customers.paid')}
+                            </span>
+                          )}
+                          {doc.type === 'invoice' &&
+                            invoiceAmountPaid(doc) > 0.009 &&
+                            invoiceBalanceDue(doc) > 0.009 && (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-500 text-white">
+                              {t('invoice.notFullyPaidShort')}
                             </span>
                           )}
                           {doc.type === 'invoice' && (doc.overpaidAmount || 0) > 0 && (
@@ -1832,6 +1846,9 @@ export function CustomersWorkspace({
                             <p className="text-xs text-gray-500">
                               {documentDateValue(doc).toLocaleDateString()} • $
                               {(doc.grandTotal || 0).toFixed(2)}
+                              {invoiceAmountPaid(doc) > 0.009 && invoiceBalanceDue(doc) > 0.009
+                                ? ` • ${t('invoice.notFullyPaid', { balance: invoiceBalanceDue(doc).toFixed(2) })}`
+                                : ''}
                               {doc.orderNumber ? ` • ${t('customers.orderNum')}${doc.orderNumber}` : ''}
                             </p>
                             </div>
@@ -1844,6 +1861,10 @@ export function CustomersWorkspace({
                             ) : doc.paymentStatus === 'pending' ? (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-100 text-amber-800">
                                 {t('customers.pending')}
+                              </span>
+                            ) : invoiceAmountPaid(doc) > 0.009 && invoiceBalanceDue(doc) > 0.009 ? (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-amber-500 text-white">
+                                {t('invoice.notFullyPaidShort')}
                               </span>
                             ) : (
                               <span className="text-[10px] font-bold px-2 py-1 rounded-full uppercase bg-slate-100 text-slate-700">
@@ -2145,9 +2166,16 @@ export function CustomersWorkspace({
                   .join(', ')}`
               : `${markingPaidInvoices[0].documentNumber} · ${markingPaidInvoices[0].customerName}`
           }
-          amountLabel={formatMoney(
-            markingPaidInvoices.reduce((sum, doc) => sum + (doc.grandTotal || 0), 0)
-          )}
+          amountLabel={t('paymentMethod.balanceDue', {
+            amount: formatMoney(
+              markingPaidInvoices.reduce((sum, doc) => sum + invoiceBalanceDue(doc), 0)
+            )
+          })}
+          defaultAmount={
+            markingPaidInvoices.length === 1
+              ? invoiceBalanceDue(markingPaidInvoices[0])
+              : undefined
+          }
           busy={busy}
           onCancel={() => setMarkingPaidInvoices(null)}
           onConfirm={async (payment) => {

@@ -1022,6 +1022,11 @@ const extra = {
     downloadPdfTitle: 'Descargar PDF para imprimir',
     closeWindowTitle: 'Cerrar ventana',
     paidBadge: 'Pagado',
+    notFullyPaid: 'No pagado por completo · ${{balance}} pendiente',
+    notFullyPaidShort: 'Saldo pendiente',
+    amountAlreadyPaid: '${{amount}} ya pagado',
+    paymentReceivedBalance:
+      'Se recibió un pago de ${{paid}}. El saldo pendiente es ${{balance}}.',
     markAsPaid: 'Marcar como pagado',
     markPaidFailed: 'No se pudo marcar la factura como pagada.',
     paymentPendingBadge: 'Pago pendiente',
@@ -1661,7 +1666,13 @@ const extra = {
     referencePlaceholder: 'Número de confirmación o referencia',
     checkWithNumber: 'Cheque #{{number}}',
     ref: 'Ref {{ref}}',
-    confirmPaid: 'Marcar pagado'
+    confirmPaid: 'Marcar pagado',
+    balanceDue: 'Saldo pendiente {{amount}}',
+    amountPaid: 'Monto pagado',
+    amountHint: 'Cámbielo si pagaron un monto distinto al saldo pendiente.',
+    amountShort: 'Menos que el saldo pendiente. La factura queda abierta por el resto.',
+    amountOver: 'Más que el saldo pendiente. El extra se registra como pagado de más.',
+    amountInvalid: 'Ingrese el monto que se pagó.'
   },
   whatsNew: {
     title: 'Desde su última visita',

@@ -47,10 +47,10 @@ import {
   updateCustomerDocument,
   deleteCustomerDocument,
   markCustomerInvoicePaid,
+  paymentFieldsAfterInvoiceTotal,
   defaultDocumentNumber,
   isDocumentNumberTaken,
   nextDocumentNumber,
-  paidAtFromDateKey,
   isEstimateDocumentNumber,
   listAllDocuments,
   subscribeToDocument,
@@ -1167,16 +1167,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const grandTotal = subtotal - discountAmount + salesTax + freightCharge;
   const paymentDocument = liveDocument || existingDocument || fetchedDocument;
   const paymentStatus = localMarkedPaid ? 'paid' : paymentDocument?.paymentStatus;
-  const isPaid = documentType === 'invoice' && paymentStatus === 'paid';
   const amountPaid =
-    isPaid
-      ? typeof paymentDocument?.stripePaidAmountCents === 'number'
+    documentType !== 'invoice'
+      ? 0
+      : typeof paymentDocument?.stripePaidAmountCents === 'number'
         ? paymentDocument.stripePaidAmountCents / 100
-        : grandTotal
-      : 0;
-  const balanceDue = isPaid ? 0 : grandTotal;
+        : paymentStatus === 'paid'
+          ? paymentDocument?.grandTotal ?? grandTotal
+          : 0;
+  const balanceDue =
+    documentType === 'invoice'
+      ? Math.max(0, Number((grandTotal - amountPaid).toFixed(2)))
+      : grandTotal;
+  const isFullyPaid = documentType === 'invoice' && balanceDue < 0.009 && amountPaid > 0.009;
   const activePayLinkUrl =
-    !isPaid && documentType === 'invoice'
+    !isFullyPaid && documentType === 'invoice'
       ? payLinkUrl ||
         paymentDocument?.qboInvoiceLink ||
         paymentDocument?.stripeCheckoutUrl ||
@@ -1347,7 +1352,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <td style="padding: 4px 0; color: #475569;">${salesTaxLabel}:</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${salesTax.toFixed(2)}</td>
             </tr>` : ''}
-            ${documentType === 'invoice' && isPaid ? `
+            ${documentType === 'invoice' && amountPaid > 0.009 ? `
             <tr>
               <td style="padding: 4px 0; color: #475569;">Invoice Total:</td>
               <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #0f172a;">$${grandTotal.toFixed(2)}</td>
@@ -1493,8 +1498,8 @@ ${
         ? `ESTIMATE TOTAL (USD): $${grandTotal.toFixed(2)}`
         : isCreditMemo
           ? `CREDIT AMOUNT (USD): $${grandTotal.toFixed(2)}`
-          : isPaid
-            ? `INVOICE TOTAL (USD): $${grandTotal.toFixed(2)}\nAmount Paid: $${amountPaid.toFixed(2)}\nBALANCE DUE (USD): $0.00`
+          : amountPaid > 0.009
+            ? `INVOICE TOTAL (USD): $${grandTotal.toFixed(2)}\nAmount Paid: $${amountPaid.toFixed(2)}\nBALANCE DUE (USD): $${balanceDue.toFixed(2)}`
             : `BALANCE DUE (USD): $${balanceDue.toFixed(2)}`
     }
 
@@ -1563,7 +1568,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       const wantPayLink =
         includePayLinkInEmail &&
         documentType === 'invoice' &&
-        !isPaid &&
+        !isFullyPaid &&
         Boolean(useQboPayLinks || useStripePayLinks);
       if (wantPayLink) {
         try {
@@ -2345,17 +2350,31 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           existingDocument?.qboInvoiceId ||
           fetchedDocument?.qboInvoiceId
       );
+      const priorInvoice = existingDocument || fetchedDocument || liveDocument;
+      const paymentUpdate =
+        documentType === 'invoice' && priorInvoice
+          ? paymentFieldsAfterInvoiceTotal(priorInvoice, savedGrandTotal)
+          : null;
       let persistedId = savedDocumentId;
       if (persistedId) {
           await updateCustomerDocument({
             id: persistedId,
             ...docPayload,
+            ...(paymentUpdate || {}),
             createdAt:
               existingDocument?.createdAt ||
               fetchedDocument?.createdAt ||
               new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
+          if (paymentUpdate?.paymentStatus === 'unpaid') setLocalMarkedPaid(false);
+          if (paymentUpdate) {
+            setLiveDocument((prev) =>
+              prev
+                ? { ...prev, ...docPayload, ...paymentUpdate, id: persistedId! }
+                : prev
+            );
+          }
         } else {
           persistedId = await addCustomerDocument(docPayload);
           setSavedDocumentId(persistedId);
@@ -2614,7 +2633,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         documentId: savedDocumentId
       });
       await applyQboPushResult(result);
-      if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
+      if (documentType === 'invoice' && isFullyPaid) {
         await syncPaymentToQuickbooksIfPossible(savedDocumentId, { quiet: true });
       }
       return {
@@ -2651,6 +2670,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     try {
       const baseDoc = liveDocument || existingDocument || fetchedDocument;
       if (baseDoc && savedDocumentId) {
+        const paymentUpdate =
+          documentType === 'invoice' ? paymentFieldsAfterInvoiceTotal(baseDoc, grandTotal) : null;
         await updateCustomerDocument({
           ...baseDoc,
           id: savedDocumentId,
@@ -2659,8 +2680,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           taxAmount: savedTaxAmount,
           salesTax,
           discount: isCreditMemo ? 0 : discount,
-          grandTotal
+          grandTotal,
+          ...(paymentUpdate || {})
         });
+        if (paymentUpdate?.paymentStatus === 'unpaid') setLocalMarkedPaid(false);
       }
       const result = await pushDocumentToQuickbooks({
         tenantId,
@@ -2678,7 +2701,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           : '';
 
       let paymentBit = '';
-      if (documentType === 'invoice' && (localMarkedPaid || isPaid)) {
+      if (documentType === 'invoice' && isFullyPaid) {
         const payMsg = await syncPaymentToQuickbooksIfPossible(savedDocumentId, {
           quiet: true
         });
@@ -3158,7 +3181,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       pdf.setLineWidth(1);
       pdf.line(labelX, y - 4, rightX, y - 4);
       y += 8;
-      if (documentType === 'invoice' && isPaid) {
+      if (documentType === 'invoice' && amountPaid > 0.009) {
         writeTotal(t('invoice.invoiceTotalLabel'), money(grandTotal), true, false);
         writeTotal(t('invoice.amountPaid'), money(amountPaid), true, false);
         writeTotal(t('invoice.balanceDue'), money(0), true, true);
@@ -3286,29 +3309,28 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         <MarkPaidModal
           title={t('invoice.markAsPaid')}
           subtitle={`${paymentDocument.documentNumber} · ${paymentDocument.billToName || paymentDocument.customerName}`}
-          amountLabel={`$${grandTotal.toFixed(2)}`}
+          amountLabel={t('paymentMethod.balanceDue', { amount: `$${balanceDue.toFixed(2)}` })}
+          defaultAmount={balanceDue}
           busy={markingPaidBusy}
           onCancel={() => setShowMarkPaid(false)}
           onConfirm={async (payment) => {
             setMarkingPaidBusy(true);
             try {
-              await markCustomerInvoicePaid(paymentDocument, payment);
-              setLocalMarkedPaid(true);
+              const applied = await markCustomerInvoicePaid(paymentDocument, payment);
+              setLocalMarkedPaid(applied.paymentStatus === 'paid');
               setLiveDocument({
                 ...paymentDocument,
-                paymentStatus: 'paid',
-                paidAt: paidAtFromDateKey(payment.paidDate),
+                paymentStatus: applied.paymentStatus,
+                paidAt: applied.paidAt,
                 paymentMethod: payment.method,
                 paymentReference: payment.reference,
-                stripePaidAmountCents:
-                  typeof paymentDocument.stripePaidAmountCents === 'number'
-                    ? paymentDocument.stripePaidAmountCents
-                    : Math.round(grandTotal * 100)
+                stripePaidAmountCents: applied.stripePaidAmountCents,
+                overpaidAmount: applied.overpaidAmount
               });
               setShowMarkPaid(false);
               await logAuditEvent({
                 action: 'invoice.marked_paid',
-                summary: `Marked ${paymentDocument.documentNumber} paid via ${payment.method}${
+                summary: `Recorded $${applied.amountReceived.toFixed(2)} on ${paymentDocument.documentNumber} via ${payment.method}${
                   payment.reference ? ` (${payment.reference})` : ''
                 }`,
                 meta: {
@@ -3411,15 +3433,16 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             </button>
           </div>
 
-          {documentType === 'invoice' && (isPaid || paymentStatus === 'pending') && (
+          {documentType === 'invoice' &&
+            (isFullyPaid || paymentStatus === 'pending' || amountPaid > 0.009) && (
             <div
               className={`rounded-xl border px-3 py-2 text-[11px] font-bold ${
-                isPaid
+                isFullyPaid
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                   : 'border-amber-200 bg-amber-50 text-amber-900'
               }`}
             >
-              {isPaid ? (
+              {isFullyPaid ? (
                 <>
                   {t('invoice.paidBadge')}
                   {paymentDocument?.paidAt
@@ -3432,6 +3455,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       })}
                     </span>
                   )}
+                  {(paymentDocument?.paymentMethod || paymentDocument?.paymentReference) && (
+                    <span className="block font-semibold mt-0.5">
+                      {formatPaymentRecord(
+                        t,
+                        paymentDocument.paymentMethod,
+                        paymentDocument.paymentReference
+                      )}
+                    </span>
+                  )}
+                </>
+              ) : amountPaid > 0.009 && paymentStatus !== 'pending' ? (
+                <>
+                  {t('invoice.notFullyPaid', { balance: balanceDue.toFixed(2) })}
+                  <span className="block font-semibold mt-0.5">
+                    {t('invoice.amountAlreadyPaid', { amount: amountPaid.toFixed(2) })}
+                  </span>
                   {(paymentDocument?.paymentMethod || paymentDocument?.paymentReference) && (
                     <span className="block font-semibold mt-0.5">
                       {formatPaymentRecord(
@@ -3956,7 +3995,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   {tenantId &&
                     (useQboPayLinks || useStripePayLinks) &&
                     documentType === 'invoice' &&
-                    !isPaid && (
+                    !isFullyPaid && (
                     <label className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50/70 p-2.5 cursor-pointer">
                       <input
                         type="checkbox"
@@ -4003,7 +4042,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               <span>{t('invoice.exportPdf')}</span>
             </button>
 
-            {documentType === 'invoice' && !isPaid && (
+            {documentType === 'invoice' && !isFullyPaid && (
               <button
                 type="button"
                 onClick={() => {
@@ -4024,7 +4063,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
 
             {tenantId &&
               documentType === 'invoice' &&
-              !isPaid &&
+              !isFullyPaid &&
               (useQboPayLinks || useStripePayLinks || Boolean(paymentDocument?.qboInvoiceId)) && (
               <button
                 type="button"
@@ -4050,10 +4089,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <button
                   type="button"
                   onClick={() => void handleCreatePayLink()}
-                  disabled={isCreatingPayLink || !savedDocumentId || isPaid}
+                  disabled={isCreatingPayLink || !savedDocumentId || isFullyPaid}
                   className="w-full py-2.5 px-4 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
                   title={
-                    isPaid
+                    isFullyPaid
                       ? t('invoice.alreadyPaidTitle')
                       : savedDocumentId
                         ? t('invoice.createPayLink')
@@ -4062,7 +4101,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 >
                   <DollarSign className="h-4 w-4" />
                   <span>
-                    {isPaid
+                    {isFullyPaid
                       ? t('invoice.invoicePaidBtn')
                       : isCreatingPayLink
                         ? t('invoice.creatingPayLink')
@@ -4071,7 +4110,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 </button>
               )}
 
-              {activePayLinkUrl && !isPaid && (
+              {activePayLinkUrl && !isFullyPaid && (
                 <p className="text-[10px] text-sky-800 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
                   {t('invoice.payLinkReadyCustomer')}
                 </p>
@@ -4099,7 +4138,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               )}
               {tenantId &&
                 canUseQuickbooks &&
-                isPaid &&
+                isFullyPaid &&
                 (paymentDocument?.qboInvoiceId || liveDocument?.qboInvoiceId) &&
                 !(paymentDocument?.qboPaymentId || liveDocument?.qboPaymentId) && (
                   <button
@@ -4372,12 +4411,17 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     <span className="text-xl font-mono font-black text-gray-950 block">
                       {invoiceNumber}
                     </span>
-                    {isPaid && (
+                    {isFullyPaid && (
                       <span className="mt-2 inline-flex items-center rounded-full bg-emerald-700 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
                         Paid
                       </span>
                     )}
-                    {!isPaid && !isEstimate && paymentStatus === 'pending' && (
+                    {!isFullyPaid && amountPaid > 0.009 && (
+                      <span className="mt-2 inline-flex items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                        {t('invoice.notFullyPaidShort')}
+                      </span>
+                    )}
+                    {!isFullyPaid && !isEstimate && paymentStatus === 'pending' && (
                       <span className="mt-2 inline-flex items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
                         Payment pending
                       </span>
@@ -5257,12 +5301,19 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       <Landmark className="h-3.5 w-3.5 mr-1" /> Payment instructions:
                     </p>
                     <p className="text-gray-600 leading-normal">
-                      {isPaid ? (
+                      {isFullyPaid ? (
                         <>
                           This invoice has been <span className="font-bold text-emerald-800">paid in full</span>
                           {paymentDocument?.paidAt
                             ? ` on ${new Date(paymentDocument.paidAt).toLocaleDateString()}.`
                             : '.'}
+                        </>
+                      ) : amountPaid > 0.009 ? (
+                        <>
+                          {t('invoice.paymentReceivedBalance', {
+                            paid: amountPaid.toFixed(2),
+                            balance: balanceDue.toFixed(2)
+                          })}
                         </>
                       ) : (
                         <>
@@ -5346,7 +5397,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   )}
 
                   {/* Grand Total / Balance Due */}
-                  {documentType === 'invoice' && isPaid && (
+                  {documentType === 'invoice' && amountPaid > 0.009 && (
                     <>
                       <div className="flex justify-between py-1 border-b border-gray-150">
                         <span className="text-gray-500 font-medium">Invoice Total:</span>

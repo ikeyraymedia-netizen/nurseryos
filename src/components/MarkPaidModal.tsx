@@ -12,6 +12,8 @@ interface MarkPaidModalProps {
   title: string;
   subtitle?: string;
   amountLabel?: string;
+  /** When set, the person can type the amount actually received. Defaults to this number. */
+  defaultAmount?: number;
   busy?: boolean;
   onCancel: () => void;
   onConfirm: (payment: {
@@ -19,6 +21,8 @@ interface MarkPaidModalProps {
     reference?: string;
     /** YYYY-MM-DD; may be in the future for scheduled payments. */
     paidDate?: string;
+    /** Dollars received on this payment. Present when defaultAmount was set. */
+    amount?: number;
   }) => void | Promise<void>;
 }
 
@@ -47,10 +51,16 @@ export function formatPaymentRecord(
   return label;
 }
 
+function moneyInput(amount: number): string {
+  if (!Number.isFinite(amount)) return '';
+  return amount.toFixed(2);
+}
+
 export function MarkPaidModal({
   title,
   subtitle,
   amountLabel,
+  defaultAmount,
   busy,
   onCancel,
   onConfirm
@@ -59,14 +69,18 @@ export function MarkPaidModal({
   const [method, setMethod] = useState<ManualPaymentMethod>('check');
   const [reference, setReference] = useState('');
   const [paidDate, setPaidDate] = useState(localTodayKey);
+  const [amountText, setAmountText] = useState(() =>
+    defaultAmount != null ? moneyInput(defaultAmount) : ''
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setMethod('check');
     setReference('');
     setPaidDate(localTodayKey());
+    setAmountText(defaultAmount != null ? moneyInput(defaultAmount) : '');
     setError(null);
-  }, [title]);
+  }, [title, defaultAmount]);
 
   const referenceRequired = method === 'check';
   const referenceLabel =
@@ -83,9 +97,34 @@ export function MarkPaidModal({
       setError(t('paymentMethod.checkNumberRequired'));
       return;
     }
+    let amount: number | undefined;
+    if (defaultAmount != null) {
+      const parsed = Number(amountText.replace(/[$,\s]/g, ''));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setError(t('paymentMethod.amountInvalid'));
+        return;
+      }
+      amount = Math.round(parsed * 100) / 100;
+    }
     setError(null);
-    await onConfirm({ method, reference: ref || undefined, paidDate: paidDate || undefined });
+    await onConfirm({
+      method,
+      reference: ref || undefined,
+      paidDate: paidDate || undefined,
+      amount
+    });
   }
+
+  const enteredAmount =
+    defaultAmount == null ? null : Number(amountText.replace(/[$,\s]/g, ''));
+  const amountNote =
+    enteredAmount == null || !Number.isFinite(enteredAmount)
+      ? null
+      : enteredAmount + 0.009 < defaultAmount!
+        ? t('paymentMethod.amountShort')
+        : enteredAmount > defaultAmount! + 0.009
+          ? t('paymentMethod.amountOver')
+          : null;
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -116,6 +155,28 @@ export function MarkPaidModal({
         </div>
 
         <div className="p-5 space-y-4">
+          {defaultAmount != null && (
+            <label className="block text-xs">
+              <span className="font-bold text-slate-600">{t('paymentMethod.amountPaid')}</span>
+              <input
+                inputMode="decimal"
+                value={amountText}
+                onChange={(e) => {
+                  setAmountText(e.target.value);
+                  setError(null);
+                }}
+                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm tabular-nums"
+                autoFocus
+              />
+              <span className="block mt-1 text-[11px] text-slate-500">
+                {t('paymentMethod.amountHint')}
+              </span>
+              {amountNote && (
+                <span className="block mt-1 text-[11px] text-amber-800">{amountNote}</span>
+              )}
+            </label>
+          )}
+
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 mb-2">
               {t('paymentMethod.howPaid')}
@@ -155,7 +216,7 @@ export function MarkPaidModal({
                   : t('paymentMethod.referencePlaceholder')
               }
               className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl text-sm"
-              autoFocus
+              autoFocus={defaultAmount == null}
             />
           </label>
 

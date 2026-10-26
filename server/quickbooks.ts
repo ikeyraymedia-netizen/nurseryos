@@ -1416,7 +1416,12 @@ export async function syncPaidInvoicePaymentToQbo(
     return { synced: false, skipped: true, reason: 'not_invoice' };
   }
   if (String(doc.paymentStatus || '') !== 'paid') {
-    return { synced: false, skipped: true, reason: 'not_paid' };
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const retried = await docRef.get();
+    const retriedStatus = String(retried.data()?.paymentStatus || '');
+    if (retriedStatus !== 'paid') {
+      return { synced: false, skipped: true, reason: 'not_paid' };
+    }
   }
   if (doc.qboPaymentId) {
     return {
@@ -1427,7 +1432,13 @@ export async function syncPaidInvoicePaymentToQbo(
     };
   }
 
-  const qboInvoiceId = String(doc.qboInvoiceId || '').trim();
+  let qboInvoiceId = String(doc.qboInvoiceId || '').trim();
+  if (!qboInvoiceId && opts?.uid) {
+    await pushDocumentToQboInternal(tenantId, documentId, opts.uid);
+    const refreshed = await docRef.get();
+    const refreshedDoc = refreshed.data() || {};
+    qboInvoiceId = String(refreshedDoc.qboInvoiceId || '').trim();
+  }
   if (!qboInvoiceId) {
     return { synced: false, skipped: true, reason: 'invoice_not_pushed' };
   }
@@ -1488,11 +1499,10 @@ export async function syncPaidInvoicePaymentToQbo(
     doc.stripePaymentIntentId ? ` · ${doc.stripePaymentIntentId}` : ''
   }`.slice(0, 4000);
 
-  const created = await qboRequest<any>(tenantId, 'POST', '/payment?minorversion=65', {
+  const paymentBody = {
     TotalAmt: rounded,
     CustomerRef: { value: customerId },
     TxnDate: txnDate,
-    ...(refNum ? { PaymentRefNum: refNum } : {}),
     PrivateNote: privateNote,
     Line: [
       {
@@ -1505,7 +1515,20 @@ export async function syncPaidInvoicePaymentToQbo(
         ]
       }
     ]
-  });
+  };
+  let created: any;
+  try {
+    created = await qboRequest<any>(tenantId, 'POST', '/payment?minorversion=65', {
+      ...paymentBody,
+      ...(refNum ? { PaymentRefNum: refNum } : {})
+    });
+  } catch (err) {
+    if (!refNum || !isDuplicateDocNumberError(err)) throw err;
+    created = await qboRequest<any>(tenantId, 'POST', '/payment?minorversion=65', {
+      ...paymentBody,
+      PrivateNote: `${privateNote} · Ref ${refNum}`.slice(0, 4000)
+    });
+  }
 
   const paymentId = created?.Payment?.Id ? String(created.Payment.Id) : null;
   if (!paymentId) {
@@ -1524,6 +1547,179 @@ export async function syncPaidInvoicePaymentToQbo(
     { merge: true }
   );
 
+  return { synced: true, qboPaymentId: paymentId };
+}
+
+/**
+ * One QuickBooks Receive Payment applied to several NurseryOS invoices
+ * (one check or ACH covering more than one invoice).
+ */
+export async function syncPaidInvoicePaymentBatchToQbo(
+  tenantId: string,
+  documentIds: string[],
+  opts?: { uid?: string }
+): Promise<{
+  synced: boolean;
+  skipped?: boolean;
+  reason?: string;
+  qboPaymentId?: string;
+}> {
+  const ids = [...new Set(documentIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (ids.length <= 1) {
+    return syncPaidInvoicePaymentToQbo(tenantId, ids[0] || '', opts);
+  }
+
+  type ReadyLine = {
+    documentId: string;
+    qboInvoiceId: string;
+    amount: number;
+    customerId: string;
+  };
+  const lines: ReadyLine[] = [];
+  let txnDate = new Date().toISOString().slice(0, 10);
+  let method = 'payment';
+  let refNum = '';
+
+  for (const documentId of ids) {
+    const docRef = getAdminDb().doc(`tenants/${tenantId}/documents/${documentId}`);
+    let snap = await docRef.get();
+    if (!snap.exists) {
+      return { synced: false, skipped: true, reason: 'missing_document' };
+    }
+    let data = snap.data() || {};
+    if (String(data.type || '') !== 'invoice') {
+      return { synced: false, skipped: true, reason: 'not_invoice' };
+    }
+    if (String(data.paymentStatus || '') !== 'paid') {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      snap = await docRef.get();
+      data = snap.data() || {};
+      if (String(data.paymentStatus || '') !== 'paid') {
+        return { synced: false, skipped: true, reason: 'not_paid' };
+      }
+    }
+    if (data.qboPaymentId) continue;
+    let qboInvoiceId = String(data.qboInvoiceId || '').trim();
+    if (!qboInvoiceId && opts?.uid) {
+      await pushDocumentToQboInternal(tenantId, documentId, opts.uid);
+      snap = await docRef.get();
+      data = snap.data() || {};
+      qboInvoiceId = String(data.qboInvoiceId || '').trim();
+    }
+    if (!qboInvoiceId) {
+      return { synced: false, skipped: true, reason: 'invoice_not_pushed' };
+    }
+    const invRes = await qboRequest<any>(
+      tenantId,
+      'GET',
+      `/invoice/${qboInvoiceId}?minorversion=65`
+    );
+    const invoice = invRes?.Invoice;
+    if (!invoice?.Id) {
+      throw Object.assign(new Error('QuickBooks invoice not found for payment sync.'), {
+        status: 404
+      });
+    }
+    const customerId = String(invoice.CustomerRef?.value || '').trim();
+    if (!customerId) {
+      throw Object.assign(new Error('QuickBooks invoice is missing a customer.'), { status: 400 });
+    }
+    let amount =
+      typeof data.stripePaidAmountCents === 'number' && Number.isFinite(data.stripePaidAmountCents)
+        ? Math.round(Number(data.stripePaidAmountCents)) / 100
+        : Number(data.grandTotal) || 0;
+    const balance = invoice.Balance != null ? Number(invoice.Balance) : null;
+    if (balance != null && Number.isFinite(balance)) {
+      if (balance <= 0.009) {
+        const now = new Date().toISOString();
+        await docRef.set(
+          {
+            qboPaymentSyncedAt: now,
+            qboPaymentNote: 'Invoice already paid in QuickBooks',
+            updatedAt: now
+          },
+          { merge: true }
+        );
+        continue;
+      }
+      if (amount > balance + 0.01) amount = balance;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    lines.push({ documentId, qboInvoiceId, amount, customerId });
+    if (data.paidAt) txnDate = String(data.paidAt).slice(0, 10);
+    if (data.paymentMethod) method = String(data.paymentMethod);
+    if (!refNum && data.paymentReference) {
+      refNum = String(data.paymentReference).trim().slice(0, 21);
+    }
+  }
+
+  if (lines.length === 0) {
+    return { synced: true, skipped: true, reason: 'already_synced' };
+  }
+  const customerIds = new Set(lines.map((line) => line.customerId));
+  if (customerIds.size > 1) {
+    let lastId: string | undefined;
+    for (const documentId of lines.map((line) => line.documentId)) {
+      const one = await syncPaidInvoicePaymentToQbo(tenantId, documentId, opts);
+      if (!one.synced && one.reason !== 'already_synced' && one.reason !== 'already_paid_in_qbo') {
+        return one;
+      }
+      lastId = one.qboPaymentId || lastId;
+    }
+    return { synced: true, qboPaymentId: lastId };
+  }
+
+  const roundedLines = lines.map((line) => ({
+    ...line,
+    amount: Math.round(line.amount * 100) / 100
+  }));
+  const total = Math.round(roundedLines.reduce((sum, line) => sum + line.amount, 0) * 100) / 100;
+  const privateNote = `NurseryOS · ${method}${refNum ? ` · ${refNum}` : ''} · ${roundedLines.length} invoices`.slice(
+    0,
+    4000
+  );
+  const paymentBody = {
+    TotalAmt: total,
+    CustomerRef: { value: roundedLines[0].customerId },
+    TxnDate: txnDate,
+    PrivateNote: privateNote,
+    Line: roundedLines.map((line) => ({
+      Amount: line.amount,
+      LinkedTxn: [{ TxnId: line.qboInvoiceId, TxnType: 'Invoice' }]
+    }))
+  };
+  let created: any;
+  try {
+    created = await qboRequest<any>(tenantId, 'POST', '/payment?minorversion=65', {
+      ...paymentBody,
+      ...(refNum ? { PaymentRefNum: refNum } : {})
+    });
+  } catch (err) {
+    if (!refNum || !isDuplicateDocNumberError(err)) throw err;
+    created = await qboRequest<any>(tenantId, 'POST', '/payment?minorversion=65', {
+      ...paymentBody,
+      PrivateNote: `${privateNote} · Ref ${refNum}`.slice(0, 4000)
+    });
+  }
+  const paymentId = created?.Payment?.Id ? String(created.Payment.Id) : null;
+  if (!paymentId) {
+    throw new Error('QuickBooks did not return a payment id.');
+  }
+  const now = new Date().toISOString();
+  await Promise.all(
+    roundedLines.map((line) =>
+      getAdminDb().doc(`tenants/${tenantId}/documents/${line.documentId}`).set(
+        {
+          qboPaymentId: paymentId,
+          qboPaymentSyncedAt: now,
+          qboPaymentSyncedByUserId: opts?.uid || 'system',
+          qboPaymentNote: null,
+          updatedAt: now
+        },
+        { merge: true }
+      )
+    )
+  );
   return { synced: true, qboPaymentId: paymentId };
 }
 
@@ -3228,13 +3424,20 @@ export function registerQuickbooksRoutes(app: Express) {
     withAuth(req, res, async (uid) => {
       const tenantId = String(req.body?.tenantId || '');
       const documentId = String(req.body?.documentId || '');
-      if (!tenantId || !documentId) {
+      const documentIds = Array.isArray(req.body?.documentIds)
+        ? req.body.documentIds.map((id: unknown) => String(id || '').trim()).filter(Boolean)
+        : [];
+      const ids = documentIds.length > 0 ? documentIds : documentId ? [documentId] : [];
+      if (!tenantId || ids.length === 0) {
         res.status(400).json({ error: 'tenantId and documentId are required.' });
         return;
       }
       await assertCanPushInvoice(tenantId, uid);
 
-      const result = await syncPaidInvoicePaymentToQbo(tenantId, documentId, { uid });
+      const result =
+        ids.length > 1
+          ? await syncPaidInvoicePaymentBatchToQbo(tenantId, ids, { uid })
+          : await syncPaidInvoicePaymentToQbo(tenantId, ids[0], { uid });
       if (!result.synced && result.reason === 'invoice_not_pushed') {
         res.status(400).json({
           error:

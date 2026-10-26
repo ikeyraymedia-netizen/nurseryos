@@ -214,7 +214,8 @@ export async function refreshQboPaymentStatus(params: {
 /** Sync a paid NurseryOS invoice as a QuickBooks Receive Payment. */
 export async function pushPaymentToQuickbooks(params: {
   tenantId: string;
-  documentId: string;
+  documentId?: string;
+  documentIds?: string[];
 }): Promise<{
   synced: boolean;
   skipped?: boolean;

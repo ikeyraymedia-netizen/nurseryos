@@ -622,6 +622,33 @@ export function CustomersWorkspace({
     return [...byId.values()];
   }, [allDocuments, customerDocuments, selectedInvoiceIds]);
 
+  async function syncPaidInvoicesToQuickbooks(doc: CustomerDocument) {
+    if (!tenantId || !permissions.canUseQuickbooks) return;
+    const reference = String(doc.paymentReference || '').trim();
+    const siblings = reference
+      ? allDocuments.filter(
+          (other) =>
+            other.type === 'invoice' &&
+            other.paymentStatus === 'paid' &&
+            !other.qboPaymentId &&
+            other.customerId === doc.customerId &&
+            String(other.paymentReference || '').trim() === reference &&
+            other.paymentMethod === doc.paymentMethod
+        )
+      : [doc];
+    const ids = (siblings.length > 0 ? siblings : [doc]).map((other) => other.id);
+    setBusy(true);
+    setMessage(null);
+    try {
+      await pushPaymentToQuickbooks({ tenantId, documentIds: ids });
+      setMessage(t('invoice.qbPaymentSynced'));
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : t('invoice.qbPaymentSyncFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function beginMarkSelectedPaid() {
     if (selectedInvoices.length === 0) return;
     if (new Set(selectedInvoices.map(invoiceCustomerKey)).size > 1) {
@@ -1566,6 +1593,20 @@ export function CustomersWorkspace({
                             {t('customers.editDoc', { type: docTypeLabel(doc.type) })}
                           </button>
                         )}
+                        {doc.type === 'invoice' &&
+                          doc.paymentStatus === 'paid' &&
+                          !doc.qboPaymentId &&
+                          permissions.canUseQuickbooks &&
+                          tenantId && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void syncPaidInvoicesToQuickbooks(doc)}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-sky-800 hover:text-sky-950 disabled:opacity-50"
+                          >
+                            {t('invoice.syncPaymentToQb')}
+                          </button>
+                        )}
                         {permissions.canViewInvoices && (
                           <button
                             type="button"
@@ -1928,6 +1969,19 @@ export function CustomersWorkspace({
                             {t('customers.editInvoice')}
                           </button>
                         )}
+                        {doc.paymentStatus === 'paid' &&
+                          !doc.qboPaymentId &&
+                          permissions.canUseQuickbooks &&
+                          tenantId && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void syncPaidInvoicesToQuickbooks(doc)}
+                            className="mt-2 ml-3 inline-flex items-center gap-1 text-xs font-bold text-sky-800 hover:text-sky-950 disabled:opacity-50"
+                          >
+                            {t('invoice.syncPaymentToQb')}
+                          </button>
+                        )}
                         {permissions.canViewInvoices && (
                           <button
                             type="button"
@@ -2219,12 +2273,18 @@ export function CustomersWorkspace({
               const qboErrors: string[] = [];
               for (const doc of targets) {
                 await markCustomerInvoicePaid(doc, payment);
-                if (tenantId && permissions.canUseQuickbooks) {
-                  try {
-                    await pushPaymentToQuickbooks({ tenantId, documentId: doc.id });
-                  } catch (err: unknown) {
-                    qboErrors.push(err instanceof Error ? err.message : t('invoice.qbPaymentSyncFailed'));
+              }
+              if (tenantId && permissions.canUseQuickbooks) {
+                try {
+                  const synced = await pushPaymentToQuickbooks({
+                    tenantId,
+                    documentIds: targets.map((doc) => doc.id)
+                  });
+                  if (!synced.synced && synced.reason) {
+                    qboErrors.push(t('invoice.qbPaymentSyncFailed'));
                   }
+                } catch (err: unknown) {
+                  qboErrors.push(err instanceof Error ? err.message : t('invoice.qbPaymentSyncFailed'));
                 }
               }
               await logAuditEvent({
@@ -2240,13 +2300,16 @@ export function CustomersWorkspace({
               });
               setMarkingPaidInvoices(null);
               setSelectedInvoiceIds((prev) => prev.filter((id) => !targets.some((doc) => doc.id === id)));
+              const done = t('customers.markSelectedPaidDone', {
+                n: targets.length,
+                ref: formatPaymentRecord(t, payment.method, payment.reference)
+              });
               setMessage(
                 qboErrors.length > 0
                   ? qboErrors[0]
-                  : t('customers.markSelectedPaidDone', {
-                      n: targets.length,
-                      ref: formatPaymentRecord(t, payment.method, payment.reference)
-                    })
+                  : permissions.canUseQuickbooks
+                    ? `${done} ${t('invoice.qbPaymentSynced')}`
+                    : done
               );
             } catch (err: unknown) {
               setMessage(err instanceof Error ? err.message : t('invoice.markPaidFailed'));

@@ -75,6 +75,7 @@ const en = {
     newNurseryRequest: 'New nursery? Request access',
     forgotPassword:
       'Forgot your password? Ask your nursery owner or admin — they can send a reset from Team.',
+    resetPassword: 'Reset password',
     questions: 'Questions?',
     atLeast6Chars: 'At least 6 characters',
     features: {

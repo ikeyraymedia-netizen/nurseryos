@@ -434,19 +434,6 @@ export function WelcomePage({
                       </div>
                     )}
 
-                    {authPanel === 'signin' && !signInWithInvite && securityStrict && onForgotPassword && (
-                      <button
-                        type="button"
-                        onClick={onForgotPassword}
-                        className="text-[11px] font-bold text-ink-100 underline"
-                      >
-                        {t('mfa.resetSend')}
-                      </button>
-                    )}
-                    {authPanel === 'signin' && !signInWithInvite && !securityStrict && (
-                      <p className="text-[11px] text-slate-500 leading-relaxed">{t('welcome.forgotPassword')}</p>
-                    )}
-
                     <button
                       type="submit"
                       disabled={busy}
@@ -459,6 +446,19 @@ export function WelcomePage({
                       )}
                       <span>{busy ? t('common.pleaseWait') : submitLabel}</span>
                     </button>
+
+                    {authPanel === 'signin' && !signInWithInvite && securityStrict && onForgotPassword && (
+                      <button
+                        type="button"
+                        onClick={onForgotPassword}
+                        className="self-start text-sm font-bold text-black underline underline-offset-2 hover:text-ink-800"
+                      >
+                        {t('welcome.resetPassword')}
+                      </button>
+                    )}
+                    {authPanel === 'signin' && !signInWithInvite && !securityStrict && (
+                      <p className="text-sm font-semibold text-slate-600 leading-relaxed">{t('welcome.forgotPassword')}</p>
+                    )}
 
                     {authPanel === 'signin' && (
                       <button

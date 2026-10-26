@@ -78,6 +78,7 @@ const es: TranslationDict = {
     newNurseryRequest: '¿Vivero nuevo? Solicitar acceso',
     forgotPassword:
       '¿Olvidó su contraseña? Pida al dueño o administrador que envíe un restablecimiento desde Equipo.',
+    resetPassword: 'Restablecer contraseña',
     questions: '¿Preguntas?',
     atLeast6Chars: 'Al menos 6 caracteres',
     features: {

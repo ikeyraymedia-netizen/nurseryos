@@ -1935,7 +1935,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                   </div>
 
                                   {/* Pulled + Loaded — stacked on mobile so controls aren't clipped */}
-                                  <div className={`grid gap-2 w-full border-t border-gray-100 pt-1.5 sm:flex sm:items-start sm:justify-end sm:gap-3 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto ${showCalledIn ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                                  <div className="grid grid-cols-2 gap-2 w-full border-t border-gray-100 pt-1.5 sm:flex sm:items-start sm:justify-end sm:gap-3 sm:border-0 sm:pt-0 sm:w-auto sm:ml-auto">
                                     <div className="flex flex-col items-center gap-1 bg-teal-50/40 border border-teal-200/60 rounded-lg p-1.5">
                                       <label className="text-[10px] font-bold text-teal-700 uppercase tracking-wide cursor-pointer select-none">
                                         {t('loader.pulled')}
@@ -1949,21 +1949,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         title={isFullyPulled ? t('loader.undoPulled') : t('loader.markAllPulled')}
                                         aria-label={isFullyPulled ? t('loader.undoPulled') : t('loader.markAllPulled')}
                                       />
-                                      <div className="flex items-center space-x-1.5">
+                                      <div className="flex items-center justify-between gap-1 w-full min-w-0">
                                         <button
                                           onClick={() => handlePulledAdjust(order.id, order, item.id, (item.pulledQuantity ?? 0) - 1)}
                                           disabled={(item.pulledQuantity ?? 0) <= 0 || isUpdatingPulled || !permissions.canCheckOffLoading}
-                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-teal-300 hover:bg-teal-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                                          className="shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-teal-300 hover:bg-teal-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                         >
                                           -
                                         </button>
-                                        <span className={`text-xs font-black font-mono w-12 text-center py-1 border border-gray-100 bg-white rounded-md ${isFullyPulled ? 'text-teal-800' : 'text-gray-800'}`}>
+                                        <span className={`text-xs font-black font-mono text-center py-1 px-1 border border-gray-100 bg-white rounded-md whitespace-nowrap ${isFullyPulled ? 'text-teal-800' : 'text-gray-800'}`}>
                                           {item.pulledQuantity ?? 0} <span className="text-[10px] font-normal text-gray-400">/</span> {item.quantity}
                                         </span>
                                         <button
                                           onClick={() => handlePulledAdjust(order.id, order, item.id, (item.pulledQuantity ?? 0) + 1)}
                                           disabled={isFullyPulled || isUpdatingPulled || !permissions.canCheckOffLoading}
-                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-teal-300 hover:bg-teal-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                                          className="shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-teal-300 hover:bg-teal-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                         >
                                           +
                                         </button>
@@ -1982,21 +1982,21 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         title={isFullyLoaded ? t('loader.undoLoaded') : t('loader.markAllLoaded')}
                                         aria-label={isFullyLoaded ? t('loader.undoLoaded') : t('loader.markAllLoaded')}
                                       />
-                                      <div className="flex items-center space-x-1.5">
+                                      <div className="flex items-center justify-between gap-1 w-full min-w-0">
                                         <button
                                           onClick={() => handleQuantityAdjust(order.id, order, item.id, item.loadedQuantity - 1)}
                                           disabled={item.loadedQuantity <= 0 || isUpdating || !permissions.canCheckOffLoading}
-                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-ink-300 hover:bg-ink-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                                          className="shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-ink-300 hover:bg-ink-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                         >
                                           -
                                         </button>
-                                        <span className={`text-xs font-black font-mono w-12 text-center py-1 border border-gray-100 bg-white rounded-md ${isFullyLoaded ? 'text-ink-800 font-black' : 'text-gray-800'}`}>
+                                        <span className={`text-xs font-black font-mono text-center py-1 px-1 border border-gray-100 bg-white rounded-md whitespace-nowrap ${isFullyLoaded ? 'text-ink-800 font-black' : 'text-gray-800'}`}>
                                           {item.loadedQuantity} <span className="text-[10px] font-normal text-gray-400">/</span> {item.quantity}
                                         </span>
                                         <button
                                           onClick={() => handleQuantityAdjust(order.id, order, item.id, item.loadedQuantity + 1)}
                                           disabled={isFullyLoaded || isUpdating || !permissions.canCheckOffLoading}
-                                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-ink-300 hover:bg-ink-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                                          className="shrink-0 w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 hover:border-ink-300 hover:bg-ink-50 text-gray-500 font-extrabold flex items-center justify-center transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                         >
                                           +
                                         </button>
@@ -2008,7 +2008,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                                         disabled={!permissions.canCheckOffLoading}
                                         aria-pressed={Boolean(item.calledIn)}
                                         onClick={() => handleToggleCalledIn(order.id, order, item.id)}
-                                        className={`flex flex-col items-center justify-center rounded-lg p-1.5 min-w-0 text-[10px] font-black uppercase tracking-wide border touch-manipulation disabled:opacity-30 ${
+                                        className={`col-span-2 sm:col-auto flex flex-col items-center justify-center rounded-lg p-1.5 min-h-11 min-w-0 sm:min-h-0 text-[10px] font-black uppercase tracking-wide border touch-manipulation disabled:opacity-30 ${
                                           item.calledIn
                                             ? 'bg-amber-600 border-amber-700 text-white'
                                             : 'bg-white border-amber-200 text-amber-800'

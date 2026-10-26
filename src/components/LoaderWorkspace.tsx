@@ -1422,7 +1422,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         </div>
 
                         {/* Twin Checkboxes / Progress Controls */}
-                        <div className={`grid gap-2 w-full min-w-0 border-t border-gray-100 pt-2 sm:flex sm:w-auto sm:ml-auto sm:border-0 sm:pt-0 ${showCalledIn ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                        <div className="grid grid-cols-2 gap-2 w-full min-w-0 border-t border-gray-100 pt-2 sm:flex sm:w-auto sm:ml-auto sm:border-0 sm:pt-0">
                           {/* Delivered / Pulled Box */}
                           <div className="flex flex-col items-center bg-teal-50/30 border border-teal-500/20 rounded-lg p-1.5 min-w-0 sm:min-w-[10.5rem] sm:shrink-0">
                             <label className="text-[9px] font-black text-teal-800 uppercase tracking-wider mb-1 cursor-pointer select-none">
@@ -1437,21 +1437,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               title={isFullyPulled ? t('loader.undoPulled') : t('loader.markAllPulled')}
                               aria-label={isFullyPulled ? t('loader.undoPulled') : t('loader.markAllPulled')}
                             />
-                            <div className="flex items-center space-x-1 bg-white border border-teal-150 rounded-lg p-0.5 shadow-sm w-full justify-center">
+                            <div className="flex items-center justify-between gap-0.5 bg-white border border-teal-150 rounded-lg p-0.5 shadow-sm w-full min-w-0">
                               <button
                                 onClick={() => handlePulledQuantityChange(item.id, false)}
                                 disabled={(item.pulledQuantity ?? 0) === 0 || !permissions.canCheckOffLoading}
-                                className="p-2 sm:p-1 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all touch-manipulation min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                                className="shrink-0 h-8 w-8 sm:h-7 sm:w-7 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all touch-manipulation flex items-center justify-center"
                               >
                                 <Minus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                               </button>
-                              <span className="text-[11px] font-mono font-bold text-gray-900 w-11 text-center select-none">
+                              <span className="text-[11px] font-mono font-bold text-gray-900 text-center select-none whitespace-nowrap px-0.5">
                                 {item.pulledQuantity ?? 0} <span className="text-gray-400">/ {item.quantity}</span>
                               </span>
                               <button
                                 onClick={() => handlePulledQuantityChange(item.id, true)}
                                 disabled={(item.pulledQuantity ?? 0) === item.quantity || !permissions.canCheckOffLoading}
-                                className="p-2 sm:p-1 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all touch-manipulation min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                                className="shrink-0 h-8 w-8 sm:h-7 sm:w-7 rounded text-teal-600 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 transition-all touch-manipulation flex items-center justify-center"
                               >
                                 <Plus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                               </button>
@@ -1472,21 +1472,21 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               title={isFullyLoaded ? t('loader.undoLoaded') : t('loader.markAllLoaded')}
                               aria-label={isFullyLoaded ? t('loader.undoLoaded') : t('loader.markAllLoaded')}
                             />
-                            <div className="flex items-center space-x-1 bg-white border border-ink-150 rounded-lg p-0.5 shadow-sm w-full justify-center">
+                            <div className="flex items-center justify-between gap-0.5 bg-white border border-ink-150 rounded-lg p-0.5 shadow-sm w-full min-w-0">
                               <button
                                 onClick={() => handleQuantityChange(item.id, false)}
                                 disabled={item.loadedQuantity === 0 || !permissions.canCheckOffLoading}
-                                className="p-2 sm:p-1 rounded text-ink-600 hover:text-ink-800 hover:bg-ink-50 disabled:opacity-30 transition-all touch-manipulation min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                                className="shrink-0 h-8 w-8 sm:h-7 sm:w-7 rounded text-ink-600 hover:text-ink-800 hover:bg-ink-50 disabled:opacity-30 transition-all touch-manipulation flex items-center justify-center"
                               >
                                 <Minus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                               </button>
-                              <span className="text-[11px] font-mono font-bold text-gray-900 w-11 text-center select-none">
+                              <span className="text-[11px] font-mono font-bold text-gray-900 text-center select-none whitespace-nowrap px-0.5">
                                 {item.loadedQuantity} <span className="text-gray-400">/ {item.quantity}</span>
                               </span>
                               <button
                                 onClick={() => handleQuantityChange(item.id, true)}
                                 disabled={item.loadedQuantity === item.quantity || !permissions.canCheckOffLoading}
-                                className="p-2 sm:p-1 rounded text-ink-600 hover:text-ink-800 hover:bg-ink-50 disabled:opacity-30 transition-all touch-manipulation min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+                                className="shrink-0 h-8 w-8 sm:h-7 sm:w-7 rounded text-ink-600 hover:text-ink-800 hover:bg-ink-50 disabled:opacity-30 transition-all touch-manipulation flex items-center justify-center"
                               >
                                 <Plus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                               </button>
@@ -1498,7 +1498,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                               disabled={!permissions.canCheckOffLoading}
                               aria-pressed={Boolean(item.calledIn)}
                               onClick={() => handleToggleCalledIn(item.id)}
-                              className={`flex flex-col items-center justify-center rounded-lg p-1.5 min-w-0 sm:min-w-[6.5rem] sm:shrink-0 text-[10px] font-black uppercase tracking-wider border touch-manipulation disabled:opacity-30 ${
+                              className={`col-span-2 sm:col-auto flex flex-col items-center justify-center rounded-lg p-1.5 min-h-11 min-w-0 sm:min-h-0 sm:min-w-[6.5rem] sm:shrink-0 text-[10px] font-black uppercase tracking-wider border touch-manipulation disabled:opacity-30 ${
                                 item.calledIn
                                   ? 'bg-amber-600 border-amber-700 text-white'
                                   : 'bg-white border-amber-200 text-amber-800'

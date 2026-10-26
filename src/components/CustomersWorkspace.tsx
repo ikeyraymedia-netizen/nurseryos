@@ -55,6 +55,7 @@ import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
 import { MergeCustomersModal } from './MergeCustomersModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
+type InvoiceBalanceFilter = 'all' | 'outstanding' | 'overdue';
 type CustomersView = 'customers' | 'invoices';
 type CustomerDocFilter = 'all' | CustomerDocumentType;
 
@@ -155,6 +156,7 @@ export function CustomersWorkspace({
   const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod>('month');
   const [invoiceCustomerId, setInvoiceCustomerId] = useState<string>('all');
   const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceBalanceFilter, setInvoiceBalanceFilter] = useState<InvoiceBalanceFilter>('all');
   const [allDocuments, setAllDocuments] = useState<CustomerDocument[]>([]);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   const [markingPaidInvoices, setMarkingPaidInvoices] = useState<CustomerDocument[] | null>(null);
@@ -582,6 +584,20 @@ export function CustomersWorkspace({
       })
       .sort((a, b) => documentDateValue(b).getTime() - documentDateValue(a).getTime());
   }, [allDocuments, invoicePeriod, invoiceCustomerId, invoiceSearch]);
+
+  const visibleInvoices = useMemo(() => {
+    if (invoiceBalanceFilter === 'outstanding') {
+      return filteredInvoices.filter((doc) => doc.paymentStatus !== 'paid');
+    }
+    if (invoiceBalanceFilter === 'overdue') {
+      return filteredInvoices.filter((doc) => isInvoiceOverdue(doc));
+    }
+    return filteredInvoices;
+  }, [filteredInvoices, invoiceBalanceFilter]);
+
+  function toggleInvoiceBalanceFilter(next: Exclude<InvoiceBalanceFilter, 'all'>) {
+    setInvoiceBalanceFilter((current) => (current === next ? 'all' : next));
+  }
 
   const invoiceTotals = useMemo(() => {
     let total = 0;
@@ -1784,41 +1800,59 @@ export function CustomersWorkspace({
                       {formatMoney(invoiceTotals.total)}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
+                  <button
+                    type="button"
+                    aria-pressed={invoiceBalanceFilter === 'outstanding'}
+                    onClick={() => toggleInvoiceBalanceFilter('outstanding')}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      invoiceBalanceFilter === 'outstanding'
+                        ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200'
+                        : 'border-amber-100 bg-amber-50/60 hover:border-amber-300'
+                    }`}
+                  >
                     <p className="text-[10px] font-bold uppercase text-amber-700">{t('customers.outstanding')}</p>
                     <p className="text-sm font-black text-amber-900">
                       {formatMoney(invoiceTotals.outstanding)}
                     </p>
-                  </div>
-                  <div className="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={invoiceBalanceFilter === 'overdue'}
+                    onClick={() => toggleInvoiceBalanceFilter('overdue')}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      invoiceBalanceFilter === 'overdue'
+                        ? 'border-rose-400 bg-rose-100 ring-2 ring-rose-200'
+                        : 'border-rose-100 bg-rose-50/60 hover:border-rose-300'
+                    }`}
+                  >
                     <p className="text-[10px] font-bold uppercase text-rose-700">{t('customers.overdue')}</p>
                     <p className="text-sm font-black text-rose-900">
                       {formatMoney(invoiceTotals.overdue)}
                     </p>
-                  </div>
+                  </button>
                 </div>
 
                 <div className="space-y-2 max-h-[480px] overflow-y-auto">
                   {renderInvoicePayBar()}
-                  {filteredInvoices.some((doc) => doc.paymentStatus !== 'paid') && (
+                  {visibleInvoices.some((doc) => doc.paymentStatus !== 'paid') && (
                     <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600">
                       <input
                         type="checkbox"
-                        checked={filteredInvoices
+                        checked={visibleInvoices
                           .filter((doc) => doc.paymentStatus !== 'paid')
                           .every((doc) => selectedInvoiceIds.includes(doc.id))}
-                        onChange={(e) => setVisibleInvoiceSelection(filteredInvoices, e.target.checked)}
+                        onChange={(e) => setVisibleInvoiceSelection(visibleInvoices, e.target.checked)}
                         className="h-4 w-4 rounded border-gray-300 text-ink-700 focus:ring-ink-500"
                       />
                       {t('customers.selectUnpaid')}
                     </label>
                   )}
-                  {filteredInvoices.length === 0 ? (
+                  {visibleInvoices.length === 0 ? (
                     <p className="text-xs text-gray-500 py-6 text-center">
                       {t('customers.noInvoices')}
                     </p>
                   ) : (
-                    filteredInvoices.map((doc) => (
+                    visibleInvoices.map((doc) => (
                       <div
                         key={doc.id}
                         className={`border rounded-xl p-3 transition ${

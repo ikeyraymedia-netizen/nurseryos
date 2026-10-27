@@ -594,7 +594,7 @@ export function PurchasingWorkspace({
   }
 
   function loadVendorBankFields(v: Vendor) {
-    setVendorBankRouting(v.bankRoutingNumber || '');
+    setVendorBankRouting('');
     setVendorBankAccount('');
     setVendorBankHolder(v.bankAccountHolderName || '');
     setVendorBankType(v.bankAccountType === 'savings' ? 'savings' : 'checking');
@@ -1967,6 +1967,24 @@ export function PurchasingWorkspace({
                     <p className="text-[10px] text-slate-500 leading-relaxed">
                       {t('purchasing.vendorBankHint')}
                     </p>
+                    {(() => {
+                      const saved = editingVendorId
+                        ? vendors.find((v) => v.id === editingVendorId)
+                        : undefined;
+                      const routingLast4 = String(saved?.bankRoutingNumber || '')
+                        .replace(/\D/g, '')
+                        .slice(-4);
+                      const accountLast4 = saved?.bankAccountLast4 || '';
+                      if (!routingLast4 && !accountLast4) return null;
+                      return (
+                        <p className="text-[11px] font-semibold text-ink-800">
+                          {t('purchasing.vendorBankMasked', {
+                            routing: routingLast4 || '····',
+                            account: accountLast4 || '····'
+                          })}
+                        </p>
+                      );
+                    })()}
                     <input
                       value={vendorBankHolder}
                       onChange={(e) => setVendorBankHolder(e.target.value)}
@@ -1976,7 +1994,18 @@ export function PurchasingWorkspace({
                     <input
                       value={vendorBankRouting}
                       onChange={(e) => setVendorBankRouting(e.target.value)}
-                      placeholder={t('purchasing.bankRouting')}
+                      placeholder={(() => {
+                        const saved = editingVendorId
+                          ? vendors.find((v) => v.id === editingVendorId)
+                          : undefined;
+                        const routingLast4 = String(saved?.bankRoutingNumber || '')
+                          .replace(/\D/g, '')
+                          .slice(-4);
+                        return routingLast4
+                          ? t('purchasing.bankRoutingKeep', { last4: routingLast4 })
+                          : t('purchasing.bankRouting');
+                      })()}
+                      type="password"
                       inputMode="numeric"
                       autoComplete="off"
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
@@ -1984,16 +2013,15 @@ export function PurchasingWorkspace({
                     <input
                       value={vendorBankAccount}
                       onChange={(e) => setVendorBankAccount(e.target.value)}
-                      placeholder={
-                        editingVendorId &&
-                        vendors.find((v) => v.id === editingVendorId)?.bankAccountLast4
-                          ? t('purchasing.bankAccountKeep', {
-                              last4:
-                                vendors.find((v) => v.id === editingVendorId)
-                                  ?.bankAccountLast4 || ''
-                            })
-                          : t('purchasing.bankAccount')
-                      }
+                      placeholder={(() => {
+                        const last4 = editingVendorId
+                          ? vendors.find((v) => v.id === editingVendorId)?.bankAccountLast4
+                          : '';
+                        return last4
+                          ? t('purchasing.bankAccountKeep', { last4 })
+                          : t('purchasing.bankAccount');
+                      })()}
+                      type="password"
                       inputMode="numeric"
                       autoComplete="off"
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"

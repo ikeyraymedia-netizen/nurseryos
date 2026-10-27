@@ -154,10 +154,6 @@ export function selectMelioFunding(tenantId: string, accountId: string) {
   });
 }
 
-export function registerMelioWebhook(tenantId: string) {
-  return postJson<{ url: string }>('/api/melio/register-webhook', { tenantId });
-}
-
 export function disconnectMelio(tenantId: string) {
   return postJson<{ ok: boolean }>('/api/melio/disconnect', { tenantId });
 }

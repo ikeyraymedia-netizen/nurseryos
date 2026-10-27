@@ -10,7 +10,6 @@ import {
   linkMelioEntity,
   MelioEntityInput,
   MelioStatus,
-  registerMelioWebhook,
   selectMelioFunding
 } from '../lib/melio';
 import { mintMelioSonarToken } from '../lib/melioSonar';
@@ -366,20 +365,6 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
             >
               <Link2 className="h-3.5 w-3.5" />
               Link a bank (Plaid)
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const result = await registerMelioWebhook(tenantId);
-                  return `Webhook registered: ${result.url}`;
-                })
-              }
-              className={secondaryBtn}
-              title="Melio sends payment status updates to NurseryOS"
-            >
-              Register webhook
             </button>
             <button
               type="button"

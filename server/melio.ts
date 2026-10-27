@@ -8,6 +8,7 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
+import { legacyMelioWebhookSecret, verifyMelioWebhook } from './melioWebhook';
 
 interface MelioIntegration {
   provider: 'melio';
@@ -586,14 +587,10 @@ async function prepareMelioPayment(
   };
 }
 
-function verifyMelioSignature(rawBody: Buffer, signature: string): boolean {
-  const secret =
-    process.env.MELIO_WEBHOOK_SECRET?.trim() || process.env.MELIO_API_KEY?.trim() || '';
-  if (!secret || !signature) return false;
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature.trim());
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+function headerValue(req: Request, name: string): string {
+  const value = req.headers[name];
+  if (Array.isArray(value)) return String(value[0] || '').trim();
+  return String(value || '').trim();
 }
 
 export function registerMelioWebhookRoute(app: Express) {
@@ -603,8 +600,18 @@ export function registerMelioWebhookRoute(app: Express) {
       return;
     }
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ''));
-    const signature = String(req.headers['x-melio-signature'] || '');
-    if (!verifyMelioSignature(rawBody, signature)) {
+    const webhookSecret = process.env.MELIO_WEBHOOK_SECRET?.trim() || '';
+    if (
+      !verifyMelioWebhook({
+        rawBody,
+        webhookId: headerValue(req, 'webhook-id'),
+        webhookTimestamp: headerValue(req, 'webhook-timestamp'),
+        webhookSignature: headerValue(req, 'webhook-signature'),
+        legacySignature: headerValue(req, 'x-melio-signature'),
+        webhookSecret,
+        legacySecret: legacyMelioWebhookSecret(webhookSecret, process.env.MELIO_API_KEY?.trim() || '')
+      })
+    ) {
       res.status(400).send('Invalid signature');
       return;
     }
@@ -618,7 +625,10 @@ export function registerMelioWebhookRoute(app: Express) {
     }
 
     const messageId = String(
-      event?.messageId || req.headers['x-melio-delivery-id'] || ''
+      event?.messageId ||
+        headerValue(req, 'webhook-id') ||
+        headerValue(req, 'x-melio-delivery-id') ||
+        ''
     ).trim();
     try {
       if (messageId) {

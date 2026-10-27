@@ -50,6 +50,7 @@ import { BillOfLadingModal } from './BillOfLadingModal';
 import { InvoiceModal } from './InvoiceModal';
 import { InventoryPlantPicker } from './InventoryPlantPicker';
 import { buildVendorPullListsForTrucks, collectVendorOrderItems, trucksLoadingOnDate, vendorItemsFullyPulled, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
+import { VendorPullListPreview, vendorCallCounts } from './VendorPullListPreview';
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
@@ -2110,6 +2111,9 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                         </p>
                         <p className="text-[10px] text-gray-500 font-mono">
                           {t('trucksExtra.vendorPlantCount', { n: list.quantity })}
+                          {showCalledIn
+                            ? ` · ${t('trucksExtra.vendorCalledSplit', vendorCallCounts(list))}`
+                            : ''}
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -2137,13 +2141,17 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                         </button>
                       </div>
                     </div>
-                    <textarea
-                      readOnly
-                      value={list.text}
-                      rows={Math.min(10, list.text.split('\n').length + 1)}
-                      onFocus={(e) => e.target.select()}
-                      className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
-                    />
+                    {showCalledIn ? (
+                      <VendorPullListPreview list={list} />
+                    ) : (
+                      <textarea
+                        readOnly
+                        value={list.text}
+                        rows={Math.min(10, list.text.split('\n').length + 1)}
+                        onFocus={(e) => e.target.select()}
+                        className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
+                      />
+                    )}
                     {permissions.canCheckOffLoading && (() => {
                       const fullyPulled = vendorItemsFullyPulled({
                         trucks: vendorScopeTrucks(),

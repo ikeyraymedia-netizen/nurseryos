@@ -54,6 +54,7 @@ import {
   vendorItemsFullyPulledOnOrders,
   type VendorPullList
 } from '../lib/pullSheet';
+import { VendorPullListPreview, vendorCallCounts } from './VendorPullListPreview';
 import { InvoiceModal } from './InvoiceModal';
 import { BillOfLadingModal } from './BillOfLadingModal';
 import { InventoryPlantPicker } from './InventoryPlantPicker';
@@ -1922,6 +1923,9 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         </p>
                         <p className="text-[10px] text-gray-500 font-mono">
                           {t('trucksExtra.vendorPlantCount', { n: list.quantity })}
+                          {showCalledIn
+                            ? ` · ${t('trucksExtra.vendorCalledSplit', vendorCallCounts(list))}`
+                            : ''}
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -1949,13 +1953,17 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
                         </button>
                       </div>
                     </div>
-                    <textarea
-                      readOnly
-                      value={list.text}
-                      rows={Math.min(10, list.text.split('\n').length + 1)}
-                      onFocus={(e) => e.target.select()}
-                      className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
-                    />
+                    {showCalledIn ? (
+                      <VendorPullListPreview list={list} />
+                    ) : (
+                      <textarea
+                        readOnly
+                        value={list.text}
+                        rows={Math.min(10, list.text.split('\n').length + 1)}
+                        onFocus={(e) => e.target.select()}
+                        className="w-full resize-none rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-mono text-gray-800 leading-relaxed"
+                      />
+                    )}
                     {permissions.canCheckOffLoading &&
                       (() => {
                         const fullyPulled = vendorItemsFullyPulledOnOrders({

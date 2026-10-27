@@ -41,11 +41,25 @@ function compareVendors(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+export type VendorPullListLine = {
+  /** Plant line without the text-message bullet, for on-screen highlighting. */
+  label: string;
+  calledIn: boolean;
+};
+
+export type VendorPullListSection = {
+  heading: string;
+  meta: string;
+  lines: VendorPullListLine[];
+};
+
 export type VendorPullList = {
   vendor: string;
   quantity: number;
-  /** Plain text ready to paste into a text / iMessage / WhatsApp. */
+  /** Plain text ready to paste into a text / iMessage / WhatsApp. Called-in stays off this copy. */
   text: string;
+  /** Same plants as `text`, with the Called in flag for the on-screen list. */
+  sections: VendorPullListSection[];
 };
 
 function collectOrdersForTrucks(orders: CustomerOrder[], trucks: Truck[]): CustomerOrder[] {
@@ -118,6 +132,7 @@ export function buildVendorPullListsForTrucks(params: {
       quantity: number;
       notes?: string;
       isAddition?: boolean;
+      calledIn?: boolean;
     }>;
     quantity: number;
   };
@@ -146,7 +161,8 @@ export function buildVendorPullListsForTrucks(params: {
         containerSize: item.containerSize,
         quantity: item.quantity,
         notes: item.notes,
-        isAddition: item.isAddition
+        isAddition: item.isAddition,
+        calledIn: item.calledIn === true
       });
       section.quantity += item.quantity;
     }
@@ -188,6 +204,7 @@ export function buildVendorPullListsForTrucks(params: {
           ];
 
     const orderBlocks: string[] = [];
+    const previewSections: VendorPullListSection[] = [];
     for (const section of sections) {
       const titleParts = [section.customerName];
       if (section.ref) titleParts.push(section.ref);
@@ -195,14 +212,20 @@ export function buildVendorPullListsForTrucks(params: {
       if (section.stagedLocation) meta.push(`Stage: ${section.stagedLocation}`);
       else meta.push('Stage: (not set)');
       if (showTruckOnOrder && section.truckName) meta.push(`Truck: ${section.truckName}`);
+      const metaLine = meta.join(' · ');
 
       orderBlocks.push(
         [
           `— ${titleParts.join(' · ')}`,
-          `  ${meta.join(' · ')}`,
+          `  ${metaLine}`,
           ...section.lines.map(vendorTextLine)
         ].join('\n')
       );
+      previewSections.push({
+        heading: titleParts.join(' · '),
+        meta: metaLine,
+        lines: section.lines.map(previewVendorLine)
+      });
     }
 
     const text = [
@@ -217,7 +240,7 @@ export function buildVendorPullListsForTrucks(params: {
       .filter((row) => row !== null)
       .join('\n');
 
-    return { vendor, quantity, text };
+    return { vendor, quantity, text, sections: previewSections };
   });
 }
 
@@ -254,6 +277,7 @@ export function buildVendorPullListsForOrders(params: {
       quantity: number;
       notes?: string;
       isAddition?: boolean;
+      calledIn?: boolean;
     }>;
     quantity: number;
   };
@@ -281,7 +305,8 @@ export function buildVendorPullListsForOrders(params: {
         containerSize: item.containerSize,
         quantity: item.quantity,
         notes: item.notes,
-        isAddition: item.isAddition
+        isAddition: item.isAddition,
+        calledIn: item.calledIn === true
       });
       section.quantity += item.quantity;
     }
@@ -316,20 +341,27 @@ export function buildVendorPullListsForOrders(params: {
         : [`${nurseryName} · ${orders.length} orders`];
 
     const orderBlocks: string[] = [];
+    const previewSections: VendorPullListSection[] = [];
     for (const section of sections) {
       const titleParts = [section.customerName];
       if (section.ref) titleParts.push(section.ref);
       const meta: string[] = [];
       if (section.stagedLocation) meta.push(`Stage: ${section.stagedLocation}`);
       else meta.push('Stage: (not set)');
+      const metaLine = meta.join(' · ');
 
       orderBlocks.push(
         [
           `— ${titleParts.join(' · ')}`,
-          `  ${meta.join(' · ')}`,
+          `  ${metaLine}`,
           ...section.lines.map(vendorTextLine)
         ].join('\n')
       );
+      previewSections.push({
+        heading: titleParts.join(' · '),
+        meta: metaLine,
+        lines: section.lines.map(previewVendorLine)
+      });
     }
 
     const text = [
@@ -344,7 +376,7 @@ export function buildVendorPullListsForOrders(params: {
       .filter((row) => row !== null)
       .join('\n');
 
-    return { vendor, quantity, text };
+    return { vendor, quantity, text, sections: previewSections };
   });
 }
 
@@ -432,6 +464,20 @@ function pullSheetRowHeight(pdf: jsPDF, line: PullSheetLine): number {
   const detail = pullSheetLineDetail(line);
   const detailLines = detail ? pdf.splitTextToSize(detail, 240).length : 0;
   return Math.max(16, nameLines.length * 11 + detailLines * 9 + 4);
+}
+
+function previewVendorLine(line: {
+  plantName: string;
+  containerSize: string;
+  quantity: number;
+  notes?: string;
+  isAddition?: boolean;
+  calledIn?: boolean;
+}): VendorPullListLine {
+  return {
+    label: vendorTextLine(line).replace(/^  • /, ''),
+    calledIn: line.calledIn === true
+  };
 }
 
 /** Text-list line, keeping the order's line order, additions, and notes. */

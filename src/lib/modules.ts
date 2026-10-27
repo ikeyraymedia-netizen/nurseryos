@@ -265,7 +265,8 @@ export function applyModuleGates(
     canManageBillPay: permissions.canManageBillPay && billPay,
     canPayVendorBills: permissions.canPayVendorBills && billPay,
     canPayVendorBillsMelio: permissions.canPayVendorBillsMelio && melioBillPay,
-    canUseRetailPOS: permissions.canUseRetailPOS && retailPos
+    canUseRetailPOS: permissions.canUseRetailPOS && retailPos,
+    canAskYardAi: permissions.canAskYardAi && (orders || trucks || inventory)
   };
 }
 

@@ -21,6 +21,8 @@ import { registerEstimatePhotoRoutes } from './server/estimatePhotos';
 import { registerEstimateAcceptRoutes } from './server/estimateAccept';
 import { registerTenantAttachmentRoutes } from './server/tenantAttachments';
 import {
+  getAdminDb,
+  getMemberRoles,
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './server/firebaseAdmin';
@@ -37,7 +39,18 @@ import {
   coalesceOrderItems
 } from './server/orderTextParse';
 import { chunkPdfText, extractPdfText } from './server/pdfTextExtract';
-import { ReportLedger, runReportConversation } from './server/reportTools';
+import { getPermissionsForRoles } from './src/lib/permissions';
+import { applyModuleGates } from './src/lib/modules';
+import type { MemberRole } from './src/types';
+import {
+  ReportLedger,
+  reportAccessFor,
+  reportScopeNote,
+  reportToolNames,
+  runReportConversation,
+  scopeReportLedger,
+  scopeReportOverview
+} from './server/reportTools';
 
 dotenv.config();
 
@@ -1530,8 +1543,38 @@ app.get('/api/config-status', (req, res) => {
 
 app.post('/api/run-report', async (req, res) => {
   try {
-    await requireAuthUid(req);
+    const uid = await requireAuthUid(req);
+    const tenantId = String(req.body?.tenantId || '').trim();
     const { question, nurseryName, data, history, ledger, today, timeZone } = req.body || {};
+    if (!tenantId) {
+      res.status(400).json({ error: 'tenantId is required.' });
+      return;
+    }
+    const roles = (await getMemberRoles(tenantId, uid)).filter((role) =>
+      ['owner', 'admin', 'supervisor', 'office', 'sales', 'loader', 'inventory'].includes(role)
+    ) as MemberRole[];
+    if (roles.length === 0) {
+      res.status(403).json({ error: 'Reports are not available for your role.' });
+      return;
+    }
+    const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
+    if (!tenantSnap.exists) {
+      res.status(404).json({ error: 'Nursery not found.' });
+      return;
+    }
+    const permissions = applyModuleGates(getPermissionsForRoles(roles), {
+      modules: tenantSnap.data()?.modules
+    });
+    if (!permissions.canViewReports && !permissions.canAskYardAi) {
+      res.status(403).json({ error: 'Reports are not available for your role.' });
+      return;
+    }
+    const access = reportAccessFor(permissions);
+    const allowedTools = reportToolNames(access);
+    if (allowedTools.length === 0) {
+      res.status(403).json({ error: 'Reports are not available for your role.' });
+      return;
+    }
     if (!question || typeof question !== 'string' || !question.trim()) {
       res.status(400).json({ error: 'Missing report question.' });
       return;
@@ -1543,22 +1586,32 @@ app.post('/api/run-report', async (req, res) => {
 
     const ai = getAiClient();
     const nursery = typeof nurseryName === 'string' && nurseryName.trim() ? nurseryName.trim() : 'Nursery';
-    const overview = {
-      summary: (data as any).summary,
-      sales: {
-        ...(data as any).sales,
-        byCustomer: ((data as any).sales?.byCustomer || []).slice(0, 25),
-        topPlantsByRevenue: ((data as any).sales?.topPlantsByRevenue || []).slice(0, 20)
-      }
-    };
+    const rawLedger = scopeReportLedger(
+      (ledger && typeof ledger === 'object' ? ledger : {}) as ReportLedger,
+      access
+    );
+    const overview = scopeReportOverview(
+      {
+        summary: (data as any).summary,
+        sales: {
+          ...(data as any).sales,
+          byCustomer: ((data as any).sales?.byCustomer || []).slice(0, 25),
+          topPlantsByRevenue: ((data as any).sales?.topPlantsByRevenue || []).slice(0, 20)
+        }
+      },
+      rawLedger,
+      access
+    );
     const conversation = {
       nursery,
       question,
       history,
       overview,
-      ledger: (ledger && typeof ledger === 'object' ? ledger : {}) as ReportLedger,
+      ledger: rawLedger,
       today,
-      timeZone
+      timeZone,
+      allowedTools,
+      scopeNote: reportScopeNote(access)
     };
     const runConversation = (model: string) =>
       runReportConversation(

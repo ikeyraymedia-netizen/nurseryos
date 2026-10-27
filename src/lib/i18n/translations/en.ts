@@ -149,6 +149,7 @@ const en = {
     customersHint: 'Manage your customer directory in the main panel.',
     purchasingHint: 'Vendors, purchase orders, receiving, and AP bills in the main panel.',
     reportsHint: 'Ask AI for loading, inventory, sales, and customer reports in the main panel.',
+    reportsYardHint: 'Ask about trucks, orders, and inventory in the main panel.',
     tasksHint: 'Assign weekly tasks by person. Workers check them off when finished.',
     retail: 'Retail'
   },

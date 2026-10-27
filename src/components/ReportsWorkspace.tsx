@@ -22,7 +22,8 @@ import {
   listAllDocuments,
   subscribeToDocuments,
   filterDocumentsForLiveOrders,
-  resolveLineUnitCost
+  resolveLineUnitCost,
+  invoiceBalanceDue
 } from '../lib/documents';
 import { authJsonHeaders } from '../lib/apiAuth';
 import { AuditEvent, listAuditEventsInRange, listRecentAuditEvents } from '../lib/audit';
@@ -35,6 +36,7 @@ interface ReportsWorkspaceProps {
   customers: Customer[];
   permissions: AppPermissions;
   nurseryName: string;
+  tenantId: string;
 }
 
 function monthKeyFromDate(raw?: string | null): string | null {
@@ -134,16 +136,16 @@ function buildPaymentStatus(documents: CustomerDocument[]) {
   let outstandingTotal = 0;
   for (const inv of invoices) {
     const status = inv.paymentStatus || 'unpaid';
-    const amount = inv.grandTotal || 0;
-    if (status === 'paid') {
+    const balance = invoiceBalanceDue(inv);
+    if (balance <= 0.009) {
       paidCount += 1;
-      paidTotal += amount;
+      paidTotal += inv.grandTotal || 0;
     } else if (status === 'pending') {
       pendingCount += 1;
-      outstandingTotal += amount;
+      outstandingTotal += balance;
     } else {
       unpaidCount += 1;
-      outstandingTotal += amount;
+      outstandingTotal += balance;
     }
   }
   return {
@@ -723,6 +725,7 @@ function buildReportLedger(params: {
       loadingDate: t.loadingDate ? localDateKey(t.loadingDate) : null,
       carrier: t.carrier || null,
       rep: t.owner || null,
+      directShip: Boolean(t.directShip),
       orderNumbers: (t.orderIds || []).map((id) => orderNumberById.get(id) || id)
     })),
     vendorBills: vendorBills
@@ -753,8 +756,10 @@ export function ReportsWorkspace({
   trucks,
   customers,
   permissions,
-  nurseryName
+  nurseryName,
+  tenantId
 }: ReportsWorkspaceProps) {
+  const yardOnly = !permissions.canViewReports && permissions.canAskYardAi;
   const t = useT();
   const { locale } = useLocale();
   const [inventory, setInventory] = useState<InventoryPlant[]>([]);
@@ -784,15 +789,15 @@ export function ReportsWorkspace({
   }, [permissions.canViewInventory]);
 
   useEffect(() => {
-    if (!permissions.canViewPurchasing) {
+    if (!permissions.canViewPurchasingDesk) {
       setVendorBills([]);
       return;
     }
     return subscribeToVendorBills(setVendorBills);
-  }, [permissions.canViewPurchasing]);
+  }, [permissions.canViewPurchasingDesk]);
 
   useEffect(() => {
-    if (!permissions.canViewReports) {
+    if (!permissions.canViewInvoices) {
       setDocuments([]);
       return;
     }
@@ -800,7 +805,7 @@ export function ReportsWorkspace({
       setDocuments(docs);
       setDocsError(null);
     });
-  }, [permissions.canViewReports]);
+  }, [permissions.canViewInvoices]);
 
   async function refreshDocuments() {
     try {
@@ -836,8 +841,9 @@ export function ReportsWorkspace({
   }
 
   useEffect(() => {
+    if (yardOnly) return;
     void refreshAudit();
-  }, []);
+  }, [yardOnly]);
 
   /** Sales ledger keeps all invoices/CMs; estimates without a live order are dropped. */
   const reportDocuments = useMemo(
@@ -872,20 +878,28 @@ export function ReportsWorkspace({
   const byMonth = salesSnapshot.byMonth.slice(0, 12);
 
   const suggestedReports = useMemo(
-    () => [
-      t('reports.suggest1'),
-      t('reports.suggest2'),
-      t('reports.suggest3'),
-      t('reports.suggest4'),
-      t('reports.suggest5'),
-      t('reports.suggest6'),
-      t('reports.suggest7'),
-      t('reports.suggest8'),
-      t('reports.suggest9'),
-      t('reports.suggest10'),
-      t('reports.suggest11')
-    ],
-    [t]
+    () =>
+      yardOnly
+        ? [
+            t('reports.yardSuggest1'),
+            t('reports.yardSuggest2'),
+            t('reports.yardSuggest3'),
+            t('reports.yardSuggest4')
+          ]
+        : [
+            t('reports.suggest1'),
+            t('reports.suggest2'),
+            t('reports.suggest3'),
+            t('reports.suggest4'),
+            t('reports.suggest5'),
+            t('reports.suggest6'),
+            t('reports.suggest7'),
+            t('reports.suggest8'),
+            t('reports.suggest9'),
+            t('reports.suggest10'),
+            t('reports.suggest11')
+          ],
+    [t, yardOnly]
   );
 
   const now = new Date();
@@ -903,7 +917,7 @@ export function ReportsWorkspace({
     return rep === NO_SALES_REP_LABEL ? t('reports.noSalesRep') : rep;
   }
 
-  if (!permissions.canViewReports) {
+  if (!permissions.canViewReports && !permissions.canAskYardAi) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-gray-500">
         {t('reports.notAvailable')}
@@ -927,9 +941,11 @@ export function ReportsWorkspace({
     setQuestion('');
 
     try {
-      const freshDocuments = await refreshDocuments();
+      const freshDocuments = yardOnly ? [] : await refreshDocuments();
       // Always include every invoice/credit memo for sales accuracy (filter only drops orphan estimates).
-      const liveDocuments = filterDocumentsForLiveOrders(freshDocuments, orders);
+      const liveDocuments = yardOnly
+        ? []
+        : filterDocumentsForLiveOrders(freshDocuments, orders);
       const snapshot = buildDataSnapshot({
         orders,
         trucks,
@@ -942,7 +958,7 @@ export function ReportsWorkspace({
         trucks,
         inventory,
         documents: liveDocuments,
-        vendorBills: permissions.canViewPurchasing ? vendorBills : null
+        vendorBills: permissions.canViewPurchasingDesk ? vendorBills : null
       });
 
       const response = await fetch('/api/run-report', {
@@ -951,7 +967,16 @@ export function ReportsWorkspace({
         body: JSON.stringify({
           question: trimmed,
           nurseryName,
-          data: { summary: snapshot.summary, sales: snapshot.sales },
+          tenantId,
+          data: yardOnly
+            ? {
+                summary: {
+                  orders: orders.length,
+                  trucks: trucks.length,
+                  inventory: inventory.length
+                }
+              }
+            : { summary: snapshot.summary, sales: snapshot.sales },
           ledger,
           today: localDateKey(new Date().toISOString()),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1018,24 +1043,31 @@ export function ReportsWorkspace({
           <div className="min-w-0">
             <h2 className="text-lg font-black tracking-tight">{t('reports.title')}</h2>
             <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-              {viewMode === 'accounting' ? t('reports.subtitleAccounting') : t('reports.subtitle')}
+              {yardOnly
+                ? t('reports.subtitleYard')
+                : viewMode === 'accounting'
+                  ? t('reports.subtitleAccounting')
+                  : t('reports.subtitle')}
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void refreshDocuments();
-            void refreshAudit();
-          }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-600 text-[11px] font-bold text-slate-200 hover:bg-slate-800 shrink-0"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          {t('reports.refresh')}
-        </button>
+        {!yardOnly && (
+          <button
+            type="button"
+            onClick={() => {
+              void refreshDocuments();
+              void refreshAudit();
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-600 text-[11px] font-bold text-slate-200 hover:bg-slate-800 shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            {t('reports.refresh')}
+          </button>
+        )}
       </div>
 
       <div className="p-5 space-y-5 flex-1 flex flex-col">
+        {!yardOnly && (
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -1060,8 +1092,9 @@ export function ReportsWorkspace({
             {t('reports.tabAccounting')}
           </button>
         </div>
+        )}
 
-        {viewMode === 'accounting' ? (
+        {viewMode === 'accounting' && !yardOnly ? (
           <AccountingReportsPanel
             documents={reportDocuments}
             bills={vendorBills}
@@ -1070,6 +1103,8 @@ export function ReportsWorkspace({
           />
         ) : (
           <>
+        {!yardOnly && (
+        <>
         {docsError && (
           <p className="text-xs text-red-700 font-semibold bg-red-50 border border-red-100 rounded-xl px-3 py-2">
             {t('reports.loadFailed')} {docsError}
@@ -1484,6 +1519,8 @@ export function ReportsWorkspace({
             )}
           </div>
         )}
+        </>
+        )}
 
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
@@ -1491,9 +1528,11 @@ export function ReportsWorkspace({
               <Sparkles className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  {t('reports.askAi')}
+                  {yardOnly ? t('reports.askAiYard') : t('reports.askAi')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800">{t('reports.askAiSubtitle')}</p>
+                <p className="text-xs font-semibold text-gray-800">
+                  {yardOnly ? t('reports.askAiYardSubtitle') : t('reports.askAiSubtitle')}
+                </p>
               </div>
             </div>
             {messages.length > 0 && (
@@ -1600,9 +1639,11 @@ export function ReportsWorkspace({
                   onChange={(e) => setQuestion(e.target.value)}
                   rows={2}
                   placeholder={
-                    messages.length > 0
-                      ? t('reports.followUpPlaceholder')
-                      : t('reports.askPlaceholder')
+                    yardOnly
+                      ? t('reports.askPlaceholderYard')
+                      : messages.length > 0
+                        ? t('reports.followUpPlaceholder')
+                        : t('reports.askPlaceholder')
                   }
                   className="flex-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-ink-500 bg-white resize-y min-h-[72px]"
                   disabled={loading}
@@ -1636,6 +1677,7 @@ export function ReportsWorkspace({
           </div>
         </div>
 
+        {!yardOnly && (
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
             <div className="flex items-center gap-2 min-w-0">
@@ -1745,6 +1787,7 @@ export function ReportsWorkspace({
             )}
           </div>
         </div>
+        )}
           </>
         )}
       </div>

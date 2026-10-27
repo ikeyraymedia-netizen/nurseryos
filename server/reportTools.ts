@@ -88,6 +88,7 @@ interface LedgerTruck {
   loadingDate?: string | null;
   carrier?: string | null;
   rep?: string | null;
+  directShip?: boolean;
   orderNumbers: string[];
 }
 
@@ -412,6 +413,7 @@ function queryOrders(ledger: ReportLedger, args: Record<string, any>) {
     }
   }
   const limit = limitOf(args);
+  const priced = orders.some((order) => order.items.some((item) => typeof item.price === 'number'));
   const shape = (r: { key: string; orders: Set<string>; qty: number; loaded: number; pulled: number; value: number }) => ({
     key: r.key,
     orderCount: r.orders.size,
@@ -419,7 +421,7 @@ function queryOrders(ledger: ReportLedger, args: Record<string, any>) {
     loadedQty: r.loaded,
     pulledQty: r.pulled,
     remainingToLoad: Math.max(0, r.qty - r.loaded),
-    pricedValue: round2(r.value)
+    ...(priced ? { pricedValue: round2(r.value) } : {})
   });
   const sorted = [...rows.values()].map(shape).sort((a, b) => b.qty - a.qty);
   return {
@@ -434,7 +436,14 @@ function queryOrders(ledger: ReportLedger, args: Record<string, any>) {
           .slice(0, limit)
           .map((o) => ({
             ...o,
-            items: o.items.filter((i) => !lineFilter || lineMatches(i, args))
+            items: o.items
+              .filter((i) => !lineFilter || lineMatches(i, args))
+              .map((item) => {
+                const next = { ...item };
+                if (typeof next.price !== 'number') delete next.price;
+                if (typeof next.cost !== 'number') delete next.cost;
+                return next;
+              })
           }))
       : undefined
   };
@@ -462,11 +471,23 @@ function queryInventory(ledger: ReportLedger, args: Record<string, any>) {
           : b.qty - a.qty
   );
   const limit = limitOf(args);
+  const priced = items.some((plant) => typeof plant.listPrice === 'number');
   return {
     count: items.length,
     totalQty: items.reduce((s, p) => s + (p.qty || 0), 0),
-    totalListValue: round2(items.reduce((s, p) => s + (p.qty || 0) * (Number(p.listPrice) || 0), 0)),
-    items: items.slice(0, limit),
+    ...(priced
+      ? {
+          totalListValue: round2(
+            items.reduce((s, p) => s + (p.qty || 0) * (Number(p.listPrice) || 0), 0)
+          )
+        }
+      : {}),
+    items: items.slice(0, limit).map((plant) => {
+      if (priced) return plant;
+      const next = { ...plant };
+      delete next.listPrice;
+      return next;
+    }),
     truncated: items.length > limit
   };
 }
@@ -678,6 +699,142 @@ export interface ReportConversationInput {
   ledger: ReportLedger;
   today?: unknown;
   timeZone?: unknown;
+  /** Tool names this user is allowed to call. Omitted means every report tool. */
+  allowedTools?: string[];
+  /** Extra system-instruction limit. Empty for full reports access. */
+  scopeNote?: string;
+}
+
+export interface ReportAccess {
+  orders: boolean;
+  trucks: boolean;
+  inventory: boolean;
+  invoices: boolean;
+  pricing: boolean;
+  profit: boolean;
+  vendorBills: boolean;
+  vendors: boolean;
+  directShip: boolean;
+}
+
+export function reportAccessFor(permissions: {
+  canViewReports: boolean;
+  canViewOrders: boolean;
+  canViewTrucks: boolean;
+  canViewInventory: boolean;
+  canViewInvoices: boolean;
+  canViewPricing: boolean;
+  canViewProfit: boolean;
+  canViewPurchasingDesk: boolean;
+  canUseVendors: boolean;
+  canViewDirectShipOrders: boolean;
+}): ReportAccess {
+  const reports = permissions.canViewReports;
+  return {
+    orders: reports || permissions.canViewOrders,
+    trucks: reports || permissions.canViewTrucks,
+    inventory: reports || permissions.canViewInventory,
+    invoices: permissions.canViewInvoices,
+    pricing: permissions.canViewPricing,
+    profit: permissions.canViewProfit,
+    vendorBills: permissions.canViewPurchasingDesk,
+    vendors: reports || permissions.canUseVendors,
+    directShip: permissions.canViewDirectShipOrders
+  };
+}
+
+function withoutMoney<T extends Record<string, unknown>>(
+  row: T,
+  access: ReportAccess,
+  fields: { price?: boolean; cost?: boolean; vendor?: boolean }
+): T {
+  const next = { ...row };
+  if (fields.price && !access.pricing) delete next.price;
+  if (fields.price && !access.pricing) delete next.listPrice;
+  if (fields.cost && !access.profit) delete next.cost;
+  if (fields.vendor && !access.vendors) delete next.vendor;
+  return next;
+}
+
+/** Drop ledger sections and money fields this role cannot see. */
+export function scopeReportLedger(ledger: ReportLedger, access: ReportAccess): ReportLedger {
+  const orders = access.orders
+    ? (ledger.orders || [])
+        .filter((order) => access.directShip || !order.directShip)
+        .map((order) => ({
+          ...order,
+          items: (order.items || []).map((item) =>
+            withoutMoney(item, access, { price: true, cost: true, vendor: true })
+          )
+        }))
+    : [];
+  const orderNumbers = new Set(orders.map((order) => order.orderNumber));
+  return {
+    documents: access.invoices
+      ? (ledger.documents || []).map((doc) => ({
+          ...doc,
+          lines: (doc.lines || []).map((line) =>
+            withoutMoney(line, access, { price: true, cost: true, vendor: true })
+          )
+        }))
+      : [],
+    orders,
+    trucks: access.trucks
+      ? (ledger.trucks || [])
+          .filter((truck) => access.directShip || !truck.directShip)
+          .map((truck) => ({
+            ...truck,
+            orderNumbers: (truck.orderNumbers || []).filter((number) => orderNumbers.has(number))
+          }))
+      : [],
+    inventory: access.inventory
+      ? (ledger.inventory || []).map((plant) =>
+          withoutMoney(plant, access, { price: true })
+        )
+      : [],
+    vendorBills: access.vendorBills ? ledger.vendorBills || [] : undefined
+  };
+}
+
+export function reportToolNames(access: ReportAccess): string[] {
+  const names: string[] = [];
+  if (access.invoices) names.push('query_sales', 'list_documents');
+  if (access.orders) names.push('query_orders');
+  if (access.inventory) names.push('query_inventory');
+  if (access.vendorBills) names.push('query_vendor_bills');
+  if (access.trucks) names.push('query_trucks');
+  return names;
+}
+
+export function reportScopeNote(access: ReportAccess): string {
+  if (access.invoices && access.pricing) return '';
+  const allowed = [
+    access.trucks ? 'trucks (status, loading date, and which orders are on them)' : '',
+    access.orders
+      ? 'plant orders (quantities, pulled, loaded, status, truck, plant, and size)'
+      : '',
+    access.inventory ? 'inventory on hand (plant, size, quantity, location, and ready date)' : '',
+    access.vendorBills ? 'vendor bills' : '',
+    access.invoices ? 'invoices and sales' : ''
+  ].filter(Boolean);
+  return [
+    `Access limit: answer only about ${allowed.join('; ')}.`,
+    'A customer name on an order or truck may be used to identify that load.',
+    'Do not answer about invoices, payments, prices, costs, profit, customer accounts, balances, or amounts owed.',
+    'If asked for any of that, say it is not available on this account.',
+    'Do not estimate dollar amounts.'
+  ].join(' ');
+}
+
+export function scopeReportOverview(overview: unknown, ledger: ReportLedger, access: ReportAccess) {
+  if (access.invoices && overview && typeof overview === 'object') return overview;
+  return {
+    summary: {
+      orders: access.orders ? ledger.orders?.length || 0 : 0,
+      trucks: access.trucks ? ledger.trucks?.length || 0 : 0,
+      inventoryItems: access.inventory ? ledger.inventory?.length || 0 : 0
+    }
+  };
 }
 
 export const REPORT_MAX_TOOL_STEPS = 8;
@@ -712,7 +869,7 @@ How to answer:
 - Format money as $1,234.56 and dates like "Sep 14, 2026".
 - If the question is truly ambiguous in a way that changes the answer, answer the most likely reading and say in one line what you assumed (or ask one short clarifying question if you can't proceed).
 - If the data doesn't contain what's needed (e.g. vendor bills not available for this user), say so plainly.
-
+${input.scopeNote ? `\n${input.scopeNote}\n` : ''}
 OVERVIEW (headline totals, computed over all saved records):
 ${JSON.stringify(input.overview)}`;
 }
@@ -743,6 +900,12 @@ export async function runReportConversation(
   onToolCall?: (name: string, args: unknown) => void
 ): Promise<string> {
   const systemInstruction = buildSystemInstruction(input);
+  const allowed = new Set(
+    input.allowedTools && input.allowedTools.length > 0
+      ? input.allowedTools
+      : REPORT_TOOL_DECLARATIONS.map((tool) => tool.name)
+  );
+  const tools = REPORT_TOOL_DECLARATIONS.filter((tool) => allowed.has(tool.name));
   const contents: any[] = [
     ...historyContents(input.history),
     { role: 'user', parts: [{ text: input.question.trim() }] }
@@ -756,7 +919,7 @@ export async function runReportConversation(
         config: {
           systemInstruction,
           temperature: 0.2,
-          tools: [{ functionDeclarations: REPORT_TOOL_DECLARATIONS }],
+          tools: [{ functionDeclarations: tools }],
           ...(finalStep ? { toolConfig: { functionCallingConfig: { mode: 'NONE' } } } : {})
         }
       }),
@@ -779,7 +942,9 @@ export async function runReportConversation(
       parts: calls.map((call) => {
         let result: unknown;
         try {
-          result = runReportTool(input.ledger, call.name, call.args);
+          result = allowed.has(String(call.name || ''))
+            ? runReportTool(input.ledger, call.name, call.args)
+            : { error: 'This report is not available for your role.' };
         } catch (toolErr: any) {
           result = { error: String(toolErr?.message || toolErr) };
         }

@@ -155,6 +155,7 @@ const es: TranslationDict = {
     customersHint: 'Administre su directorio de clientes en el panel principal.',
     purchasingHint: 'Proveedores, órdenes de compra, recepción y facturas AP en el panel principal.',
     reportsHint: 'Pida reportes de carga, inventario, ventas y clientes en el panel principal.',
+    reportsYardHint: 'Pregunte por camiones, pedidos e inventario en el panel principal.',
     tasksHint: 'Asigne tareas semanales por persona. Los trabajadores las marcan al terminar.',
     retail: 'Venta'
   },

@@ -104,7 +104,7 @@ function canAccessWorkspaceTab(
     case 'customers':
       return permissions.canViewCustomers;
     case 'reports':
-      return permissions.canViewReports;
+      return permissions.canViewReports || permissions.canAskYardAi;
     case 'tasks':
       return permissions.canViewTasks;
     case 'purchasing':
@@ -577,6 +577,7 @@ function NurseryApp({
     permissions.canViewCustomers,
     permissions.canViewOrders,
     permissions.canViewReports,
+    permissions.canAskYardAi,
     permissions.canViewInventory,
     permissions.canViewTrucks,
     permissions.canViewTasks,
@@ -607,6 +608,7 @@ function NurseryApp({
     permissions.canViewCustomers,
     permissions.canViewOrders,
     permissions.canViewReports,
+    permissions.canAskYardAi,
     permissions.canViewInventory,
     permissions.canViewTrucks,
     permissions.canViewTasks,
@@ -1124,7 +1126,7 @@ function NurseryApp({
                 <span>{t('nav.purchasing')}</span>
               </button>
             )}
-            {permissions.canViewReports && (
+            {(permissions.canViewReports || permissions.canAskYardAi) && (
               <button
                 onClick={() => {
                   if (!leaveTruckBuilderIfNeeded()) return;
@@ -1191,7 +1193,9 @@ function NurseryApp({
             </div>
           ) : activeTab === 'reports' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
-              {t('nav.reportsHint')}
+              {permissions.canAskYardAi && !permissions.canViewReports
+                ? t('nav.reportsYardHint')
+                : t('nav.reportsHint')}
             </div>
           ) : activeTab === 'tasks' ? (
             <div className="text-xs text-gray-500 bg-white rounded-xl border border-gray-150 p-4">
@@ -1307,6 +1311,7 @@ function NurseryApp({
               customers={customers}
               permissions={permissions}
               nurseryName={tenant.name}
+              tenantId={tenant.id}
             />
           ) : activeTab === 'tasks' ? (
             <TasksWorkspace

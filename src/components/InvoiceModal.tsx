@@ -45,6 +45,7 @@ import { updateCustomerOrder, addCustomerOrder, subscribeToWeights, updateOrderI
 import {
   addCustomerDocument,
   updateCustomerDocument,
+  stampCustomerDocumentEmailed,
   deleteCustomerDocument,
   markCustomerInvoicePaid,
   paymentFieldsAfterInvoiceTotal,
@@ -195,6 +196,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     existingDocument?.documentNumber ||
       defaultDocumentNumber(initialDocumentType)
   );
+  // Save can assign a real number before React re-renders. Email and PDF read this
+  // so the message matches the document that was just written.
+  const invoiceNumberRef = useRef(invoiceNumber);
+  useEffect(() => {
+    invoiceNumberRef.current = invoiceNumber;
+  }, [invoiceNumber]);
   const [poNumber, setPoNumber] = useState('');
   const [referencedInvoiceNumber, setReferencedInvoiceNumber] = useState('');
   /** Editable plant lines for estimates and credit memos. */
@@ -1274,7 +1281,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         <p style="font-size: 11px; color: #0e7490; font-weight: bold; margin-top: 0; text-transform: uppercase; letter-spacing: 1.5px; font-family: Arial, sans-serif;">${t('invoice.wholesaleNursery')}</p>
         
         <div style="margin: 25px 0; padding: 18px; background-color: #f0fdf4; border-radius: 8px; border: 1px solid #dcfce7; font-family: Arial, sans-serif;">
-          <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumber}</h2>
+          <h2 style="font-size: 18px; margin: 0 0 8px 0; color: #14532d; font-weight: 800;">${docLabel} ${invoiceNumberRef.current}</h2>
           <table style="width: 100%; font-size: 13px; font-family: Arial, sans-serif;">
             <tr>
               <td style="padding: 2px 0; color: #475569;"><strong>${docLabel} Date:</strong></td>
@@ -1467,7 +1474,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 ${nurseryName.toUpperCase()}
 Wholesale Nursery
 
-${docLabelUpper}: ${invoiceNumber}
+${docLabelUpper}: ${invoiceNumberRef.current}
 Date: ${new Date(invoiceDate).toLocaleDateString(undefined, { dateStyle: 'long' })}
 ${poNumber.trim() ? `P.O. #: ${poNumber.trim()}\n` : ''}${
       referencedInvoiceNumber.trim()
@@ -1551,9 +1558,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     setEmailQbNote(null);
 
     try {
-      const qbSync = await syncToQuickbooksOnEmail();
-      // The email body and PDF are built from the number on screen; never send a stale one.
-      if (qbSync.documentNumber && qbSync.documentNumber !== invoiceNumber.trim()) {
+      // Persist first so QuickBooks can issue a pay link for this exact invoice.
+      const saved = await saveInvoice();
+      if (!saved) return;
+
+      const qbSync = await syncToQuickbooksOnEmail(saved.id);
+      const issuedNumber = invoiceNumberRef.current.trim();
+      // The email body and PDF are built from the number just saved; never send a stale one.
+      if (qbSync.documentNumber && qbSync.documentNumber !== issuedNumber) {
         setEmailSentStatus('error_general');
         setEmailErrorMessage(
           t('invoice.emailNumberChanged', { number: qbSync.documentNumber })
@@ -1572,7 +1584,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         Boolean(useQboPayLinks || useStripePayLinks);
       if (wantPayLink) {
         try {
-          emailPayUrl = await ensurePayLink();
+          emailPayUrl = await ensurePayLink(saved.id);
         } catch (payErr) {
           console.warn('Invoice email continuing without pay link:', payErr);
         }
@@ -1580,16 +1592,20 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         emailPayUrl = null;
       }
 
+      const subject =
+        issuedNumber && issuedNumber !== invoiceNumber.trim()
+          ? t('invoice.emailSubjectFrom', {
+              docLabel,
+              number: issuedNumber,
+              nurseryName
+            })
+          : emailSubject;
+
       let estimateAcceptUrl: string | null = null;
       if (isEstimate) {
-        if (!savedDocumentId) {
-          setEmailSentStatus('error_general');
-          setEmailErrorMessage(t('invoice.saveEstimateBeforeEmail'));
-          return;
-        }
         const prepared = await prepareEstimateAcceptLink({
           tenantId,
-          documentId: savedDocumentId
+          documentId: saved.id
         });
         estimateAcceptUrl = prepared.acceptUrl || null;
       }
@@ -1606,7 +1622,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         tenantId,
         to: customerEmail,
         cc,
-        subject: emailSubject,
+        subject,
         text: emailText,
         html: emailHtml,
         fromName: nurseryName,
@@ -1625,15 +1641,16 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           };
           await updateCustomerOrder(updatedOrder);
         }
-        const savedDoc = liveDocument || existingDocument || fetchedDocument;
-        if (savedDocumentId && savedDoc) {
-          await updateCustomerDocument({
-            ...savedDoc,
-            id: savedDocumentId,
+        if (saved.id) {
+          const emailedAt = new Date().toISOString();
+          await stampCustomerDocumentEmailed(saved.id, {
             customerEmail,
             customerEmailCc: ccJoined,
-            emailSentAt: new Date().toISOString()
+            emailSentAt: emailedAt
           });
+          setLiveDocument((prev) =>
+            prev ? { ...prev, customerEmail, customerEmailCc: ccJoined, emailSentAt: emailedAt } : prev
+          );
         }
         setEmailSentStatus('success');
       } else if (
@@ -2050,7 +2067,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     freightShares?: FreightShare[],
     freightMethod?: FreightAllocationMethod,
     totalFreight?: number
-  ) => {
+  ): Promise<{ id: string; documentNumber: string } | null> => {
     setIsSaving(true);
     setSaveSuccess(false);
 
@@ -2075,7 +2092,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             ? qboNumber
             : await allocateFresh();
       }
-      if (invoiceNumber !== enteredNumber) setInvoiceNumber(invoiceNumber);
+      if (invoiceNumber !== enteredNumber) {
+        invoiceNumberRef.current = invoiceNumber;
+        setInvoiceNumber(invoiceNumber);
+      }
 
       const currentFreight =
         freightShares?.find((share) => share.orderId === order.id)?.amount ?? freightCharge;
@@ -2378,6 +2398,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         } else {
           persistedId = await addCustomerDocument(docPayload);
           setSavedDocumentId(persistedId);
+          const now = new Date().toISOString();
+          const createdDoc: CustomerDocument = {
+            id: persistedId,
+            ...docPayload,
+            createdAt: now,
+            updatedAt: now
+          };
+          setLiveDocument(createdDoc);
         }
 
       // Invoices unlock line editing once a document id exists. Seed creditLines
@@ -2506,7 +2534,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         }
       }
 
+      if (!persistedId) {
+        throw new Error(t('invoice.saveFailedGeneric', { message: '' }));
+      }
       setSaveSuccess(true);
+      return { id: persistedId, documentNumber: invoiceNumber };
     } catch (err: any) {
       console.error('Failed to save document:', err);
       const code = err?.code || '';
@@ -2527,6 +2559,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       } else {
         alert(t('invoice.saveFailedGeneric', { message }));
       }
+      return null;
     } finally {
       setIsSaving(false);
     }
@@ -2602,7 +2635,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     );
     if (result.documentNumber) {
       const nextNum = String(result.documentNumber).trim();
-      if (nextNum && nextNum !== invoiceNumber) {
+      if (nextNum && nextNum !== invoiceNumberRef.current) {
+        invoiceNumberRef.current = nextNum;
         setInvoiceNumber(nextNum);
       }
     }
@@ -2615,26 +2649,27 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   };
 
   /** Push invoice/estimate to QBO if QuickBooks is on and the document is saved. Never throws. */
-  const syncToQuickbooksOnEmail = async (): Promise<{
+  const syncToQuickbooksOnEmail = async (documentId?: string): Promise<{
     note: string | null;
     qboInvoiceLink: string | null;
     documentNumber?: string | null;
   }> => {
+    const id = documentId || savedDocumentId;
     if (!canUseQuickbooks) return { note: null, qboInvoiceLink: null };
     if (documentType !== 'invoice' && documentType !== 'estimate' && documentType !== 'credit_memo') {
       return { note: null, qboInvoiceLink: null };
     }
-    if (!tenantId || !savedDocumentId) {
+    if (!tenantId || !id) {
       return { note: t('invoice.emailQbSaveFirst'), qboInvoiceLink: null };
     }
     try {
       const result = await pushDocumentToQuickbooks({
         tenantId,
-        documentId: savedDocumentId
+        documentId: id
       });
       await applyQboPushResult(result);
       if (documentType === 'invoice' && isFullyPaid) {
-        await syncPaymentToQuickbooksIfPossible(savedDocumentId, { quiet: true });
+        await syncPaymentToQuickbooksIfPossible(id, { quiet: true });
       }
       return {
         note: result.updated
@@ -2723,21 +2758,32 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
   };
 
-  const ensurePayLink = async (): Promise<string> => {
-    if (activePayLinkUrl && useQboPayLinks && paymentDocument?.qboInvoiceLink) {
+  const ensurePayLink = async (documentId?: string): Promise<string> => {
+    const id = documentId || savedDocumentId;
+    if (
+      !documentId &&
+      activePayLinkUrl &&
+      useQboPayLinks &&
+      paymentDocument?.qboInvoiceLink
+    ) {
       return activePayLinkUrl;
     }
-    if (activePayLinkUrl && useStripePayLinks && paymentDocument?.stripeCheckoutUrl) {
+    if (
+      !documentId &&
+      activePayLinkUrl &&
+      useStripePayLinks &&
+      paymentDocument?.stripeCheckoutUrl
+    ) {
       return activePayLinkUrl;
     }
-    if (!tenantId || !savedDocumentId) {
+    if (!tenantId || !id) {
       throw new Error(t('invoice.saveInvoiceFirst'));
     }
 
     if (useQboPayLinks) {
       const result = await ensureQboPayLink({
         tenantId,
-        documentId: savedDocumentId
+        documentId: id
       });
       setPayLinkUrl(result.url);
       setPayLinkMessage(t('invoice.payLinkReady'));
@@ -2753,14 +2799,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       await logAuditEvent({
         action: 'quickbooks.pay_link_created',
         summary: `Created QuickBooks pay link for invoice ${invoiceNumber}`,
-        meta: { documentId: savedDocumentId, qboInvoiceId: result.qboInvoiceId }
+        meta: { documentId: id, qboInvoiceId: result.qboInvoiceId }
       });
       return result.url;
     }
 
     const result = await createInvoiceCheckout({
       tenantId,
-      documentId: savedDocumentId
+      documentId: id
     });
     if (!result.url) {
       throw new Error('Stripe did not return a pay link URL.');
@@ -2770,7 +2816,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     await logAuditEvent({
       action: 'stripe.checkout_created',
       summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
-      meta: { documentId: savedDocumentId, sessionId: result.sessionId }
+      meta: { documentId: id, sessionId: result.sessionId }
     });
     return result.url;
   };
@@ -2931,7 +2977,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(16);
       pdf.setTextColor(20, 20, 20);
-      pdf.text(invoiceNumber || docLabel, rightX, headerTop + 20, { align: 'right' });
+      pdf.text(invoiceNumberRef.current || docLabel, rightX, headerTop + 20, { align: 'right' });
 
       y = headerTop + (logoSrc ? 56 : 40);
       pdf.setFont('helvetica', 'normal');
@@ -3231,7 +3277,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         });
       }
 
-      const fileName = `${(invoiceNumber || docLabel).replace(/[^\w.-]+/g, '_')}.pdf`;
+      const fileName = `${(invoiceNumberRef.current || docLabel).replace(/[^\w.-]+/g, '_')}.pdf`;
       return { blob: pdf.output('blob'), fileName };
   };
 

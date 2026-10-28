@@ -189,6 +189,21 @@ export async function syncInvoicesFromOrder(order: CustomerOrder): Promise<Custo
   return { ...order, items };
 }
 
+/** Record that this document was emailed without rewriting totals or QuickBooks fields. */
+export async function stampCustomerDocumentEmailed(
+  documentId: string,
+  fields: { customerEmail?: string; customerEmailCc?: string; emailSentAt: string }
+): Promise<void> {
+  const tenantId = requireTenantId();
+  await updateDoc(
+    documentDoc(tenantId, documentId),
+    sanitizeForFirestore({
+      ...fields,
+      updatedAt: new Date().toISOString()
+    })
+  );
+}
+
 export async function updateCustomerDocument(document: CustomerDocument): Promise<void> {
   const tenantId = requireTenantId();
   const { id, ...rest } = document;

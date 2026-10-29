@@ -112,13 +112,28 @@ export async function deleteNursery(input: {
   return { tenantId: data.tenantId, name: data.name || input.confirmName };
 }
 
-export async function resendOwnerPasswordEmail(tenantId: string): Promise<{ ownerEmail: string }> {
+export async function fetchNurseryOwner(
+  tenantId: string
+): Promise<{ ownerEmail: string; displayName: string | null }> {
+  const res = await fetch(
+    `/api/platform/nursery-owner?tenantId=${encodeURIComponent(tenantId)}`,
+    { headers: await authHeaders() }
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { ownerEmail?: string; displayName?: string | null };
+  return { ownerEmail: data.ownerEmail || '', displayName: data.displayName || null };
+}
+
+export async function resendOwnerPasswordEmail(
+  tenantId: string,
+  email: string
+): Promise<{ ownerEmail: string; emailUpdated: boolean }> {
   const res = await fetch('/api/platform/resend-owner-password', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ tenantId })
+    body: JSON.stringify({ tenantId, email: email.trim() })
   });
   if (!res.ok) throw new Error(await readError(res));
-  const data = (await res.json()) as { ownerEmail?: string };
-  return { ownerEmail: data.ownerEmail || '' };
+  const data = (await res.json()) as { ownerEmail?: string; emailUpdated?: boolean };
+  return { ownerEmail: data.ownerEmail || '', emailUpdated: Boolean(data.emailUpdated) };
 }

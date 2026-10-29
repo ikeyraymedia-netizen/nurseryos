@@ -18,6 +18,7 @@ import {
   PASSWORD_MIN_LENGTH,
   passwordLengthFailure,
   rateLimitAllows,
+  OWNER_INVITE_TTL_MS,
   RESET_LINK_TTL_MS,
   resetTokenStatus,
   sanitizeAuditDetails,
@@ -229,6 +230,13 @@ describe('reset links', () => {
     assert.equal(resetTokenStatus({ ...fresh, usedAt: NOW }, NOW), 'used');
     assert.equal(resetTokenStatus({ expiresAt: NOW, usedAt: null }, NOW), 'expired');
     assert.equal(resetTokenStatus(null, NOW), 'missing');
+  });
+
+  it('keeps an owner set-password link for 7 days', () => {
+    assert.equal(OWNER_INVITE_TTL_MS, 7 * 24 * 60 * 60 * 1000);
+    const token = { expiresAt: NOW + OWNER_INVITE_TTL_MS, usedAt: null };
+    assert.equal(resetTokenStatus(token, NOW + 6 * 24 * 60 * 60 * 1000), 'ok');
+    assert.equal(resetTokenStatus(token, NOW + OWNER_INVITE_TTL_MS), 'expired');
   });
 });
 

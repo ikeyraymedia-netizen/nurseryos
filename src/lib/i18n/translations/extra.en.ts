@@ -1626,6 +1626,7 @@ const extra = {
     resetSent: 'If an account exists for that email, a reset link is on its way. It expires in 15 minutes and works once.',
     newPassword: 'New password',
     savePassword: 'Save password',
+    passwordSaved: 'Password saved. Sign in with your email and this password.',
     wrongCode: "That code didn't match. Check the app and try the newest code.",
     setupFailed: 'Could not set up two-step login. Please try again.',
     verifyEmailFirst:

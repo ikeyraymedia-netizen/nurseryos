@@ -1642,6 +1642,7 @@ const extra = {
     resetSent: 'Si existe una cuenta para ese correo, el enlace va en camino. Vence en 15 minutos y funciona una vez.',
     newPassword: 'Nueva contraseña',
     savePassword: 'Guardar contraseña',
+    passwordSaved: 'Contraseña guardada. Inicie sesión con su correo y esta contraseña.',
     wrongCode: 'Ese código no coincide. Revise la app y use el código más reciente.',
     setupFailed: 'No se pudo configurar el inicio en dos pasos. Intente de nuevo.',
     verifyEmailFirst:

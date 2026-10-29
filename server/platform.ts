@@ -7,6 +7,8 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
+import { OWNER_INVITE_TTL_MS } from '../src/lib/securityPolicy';
+import { resetTokenDocId } from './securityReset';
 
 /** Mirror of client DEFAULT_CONTAINER_WEIGHTS — keep in sync with src/data/defaultWeights.ts */
 const DEFAULT_CONTAINER_WEIGHTS = [
@@ -120,28 +122,22 @@ function appBaseUrl(req: Request): string {
   return 'https://nurseryos.app';
 }
 
-async function generateOwnerPasswordResetLink(email: string, continueUrl: string): Promise<string> {
-  try {
-    return await admin.auth().generatePasswordResetLink(email, {
-      url: `${continueUrl}/`
-    });
-  } catch (err: any) {
-    const msg = String(err?.message || err || '');
-    // Domain not allowlisted / unauthorized continue URL — fall back to Firebase default handler.
-    if (
-      /allowlist|whitelist|unauthorized.domain|unauthorized_continue_uri|invalid.continue/i.test(
-        msg
-      )
-    ) {
-      console.warn(
-        '[platform] continue URL not allowlisted, generating reset link without custom URL:',
-        continueUrl,
-        msg
-      );
-      return await admin.auth().generatePasswordResetLink(email);
-    }
-    throw err;
-  }
+async function createOwnerSetPasswordLink(email: string, continueUrl: string): Promise<string> {
+  const normalized = email.trim().toLowerCase();
+  const user = await admin.auth().getUserByEmail(normalized);
+  const rawToken = crypto.randomBytes(32).toString('base64url');
+  const tokenId = await resetTokenDocId(rawToken);
+  const now = Date.now();
+  await getAdminDb().doc(`securityResetTokens/${tokenId}`).set({
+    uid: user.uid,
+    email: normalized,
+    expiresAt: now + OWNER_INVITE_TTL_MS,
+    usedAt: null,
+    createdAt: now,
+    purpose: 'owner_invite'
+  });
+  const base = continueUrl.replace(/\/$/, '');
+  return `${base}/?melioReset=${encodeURIComponent(rawToken)}`;
 }
 
 async function sendOwnerWelcomeEmail(params: {
@@ -150,7 +146,7 @@ async function sendOwnerWelcomeEmail(params: {
   nurseryName: string;
   continueUrl: string;
 }): Promise<{ resetLink: string; messageId: string }> {
-  const resetLink = await generateOwnerPasswordResetLink(params.email, params.continueUrl);
+  const resetLink = await createOwnerSetPasswordLink(params.email, params.continueUrl);
   const displayName = (params.displayName || '').trim();
   const nurseryName = params.nurseryName.trim();
 
@@ -162,6 +158,8 @@ async function sendOwnerWelcomeEmail(params: {
     'Set your password and sign in here:',
     resetLink,
     '',
+    'This link works for 7 days and can be used once.',
+    '',
     'If you did not request access, you can ignore this email.',
     '',
     '— NurseryOS'
@@ -171,6 +169,7 @@ async function sendOwnerWelcomeEmail(params: {
     <p>Hi${displayName ? ` ${escapeHtml(displayName)}` : ''},</p>
     <p>Your NurseryOS workspace for <strong>${escapeHtml(nurseryName)}</strong> is ready.</p>
     <p><a href="${escapeHtml(resetLink)}">Set your password and sign in</a></p>
+    <p>This link works for 7 days and can be used once.</p>
     <p style="color:#64748b;font-size:12px;">If the button does not work, copy this link:<br/>${escapeHtml(resetLink)}</p>
     <p>— NurseryOS</p>
   `;
@@ -225,6 +224,54 @@ async function resolveNurseryOwner(tenantId: string): Promise<{
   }
 
   return { uid: ownerId, email, displayName, nurseryName };
+}
+
+async function setNurseryOwnerEmail(
+  tenantId: string,
+  owner: { uid: string; email: string; displayName: string; nurseryName: string },
+  nextEmail: string
+): Promise<{ uid: string; email: string; displayName: string; nurseryName: string }> {
+  const email = nextEmail.trim().toLowerCase();
+  if (!looksLikeEmail(email) || email.length > 200) {
+    throw Object.assign(new Error('Please enter a valid owner email.'), { status: 400 });
+  }
+  if (email === owner.email) return owner;
+
+  let taken: admin.auth.UserRecord | null = null;
+  try {
+    taken = await admin.auth().getUserByEmail(email);
+  } catch (err: any) {
+    if (err?.code !== 'auth/user-not-found') throw err;
+  }
+  if (taken && taken.uid !== owner.uid) {
+    throw Object.assign(new Error('That email already has a NurseryOS login.'), { status: 409 });
+  }
+
+  try {
+    await admin.auth().updateUser(owner.uid, { email, emailVerified: true });
+  } catch (err: any) {
+    if (err?.code === 'auth/email-already-exists') {
+      throw Object.assign(new Error('That email already has a NurseryOS login.'), { status: 409 });
+    }
+    throw err;
+  }
+
+  const db = getAdminDb();
+  const memberRef = db.doc(`tenants/${tenantId}/members/${owner.uid}`);
+  const memberSnap = await memberRef.get();
+  if (memberSnap.exists) {
+    await memberRef.set({ email }, { merge: true });
+  } else {
+    await memberRef.set({
+      userId: owner.uid,
+      email,
+      role: 'owner',
+      roles: ['owner'],
+      joinedAt: new Date().toISOString()
+    });
+  }
+  await db.doc(`users/${owner.uid}`).set({ uid: owner.uid, email }, { merge: true });
+  return { ...owner, email };
 }
 
 function platformFromAddress(): string {
@@ -575,6 +622,22 @@ export function registerPlatformRoutes(app: Express) {
     });
   });
 
+  app.get('/api/platform/nursery-owner', (req, res) => {
+    withPlatformAdmin(req, res, async () => {
+      const tenantId = String(req.query.tenantId || '').trim();
+      if (!tenantId) {
+        res.status(400).json({ error: 'Missing nursery id.' });
+        return;
+      }
+      const owner = await resolveNurseryOwner(tenantId);
+      res.json({
+        tenantId,
+        ownerEmail: owner.email,
+        displayName: owner.displayName || null
+      });
+    });
+  });
+
   app.post('/api/platform/resend-owner-password', (req, res) => {
     withPlatformAdmin(req, res, async () => {
       const tenantId = String(req.body?.tenantId || '').trim();
@@ -584,7 +647,11 @@ export function registerPlatformRoutes(app: Express) {
       }
 
       getAdminDb();
-      const owner = await resolveNurseryOwner(tenantId);
+      const current = await resolveNurseryOwner(tenantId);
+      const requested = String(req.body?.email || '').trim();
+      const owner = requested
+        ? await setNurseryOwnerEmail(tenantId, current, requested)
+        : current;
       const welcome = await sendOwnerWelcomeEmail({
         email: owner.email,
         displayName: owner.displayName,
@@ -596,6 +663,7 @@ export function registerPlatformRoutes(app: Express) {
         success: true,
         tenantId,
         ownerEmail: owner.email,
+        emailUpdated: owner.email !== current.email,
         messageId: welcome.messageId
       });
     });

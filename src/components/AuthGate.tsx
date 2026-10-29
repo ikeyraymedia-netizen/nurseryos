@@ -742,7 +742,7 @@ export function AuthGate({ children }: AuthGateProps) {
               void securityCompleteReset(resetToken, resetPassword, faxNumber)
                 .then(() => {
                   setResetToken('');
-                  setResetMessage(translate(effectiveLocale, 'mfa.resetSent'));
+                  setResetMessage(translate(effectiveLocale, 'mfa.passwordSaved'));
                   window.history.replaceState({}, '', window.location.pathname);
                 })
                 .catch((err: unknown) =>

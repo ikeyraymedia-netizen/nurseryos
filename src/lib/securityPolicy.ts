@@ -19,6 +19,8 @@ export const MAX_SESSION_MS = 12 * 60 * 60 * 1000;
 export const MFA_RECHECK_MS = 30 * 24 * 60 * 60 * 1000;
 export const MFA_FRESH_MS = 10 * 60 * 1000;
 export const RESET_LINK_TTL_MS = 15 * 60 * 1000;
+/** Owner welcome / set-password link from the seller console. */
+export const OWNER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const LOCKOUT_MAX_FAILURES = 5;
 export const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;

@@ -30,6 +30,7 @@ import {
   declineAccessRequest,
   deleteNursery,
   listAccessRequests,
+  fetchNurseryOwner,
   provisionNursery,
   resendOwnerPasswordEmail
 } from '../lib/platformAdmin';
@@ -81,6 +82,8 @@ export function PlatformDashboard({
   const [createBusy, setCreateBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [resendingPassword, setResendingPassword] = useState(false);
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerEmailDraft, setOwnerEmailDraft] = useState('');
 
   function loadDraft(tenant: Tenant) {
     if (tenant.modules == null) {
@@ -146,6 +149,28 @@ export function PlatformDashboard({
       refreshRequests().catch(() => undefined);
     }
   }, [view]);
+
+  useEffect(() => {
+    if (!selectedId || view !== 'nurseries') return;
+    let cancelled = false;
+    setOwnerEmail('');
+    setOwnerEmailDraft('');
+    void fetchNurseryOwner(selectedId)
+      .then((owner) => {
+        if (cancelled) return;
+        setOwnerEmail(owner.ownerEmail);
+        setOwnerEmailDraft((current) => (current.trim() ? current : owner.ownerEmail));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setOwnerEmail('');
+        setOwnerEmailDraft('');
+        setError(err instanceof Error ? err.message : 'Could not load the owner email.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, view]);
 
   function resetCreateForm() {
     setCreateName('');
@@ -239,11 +264,13 @@ export function PlatformDashboard({
     setError(null);
     setMessage(null);
     try {
-      const result = await resendOwnerPasswordEmail(selected.id);
+      const result = await resendOwnerPasswordEmail(selected.id, ownerEmailDraft);
+      setOwnerEmail(result.ownerEmail);
+      setOwnerEmailDraft(result.ownerEmail);
       setMessage(
         result.ownerEmail
-          ? `Set-password email resent to ${result.ownerEmail}. Ask them to check inbox and spam.`
-          : 'Set-password email resent. Ask them to check inbox and spam.'
+          ? `Set-password email sent to ${result.ownerEmail}. The link works for 7 days.`
+          : 'Set-password email sent. The link works for 7 days.'
       );
     } catch (err: any) {
       setError(err?.message || 'Could not resend password email.');
@@ -561,7 +588,8 @@ export function PlatformDashboard({
             </div>
             <div className="p-4 space-y-3">
               <p className="text-[11px] text-slate-400">
-                Creates the workspace, owner login, and emails them a set-password link.
+                Creates the workspace, owner login, and emails them a set-password link that works
+                for 7 days.
               </p>
               <label className="block text-xs space-y-1">
                 <span className="font-bold text-slate-400">Owner name</span>
@@ -860,16 +888,28 @@ export function PlatformDashboard({
                     Owner login
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    If they never got the welcome email, resend a set-password link to the nursery
-                    owner.
+                    Send a set-password link that works for 7 days. Type a different email to
+                    replace the owner login, then send.
                   </p>
+                  <label className="block text-xs space-y-1">
+                    <span className="font-bold text-slate-400">
+                      {ownerEmail ? `On file: ${ownerEmail}` : 'Owner email'}
+                    </span>
+                    <input
+                      type="email"
+                      value={ownerEmailDraft}
+                      onChange={(e) => setOwnerEmailDraft(e.target.value)}
+                      placeholder="owner@example.com"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-ink-500 focus:outline-none"
+                    />
+                  </label>
                   <button
                     type="button"
-                    disabled={resendingPassword || deleting || saving}
+                    disabled={resendingPassword || deleting || saving || !ownerEmailDraft.trim()}
                     onClick={() => void handleResendPassword()}
                     className="px-4 py-2 rounded-lg text-xs font-black bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-50"
                   >
-                    {resendingPassword ? 'Sending…' : 'Resend set-password email'}
+                    {resendingPassword ? 'Sending…' : 'Send set-password email'}
                   </button>
                 </div>
 

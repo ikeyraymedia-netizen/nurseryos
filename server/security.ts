@@ -769,9 +769,18 @@ export function registerSecurityRoutes(app: Express): void {
       const now = Date.now();
       let uid = '';
       let email = '';
+      let purpose = '';
       await getAdminDb().runTransaction(async (tx) => {
         const snap = await tx.get(ref);
-        const data = snap.exists ? (snap.data() as { expiresAt: number; usedAt: number | null; uid?: string; email?: string }) : null;
+        const data = snap.exists
+          ? (snap.data() as {
+              expiresAt: number;
+              usedAt: number | null;
+              uid?: string;
+              email?: string;
+              purpose?: string;
+            })
+          : null;
         const status = resetTokenStatus(
           data ? { expiresAt: Number(data.expiresAt), usedAt: data.usedAt == null ? null : Number(data.usedAt) } : null,
           now
@@ -781,15 +790,20 @@ export function registerSecurityRoutes(app: Express): void {
         }
         uid = String(data.uid);
         email = String(data.email || '');
+        purpose = String(data.purpose || '');
         tx.set(ref, { usedAt: now }, { merge: true });
       });
-      await admin.auth().updateUser(uid, { password });
+      await admin.auth().updateUser(uid, { password, emailVerified: true });
       await revokeAllAccess(uid);
       if (email) {
         await sendSecurityNotice(
           email,
-          'Your NurseryOS password was reset',
-          'Your NurseryOS password was changed and every session was signed out. Sign in again with your authenticator app. If this was not you, contact your nursery owner.'
+          purpose === 'owner_invite'
+            ? 'Your NurseryOS password is set'
+            : 'Your NurseryOS password was reset',
+          purpose === 'owner_invite'
+            ? 'Your NurseryOS password is set. Sign in with this email and the password you just chose.'
+            : 'Your NurseryOS password was changed and every session was signed out. Sign in again with your authenticator app. If this was not you, contact your nursery owner.'
         );
       }
       await audit('password_reset_completed', { uid, email, ipHash: clientIpHash(req) });

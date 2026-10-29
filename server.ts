@@ -48,6 +48,7 @@ import {
   reportScopeNote,
   reportToolNames,
   runReportConversation,
+  applyContainerWeights,
   scopeReportLedger,
   scopeReportOverview
 } from './server/reportTools';
@@ -1586,10 +1587,26 @@ app.post('/api/run-report', async (req, res) => {
 
     const ai = getAiClient();
     const nursery = typeof nurseryName === 'string' && nurseryName.trim() ? nurseryName.trim() : 'Nursery';
-    const rawLedger = scopeReportLedger(
+    let rawLedger = scopeReportLedger(
       (ledger && typeof ledger === 'object' ? ledger : {}) as ReportLedger,
       access
     );
+    try {
+      const weightSnap = await getAdminDb().collection(`tenants/${tenantId}/containerWeights`).get();
+      rawLedger = applyContainerWeights(
+        rawLedger,
+        weightSnap.docs.map((d) => {
+          const data = d.data() || {};
+          return {
+            id: d.id,
+            label: typeof data.label === 'string' ? data.label : '',
+            weightLbs: Number(data.weightLbs) || 0
+          };
+        })
+      );
+    } catch (weightErr: any) {
+      console.warn('[report] container weights unavailable', weightErr?.message || weightErr);
+    }
     const overview = scopeReportOverview(
       {
         summary: (data as any).summary,

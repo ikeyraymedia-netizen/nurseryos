@@ -14,7 +14,15 @@ import {
   DollarSign,
   FileText
 } from 'lucide-react';
-import { Customer, CustomerOrder, Truck, InventoryPlant, CustomerDocument, VendorBill } from '../types';
+import {
+  Customer,
+  CustomerOrder,
+  Truck,
+  InventoryPlant,
+  CustomerDocument,
+  VendorBill,
+  ContainerWeight
+} from '../types';
 import { useLocale, useT } from '../lib/i18n';
 import { AppPermissions } from '../lib/permissions';
 import { subscribeToInventory } from '../lib/inventory';
@@ -28,6 +36,7 @@ import {
 import { authJsonHeaders } from '../lib/apiAuth';
 import { AuditEvent, listAuditEventsInRange, listRecentAuditEvents } from '../lib/audit';
 import { subscribeToVendorBills } from '../lib/purchasing';
+import { subscribeToWeights } from '../lib/db';
 import { AccountingReportsPanel } from './AccountingReportsPanel';
 
 interface ReportsWorkspaceProps {
@@ -620,6 +629,15 @@ function buildDataSnapshot(params: {
   };
 }
 
+function unitWeightLbs(size: string, weights: ContainerWeight[]): number | null {
+  const needle = String(size || '').trim().toLowerCase();
+  if (!needle || weights.length === 0) return null;
+  const match = weights.find(
+    (w) => w.id.toLowerCase() === needle || w.label.toLowerCase() === needle
+  );
+  return match && match.weightLbs > 0 ? match.weightLbs : null;
+}
+
 function localDateKey(raw?: string | null): string {
   if (!raw) return '';
   const value = String(raw).trim();
@@ -636,8 +654,9 @@ function buildReportLedger(params: {
   inventory: InventoryPlant[];
   documents: CustomerDocument[];
   vendorBills: VendorBill[] | null;
+  containerWeights: ContainerWeight[];
 }) {
-  const { orders, trucks, inventory, documents, vendorBills } = params;
+  const { orders, trucks, inventory, documents, vendorBills, containerWeights } = params;
   const truckById = new Map(trucks.map((t) => [t.id, t]));
   const ownerByOrderId = new Map<string, string>();
   const orderCostByLine = new Map<string, number | undefined>();
@@ -703,6 +722,7 @@ function buildReportLedger(params: {
           price: i.unitPrice ?? null,
           cost: i.unitCost ?? null,
           vendor: i.vendor || null,
+          weightLbs: unitWeightLbs(i.containerSize, containerWeights),
           notes: i.notes || null,
           isAddition: Boolean(i.isAddition)
         }))
@@ -778,6 +798,7 @@ export function ReportsWorkspace({
   const [auditSearch, setAuditSearch] = useState('');
   const [auditError, setAuditError] = useState<string | null>(null);
   const [vendorBills, setVendorBills] = useState<VendorBill[]>([]);
+  const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
   const [viewMode, setViewMode] = useState<'sales' | 'accounting'>('sales');
 
   useEffect(() => {
@@ -787,6 +808,8 @@ export function ReportsWorkspace({
     }
     return subscribeToInventory(setInventory);
   }, [permissions.canViewInventory]);
+
+  useEffect(() => subscribeToWeights(setContainerWeights), []);
 
   useEffect(() => {
     if (!permissions.canViewPurchasingDesk) {
@@ -884,7 +907,8 @@ export function ReportsWorkspace({
             t('reports.yardSuggest1'),
             t('reports.yardSuggest2'),
             t('reports.yardSuggest3'),
-            t('reports.yardSuggest4')
+            t('reports.yardSuggest4'),
+            t('reports.yardSuggest5')
           ]
         : [
             t('reports.suggest1'),
@@ -897,7 +921,8 @@ export function ReportsWorkspace({
             t('reports.suggest8'),
             t('reports.suggest9'),
             t('reports.suggest10'),
-            t('reports.suggest11')
+            t('reports.suggest11'),
+            t('reports.suggest12')
           ],
     [t, yardOnly]
   );
@@ -958,7 +983,8 @@ export function ReportsWorkspace({
         trucks,
         inventory,
         documents: liveDocuments,
-        vendorBills: permissions.canViewPurchasingDesk ? vendorBills : null
+        vendorBills: permissions.canViewPurchasingDesk ? vendorBills : null,
+        containerWeights
       });
 
       const response = await fetch('/api/run-report', {

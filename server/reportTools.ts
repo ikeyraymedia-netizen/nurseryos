@@ -40,6 +40,8 @@ interface LedgerDocument {
 interface LedgerOrderItem extends LedgerLine {
   loaded: number;
   pulled: number;
+  /** Pounds for one plant of this size. Missing when the size has no container weight. */
+  weightLbs?: number | null;
   invoiced?: number;
   notes?: string | null;
   isAddition?: boolean;
@@ -361,6 +363,75 @@ function listDocuments(ledger: ReportLedger, args: Record<string, any>) {
   };
 }
 
+/** Stamp each order line with the nursery's container weight so pound totals match the yard. */
+export function applyContainerWeights(
+  ledger: ReportLedger,
+  weights: Array<{ id?: string; label?: string; weightLbs?: number }>
+): ReportLedger {
+  const usable = weights.filter((w) => Number(w.weightLbs) > 0);
+  if (usable.length === 0) return ledger;
+  const unit = (size: string): number | null => {
+    const needle = String(size || '').trim().toLowerCase();
+    if (!needle) return null;
+    const match = usable.find(
+      (w) =>
+        String(w.id || '').toLowerCase() === needle ||
+        String(w.label || '').toLowerCase() === needle
+    );
+    return match ? Number(match.weightLbs) : null;
+  };
+  return {
+    ...ledger,
+    orders: (ledger.orders || []).map((order) => ({
+      ...order,
+      items: (order.items || []).map((item) => ({
+        ...item,
+        weightLbs: unit(item.size)
+      }))
+    }))
+  };
+}
+
+function lineWeightLbs(item: { weightLbs?: number | null }): number {
+  const n = Number(item.weightLbs);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function ordersOnTruck(truck: LedgerTruck, orders: LedgerOrder[]): LedgerOrder[] {
+  const numbers = new Set(truck.orderNumbers || []);
+  return orders.filter((order) => {
+    if (order.truck && order.truck !== truck.name) return false;
+    return numbers.has(order.orderNumber) || order.truck === truck.name;
+  });
+}
+
+function poundsForOrders(orders: LedgerOrder[]): {
+  loadedLbs: number;
+  orderLbs: number;
+  unweightedLoadedQty: number;
+} {
+  let loadedLbs = 0;
+  let orderLbs = 0;
+  let unweightedLoadedQty = 0;
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      const unit = lineWeightLbs(item);
+      const loaded = item.loaded || 0;
+      if (!unit) {
+        unweightedLoadedQty += loaded;
+        continue;
+      }
+      loadedLbs += loaded * unit;
+      orderLbs += (item.qty || 0) * unit;
+    }
+  }
+  return {
+    loadedLbs: round2(loadedLbs),
+    orderLbs: round2(orderLbs),
+    unweightedLoadedQty
+  };
+}
+
 function queryOrders(ledger: ReportLedger, args: Record<string, any>) {
   const lineFilter = Boolean(args.plant || args.size || args.vendor);
   const orders = (ledger.orders || []).filter(
@@ -376,8 +447,30 @@ function queryOrders(ledger: ReportLedger, args: Record<string, any>) {
       (!lineFilter || o.items.some((i) => lineMatches(i, args)))
   );
   const groupBy = String(args.groupBy || 'none');
-  const rows = new Map<string, { key: string; orders: Set<string>; qty: number; loaded: number; pulled: number; value: number }>();
-  const total = { orders: new Set<string>(), qty: 0, loaded: 0, pulled: 0, value: 0 };
+  const rows = new Map<
+    string,
+    {
+      key: string;
+      orders: Set<string>;
+      qty: number;
+      loaded: number;
+      pulled: number;
+      value: number;
+      loadedLbs: number;
+      orderLbs: number;
+      unweightedLoadedQty: number;
+    }
+  >();
+  const total = {
+    orders: new Set<string>(),
+    qty: 0,
+    loaded: 0,
+    pulled: 0,
+    value: 0,
+    loadedLbs: 0,
+    orderLbs: 0,
+    unweightedLoadedQty: 0
+  };
   for (const o of orders) {
     for (const i of o.items) {
       if (lineFilter && !lineMatches(i, args)) continue;
@@ -398,29 +491,62 @@ function queryOrders(ledger: ReportLedger, args: Record<string, any>) {
                       ? i.vendor || 'No vendor'
                       : groupBy === 'month'
                         ? periodKey(o.date, 'month')
-                        : groupBy === 'order'
-                          ? `${o.orderNumber} · ${o.customer}`
-                          : 'all';
-      const row = rows.get(key) || { key, orders: new Set(), qty: 0, loaded: 0, pulled: 0, value: 0 };
+                        : groupBy === 'loading_day'
+                          ? o.loadingDate || 'No loading date'
+                          : groupBy === 'order'
+                            ? `${o.orderNumber} · ${o.customer}`
+                            : 'all';
+      const row =
+        rows.get(key) || {
+          key,
+          orders: new Set<string>(),
+          qty: 0,
+          loaded: 0,
+          pulled: 0,
+          value: 0,
+          loadedLbs: 0,
+          orderLbs: 0,
+          unweightedLoadedQty: 0
+        };
+      const unit = lineWeightLbs(i);
+      const loaded = i.loaded || 0;
       for (const r of [row, total]) {
         r.orders.add(o.orderNumber + o.customer);
         r.qty += i.qty || 0;
-        r.loaded += i.loaded || 0;
+        r.loaded += loaded;
         r.pulled += i.pulled || 0;
         r.value += (i.qty || 0) * (Number(i.price) || 0);
+        if (!unit) r.unweightedLoadedQty += loaded;
+        else {
+          r.loadedLbs += loaded * unit;
+          r.orderLbs += (i.qty || 0) * unit;
+        }
       }
       rows.set(key, row);
     }
   }
   const limit = limitOf(args);
   const priced = orders.some((order) => order.items.some((item) => typeof item.price === 'number'));
-  const shape = (r: { key: string; orders: Set<string>; qty: number; loaded: number; pulled: number; value: number }) => ({
+  const shape = (r: {
+    key: string;
+    orders: Set<string>;
+    qty: number;
+    loaded: number;
+    pulled: number;
+    value: number;
+    loadedLbs: number;
+    orderLbs: number;
+    unweightedLoadedQty: number;
+  }) => ({
     key: r.key,
     orderCount: r.orders.size,
     qty: r.qty,
     loadedQty: r.loaded,
     pulledQty: r.pulled,
     remainingToLoad: Math.max(0, r.qty - r.loaded),
+    loadedLbs: round2(r.loadedLbs),
+    orderLbs: round2(r.orderLbs),
+    unweightedLoadedQty: r.unweightedLoadedQty,
     ...(priced ? { pricedValue: round2(r.value) } : {})
   });
   const sorted = [...rows.values()].map(shape).sort((a, b) => b.qty - a.qty);
@@ -537,14 +663,73 @@ function queryVendorBills(ledger: ReportLedger, args: Record<string, any>) {
 }
 
 function queryTrucks(ledger: ReportLedger, args: Record<string, any>) {
-  const trucks = (ledger.trucks || []).filter(
-    (t) =>
-      inRange(t.loadingDate || '', args.loadingFrom, args.loadingTo) &&
-      (!args.status || t.status === args.status) &&
-      textMatches(t.name, args.name)
+  const orders = ledger.orders || [];
+  const trucks = (ledger.trucks || [])
+    .filter(
+      (t) =>
+        inRange(t.loadingDate || '', args.loadingFrom, args.loadingTo) &&
+        (!args.status || t.status === args.status) &&
+        textMatches(t.name, args.name)
+    )
+    .map((truck) => ({
+      ...truck,
+      ...poundsForOrders(ordersOnTruck(truck, orders))
+    }))
+    .sort((a, b) => b.loadedLbs - a.loadedLbs || a.name.localeCompare(b.name));
+  const totals = trucks.reduce(
+    (sum, truck) => {
+      sum.loadedLbs += truck.loadedLbs;
+      sum.orderLbs += truck.orderLbs;
+      sum.unweightedLoadedQty += truck.unweightedLoadedQty;
+      return sum;
+    },
+    { truckCount: trucks.length, loadedLbs: 0, orderLbs: 0, unweightedLoadedQty: 0 }
   );
+  totals.loadedLbs = round2(totals.loadedLbs);
+  totals.orderLbs = round2(totals.orderLbs);
+  const groupBy = String(args.groupBy || 'none');
+  const grouped = new Map<
+    string,
+    { key: string; truckCount: number; loadedLbs: number; orderLbs: number; unweightedLoadedQty: number }
+  >();
+  if (groupBy === 'day' || groupBy === 'truck' || groupBy === 'status') {
+    for (const truck of trucks) {
+      const key =
+        groupBy === 'day'
+          ? truck.loadingDate || 'No loading date'
+          : groupBy === 'status'
+            ? truck.status
+            : truck.name;
+      const row = grouped.get(key) || {
+        key,
+        truckCount: 0,
+        loadedLbs: 0,
+        orderLbs: 0,
+        unweightedLoadedQty: 0
+      };
+      row.truckCount += 1;
+      row.loadedLbs += truck.loadedLbs;
+      row.orderLbs += truck.orderLbs;
+      row.unweightedLoadedQty += truck.unweightedLoadedQty;
+      grouped.set(key, row);
+    }
+  }
   const limit = limitOf(args);
-  return { count: trucks.length, trucks: trucks.slice(0, limit), truncated: trucks.length > limit };
+  const rows = [...grouped.values()]
+    .map((row) => ({
+      ...row,
+      loadedLbs: round2(row.loadedLbs),
+      orderLbs: round2(row.orderLbs)
+    }))
+    .sort((a, b) => b.loadedLbs - a.loadedLbs || a.key.localeCompare(b.key));
+  return {
+    count: trucks.length,
+    totals,
+    rows: groupBy === 'none' ? [] : rows.slice(0, limit),
+    rowsTruncated: rows.length > limit,
+    trucks: trucks.slice(0, limit),
+    truncated: trucks.length > limit
+  };
 }
 
 const STR = { type: Type.STRING };
@@ -610,7 +795,7 @@ export const REPORT_TOOL_DECLARATIONS = [
   {
     name: 'query_orders',
     description:
-      'Plant orders (what customers ordered, loading/pulling progress, trucks, direct ships). Filter and group; includeOrders returns order details with items and notes.',
+      'Plant orders (what customers ordered, loading/pulling progress, trucks, direct ships, and pounds). loadedLbs is loaded quantity times container weight, already summed in totals. Filter loadingFrom/loadingTo for pounds loaded on trucks that day. groupBy "truck" or "loading_day" for a breakdown. Do not multiply quantities by weight yourself.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -629,7 +814,7 @@ export const REPORT_TOOL_DECLARATIONS = [
         onlyUnfinished: { type: Type.BOOLEAN },
         groupBy: {
           type: Type.STRING,
-          enum: ['none', 'customer', 'plant', 'plant_size', 'status', 'truck', 'rep', 'vendor', 'month', 'order']
+          enum: ['none', 'customer', 'plant', 'plant_size', 'status', 'truck', 'rep', 'vendor', 'month', 'loading_day', 'order']
         },
         includeOrders: { type: Type.BOOLEAN },
         limit: LIMIT
@@ -677,14 +862,16 @@ export const REPORT_TOOL_DECLARATIONS = [
   },
   {
     name: 'query_trucks',
-    description: 'Trucks / loads with status, loading date, carrier, and order numbers.',
+    description:
+      'Trucks and pounds loaded on them. loadedLbs is loaded quantity times each size\'s container weight, already summed. For "how many pounds were loaded across all trucks that day", set loadingFrom and loadingTo to that day and use totals.loadedLbs (every matching truck, not just the page). orderLbs is the full order weight. groupBy "truck" or "day" for a breakdown. unweightedLoadedQty is loaded plants whose size has no weight on file and is excluded from loadedLbs.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         name: STR,
         status: { type: Type.STRING, enum: ['pending', 'loading', 'completed'] },
-        loadingFrom: DATE('Loading date on/after YYYY-MM-DD.'),
+        loadingFrom: DATE('Loading date on/after YYYY-MM-DD. For one day, set this and loadingTo to that date.'),
         loadingTo: DATE('Loading date on/before YYYY-MM-DD.'),
+        groupBy: { type: Type.STRING, enum: ['none', 'truck', 'day', 'status'] },
         limit: LIMIT
       }
     }
@@ -809,9 +996,11 @@ export function reportToolNames(access: ReportAccess): string[] {
 export function reportScopeNote(access: ReportAccess): string {
   if (access.invoices && access.pricing) return '';
   const allowed = [
-    access.trucks ? 'trucks (status, loading date, and which orders are on them)' : '',
+    access.trucks
+      ? 'trucks (status, loading date, which orders are on them, and pounds loaded)'
+      : '',
     access.orders
-      ? 'plant orders (quantities, pulled, loaded, status, truck, plant, and size)'
+      ? 'plant orders (quantities, pulled, loaded, pounds, status, truck, plant, and size)'
       : '',
     access.inventory ? 'inventory on hand (plant, size, quantity, location, and ready date)' : '',
     access.vendorBills ? 'vendor bills' : '',
@@ -861,6 +1050,7 @@ Definitions:
 - Sales = saved invoices minus credit memos. Estimates are quotes, not sales — only use them when asked about estimates/quotes.
 - "Sales"/"revenue" in dollars means invoice totals (documentTotal) unless the question is about specific plants, in which case use merchandiseRevenue (qty × price). Say which one you used when it matters.
 - Profit uses saved line costs; mention when cost is missing on many lines.
+- Pounds loaded means plants already marked loaded, times the nursery's container weight for that size. It is not the full order weight (that is orderLbs) and not a plant count. For one day across every truck, call query_trucks with loadingFrom and loadingTo both set to that day and answer with totals.loadedLbs. Use groupBy "truck" when they want each truck. If unweightedLoadedQty is above zero, say that many loaded plants have no container weight and are not in the pound total. Never multiply quantity by a guessed weight.
 
 How to answer:
 - Lead with the direct answer in the first line (the number, name, or list asked for). Then add only the supporting detail that helps — a short breakdown, the period and filters used, and anything notable.

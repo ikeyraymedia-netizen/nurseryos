@@ -707,6 +707,11 @@ export function PlatformDashboard({
                         <span className="block text-[11px] text-slate-400 mt-1">
                           {moduleSummary(t)}
                         </span>
+                        {t.ownerAccountReadyAt ? (
+                          <span className="block text-[11px] mt-1 text-emerald-300">
+                            Owner account ready · {new Date(t.ownerAccountReadyAt).toLocaleString()}
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   );
@@ -891,6 +896,14 @@ export function PlatformDashboard({
                     Send a set-password link that works for 7 days. Type a different email to
                     replace the owner login, then send.
                   </p>
+                  {selected.ownerAccountReadyAt ? (
+                    <p className="text-[11px] font-semibold text-emerald-300">
+                      Account ready {new Date(selected.ownerAccountReadyAt).toLocaleString()}
+                      {selected.ownerAccountReadyEmail
+                        ? ` · ${selected.ownerAccountReadyEmail}`
+                        : ''}
+                    </p>
+                  ) : null}
                   <label className="block text-xs space-y-1">
                     <span className="font-bold text-slate-400">
                       {ownerEmail ? `On file: ${ownerEmail}` : 'Owner email'}

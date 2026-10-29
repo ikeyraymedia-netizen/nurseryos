@@ -25,6 +25,9 @@ export interface Tenant {
   name: string;
   createdAt: string;
   ownerId: string;
+  /** Set when the owner finishes the seller-console set-password link. */
+  ownerAccountReadyAt?: string;
+  ownerAccountReadyEmail?: string;
   /** Ship-from / origin address shown on invoices and bills of lading. */
   shippingAddress?: string;
   /**

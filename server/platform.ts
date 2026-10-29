@@ -9,6 +9,7 @@ import {
 } from './firebaseAdmin';
 import { OWNER_INVITE_TTL_MS } from '../src/lib/securityPolicy';
 import { resetTokenDocId } from './securityReset';
+import { sendSecurityNotice } from './securityMail';
 
 /** Mirror of client DEFAULT_CONTAINER_WEIGHTS — keep in sync with src/data/defaultWeights.ts */
 const DEFAULT_CONTAINER_WEIGHTS = [
@@ -122,7 +123,11 @@ function appBaseUrl(req: Request): string {
   return 'https://nurseryos.app';
 }
 
-async function createOwnerSetPasswordLink(email: string, continueUrl: string): Promise<string> {
+async function createOwnerSetPasswordLink(
+  email: string,
+  continueUrl: string,
+  tenantId: string
+): Promise<string> {
   const normalized = email.trim().toLowerCase();
   const user = await admin.auth().getUserByEmail(normalized);
   const rawToken = crypto.randomBytes(32).toString('base64url');
@@ -131,6 +136,7 @@ async function createOwnerSetPasswordLink(email: string, continueUrl: string): P
   await getAdminDb().doc(`securityResetTokens/${tokenId}`).set({
     uid: user.uid,
     email: normalized,
+    tenantId: tenantId.trim(),
     expiresAt: now + OWNER_INVITE_TTL_MS,
     usedAt: null,
     createdAt: now,
@@ -145,8 +151,13 @@ async function sendOwnerWelcomeEmail(params: {
   displayName?: string;
   nurseryName: string;
   continueUrl: string;
+  tenantId: string;
 }): Promise<{ resetLink: string; messageId: string }> {
-  const resetLink = await createOwnerSetPasswordLink(params.email, params.continueUrl);
+  const resetLink = await createOwnerSetPasswordLink(
+    params.email,
+    params.continueUrl,
+    params.tenantId
+  );
   const displayName = (params.displayName || '').trim();
   const nurseryName = params.nurseryName.trim();
 
@@ -183,6 +194,50 @@ async function sendOwnerWelcomeEmail(params: {
   });
 
   return { resetLink, messageId };
+}
+
+/** After an owner sets a password from the seller-console link. Never throws to the caller. */
+export async function recordOwnerAccountReady(input: {
+  uid: string;
+  email: string;
+  tenantId?: string;
+}): Promise<void> {
+  const email = input.email.trim().toLowerCase();
+  const uid = input.uid.trim();
+  if (!uid || !email) return;
+  const db = getAdminDb();
+  const explicitId = String(input.tenantId || '').trim();
+  const matches = explicitId
+    ? [explicitId]
+    : (
+        await db.collection('tenants').where('ownerId', '==', uid).limit(5).get()
+      ).docs.map((doc) => doc.id);
+  if (matches.length === 0) return;
+
+  const at = new Date().toISOString();
+  const names: string[] = [];
+  for (const tenantId of matches) {
+    const ref = db.doc(`tenants/${tenantId}`);
+    const snap = await ref.get();
+    if (!snap.exists) continue;
+    names.push(String(snap.data()?.name || tenantId).trim() || tenantId);
+    await ref.set(
+      { ownerAccountReadyAt: at, ownerAccountReadyEmail: email },
+      { merge: true }
+    );
+  }
+  if (names.length === 0) return;
+
+  const admins = await db.collection('users').where('isPlatformAdmin', '==', true).get();
+  const seen = new Set<string>();
+  const nurseryList = names.join(', ');
+  const text = `${email} set a password for ${nurseryList}. They can sign in now.`;
+  for (const adminDoc of admins.docs) {
+    const to = String(adminDoc.data()?.email || '').trim().toLowerCase();
+    if (!to || to === email || seen.has(to)) continue;
+    seen.add(to);
+    await sendSecurityNotice(to, `NurseryOS owner account ready — ${nurseryList}`, text);
+  }
 }
 
 async function resolveNurseryOwner(tenantId: string): Promise<{
@@ -596,7 +651,8 @@ export function registerPlatformRoutes(app: Express) {
             email,
             displayName,
             nurseryName,
-            continueUrl: appBaseUrl(req)
+            continueUrl: appBaseUrl(req),
+            tenantId
           });
           resetLink = welcome.resetLink;
           welcomeEmailId = welcome.messageId;
@@ -656,7 +712,8 @@ export function registerPlatformRoutes(app: Express) {
         email: owner.email,
         displayName: owner.displayName,
         nurseryName: owner.nurseryName,
-        continueUrl: appBaseUrl(req)
+        continueUrl: appBaseUrl(req),
+        tenantId
       });
 
       res.json({

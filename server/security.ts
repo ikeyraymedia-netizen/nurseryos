@@ -13,6 +13,7 @@ import { isMelioSecurityStrict } from './securityFlag';
 import { registerPasskeyRoutes } from './passkeys';
 import { requestContext } from './requestContext';
 import { sendSecurityNotice } from './securityMail';
+import { recordOwnerAccountReady } from './platform';
 import {
   createStrictPasswordResetLink,
   GENERIC_RESET_MESSAGE,
@@ -770,6 +771,7 @@ export function registerSecurityRoutes(app: Express): void {
       let uid = '';
       let email = '';
       let purpose = '';
+      let tenantId = '';
       await getAdminDb().runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         const data = snap.exists
@@ -779,6 +781,7 @@ export function registerSecurityRoutes(app: Express): void {
               uid?: string;
               email?: string;
               purpose?: string;
+              tenantId?: string;
             })
           : null;
         const status = resetTokenStatus(
@@ -791,6 +794,7 @@ export function registerSecurityRoutes(app: Express): void {
         uid = String(data.uid);
         email = String(data.email || '');
         purpose = String(data.purpose || '');
+        tenantId = String(data.tenantId || '');
         tx.set(ref, { usedAt: now }, { merge: true });
       });
       await admin.auth().updateUser(uid, { password, emailVerified: true });
@@ -807,6 +811,16 @@ export function registerSecurityRoutes(app: Express): void {
         );
       }
       await audit('password_reset_completed', { uid, email, ipHash: clientIpHash(req) });
+      if (purpose === 'owner_invite') {
+        try {
+          await recordOwnerAccountReady({ uid, email, tenantId });
+        } catch (notifyErr) {
+          console.warn(
+            '[security] owner-ready notice failed',
+            notifyErr instanceof Error ? notifyErr.message : notifyErr
+          );
+        }
+      }
       res.json({ ok: true, signInAgain: true });
     } catch (err) {
       sendErr(res, err);

@@ -52,6 +52,7 @@ import {
   defaultDocumentNumber,
   isDocumentNumberTaken,
   nextDocumentNumber,
+  invoiceNumberNeedsFreshAllocation,
   isEstimateDocumentNumber,
   listAllDocuments,
   subscribeToDocument,
@@ -2080,17 +2081,27 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       let invoiceNumber = enteredNumber;
       const allocateFresh = () =>
         nextDocumentNumber(documentType, { considerQuickbooks: canUseQuickbooks, tenantId });
-      if (
+      const priorDoc = existingDocument || fetchedDocument || liveDocument;
+      // Turning an estimate into an invoice files the next real invoice number.
+      const filingEstimateAsInvoice = invoiceNumberNeedsFreshAllocation({
+        type: documentType,
+        enteredNumber: invoiceNumber,
+        priorType: priorDoc?.type
+      });
+      if (filingEstimateAsInvoice) {
+        invoiceNumber = await allocateFresh();
+      } else if (
         creatingNewDocument &&
         (!invoiceNumber || invoiceNumber === defaultDocumentNumber(documentType))
       ) {
         invoiceNumber = await allocateFresh();
       } else if (await isDocumentNumberTaken(documentType, invoiceNumber, savedDocumentId)) {
         const qboNumber = String(liveDocument?.qboDocNumber || '').trim();
-        invoiceNumber =
-          qboNumber && !(await isDocumentNumberTaken(documentType, qboNumber, savedDocumentId))
-            ? qboNumber
-            : await allocateFresh();
+        const qboNumberUsable =
+          Boolean(qboNumber) &&
+          !(documentType === 'invoice' && isEstimateDocumentNumber(qboNumber)) &&
+          !(await isDocumentNumberTaken(documentType, qboNumber, savedDocumentId));
+        invoiceNumber = qboNumberUsable ? qboNumber : await allocateFresh();
       }
       if (invoiceNumber !== enteredNumber) {
         invoiceNumberRef.current = invoiceNumber;

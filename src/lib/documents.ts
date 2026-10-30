@@ -417,6 +417,25 @@ export function isEstimateDocumentNumber(
   return /^EST[- ]?\d+/i.test(String(documentNumber || '').trim());
 }
 
+/**
+ * An estimate filed as an invoice needs the next plain invoice number.
+ * Invoices already saved under an EST- number are left alone.
+ */
+export function invoiceNumberNeedsFreshAllocation(params: {
+  type: CustomerDocumentType;
+  enteredNumber: string;
+  priorType?: string | null;
+}): boolean {
+  if (params.type !== 'invoice') return false;
+  if (params.priorType === 'invoice') return false;
+  const entered = params.enteredNumber.trim();
+  return (
+    !entered ||
+    entered === defaultDocumentNumber('invoice') ||
+    isEstimateDocumentNumber(entered)
+  );
+}
+
 /** Extract a sequential integer from a document number, if it looks sequential. */
 export function parseSequentialDocumentNumber(
   documentNumber: string | undefined | null,

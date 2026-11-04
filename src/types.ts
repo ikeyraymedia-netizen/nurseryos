@@ -551,6 +551,10 @@ export interface VendorBill {
   /** Flat vendor discount taken off the invoice total (positive number). */
   discountAmount?: number;
   grandTotal: number;
+  /** Dollars paid so far. A partial payment leaves the bill unpaid for the rest. */
+  amountPaid?: number;
+  /** Dollars of amountPaid already sent to QuickBooks as bill payments. */
+  qboSyncedPaymentAmount?: number;
   /** Scanned invoice image/PDF in Firebase Storage. */
   invoicePhotoUrl?: string | null;
   invoicePhotoPath?: string | null;

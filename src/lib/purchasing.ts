@@ -25,6 +25,7 @@ import {
 import { findMatchingInventoryPlants } from './inventoryMatch';
 import { deleteLinkedQuickbooksBill, pushBillPaymentToQuickbooks } from './quickbooks';
 import { paidAtFromDateKey } from './documents';
+import { applyManualInvoicePayment, billAmountPaid, billBalanceDue } from './manualPayment';
 
 let activeTenantId: string | null = null;
 
@@ -433,6 +434,8 @@ export async function markVendorBillPaid(
     method: Exclude<VendorBill['paymentMethod'], 'stripe' | undefined>;
     reference?: string;
     paidDate?: string;
+    /** Dollars on this payment. Omitted means the remaining balance. */
+    amount?: number;
   }
 ): Promise<{
   qboPaymentSynced?: boolean;
@@ -440,9 +443,17 @@ export async function markVendorBillPaid(
   qboPaymentReason?: string | null;
   qboPaymentError?: string | null;
 }> {
+  const balance = billBalanceDue(bill);
+  const amount =
+    payment?.amount != null && Number.isFinite(payment.amount) ? payment.amount : balance;
+  if (!(amount > 0)) {
+    throw new Error('Enter the amount that was paid.');
+  }
+  const applied = applyManualInvoicePayment(bill.grandTotal || 0, billAmountPaid(bill), amount);
   await updateVendorBill({
     ...bill,
-    status: 'paid',
+    status: applied.paymentStatus === 'paid' ? 'paid' : 'unpaid',
+    amountPaid: applied.stripePaidAmountCents / 100,
     paidAt: paidAtFromDateKey(payment?.paidDate),
     paymentMethod: payment?.method,
     paymentReference: payment?.reference?.trim() || undefined

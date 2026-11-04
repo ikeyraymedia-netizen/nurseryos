@@ -75,6 +75,7 @@ import { VendorInvoiceScanner } from './VendorInvoiceScanner';
 import { PurchaseCategoryField } from './PurchaseCategoryField';
 import { CREATE_NEW_VENDOR, VendorPicker } from './VendorPicker';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
+import { billBalanceDue } from '../lib/manualPayment';
 import { billsInSamePayment, CheckPaymentModal } from './CheckPaymentModal';
 import { BillEditModal } from './BillEditModal';
 import { MelioPayModal } from './MelioPayModal';
@@ -424,7 +425,7 @@ export function PurchasingWorkspace({
       return {
         key,
         bills: list,
-        total: list.reduce((sum, b) => sum + (b.grandTotal || 0), 0)
+        total: list.reduce((sum, b) => sum + billBalanceDue(b), 0)
       };
     });
   }, [filteredBills]);
@@ -444,7 +445,7 @@ export function PurchasingWorkspace({
   }, [bills, selectedBillIds]);
 
   const selectedBillsTotal = useMemo(
-    () => selectedBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0),
+    () => selectedBills.reduce((sum, b) => sum + billBalanceDue(b), 0),
     [selectedBills]
   );
 
@@ -462,7 +463,7 @@ export function PurchasingWorkspace({
       const cur = map.get(bill.vendorId) || { count: 0, outstanding: 0 };
       cur.count += 1;
       if (bill.status !== 'paid' && bill.status !== 'payment_pending') {
-        cur.outstanding += bill.grandTotal || 0;
+        cur.outstanding += billBalanceDue(bill);
       }
       map.set(bill.vendorId, cur);
     }
@@ -475,8 +476,8 @@ export function PurchasingWorkspace({
     const today = todayKey();
     for (const bill of bills) {
       if (!isBillOutstanding(bill)) continue;
-      outstanding += bill.grandTotal || 0;
-      if (isBillOverdue(bill, today)) overdue += bill.grandTotal || 0;
+      outstanding += billBalanceDue(bill);
+      if (isBillOverdue(bill, today)) overdue += billBalanceDue(bill);
     }
     return { outstanding, overdue, count: bills.length };
   }, [bills]);
@@ -1119,7 +1120,7 @@ export function PurchasingWorkspace({
     const canDelete = permissions.canManageVendorBills;
     if ((!canPay && !canDelete) || selectedBills.length === 0) return null;
     const unpaidSelected = selectedBills.filter((b) => b.status === 'unpaid');
-    const unpaidTotal = unpaidSelected.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+    const unpaidTotal = unpaidSelected.reduce((sum, b) => sum + billBalanceDue(b), 0);
     return (
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 mb-2">
         <p className="text-[11px] font-bold text-ink-800">
@@ -1255,6 +1256,12 @@ export function PurchasingWorkspace({
                 ? ` · ${t('purchasing.invPrefix')} ${bill.vendorInvoiceNumber}`
                 : ''}
               {bill.poNumber ? ` · ${bill.poNumber}` : ''} · {money(bill.grandTotal)}
+              {bill.status !== 'paid' && (bill.amountPaid || 0) > 0.009
+                ? ` · ${t('purchasing.partialPaid', {
+                    paid: money(bill.amountPaid || 0),
+                    due: money(billBalanceDue(bill))
+                  })}`
+                : ''}
             </p>
             {bill.status !== 'paid' && bill.dueDate && (() => {
               const days = daysBetweenKeys(todayKey(), bill.dueDate);
@@ -3099,17 +3106,33 @@ export function PurchasingWorkspace({
                   .join(', ')}`
               : `${markingPaidBills[0].billNumber} · ${markingPaidBills[0].vendorName}`
           }
-          amountLabel={money(markingPaidBills.reduce((sum, b) => sum + (b.grandTotal || 0), 0))}
+          amountLabel={t('paymentMethod.balanceDue', {
+            amount: money(markingPaidBills.reduce((sum, b) => sum + billBalanceDue(b), 0))
+          })}
+          defaultAmount={
+            markingPaidBills.length === 1 ? billBalanceDue(markingPaidBills[0]) : undefined
+          }
           busy={busy}
           onCancel={() => setMarkingPaidBills(null)}
           onConfirm={async (payment) => {
             await run(async () => {
               const targets = markingPaidBills;
+              const singleBalance =
+                targets.length === 1 ? billBalanceDue(targets[0]) : 0;
+              const paying =
+                targets.length === 1 ? payment.amount ?? singleBalance : 0;
+              const leftOpen =
+                targets.length === 1
+                  ? Math.max(0, Math.round((singleBalance - paying) * 100) / 100)
+                  : 0;
               const qboErrors: string[] = [];
               let qboSynced = 0;
               let qboAlready = 0;
               for (const bill of targets) {
-                const payResult = await markVendorBillPaid(bill, payment);
+                const payResult = await markVendorBillPaid(
+                  bill,
+                  targets.length === 1 ? { ...payment, amount: paying } : payment
+                );
                 if (payResult.qboPaymentError) qboErrors.push(payResult.qboPaymentError);
                 else if (payResult.qboPaymentSynced && !payResult.qboPaymentSkipped) qboSynced += 1;
                 else if (
@@ -3121,8 +3144,20 @@ export function PurchasingWorkspace({
               }
               setMarkingPaidBills(null);
               setSelectedBillIds((prev) => prev.filter((id) => !targets.some((b) => b.id === id)));
+              const partialNote =
+                leftOpen > 0.009
+                  ? t('purchasing.partialPaymentSaved', {
+                      amount: money(paying),
+                      balance: money(leftOpen),
+                      bill: targets[0].billNumber
+                    })
+                  : '';
               if (qboErrors.length > 0) {
                 setStatus(t('purchasing.qbBillPaymentSyncFailed', { error: qboErrors[0] }));
+              } else if (partialNote) {
+                setStatus(
+                  partialNote + (qboSynced > 0 ? ` ${t('purchasing.qbBillPaymentSynced')}` : '')
+                );
               } else if (targets.length > 1) {
                 setStatus(
                   t('purchasing.markSelectedPaidDone', {

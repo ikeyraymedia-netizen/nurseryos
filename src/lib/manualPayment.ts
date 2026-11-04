@@ -1,3 +1,25 @@
+/** Cash already recorded on a vendor bill. A paid bill with no stored amount used its total. */
+export function billAmountPaid(bill: {
+  status?: string;
+  amountPaid?: number;
+  grandTotal?: number;
+}): number {
+  if (typeof bill.amountPaid === 'number' && Number.isFinite(bill.amountPaid)) {
+    return bill.amountPaid;
+  }
+  if (bill.status === 'paid') return Number(bill.grandTotal) || 0;
+  return 0;
+}
+
+/** What is still owed on a vendor bill. */
+export function billBalanceDue(bill: {
+  status?: string;
+  amountPaid?: number;
+  grandTotal?: number;
+}): number {
+  return Math.max(0, Number(((Number(bill.grandTotal) || 0) - billAmountPaid(bill)).toFixed(2)));
+}
+
 /** Apply one manual payment on top of cash already recorded. Amounts are dollars. */
 export function applyManualInvoicePayment(
   grandTotal: number,

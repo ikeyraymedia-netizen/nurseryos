@@ -2590,16 +2590,36 @@ async function syncPaidVendorBillPaymentUnlocked(
     return { synced: false, skipped: true, reason: 'missing_bill' };
   }
   let bill = snap.data() || {};
-  if (String(bill.status || '') !== 'paid') {
-    return { synced: false, skipped: true, reason: 'not_paid' };
-  }
-  if (bill.qboBillPaymentId) {
+  const grand = Number(bill.grandTotal) || 0;
+  const recorded =
+    typeof bill.amountPaid === 'number' && Number.isFinite(Number(bill.amountPaid))
+      ? Number(bill.amountPaid)
+      : String(bill.status || '') === 'paid'
+        ? grand
+        : 0;
+  const previouslySynced = Number(bill.qboSyncedPaymentAmount) || 0;
+  const legacyFullySynced =
+    Boolean(bill.qboBillPaymentId) &&
+    bill.amountPaid == null &&
+    String(bill.status || '') === 'paid';
+  if (legacyFullySynced) {
     return {
       synced: true,
       skipped: true,
       reason: 'already_synced',
       qboBillPaymentId: String(bill.qboBillPaymentId)
     };
+  }
+  if (recorded - previouslySynced <= 0.009) {
+    if (bill.qboBillPaymentId || previouslySynced > 0.009) {
+      return {
+        synced: true,
+        skipped: true,
+        reason: 'already_synced',
+        qboBillPaymentId: bill.qboBillPaymentId ? String(bill.qboBillPaymentId) : undefined
+      };
+    }
+    return { synced: false, skipped: true, reason: 'not_paid' };
   }
 
   let qboBillId = String(bill.qboBillId || '').trim();
@@ -2632,7 +2652,7 @@ async function syncPaidVendorBillPaymentUnlocked(
     throw Object.assign(new Error('QuickBooks bill is missing a vendor.'), { status: 400 });
   }
 
-  let amount = Number(bill.grandTotal) || Number(qboBill.TotalAmt) || 0;
+  let amount = Math.round((recorded - previouslySynced) * 100) / 100;
   const balance = qboBill.Balance != null ? Number(qboBill.Balance) : null;
   if (balance != null && Number.isFinite(balance)) {
     if (balance <= 0.009) {
@@ -2641,6 +2661,7 @@ async function syncPaidVendorBillPaymentUnlocked(
         {
           qboBillPaymentSyncedAt: now,
           qboBillPaymentNote: 'Bill already paid in QuickBooks',
+          qboSyncedPaymentAmount: Math.round(recorded * 100) / 100,
           updatedAt: now
         },
         { merge: true }
@@ -2669,23 +2690,24 @@ async function syncPaidVendorBillPaymentUnlocked(
   const rounded = Math.round(amount * 100) / 100;
 
   const shared = await findSharedQboBillPayment(tenantId, billId, bill, vendorId);
-  if (shared) {
-    const lines: any[] = Array.isArray(shared.Line) ? shared.Line : [];
-    const alreadyLinked = lines.some((line) =>
+  const sharedLines: any[] = Array.isArray(shared?.Line) ? shared.Line : [];
+  const alreadyLinked =
+    shared != null &&
+    sharedLines.some((line) =>
       (line?.LinkedTxn || []).some(
         (lt: any) => lt?.TxnType === 'Bill' && String(lt.TxnId) === qboBillId
       )
     );
+  if (shared && !alreadyLinked) {
+    const lines = sharedLines;
     let paymentId = String(shared.Id);
-    if (!alreadyLinked) {
-      const total = Math.round((Number(shared.TotalAmt || 0) + rounded) * 100) / 100;
-      const updated = await qboRequest<any>(tenantId, 'POST', '/billpayment?minorversion=65', {
-        ...shared,
-        TotalAmt: total,
-        Line: [...lines, { Amount: rounded, LinkedTxn: [{ TxnId: qboBillId, TxnType: 'Bill' }] }]
-      });
-      paymentId = updated?.BillPayment?.Id ? String(updated.BillPayment.Id) : paymentId;
-    }
+    const total = Math.round((Number(shared.TotalAmt || 0) + rounded) * 100) / 100;
+    const updated = await qboRequest<any>(tenantId, 'POST', '/billpayment?minorversion=65', {
+      ...shared,
+      TotalAmt: total,
+      Line: [...lines, { Amount: rounded, LinkedTxn: [{ TxnId: qboBillId, TxnType: 'Bill' }] }]
+    });
+    paymentId = updated?.BillPayment?.Id ? String(updated.BillPayment.Id) : paymentId;
     const now = new Date().toISOString();
     await billRef.set(
       {
@@ -2693,6 +2715,7 @@ async function syncPaidVendorBillPaymentUnlocked(
         qboBillPaymentSyncedAt: now,
         qboBillPaymentSyncedByUserId: opts?.uid || 'system',
         qboBillPaymentNote: null,
+        qboSyncedPaymentAmount: Math.round((previouslySynced + rounded) * 100) / 100,
         updatedAt: now
       },
       { merge: true }
@@ -2757,6 +2780,7 @@ async function syncPaidVendorBillPaymentUnlocked(
       qboBillPaymentSyncedAt: now,
       qboBillPaymentSyncedByUserId: opts?.uid || 'system',
       qboBillPaymentNote: null,
+      qboSyncedPaymentAmount: Math.round((previouslySynced + rounded) * 100) / 100,
       updatedAt: now
     },
     { merge: true }

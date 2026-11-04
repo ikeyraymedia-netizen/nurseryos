@@ -1,4 +1,5 @@
 import { CustomerDocument, VendorBill } from '../types';
+import { billBalanceDue } from './manualPayment';
 import {
   billDiscountFactor,
   purchaseCategoryLabel,
@@ -255,7 +256,7 @@ export function buildApAging(bills: VendorBill[], asOf = new Date()): AgingRepor
 
   for (const bill of bills) {
     if (bill.status === 'paid') continue;
-    const amount = bill.grandTotal || 0;
+    const amount = billBalanceDue(bill);
     if (amount <= 0) continue;
     const due = parseDate(bill.dueDate) || parseDate(bill.billDate) || parseDate(bill.createdAt);
     if (!due) continue;

@@ -3064,7 +3064,7 @@ export function PurchasingWorkspace({
           onCancel={() => {
             if (!busy) setMelioPayBills(null);
           }}
-          onConfirm={async (sonarToken) => {
+          onConfirm={async (payment) => {
             const targets = melioPayBills;
             setBusy(true);
             setError(null);
@@ -3072,19 +3072,19 @@ export function PurchasingWorkspace({
               const result = await payVendorBillMelio({
                 tenantId,
                 billIds: targets.map((b) => b.id),
-                sonarToken
+                ...payment
               });
               setSelectedBillIds([]);
               setMelioPayBills(null);
               const sentLast4 = result.last4 || '****';
-              setStatus(
+              const sent =
                 targets.length > 1
                   ? t('purchasing.melioPaymentSentMulti', {
                       n: targets.length,
                       last4: sentLast4
                     })
-                  : t('purchasing.melioPaymentSent', { last4: sentLast4 })
-              );
+                  : t('purchasing.melioPaymentSent', { last4: sentLast4 });
+              setStatus(`${sent} ${t('purchasing.melioReceiptNote')}`);
             } finally {
               setBusy(false);
             }

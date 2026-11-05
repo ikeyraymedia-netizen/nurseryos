@@ -53,6 +53,7 @@ export interface MelioStatus {
   fundingAccountId: string | null;
   fundingAccountLast4: string | null;
   fundingAccountName: string | null;
+  fundingAccountType: string | null;
   connectedAt: string | null;
   accounts: MelioFundingAccount[];
   ready: boolean;
@@ -114,7 +115,8 @@ export async function fetchMelioPayContext(
 export function linkMelioEntity(tenantId: string, entityId: string) {
   return postJson<{ entityId: string; kycStatus: string | null }>('/api/melio/link-entity', {
     tenantId,
-    entityId
+    entityId,
+    termsAccepted: true
   });
 }
 
@@ -122,28 +124,33 @@ export function linkMelioEntity(tenantId: string, entityId: string) {
 export function createMelioEntity(
   tenantId: string,
   entity: MelioEntityInput,
-  sonarToken?: string
+  sonarToken: string
 ) {
   return postJson<{ entityId: string; kycStatus: string | null }>('/api/melio/create-entity', {
     tenantId,
     entity,
     termsAccepted: true,
-    ...(sonarToken ? { sonarToken } : {})
+    sonarToken
   });
 }
 
-export function createMelioFundingLink(tenantId: string, sonarToken?: string) {
+export function createMelioFundingLink(
+  tenantId: string,
+  sonarToken: string,
+  type: 'plaid' | 'card'
+) {
   return postJson<{ url: string; expiration: string | null }>('/api/melio/funding-link', {
     tenantId,
-    ...(sonarToken ? { sonarToken } : {})
+    sonarToken,
+    type
   });
 }
 
-export function createMelioVerifyLink(tenantId: string, accountId: string, sonarToken?: string) {
+export function createMelioVerifyLink(tenantId: string, accountId: string, sonarToken: string) {
   return postJson<{ url: string; expiration: string | null }>('/api/melio/verify-link', {
     tenantId,
     accountId,
-    ...(sonarToken ? { sonarToken } : {})
+    sonarToken
   });
 }
 
@@ -158,6 +165,14 @@ export function disconnectMelio(tenantId: string) {
   return postJson<{ ok: boolean }>('/api/melio/disconnect', { tenantId });
 }
 
+export interface MelioMerchantAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
 export interface MelioPayQuote {
   amountCents: number;
   feeCents: number;
@@ -167,12 +182,16 @@ export interface MelioPayQuote {
   vendorName: string;
   last4: string | null;
   billCount: number;
+  fundingType: string;
+  merchantCategoryCode: string | null;
+  merchantAddress: MelioMerchantAddress | null;
+  goodsReceivedRequired: boolean;
 }
 
 export function quoteVendorBillMelio(params: {
   tenantId: string;
   billIds: string[];
-  sonarToken?: string;
+  sonarToken: string;
 }) {
   return postJson<MelioPayQuote>('/api/melio/quote-bill', params);
 }
@@ -180,7 +199,10 @@ export function quoteVendorBillMelio(params: {
 export function payVendorBillMelio(params: {
   tenantId: string;
   billIds: string[];
-  sonarToken?: string;
+  sonarToken: string;
+  merchantCategoryCode?: string;
+  goodsReceived?: boolean;
+  merchantAddress?: MelioMerchantAddress;
 }) {
   return postJson<{
     paymentId: string;

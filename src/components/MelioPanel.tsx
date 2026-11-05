@@ -50,6 +50,32 @@ const primaryBtn =
 const secondaryBtn =
   'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-bold disabled:opacity-50';
 
+function MelioTermsNotice() {
+  return (
+    <p className="text-xs leading-relaxed text-indigo-950">
+      By continuing, you accept Melio&apos;s{' '}
+      <a
+        href="https://melio.com/terms-of-service/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold underline"
+      >
+        Terms of Service
+      </a>{' '}
+      and{' '}
+      <a
+        href="https://melio.com/privacy-policy/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold underline"
+      >
+        Privacy Policy
+      </a>
+      . Payment services provided by Melio Solutions Inc. (NMLS ID 2376858)
+    </p>
+  );
+}
+
 export default function MelioPanel({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<MelioStatus | null>(null);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
@@ -62,16 +88,61 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
   const [fundingChoice, setFundingChoice] = useState('');
   const [sonarKey, setSonarKey] = useState<string | null>(null);
   const [sonarEnv, setSonarEnv] = useState<'sandbox' | 'production'>('sandbox');
+  const [hosted, setHosted] = useState<{ url: string; title: string } | null>(null);
   const selectedAccount = status?.accounts.find((a) => a.id === fundingChoice) || null;
 
   async function sonarToken(entityId?: string | null) {
-    if (!sonarKey) return undefined;
+    if (!sonarKey) {
+      throw new Error(
+        'Melio Sonar is required. Add MELIO_SONAR_PUBLISHABLE_KEY and restart the server.'
+      );
+    }
     return mintMelioSonarToken({
       publishableKey: sonarKey,
       environment: sonarEnv,
       businessEntityId: entityId
     });
   }
+
+  useEffect(() => {
+    if (!hosted) return;
+    let origin = '';
+    try {
+      origin = new URL(hosted.url).origin;
+    } catch {
+      return;
+    }
+    function onMessage(event: MessageEvent) {
+      let host = '';
+      try {
+        host = new URL(event.origin).hostname;
+      } catch {
+        return;
+      }
+      const fromMelio = host === 'melio.com' || host.endsWith('.melio.com');
+      if (event.origin !== origin && !fromMelio) return;
+      const data = event.data as {
+        type?: string;
+        status?: string;
+        message?: string;
+      };
+      if (data?.type !== 'melio:accounts:internal') return;
+      if (data.status === 'success') {
+        setHosted(null);
+        setNotice('Account updated in Melio.');
+        void refresh();
+      } else if (data.status === 'cancelled') {
+        setHosted(null);
+        setNotice('The Melio window was closed before it finished.');
+      } else if (data.status === 'error') {
+        setError(data.message || 'Melio could not finish that step.');
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+    // refresh is recreated each render; the listener only needs the open link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosted]);
 
   async function refresh() {
     try {
@@ -148,8 +219,8 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
       </p>
       {status && !sonarKey && (
         <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
-          Sonar is required on create-business, bank linking, and payments. Add
-          MELIO_SONAR_PUBLISHABLE_KEY from the Melio dashboard, then restart.
+          Sonar is required before a business, bank, card, or payment can be sent to Melio.
+          Add MELIO_SONAR_PUBLISHABLE_KEY from the Melio dashboard, then restart.
         </p>
       )}
 
@@ -172,6 +243,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
           <p className="text-[11px] font-semibold text-indigo-950">
             Step 1: link your Melio business
           </p>
+          <MelioTermsNotice />
           <div className="flex gap-2">
             <input
               value={entityIdInput}
@@ -231,30 +303,10 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                 </select>
               </label>
               <div className="sm:col-span-2 space-y-2">
-                <p className="text-xs leading-relaxed text-indigo-950">
-                  By continuing, you accept Melio&apos;s{' '}
-                  <a
-                    href="https://melio.com/terms-of-service/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold underline"
-                  >
-                    Terms of Service
-                  </a>{' '}
-                  and{' '}
-                  <a
-                    href="https://melio.com/privacy-policy/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold underline"
-                  >
-                    Privacy Policy
-                  </a>
-                  . Payment services provided by Melio Solutions Inc. (NMLS ID 2376858)
-                </p>
+                <MelioTermsNotice />
                 <button
                   type="button"
-                  disabled={busy || !status.apiOk}
+                  disabled={busy || !status.apiOk || !sonarKey}
                   onClick={() =>
                     void run(async () => {
                       const token = await sonarToken(null);
@@ -287,7 +339,9 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
           </p>
           {status.fundingAccountId ? (
             <p className="text-[11px] text-emerald-800 font-semibold">
-              Paying from {status.fundingAccountName || 'bank'}
+              Paying from{' '}
+              {status.fundingAccountName ||
+                (status.fundingAccountType === 'card' ? 'card' : 'bank')}
               {status.fundingAccountLast4 ? ` ••••${status.fundingAccountLast4}` : ''}. Pay via
               Melio is on in Purchasing → Bills.
             </p>
@@ -313,13 +367,13 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
               {selectedAccount && !selectedAccount.isVerified ? (
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || !sonarKey}
                   onClick={() =>
                     void run(async () => {
                       const token = await sonarToken(status?.entityId);
                       const link = await createMelioVerifyLink(tenantId, selectedAccount.id, token);
-                      window.open(link.url, '_blank');
-                      return 'Finish verifying the bank in the Melio tab, then tap refresh here.';
+                      setHosted({ url: link.url, title: 'Verify bank' });
+                      return 'Finish verifying the bank in the Melio window.';
                     })
                   }
                   className={primaryBtn}
@@ -352,19 +406,34 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !sonarKey}
               onClick={() =>
                 void run(async () => {
                   const token = await sonarToken(status?.entityId);
-                  const link = await createMelioFundingLink(tenantId, token);
-                  window.open(link.url, '_blank');
-                  return 'Finish linking the bank in the Melio tab, then tap refresh here.';
+                  const link = await createMelioFundingLink(tenantId, token, 'plaid');
+                  setHosted({ url: link.url, title: 'Link a bank' });
+                  return 'Finish linking the bank in the Melio window.';
                 })
               }
               className={primaryBtn}
             >
               <Link2 className="h-3.5 w-3.5" />
               Link a bank (Plaid)
+            </button>
+            <button
+              type="button"
+              disabled={busy || !sonarKey}
+              onClick={() =>
+                void run(async () => {
+                  const token = await sonarToken(status?.entityId);
+                  const link = await createMelioFundingLink(tenantId, token, 'card');
+                  setHosted({ url: link.url, title: 'Add a card' });
+                  return 'Finish adding the card in the Melio window.';
+                })
+              }
+              className={secondaryBtn}
+            >
+              Add a card
             </button>
             <button
               type="button"
@@ -387,6 +456,38 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
 
       {notice && <p className="text-[11px] font-semibold text-emerald-800">{notice}</p>}
       {error && <p className="text-[11px] font-semibold text-rose-700">{error}</p>}
+
+      {hosted && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={hosted.title}
+            className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
+              <p className="text-xs font-black text-gray-900">{hosted.title}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setHosted(null);
+                  setNotice(null);
+                  void refresh();
+                }}
+                className="text-xs font-bold text-gray-600"
+              >
+                Close
+              </button>
+            </div>
+            <iframe
+              title={hosted.title}
+              src={hosted.url}
+              allow="payment"
+              className="h-[70vh] w-full bg-white"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

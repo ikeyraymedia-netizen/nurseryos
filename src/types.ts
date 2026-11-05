@@ -466,6 +466,16 @@ export interface Vendor {
   bankAccountLast4?: string;
   bankAccountHolderName?: string;
   bankAccountType?: 'checking' | 'savings';
+  /** Four-digit card-network category used when this vendor is paid from a card. */
+  melioMerchantCategoryCode?: string;
+  /** Business address sent to the card networks on a Melio card payment. */
+  melioMerchantAddress?: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+  };
   /** QuickBooks Online Vendor id after AP sync. */
   qboVendorId?: string | null;
   createdAt: string;

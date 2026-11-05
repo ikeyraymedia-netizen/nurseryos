@@ -8,6 +8,11 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
+import {
+  MELIO_CARD_GOODS_CENTS,
+  buildMelioPaymentCompliance,
+  requireMelioSonarToken
+} from './melioCompliance';
 import { legacyMelioWebhookSecret, verifyMelioWebhook } from './melioWebhook';
 
 interface MelioIntegration {
@@ -18,14 +23,18 @@ interface MelioIntegration {
   fundingAccountId?: string | null;
   fundingAccountLast4?: string | null;
   fundingAccountName?: string | null;
+  /** Melio account type of the funding source: ach or card. */
+  fundingAccountType?: string | null;
   environment: 'sandbox' | 'production';
   connectedAt: string;
   connectedByUserId: string;
   updatedAt: string;
-  /** Set when this nursery's owner accepted Melio's terms on business create. */
-  termsVersion?: string | null;
+  /** When the payor accepted Melio's terms. On a linked entity this is Melio's recorded time. */
   termsAcceptedAt?: string | null;
   termsAcceptedByUserId?: string | null;
+  /** When the payor was shown the terms on this screen. */
+  termsPresentedAt?: string | null;
+  termsPresentedByUserId?: string | null;
 }
 
 interface MelioAccount {
@@ -47,6 +56,10 @@ interface MelioAccount {
     bankName?: string;
     name?: string;
   };
+  card?: {
+    lastFourDigits?: string;
+    network?: string;
+  };
 }
 
 interface MelioPayment {
@@ -62,9 +75,6 @@ const MELIO_BASE_URLS = {
   sandbox: 'https://api.staging01.melio.com/v2',
   production: 'https://api.melio.com/v2'
 };
-
-/** Published revision date of the Melio terms the owner is shown. Must match the version in force. */
-const MELIO_TERMS_VERSION = '2026-06-24';
 
 function melioEnvironment(): 'sandbox' | 'production' {
   return String(process.env.MELIO_ENV || 'sandbox').trim().toLowerCase() === 'production'
@@ -181,12 +191,12 @@ async function saveEntityLink(
   tenantId: string,
   uid: string,
   entity: any,
-  terms?: { version: string; acceptedAt: string }
+  terms?: { acceptedAt: string }
 ) {
   const now = new Date().toISOString();
   const entityId = String(entity?.id || '').trim();
   if (!entityId) throw Object.assign(new Error('Melio did not return an entity id.'), { status: 502 });
-  const recorded = entity?.termsAcceptance;
+  const recordedAt = String(entity?.termsAcceptance?.acceptedAt || terms?.acceptedAt || '').trim();
   const integration: MelioIntegration = {
     provider: 'melio',
     entityId,
@@ -195,15 +205,17 @@ async function saveEntityLink(
     fundingAccountId: null,
     fundingAccountLast4: null,
     fundingAccountName: null,
+    fundingAccountType: null,
     environment: melioEnvironment(),
     connectedAt: now,
     connectedByUserId: uid,
     updatedAt: now,
-    ...(terms
+    ...(recordedAt
       ? {
-          termsVersion: String(recorded?.version || terms.version),
-          termsAcceptedAt: String(recorded?.acceptedAt || terms.acceptedAt),
-          termsAcceptedByUserId: uid
+          termsAcceptedAt: recordedAt,
+          termsAcceptedByUserId: uid,
+          termsPresentedAt: now,
+          termsPresentedByUserId: uid
         }
       : {})
   };
@@ -291,6 +303,10 @@ async function applyPaymentToBill(params: {
   if (!mapped) return;
 
   const now = new Date().toISOString();
+  const billSnap = await getAdminDb()
+    .doc(`tenants/${params.tenantId}/vendorBills/${params.billId}`)
+    .get();
+  const method = billSnap.data()?.paymentMethod === 'cc' ? 'cc' : 'ach';
   const patch: Record<string, unknown> = {
     melioPaymentId: params.payment.id,
     melioPaymentStatus: status,
@@ -299,7 +315,7 @@ async function applyPaymentToBill(params: {
   if (mapped === 'paid') {
     patch.status = 'paid';
     patch.paidAt = now;
-    patch.paymentMethod = 'ach';
+    patch.paymentMethod = method;
     patch.paymentReference = params.payment.id;
     patch.melioPaymentError = null;
   } else if (mapped === 'unpaid') {
@@ -312,7 +328,7 @@ async function applyPaymentToBill(params: {
       `Melio payment ${status}`;
   } else {
     patch.status = 'payment_pending';
-    patch.paymentMethod = 'ach';
+    patch.paymentMethod = method;
     patch.paymentReference = params.payment.id;
     patch.melioPaymentError = null;
   }
@@ -353,13 +369,18 @@ async function listAccounts(entityId: string): Promise<MelioAccount[]> {
 }
 
 function accountLast4(acct: MelioAccount): string | null {
-  const raw = acct.last4 || acct.bankAccount?.accountNumberLast4 || '';
+  const raw = acct.last4 || acct.bankAccount?.accountNumberLast4 || acct.card?.lastFourDigits || '';
   const digits = String(raw).replace(/\D/g, '').slice(-4);
   return digits || null;
 }
 
 function accountLabel(acct: MelioAccount): string {
   const nick = String(acct.nickname || acct.name || '').trim();
+  if (String(acct.type || '').toLowerCase() === 'card') {
+    const network = String(acct.card?.network || '').trim();
+    if (nick && !/^(card)$/i.test(nick)) return nick;
+    return network ? `${network} card` : 'Card';
+  }
   if (nick && !/^(ach|plaid|bank)$/i.test(nick)) return nick;
   const bank = acct.bankAccount;
   const institution = String(
@@ -402,6 +423,7 @@ async function ensureVendorPayeeAccount(params: {
   if (params.existingAccountId && params.existingFingerprint === fingerprint) {
     return params.existingAccountId;
   }
+  requireMelioSonarToken(params.sonarToken);
 
   const nickname = params.vendorName.slice(0, 80);
   const counterPartyName = (params.holderName || params.vendorName).slice(0, 80);
@@ -459,11 +481,21 @@ function asList<T>(json: any, key: string): T[] {
 type PreparedMelioPay = {
   entityId: string;
   fundingAccountId: string;
+  fundingType: string;
   bills: Array<{ id: string; data: Record<string, any> }>;
   amountCents: number;
   receivingAccountId: string;
   last4: string;
   vendorName: string;
+  vendorId: string;
+  merchantCategoryCode: string | null;
+  merchantAddress: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+  } | null;
 };
 
 async function prepareMelioPayment(
@@ -483,6 +515,7 @@ async function prepareMelioPayment(
       entityId: integration.entityId
     })
   );
+  const fundingType = String(funding?.type || 'ach').toLowerCase();
   if (funding?.isVerified === false) {
     throw Object.assign(
       new Error('The Melio funding account is not verified. Finish verification in Team.'),
@@ -531,6 +564,17 @@ async function prepareMelioPayment(
     throw Object.assign(new Error('Vendor not found.'), { status: 404 });
   }
   const vendor = (vendorSnap.data() || {}) as Record<string, any>;
+  const storedAddress = vendor.melioMerchantAddress;
+  const merchantAddress =
+    storedAddress && typeof storedAddress === 'object' && storedAddress.line1
+      ? {
+          line1: String(storedAddress.line1),
+          ...(storedAddress.line2 ? { line2: String(storedAddress.line2) } : {}),
+          city: String(storedAddress.city || ''),
+          state: String(storedAddress.state || ''),
+          postalCode: String(storedAddress.postalCode || '')
+        }
+      : null;
   const routing = String(vendor.bankRoutingNumber || '').replace(/\D/g, '');
   const accountNumber = String(vendor.bankAccountNumber || '').replace(/\s/g, '');
   if (routing.length !== 9 || accountNumber.length < 4) {
@@ -579,11 +623,15 @@ async function prepareMelioPayment(
   return {
     entityId: integration.entityId,
     fundingAccountId: integration.fundingAccountId,
+    fundingType,
     bills,
     amountCents: Math.round(amount * 100),
     receivingAccountId,
     last4,
-    vendorName
+    vendorName,
+    vendorId,
+    merchantCategoryCode: String(vendor.melioMerchantCategoryCode || '').trim() || null,
+    merchantAddress
   };
 }
 
@@ -758,6 +806,7 @@ export function registerMelioRoutes(app: Express) {
         fundingAccountId: integration?.fundingAccountId || null,
         fundingAccountLast4: integration?.fundingAccountLast4 || null,
         fundingAccountName: integration?.fundingAccountName || null,
+        fundingAccountType: integration?.fundingAccountType || null,
         connectedAt: integration?.connectedAt || null,
         accounts,
         limitations,
@@ -794,13 +843,31 @@ export function registerMelioRoutes(app: Express) {
         return;
       }
       await assertAdminOrOwner(tenantId, uid);
+      if (req.body?.termsAccepted !== true) {
+        res.status(400).json({
+          error:
+            'The business owner must accept Melio’s Terms of Service before this business can be linked.'
+        });
+        return;
+      }
       const entity = unwrap<any>(
         await melioFetch<any>(`/entities/${encodeURIComponent(entityIdInput)}`)
       );
-      const integration = await saveEntityLink(tenantId, uid, {
-        ...entity,
-        id: entity?.id || entityIdInput
-      });
+      const acceptedAt = String(entity?.termsAcceptance?.acceptedAt || '').trim();
+      if (!acceptedAt) {
+        throw Object.assign(
+          new Error(
+            'This Melio business has no Terms of Service acceptance on file. Create the business here so the owner can accept Melio’s terms.'
+          ),
+          { status: 400 }
+        );
+      }
+      const integration = await saveEntityLink(
+        tenantId,
+        uid,
+        { ...entity, id: entity?.id || entityIdInput },
+        { acceptedAt }
+      );
       res.json({ entityId: integration.entityId, kycStatus: integration.kycStatus });
     })
   );
@@ -840,6 +907,7 @@ export function registerMelioRoutes(app: Express) {
         });
         return;
       }
+      const sonarToken = requireMelioSonarToken(sonarTokenFrom(req));
       const termsAcceptedAt = new Date().toISOString();
       const address = {
         line1: String(b.line1).trim(),
@@ -872,8 +940,7 @@ export function registerMelioRoutes(app: Express) {
         },
         termsAcceptance: {
           accepted: true,
-          acceptedAt: termsAcceptedAt,
-          version: MELIO_TERMS_VERSION
+          acceptedAt: termsAcceptedAt
         }
       };
       const entity = unwrap<any>(
@@ -881,11 +948,10 @@ export function registerMelioRoutes(app: Express) {
           method: 'POST',
           body,
           idempotencyKey: `nos-entity-${tenantId}-${Date.now()}`,
-          sonarToken: sonarTokenFrom(req)
+          sonarToken
         })
       );
       const integration = await saveEntityLink(tenantId, uid, entity, {
-        version: MELIO_TERMS_VERSION,
         acceptedAt: termsAcceptedAt
       });
       res.json({ entityId: integration.entityId, kycStatus: integration.kycStatus });
@@ -901,6 +967,7 @@ export function registerMelioRoutes(app: Express) {
         return;
       }
       await assertAdminOrOwner(tenantId, uid);
+      const sonarToken = requireMelioSonarToken(sonarTokenFrom(req));
       const integration = await loadIntegration(tenantId);
       if (!integration?.entityId) {
         throw Object.assign(new Error('Link a Melio business first.'), { status: 400 });
@@ -912,7 +979,7 @@ export function registerMelioRoutes(app: Express) {
           entityId: integration.entityId,
           body: { type },
           idempotencyKey: `nos-link-${tenantId}-${Date.now()}`,
-          sonarToken: sonarTokenFrom(req)
+          sonarToken
         })
       );
       if (!link?.url) {
@@ -932,6 +999,7 @@ export function registerMelioRoutes(app: Express) {
         return;
       }
       await assertAdminOrOwner(tenantId, uid);
+      const sonarToken = requireMelioSonarToken(sonarTokenFrom(req));
       const integration = await loadIntegration(tenantId);
       if (!integration?.entityId) {
         throw Object.assign(new Error('Link a Melio business first.'), { status: 400 });
@@ -942,7 +1010,7 @@ export function registerMelioRoutes(app: Express) {
           entityId: integration.entityId,
           body: {},
           idempotencyKey: `nos-verify-${accountId}-${Date.now()}`,
-          sonarToken: sonarTokenFrom(req)
+          sonarToken
         })
       );
       if (!link?.url) {
@@ -984,6 +1052,7 @@ export function registerMelioRoutes(app: Express) {
           fundingAccountId: account.id,
           fundingAccountLast4: accountLast4(account),
           fundingAccountName: accountLabel(account),
+          fundingAccountType: String(account.type || 'ach').toLowerCase(),
           updatedAt: new Date().toISOString()
         },
         { merge: true }
@@ -1048,7 +1117,8 @@ export function registerMelioRoutes(app: Express) {
         return;
       }
       await assertCanPayVendorBills(tenantId, uid);
-      const prepared = await prepareMelioPayment(tenantId, billIds, sonarTokenFrom(req));
+      const sonarToken = requireMelioSonarToken(sonarTokenFrom(req));
+      const prepared = await prepareMelioPayment(tenantId, billIds, sonarToken);
       const deductionDate = todayIsoDate();
       const [feeJson, etaJson] = await Promise.all([
         melioFetch<any>('/tools/fee-calculator', {
@@ -1093,7 +1163,12 @@ export function registerMelioRoutes(app: Express) {
         deliveryPreference: 'standard-ach',
         vendorName: prepared.vendorName,
         last4: prepared.last4 || null,
-        billCount: prepared.bills.length
+        billCount: prepared.bills.length,
+        fundingType: prepared.fundingType,
+        merchantCategoryCode: prepared.merchantCategoryCode,
+        merchantAddress: prepared.merchantAddress,
+        goodsReceivedRequired:
+          prepared.fundingType === 'card' && prepared.amountCents > MELIO_CARD_GOODS_CENTS
       });
     })
   );
@@ -1115,8 +1190,29 @@ export function registerMelioRoutes(app: Express) {
         return;
       }
       await assertCanPayVendorBills(tenantId, uid);
-      const prepared = await prepareMelioPayment(tenantId, billIds, sonarTokenFrom(req));
+      const sonarToken = requireMelioSonarToken(sonarTokenFrom(req));
+      const prepared = await prepareMelioPayment(tenantId, billIds, sonarToken);
       const { bills, amountCents, receivingAccountId, last4, vendorName } = prepared;
+      const compliance = buildMelioPaymentCompliance({
+        fundingType: prepared.fundingType,
+        amountCents,
+        merchantCategoryCode: req.body?.merchantCategoryCode,
+        goodsReceived: req.body?.goodsReceived === true,
+        merchantAddress: req.body?.merchantAddress
+      });
+      if (compliance.card) {
+        await getAdminDb()
+          .doc(`tenants/${tenantId}/vendors/${prepared.vendorId}`)
+          .set(
+            {
+              melioMerchantCategoryCode: compliance.card.merchantCategoryCode,
+              melioMerchantAddress: compliance.card.merchantAddress,
+              updatedAt: new Date().toISOString()
+            },
+            { merge: true }
+          );
+      }
+      const paymentMethod = prepared.fundingType === 'card' ? 'cc' : 'ach';
 
       const billNumbers = bills
         .map((b) => String(b.data.billNumber || b.id).trim())
@@ -1135,7 +1231,7 @@ export function registerMelioRoutes(app: Express) {
         currency: 'USD',
         deductionDate: todayIsoDate(),
         deliveryPreference: 'standard-ach',
-        compliance: { type: 'goods-and-services' },
+        compliance,
         noteToRecipient: memo,
         noteToSelf: `NurseryOS ${memo}`.slice(0, 140)
       };
@@ -1145,7 +1241,7 @@ export function registerMelioRoutes(app: Express) {
           entityId: prepared.entityId,
           body: { ...body, metadata: { tenantId, billIds: billIds.join(',').slice(0, 450) } },
           idempotencyKey: `nos-pay-${crypto.randomUUID()}`,
-          sonarToken: sonarTokenFrom(req)
+          sonarToken
         })
       );
       if (!payment?.id) {
@@ -1159,7 +1255,7 @@ export function registerMelioRoutes(app: Express) {
           getAdminDb().doc(`tenants/${tenantId}/vendorBills/${bill.id}`),
           {
             status: 'payment_pending',
-            paymentMethod: 'ach',
+            paymentMethod,
             paymentReference: payment.id,
             melioPaymentId: payment.id,
             melioPaymentStatus: payment.status || 'scheduled',

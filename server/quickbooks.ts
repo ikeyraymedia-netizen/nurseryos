@@ -1378,6 +1378,27 @@ async function getCreditCardAccountId(tenantId: string): Promise<string | null> 
   }
 }
 
+/** Cash recorded on the invoice. A fully paid invoice with no stored amount used its total. */
+function recordedInvoicePaidDollars(doc: any): number {
+  if (typeof doc?.stripePaidAmountCents === 'number' && Number.isFinite(doc.stripePaidAmountCents)) {
+    return Math.round(Number(doc.stripePaidAmountCents)) / 100;
+  }
+  if (String(doc?.paymentStatus || '') === 'paid') return Number(doc?.grandTotal) || 0;
+  return 0;
+}
+
+/**
+ * Dollars already sent to QuickBooks. A linked payment with no stored amount was a full payment,
+ * so it is not sent again.
+ */
+function previouslySyncedInvoicePayment(doc: any, recorded: number): number {
+  if (typeof doc?.qboSyncedPaymentAmount === 'number' && Number.isFinite(doc.qboSyncedPaymentAmount)) {
+    return Number(doc.qboSyncedPaymentAmount);
+  }
+  if (doc?.qboPaymentId && String(doc?.paymentStatus || '') === 'paid') return recorded;
+  return 0;
+}
+
 /**
  * Create a QBO Payment (Receive Payment) for a NurseryOS invoice that is paid
  * and was previously pushed (`qboInvoiceId`). Safe to call multiple times.
@@ -1411,25 +1432,28 @@ export async function syncPaidInvoicePaymentToQbo(
   if (!snap.exists) {
     return { synced: false, skipped: true, reason: 'missing_document' };
   }
-  const doc = snap.data() || {};
+  let doc = snap.data() || {};
   if (doc.type !== 'invoice') {
     return { synced: false, skipped: true, reason: 'not_invoice' };
   }
-  if (String(doc.paymentStatus || '') !== 'paid') {
+  let recorded = recordedInvoicePaidDollars(doc);
+  if (recorded <= 0.009) {
     await new Promise((resolve) => setTimeout(resolve, 400));
     const retried = await docRef.get();
-    const retriedStatus = String(retried.data()?.paymentStatus || '');
-    if (retriedStatus !== 'paid') {
-      return { synced: false, skipped: true, reason: 'not_paid' };
-    }
+    doc = retried.data() || doc;
+    recorded = recordedInvoicePaidDollars(doc);
   }
-  if (doc.qboPaymentId) {
-    return {
-      synced: true,
-      skipped: true,
-      reason: 'already_synced',
-      qboPaymentId: String(doc.qboPaymentId)
-    };
+  const previouslySynced = previouslySyncedInvoicePayment(doc, recorded);
+  if (recorded - previouslySynced <= 0.009) {
+    if (doc.qboPaymentId || previouslySynced > 0.009) {
+      return {
+        synced: true,
+        skipped: true,
+        reason: 'already_synced',
+        qboPaymentId: doc.qboPaymentId ? String(doc.qboPaymentId) : undefined
+      };
+    }
+    return { synced: false, skipped: true, reason: 'not_paid' };
   }
 
   let qboInvoiceId = String(doc.qboInvoiceId || '').trim();
@@ -1459,10 +1483,7 @@ export async function syncPaidInvoicePaymentToQbo(
     throw Object.assign(new Error('QuickBooks invoice is missing a customer.'), { status: 400 });
   }
 
-  let amount =
-    typeof doc.stripePaidAmountCents === 'number' && Number.isFinite(doc.stripePaidAmountCents)
-      ? Math.round(Number(doc.stripePaidAmountCents)) / 100
-      : Number(doc.grandTotal) || 0;
+  let amount = Math.round((recorded - previouslySynced) * 100) / 100;
 
   const balance = invoice.Balance != null ? Number(invoice.Balance) : null;
   if (balance != null && Number.isFinite(balance)) {
@@ -1472,6 +1493,7 @@ export async function syncPaidInvoicePaymentToQbo(
         {
           qboPaymentSyncedAt: now,
           qboPaymentNote: 'Invoice already paid in QuickBooks',
+          qboSyncedPaymentAmount: Math.round(recorded * 100) / 100,
           updatedAt: now
         },
         { merge: true }
@@ -1542,6 +1564,7 @@ export async function syncPaidInvoicePaymentToQbo(
       qboPaymentSyncedAt: now,
       qboPaymentSyncedByUserId: opts?.uid || 'system',
       qboPaymentNote: null,
+      qboSyncedPaymentAmount: Math.round((previouslySynced + rounded) * 100) / 100,
       updatedAt: now
     },
     { merge: true }
@@ -3472,7 +3495,7 @@ export function registerQuickbooksRoutes(app: Express) {
       }
       if (!result.synced && result.reason === 'not_paid') {
         res.status(400).json({
-          error: 'Mark the invoice paid (or wait for QBO payment) before syncing payment to QuickBooks.',
+          error: 'Record the amount received on the invoice before syncing it to QuickBooks.',
           reason: result.reason
         });
         return;

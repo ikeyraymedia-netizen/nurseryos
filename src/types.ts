@@ -287,6 +287,8 @@ export interface CustomerDocument {
   qboDocNumber?: string;
   /** QuickBooks Receive Payment id after payment sync. */
   qboPaymentId?: string;
+  /** Dollars of this invoice already sent to QuickBooks as Receive Payments. */
+  qboSyncedPaymentAmount?: number;
   qboPaymentSyncedAt?: string;
   qboPaymentSyncedByUserId?: string;
   qboPaymentNote?: string | null;

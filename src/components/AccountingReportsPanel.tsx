@@ -6,22 +6,32 @@ import {
   Download,
   FileSpreadsheet,
   Landmark,
+  List,
   Receipt,
   Scale,
+  Users,
   Wallet
 } from 'lucide-react';
 import { CustomerDocument, InventoryPlant, VendorBill } from '../types';
 import { useT } from '../lib/i18n';
 import {
+  AccountingBasis,
   AccountingPeriod,
   AgingBucketId,
   buildApAging,
+  buildApOpenItems,
   buildArAging,
+  buildArOpenItems,
   buildBalanceSheet,
   buildCashMovement,
   buildExpenseReport,
   buildProfitAndLoss,
+  buildSalesByCustomer,
   buildSalesTaxReport,
+  buildTransactionList,
+  buildTrialBalance,
+  CsvRow,
+  OpenItemRow,
   downloadCsv,
   exportBalanceSheetCsv,
   exportProfitAndLossCsv
@@ -30,11 +40,14 @@ import {
 type AccountingReportId =
   | 'pnl'
   | 'balance'
+  | 'trial'
   | 'ar'
   | 'ap'
   | 'tax'
+  | 'sales'
   | 'cash'
-  | 'expenses';
+  | 'expenses'
+  | 'transactions';
 
 interface AccountingReportsPanelProps {
   documents: CustomerDocument[];
@@ -65,7 +78,8 @@ export function AccountingReportsPanel({
 }: AccountingReportsPanelProps) {
   const t = useT();
   const [reportId, setReportId] = useState<AccountingReportId>('pnl');
-  const [period, setPeriod] = useState<AccountingPeriod>('month');
+  const [period, setPeriod] = useState<AccountingPeriod>('year');
+  const [basis, setBasis] = useState<AccountingBasis>('accrual');
 
   const periodOptions: Array<{ id: AccountingPeriod; label: string }> = [
     { id: 'month', label: t('reports.acctPeriodMonth') },
@@ -82,11 +96,14 @@ export function AccountingReportsPanel({
   }> = [
     { id: 'pnl', label: t('reports.acctPnl'), icon: Calculator },
     { id: 'balance', label: t('reports.acctBalance'), icon: Scale },
+    { id: 'trial', label: t('reports.acctTrial'), icon: Scale },
     { id: 'ar', label: t('reports.acctAr'), icon: Building2 },
     { id: 'ap', label: t('reports.acctAp'), icon: Landmark, needsPurchasing: true },
+    { id: 'sales', label: t('reports.acctSalesByCustomer'), icon: Users },
     { id: 'tax', label: t('reports.acctTax'), icon: Receipt },
     { id: 'cash', label: t('reports.acctCash'), icon: Wallet },
-    { id: 'expenses', label: t('reports.acctExpenses'), icon: CreditCard, needsPurchasing: true }
+    { id: 'expenses', label: t('reports.acctExpenses'), icon: CreditCard, needsPurchasing: true },
+    { id: 'transactions', label: t('reports.acctTransactions'), icon: List }
   ];
 
   const agingBucketLabel = (id: AgingBucketId) => {
@@ -101,8 +118,8 @@ export function AccountingReportsPanel({
     periodOptions.find((p) => p.id === period)?.label || period;
 
   const pnl = useMemo(
-    () => buildProfitAndLoss(documents, bills, period),
-    [documents, bills, period]
+    () => buildProfitAndLoss(documents, bills, period, new Date(), basis),
+    [documents, bills, period, basis]
   );
   const balance = useMemo(
     () => buildBalanceSheet(documents, bills, inventory),
@@ -110,14 +127,42 @@ export function AccountingReportsPanel({
   );
   const ar = useMemo(() => buildArAging(documents), [documents]);
   const ap = useMemo(() => buildApAging(bills), [bills]);
-  const tax = useMemo(() => buildSalesTaxReport(documents, period), [documents, period]);
+  const tax = useMemo(
+    () => buildSalesTaxReport(documents, period, new Date(), basis),
+    [documents, period, basis]
+  );
   const cash = useMemo(
     () => buildCashMovement(documents, bills, period),
     [documents, bills, period]
   );
-  const expenses = useMemo(() => buildExpenseReport(bills, period), [bills, period]);
+  const expenses = useMemo(
+    () => buildExpenseReport(bills, period, new Date(), basis),
+    [bills, period, basis]
+  );
+  const sales = useMemo(
+    () => buildSalesByCustomer(documents, period, new Date(), basis),
+    [documents, period, basis]
+  );
+  const transactions = useMemo(
+    () => buildTransactionList(documents, bills, period),
+    [documents, bills, period]
+  );
+  const trial = useMemo(
+    () => buildTrialBalance(documents, bills, inventory),
+    [documents, bills, inventory]
+  );
+  const arItems = useMemo(() => buildArOpenItems(documents), [documents]);
+  const apItems = useMemo(() => buildApOpenItems(bills), [bills]);
 
-  const showPeriod = reportId === 'pnl' || reportId === 'tax' || reportId === 'cash' || reportId === 'expenses';
+  const showPeriod =
+    reportId === 'pnl' ||
+    reportId === 'tax' ||
+    reportId === 'cash' ||
+    reportId === 'expenses' ||
+    reportId === 'sales' ||
+    reportId === 'transactions';
+  const showBasis =
+    reportId === 'pnl' || reportId === 'tax' || reportId === 'expenses' || reportId === 'sales';
   const needsPurchasing =
     reportId === 'ap' ||
     reportId === 'expenses' ||
@@ -132,8 +177,8 @@ export function AccountingReportsPanel({
       `profit-and-loss-${period}-${stamp}.csv`,
       exportProfitAndLossCsv(pnl, {
         period: periodLabel,
-        grossRevenue: t('reports.acctGrossRevenue'),
-        salesTax: t('reports.acctLessSalesTax'),
+        grossRevenue: t('reports.acctProductSales'),
+        salesTax: t('reports.acctTaxCollected'),
         netSales: t('reports.acctNetSales'),
         freight: t('reports.acctFreightIncome'),
         discounts: t('reports.acctDiscounts'),
@@ -147,6 +192,11 @@ export function AccountingReportsPanel({
         line: t('reports.acctLine')
       })
     );
+  }
+
+  function saveCsv(name: string, rows: CsvRow[]) {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`${name}-${stamp}.csv`, rows);
   }
 
   function exportBalance() {
@@ -169,6 +219,111 @@ export function AccountingReportsPanel({
         totalLiabEquity: t('reports.acctBsTotalLiabEquity')
       })
     );
+  }
+
+  function exportTax() {
+    saveCsv(
+      `sales-tax-${period}-${basis}`,
+      tax.lines.map((line) => ({
+        Date: line.date,
+        Number: line.num,
+        Customer: line.name,
+        Kind: line.kind,
+        Rate: line.kind === 'exempt' ? 'Exempt' : line.ratePct,
+        'Taxable sales': line.taxable,
+        'Sales tax': line.tax
+      }))
+    );
+  }
+
+  function exportSales() {
+    saveCsv(
+      `sales-by-customer-${period}-${basis}`,
+      sales.rows.map((row) => ({
+        Customer: row.customer,
+        Invoices: row.invoices,
+        'Net sales': row.netSales,
+        'Sales tax': row.salesTax,
+        Total: row.total,
+        'Open balance': row.balance
+      }))
+    );
+  }
+
+  function exportCash() {
+    const rows: CsvRow[] = [
+      ...cash.inRows.map((row) => ({
+        Direction: 'In',
+        Date: row.date,
+        Name: row.name,
+        Method: row.method,
+        Amount: row.amount,
+        Ref: row.ref || ''
+      })),
+      ...cash.outRows.map((row) => ({
+        Direction: 'Out',
+        Date: row.date,
+        Name: row.name,
+        Method: row.method,
+        Amount: row.amount,
+        Ref: row.ref || ''
+      }))
+    ];
+    saveCsv(`cash-flow-${period}`, rows);
+  }
+
+  function exportExpenses() {
+    saveCsv(
+      `expenses-${period}-${basis}`,
+      expenses.lines.map((line) => ({
+        Date: line.date,
+        Vendor: line.vendor,
+        Number: line.num,
+        Category: line.category,
+        Amount: line.amount
+      }))
+    );
+  }
+
+  function exportOpenItems(name: string, rows: ReturnType<typeof buildArOpenItems>) {
+    saveCsv(
+      name,
+      rows.map((row) => ({
+        Name: row.name,
+        Number: row.num,
+        Date: row.date,
+        Due: row.due,
+        Bucket: row.bucket,
+        Total: row.total,
+        Paid: row.paid,
+        Balance: row.balance
+      }))
+    );
+  }
+
+  function exportTransactions() {
+    saveCsv(
+      `transaction-list-${period}`,
+      transactions.rows.map((row) => ({
+        Date: row.date,
+        Type: row.type,
+        Number: row.num,
+        Name: row.name,
+        Account: row.account,
+        Amount: row.amount
+      }))
+    );
+  }
+
+  function exportTrial() {
+    saveCsv(`trial-balance-${trial.asOf}`, [
+      ...trial.rows.map((row) => ({
+        Account: row.account,
+        Debit: row.debit || '',
+        Credit: row.credit || ''
+      })),
+      { Account: 'Total', Debit: trial.totalDebit, Credit: trial.totalCredit }
+    ]);
   }
 
   return (
@@ -229,6 +384,28 @@ export function AccountingReportsPanel({
         </div>
       )}
 
+      {showBasis && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            {t('reports.acctBasis')}
+          </span>
+          {(['accrual', 'cash'] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setBasis(id)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                basis === id
+                  ? 'bg-ink-600 text-white border-ink-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {id === 'accrual' ? t('reports.acctBasisAccrual') : t('reports.acctBasisCash')}
+            </button>
+          ))}
+        </div>
+      )}
+
       {missingPurchasing && (
         <p className="text-xs text-amber-800 font-semibold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
           {t('reports.acctNeedPurchasing')}
@@ -241,7 +418,7 @@ export function AccountingReportsPanel({
             <ExportButton label={t('reports.acctExportCsv')} onClick={exportPnl} />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard label={t('reports.acctNetSales')} value={money(pnl.revenue - pnl.salesTax)} hint={periodLabel} />
+            <StatCard label={t('reports.acctNetSales')} value={money(pnl.netSales)} hint={periodLabel} />
             <StatCard label={t('reports.acctCogs')} value={money(pnl.cogs)} hint={t('reports.acctInvoiceCount', { n: pnl.invoiceCount })} />
             <StatCard
               label={t('reports.acctGrossProfit')}
@@ -259,24 +436,23 @@ export function AccountingReportsPanel({
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <table className="w-full text-sm">
               <tbody className="divide-y divide-slate-100">
-                <PlRow label={t('reports.acctGrossRevenue')} amount={pnl.revenue} />
-                <PlRow label={t('reports.acctLessSalesTax')} amount={-pnl.salesTax} muted />
-                <PlRow label={t('reports.acctNetSales')} amount={pnl.revenue - pnl.salesTax} bold />
+                <PlRow label={t('reports.acctProductSales')} amount={pnl.productSales} />
+                {pnl.discounts > 0.009 && (
+                  <PlRow label={t('reports.acctDiscounts')} amount={-pnl.discounts} muted />
+                )}
+                {Math.abs(pnl.freightIncome) > 0.009 && (
+                  <PlRow label={t('reports.acctFreightIncome')} amount={pnl.freightIncome} />
+                )}
+                <PlRow label={t('reports.acctNetSales')} amount={pnl.netSales} bold />
                 <PlRow label={t('reports.acctCogs')} amount={-pnl.cogs} />
                 <PlRow label={t('reports.acctGrossProfit')} amount={pnl.grossProfit} bold />
                 <PlRow label={t('reports.acctOpEx')} amount={-pnl.operatingExpenses} />
                 <PlRow label={t('reports.acctNetOperating')} amount={pnl.netOperating} bold emphasize />
               </tbody>
             </table>
-            {(pnl.freightIncome > 0 || pnl.discounts > 0) && (
-              <p className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100">
-                {pnl.freightIncome > 0
-                  ? `${t('reports.acctFreightIncome')}: ${money(pnl.freightIncome)}`
-                  : ''}
-                {pnl.freightIncome > 0 && pnl.discounts > 0 ? ' · ' : ''}
-                {pnl.discounts > 0 ? `${t('reports.acctDiscounts')}: ${money(pnl.discounts)}` : ''}
-              </p>
-            )}
+            <p className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100">
+              {t('reports.acctTaxCollected')}: {money(pnl.salesTax)}. {t('reports.acctTaxNotIncome')}
+            </p>
           </div>
 
           {pnl.expensesByCategory.length > 0 && (
@@ -313,7 +489,9 @@ export function AccountingReportsPanel({
                     ? t('reports.acctNoteCogsBills')
                     : note === 'cogs_empty'
                       ? t('reports.acctNoteCogsEmpty')
-                      : note}
+                      : note === 'cash_basis'
+                        ? t('reports.acctNoteCashBasis')
+                        : note}
               </li>
             ))}
           </ul>
@@ -402,34 +580,118 @@ export function AccountingReportsPanel({
         </div>
       )}
 
+      {reportId === 'trial' && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-slate-900">{t('reports.acctTrialTitle')}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{t('reports.acctBsSubtitle', { asOf: trial.asOf })}</p>
+            </div>
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportTrial} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard label={t('reports.acctDebit')} value={money(trial.totalDebit)} />
+            <StatCard label={t('reports.acctCredit')} value={money(trial.totalCredit)} emphasize />
+          </div>
+          <SimpleTable
+            headers={[t('reports.acctLine'), t('reports.acctDebit'), t('reports.acctCredit')]}
+            rows={trial.rows.map((row) => [
+              row.account,
+              row.debit ? money(row.debit) : '',
+              row.credit ? money(row.credit) : ''
+            ])}
+            empty={t('reports.acctTaxEmpty')}
+          />
+          <p className="text-[11px] text-slate-500">{t('reports.acctNoteTrial')}</p>
+        </div>
+      )}
+
       {reportId === 'ar' && (
-        <AgingView
-          title={t('reports.acctArTitle')}
-          subtitle={t('reports.acctArSubtitle', { asOf: ar.asOf })}
-          report={ar}
-          nameHeader={t('reports.customer')}
-          totalLabel={t('reports.acctTotal')}
-          empty={t('reports.acctArEmpty')}
-          bucketLabel={agingBucketLabel}
-        />
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={() => exportOpenItems('ar-aging', arItems)} />
+          </div>
+          <AgingView
+            title={t('reports.acctArTitle')}
+            subtitle={t('reports.acctArSubtitle', { asOf: ar.asOf })}
+            report={ar}
+            nameHeader={t('reports.customer')}
+            totalLabel={t('reports.acctTotal')}
+            empty={t('reports.acctArEmpty')}
+            bucketLabel={agingBucketLabel}
+          />
+          <OpenItemsTable
+            title={t('reports.acctOpenItems')}
+            rows={arItems}
+            nameHeader={t('reports.customer')}
+            empty={t('reports.acctArEmpty')}
+          />
+        </div>
       )}
 
       {reportId === 'ap' && (
-        <AgingView
-          title={t('reports.acctApTitle')}
-          subtitle={t('reports.acctApSubtitle', { asOf: ap.asOf })}
-          report={ap}
-          nameHeader={t('reports.acctVendor')}
-          totalLabel={t('reports.acctTotal')}
-          empty={canViewPurchasing ? t('reports.acctApEmpty') : t('reports.acctNeedPurchasing')}
-          bucketLabel={agingBucketLabel}
-        />
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={() => exportOpenItems('ap-aging', apItems)} />
+          </div>
+          <AgingView
+            title={t('reports.acctApTitle')}
+            subtitle={t('reports.acctApSubtitle', { asOf: ap.asOf })}
+            report={ap}
+            nameHeader={t('reports.acctVendor')}
+            totalLabel={t('reports.acctTotal')}
+            empty={canViewPurchasing ? t('reports.acctApEmpty') : t('reports.acctNeedPurchasing')}
+            bucketLabel={agingBucketLabel}
+          />
+          <OpenItemsTable
+            title={t('reports.acctOpenItems')}
+            rows={apItems}
+            nameHeader={t('reports.acctVendor')}
+            empty={canViewPurchasing ? t('reports.acctApEmpty') : t('reports.acctNeedPurchasing')}
+          />
+        </div>
+      )}
+
+      {reportId === 'sales' && (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportSales} />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <StatCard label={t('reports.acctNetSales')} value={money(sales.netSales)} hint={periodLabel} />
+            <StatCard label={t('reports.acctTaxCollected')} value={money(sales.salesTax)} />
+            <StatCard label={t('reports.acctBsAr')} value={money(sales.balance)} emphasize />
+          </div>
+          <SimpleTable
+            headers={[
+              t('reports.customer'),
+              t('reports.acctInvoices'),
+              t('reports.acctNetSales'),
+              t('reports.acctTaxCol'),
+              t('reports.acctTotal'),
+              t('reports.acctOpenBalance')
+            ]}
+            rows={sales.rows.map((row) => [
+              row.customer,
+              String(row.invoices),
+              money(row.netSales),
+              money(row.salesTax),
+              money(row.total),
+              money(row.balance)
+            ])}
+            empty={t('reports.acctTaxEmpty')}
+          />
+        </div>
       )}
 
       {reportId === 'tax' && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportTax} />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard label={t('reports.acctTaxableSales')} value={money(tax.taxableSales)} hint={periodLabel} />
+            <StatCard label={t('reports.acctExemptSales')} value={money(tax.exemptSales)} />
             <StatCard label={t('reports.acctTaxCollected')} value={money(tax.salesTaxCollected)} emphasize />
             <StatCard label={t('reports.acctInvoices')} value={String(tax.invoiceCount)} />
           </div>
@@ -451,8 +713,10 @@ export function AccountingReportsPanel({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {tax.byRate.map((row) => (
-                    <tr key={row.ratePct}>
-                      <td className="px-4 py-2 font-mono">{pct(row.ratePct)}</td>
+                    <tr key={`${row.exempt ? 'exempt' : 'tax'}-${row.ratePct}`}>
+                      <td className="px-4 py-2 font-mono">
+                        {row.exempt ? t('reports.acctExempt') : pct(row.ratePct)}
+                      </td>
                       <td className="px-4 py-2 text-right font-mono tabular-nums">{money(row.taxable)}</td>
                       <td className="px-4 py-2 text-right font-mono tabular-nums font-semibold">{money(row.tax)}</td>
                       <td className="px-4 py-2 text-right tabular-nums">{row.invoiceCount}</td>
@@ -467,6 +731,9 @@ export function AccountingReportsPanel({
 
       {reportId === 'cash' && (
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportCash} />
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             <StatCard label={t('reports.acctCashIn')} value={money(cash.cashIn)} hint={periodLabel} />
             <StatCard label={t('reports.acctCashOut')} value={money(cash.cashOut)} />
@@ -503,8 +770,38 @@ export function AccountingReportsPanel({
         </div>
       )}
 
+      {reportId === 'transactions' && (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportTransactions} />
+          </div>
+          <SimpleTable
+            headers={[
+              t('reports.acctDate'),
+              t('reports.acctTxnType'),
+              t('reports.acctTxnNum'),
+              t('reports.customer'),
+              t('reports.acctTxnAccount'),
+              t('reports.acctAmount')
+            ]}
+            rows={transactions.rows.map((row) => [
+              row.date,
+              row.type,
+              row.num,
+              row.name,
+              row.account,
+              money(row.amount)
+            ])}
+            empty={t('reports.acctTaxEmpty')}
+          />
+        </div>
+      )}
+
       {reportId === 'expenses' && (
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <ExportButton label={t('reports.acctExportCsv')} onClick={exportExpenses} />
+          </div>
           <StatCard label={t('reports.acctTotalSpend')} value={money(expenses.total)} hint={periodLabel} emphasize />
           <div className="grid lg:grid-cols-2 gap-3">
             <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -568,6 +865,97 @@ export function AccountingReportsPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SimpleTable({
+  headers,
+  rows,
+  empty
+}: {
+  headers: string[];
+  rows: string[][];
+  empty: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 overflow-hidden">
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-xs text-slate-500 text-center">{empty}</p>
+      ) : (
+        <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead className="text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-100 sticky top-0 bg-slate-50">
+              <tr>
+                {headers.map((header) => (
+                  <th
+                    key={header}
+                    className={`font-bold px-3 py-2 ${header === headers[0] ? 'text-left' : 'text-right'}`}
+                  >
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row, index) => (
+                <tr key={`${row[0]}-${row[1]}-${index}`}>
+                  {row.map((cell, cellIndex) => (
+                    <td
+                      key={cellIndex}
+                      className={`px-3 py-2 ${
+                        cellIndex === 0 ? 'text-left font-semibold text-slate-900' : 'text-right font-mono tabular-nums text-slate-700'
+                      }`}
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OpenItemsTable({
+  title,
+  rows,
+  nameHeader,
+  empty
+}: {
+  title: string;
+  rows: OpenItemRow[];
+  nameHeader: string;
+  empty: string;
+}) {
+  const t = useT();
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-bold text-slate-800">{title}</p>
+      <SimpleTable
+        headers={[
+          nameHeader,
+          t('reports.acctTxnNum'),
+          t('reports.acctDate'),
+          t('reports.acctDue'),
+          t('reports.acctTotal'),
+          t('reports.acctPaid'),
+          t('reports.acctOpenBalance')
+        ]}
+        rows={rows.map((row) => [
+          row.name,
+          row.num,
+          row.date,
+          row.due,
+          money(row.total),
+          money(row.paid),
+          money(row.balance)
+        ])}
+        empty={empty}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { CustomerDocument, VendorBill } from '../types';
-import { billBalanceDue } from './manualPayment';
+import { invoiceAmountPaid, invoiceBalanceDue } from './documents';
+import { billAmountPaid, billBalanceDue } from './manualPayment';
 import {
   billDiscountFactor,
   purchaseCategoryLabel,
@@ -7,6 +8,9 @@ import {
 } from './purchaseCategories';
 
 export type AccountingPeriod = 'month' | 'quarter' | 'year' | 'all';
+
+/** Accrual uses the invoice or bill date. Cash uses the date the money moved. */
+export type AccountingBasis = 'accrual' | 'cash';
 
 export type AgingBucketId = 'current' | 'b1_30' | 'b31_60' | 'b61_90' | 'b90_plus';
 
@@ -36,10 +40,15 @@ export interface AgingReport {
 
 export interface PlReport {
   periodLabel: string;
+  basis: AccountingBasis;
+  /** Plant and supply sales before discounts and freight. Credit memos reduce this. */
+  productSales: number;
+  /** Kept so older callers still read a top-line sales figure (net of tax). */
   revenue: number;
   salesTax: number;
   freightIncome: number;
   discounts: number;
+  netSales: number;
   cogsFromInvoices: number;
   cogsFromVendorPlants: number;
   cogs: number;
@@ -53,12 +62,27 @@ export interface PlReport {
   notes: string[];
 }
 
+export interface SalesTaxLine {
+  date: string;
+  num: string;
+  name: string;
+  kind: 'taxable' | 'exempt' | 'credit';
+  ratePct: number;
+  taxable: number;
+  tax: number;
+}
+
 export interface SalesTaxReport {
   periodLabel: string;
+  basis: AccountingBasis;
+  /** Sales that had sales tax charged. */
   taxableSales: number;
+  /** Wholesale and other invoices with no sales tax. */
+  exemptSales: number;
   salesTaxCollected: number;
   invoiceCount: number;
-  byRate: Array<{ ratePct: number; taxable: number; tax: number; invoiceCount: number }>;
+  byRate: Array<{ ratePct: number; taxable: number; tax: number; invoiceCount: number; exempt: boolean }>;
+  lines: SalesTaxLine[];
 }
 
 export interface CashMovementReport {
@@ -74,9 +98,11 @@ export interface CashMovementReport {
 
 export interface ExpenseReport {
   periodLabel: string;
+  basis: AccountingBasis;
   total: number;
   byCategory: Array<{ category: string; amount: number; count: number }>;
   byVendor: Array<{ vendor: string; amount: number; count: number }>;
+  lines: Array<{ date: string; vendor: string; num: string; category: string; amount: number }>;
 }
 
 function parseDate(raw?: string | null): Date | null {
@@ -206,10 +232,8 @@ export function buildArAging(documents: CustomerDocument[], asOf = new Date()): 
       continue;
     }
     if (doc.type !== 'invoice') continue;
-    const status = doc.paymentStatus || 'unpaid';
-    if (status === 'paid') continue;
-    const amount = doc.grandTotal || 0;
-    if (amount <= 0) continue;
+    const amount = invoiceBalanceDue(doc);
+    if (amount <= 0.009) continue;
     const due = parseDate(doc.dueDate) || parseDate(doc.documentDate) || parseDate(doc.createdAt);
     if (!due) continue;
     const bucket = bucketForDays(daysPastDue(asOf, due));
@@ -300,14 +324,55 @@ function billLineTotal(bill: VendorBill): number {
   );
 }
 
+function roundMoney(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/** Invoice and credit-memo pieces. Credits are negative so they reduce income. */
+function documentIncomeParts(doc: CustomerDocument) {
+  const sign = doc.type === 'credit_memo' ? -1 : 1;
+  const subtotal = Math.abs(doc.subtotal || 0) * sign;
+  const discount = Math.abs(doc.discount || 0) * sign;
+  const freight = Math.abs(doc.freightCharge || 0) * sign;
+  const tax = Math.abs(doc.salesTax || 0) * sign;
+  const total = Math.abs(doc.grandTotal || 0) * sign;
+  return { subtotal, discount, freight, tax, total };
+}
+
+/**
+ * Share of an invoice recognized on the cash basis.
+ * Sales tax stays out of income. Amounts above the invoice total stay out too.
+ */
+function cashIncomeRatio(doc: CustomerDocument): number {
+  const total = Math.abs(doc.grandTotal || 0);
+  const paid = invoiceAmountPaid(doc);
+  if (paid <= 0.009 || total <= 0.009) return 0;
+  return Math.min(paid, total) / total;
+}
+
+function addExpenseAmount(
+  map: Map<string, number>,
+  category: string,
+  amount: number,
+  into: { operating: number; plant: number }
+) {
+  if (Math.abs(amount) <= 0.0001) return;
+  if (isPlantPurchaseCategory(category)) into.plant += amount;
+  else {
+    into.operating += amount;
+    map.set(category, (map.get(category) || 0) + amount);
+  }
+}
+
 export function buildProfitAndLoss(
   documents: CustomerDocument[],
   bills: VendorBill[],
   period: AccountingPeriod,
-  now = new Date()
+  now = new Date(),
+  basis: AccountingBasis = 'accrual'
 ): PlReport {
   const { start, end, label } = periodBounds(period, now);
-  let revenue = 0;
+  let productSales = 0;
   let salesTax = 0;
   let freightIncome = 0;
   let discounts = 0;
@@ -315,81 +380,110 @@ export function buildProfitAndLoss(
   let invoiceCount = 0;
 
   for (const doc of documents) {
-    if (doc.type !== 'invoice') continue;
-    if (!inPeriod(doc.documentDate || doc.createdAt, start, end)) continue;
+    if (doc.type !== 'invoice' && doc.type !== 'credit_memo') continue;
+    const parts = documentIncomeParts(doc);
+    if (basis === 'cash' && doc.type === 'invoice') {
+      if (!inPeriod(doc.paidAt || doc.documentDate || doc.createdAt, start, end)) continue;
+      const ratio = cashIncomeRatio(doc);
+      if (ratio <= 0) continue;
+      invoiceCount += 1;
+      productSales += parts.subtotal * ratio;
+      salesTax += parts.tax * ratio;
+      freightIncome += parts.freight * ratio;
+      discounts += parts.discount * ratio;
+      cogsFromInvoices += invoiceCogs(doc) * ratio;
+      continue;
+    }
+    const when =
+      doc.type === 'credit_memo'
+        ? doc.documentDate || doc.createdAt
+        : doc.documentDate || doc.createdAt;
+    if (!inPeriod(when, start, end)) continue;
     invoiceCount += 1;
-    revenue += doc.grandTotal || 0;
-    salesTax += doc.salesTax || 0;
-    freightIncome += doc.freightCharge || 0;
-    discounts += doc.discount || 0;
-    cogsFromInvoices += invoiceCogs(doc);
+    productSales += parts.subtotal;
+    salesTax += parts.tax;
+    freightIncome += parts.freight;
+    discounts += parts.discount;
+    if (doc.type === 'invoice') cogsFromInvoices += invoiceCogs(doc);
   }
 
   let cogsFromVendorPlants = 0;
   let operatingExpenses = 0;
   let billCount = 0;
   const expenseMap = new Map<string, number>();
+  const sink = { operating: 0, plant: 0 };
 
   for (const bill of bills) {
-    if (!inPeriod(bill.billDate || bill.createdAt, start, end)) continue;
+    const paid = billAmountPaid(bill);
+    const ratio =
+      basis === 'cash'
+        ? (bill.grandTotal || 0) > 0.009
+          ? Math.min(Math.max(paid, 0), bill.grandTotal || 0) / (bill.grandTotal || 1)
+          : 0
+        : 1;
+    if (basis === 'cash' && ratio <= 0) continue;
+    const when =
+      basis === 'cash'
+        ? bill.paidAt || bill.billDate || bill.createdAt
+        : bill.billDate || bill.createdAt;
+    if (!inPeriod(when, start, end)) continue;
     billCount += 1;
     const lines = bill.items || [];
+    const factor = billDiscountFactor(bill) * ratio;
     if (lines.length === 0) {
-      const amt = bill.grandTotal || 0;
-      operatingExpenses += amt;
+      const amt = (bill.grandTotal || 0) * ratio;
+      sink.operating += amt;
       expenseMap.set('Other', (expenseMap.get('Other') || 0) + amt);
-      continue;
-    }
-    const factor = billDiscountFactor(bill);
-    for (const line of lines) {
-      const amt = (line.quantity || 0) * (line.unitCost || 0) * factor;
-      const category = purchaseCategoryLabel(
-        line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
-      );
-      if (isPlantPurchaseCategory(category)) {
-        cogsFromVendorPlants += amt;
-      } else {
-        operatingExpenses += amt;
-        expenseMap.set(category, (expenseMap.get(category) || 0) + amt);
+    } else {
+      for (const line of lines) {
+        const amt = (line.quantity || 0) * (line.unitCost || 0) * factor;
+        const category = purchaseCategoryLabel(
+          line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
+        );
+        addExpenseAmount(expenseMap, category, amt, sink);
+      }
+      if (bill.freightCharge) {
+        const freight = bill.freightCharge * factor;
+        sink.operating += freight;
+        expenseMap.set('Freight', (expenseMap.get('Freight') || 0) + freight);
       }
     }
-    if (bill.freightCharge) {
-      const freight = bill.freightCharge * factor;
-      operatingExpenses += freight;
-      expenseMap.set('Freight', (expenseMap.get('Freight') || 0) + freight);
-    }
   }
+  cogsFromVendorPlants = sink.plant;
+  operatingExpenses = sink.operating;
 
-  // Prefer invoice line costs when present; otherwise fall back to plant vendor bills.
   const cogs = cogsFromInvoices > 0 ? cogsFromInvoices : cogsFromVendorPlants;
-  const grossProfit = revenue - salesTax - cogs;
-  const grossMarginPct = revenue - salesTax > 0 ? (grossProfit / (revenue - salesTax)) * 100 : 0;
+  const netSales = productSales - discounts + freightIncome;
+  const grossProfit = netSales - cogs;
+  const grossMarginPct = netSales > 0.009 ? (grossProfit / netSales) * 100 : 0;
   const netOperating = grossProfit - operatingExpenses;
 
   const notes: string[] = [];
-  if (cogsFromInvoices <= 0 && cogsFromVendorPlants > 0) {
-    notes.push('cogs_bills');
-  } else if (cogsFromInvoices <= 0) {
-    notes.push('cogs_empty');
-  }
+  if (cogsFromInvoices <= 0 && cogsFromVendorPlants > 0) notes.push('cogs_bills');
+  else if (cogsFromInvoices <= 0) notes.push('cogs_empty');
+  if (basis === 'cash') notes.push('cash_basis');
   notes.push('gaap');
 
   return {
     periodLabel: label,
-    revenue,
-    salesTax,
-    freightIncome,
-    discounts,
-    cogsFromInvoices,
-    cogsFromVendorPlants,
-    cogs,
-    grossProfit,
+    basis,
+    productSales: roundMoney(productSales),
+    revenue: roundMoney(netSales),
+    salesTax: roundMoney(salesTax),
+    freightIncome: roundMoney(freightIncome),
+    discounts: roundMoney(discounts),
+    netSales: roundMoney(netSales),
+    cogsFromInvoices: roundMoney(cogsFromInvoices),
+    cogsFromVendorPlants: roundMoney(cogsFromVendorPlants),
+    cogs: roundMoney(cogs),
+    grossProfit: roundMoney(grossProfit),
     grossMarginPct,
-    operatingExpenses,
+    operatingExpenses: roundMoney(operatingExpenses),
     expensesByCategory: [...expenseMap.entries()]
-      .map(([category, amount]) => ({ category, amount }))
+      .map(([category, amount]) => ({ category, amount: roundMoney(amount) }))
+      .filter((row) => Math.abs(row.amount) > 0.004)
       .sort((a, b) => b.amount - a.amount),
-    netOperating,
+    netOperating: roundMoney(netOperating),
     invoiceCount,
     billCount,
     notes
@@ -399,38 +493,63 @@ export function buildProfitAndLoss(
 export function buildSalesTaxReport(
   documents: CustomerDocument[],
   period: AccountingPeriod,
-  now = new Date()
+  now = new Date(),
+  basis: AccountingBasis = 'accrual'
 ): SalesTaxReport {
   const { start, end, label } = periodBounds(period, now);
   let taxableSales = 0;
+  let exemptSales = 0;
   let salesTaxCollected = 0;
   let invoiceCount = 0;
-  const byRate = new Map<number, { taxable: number; tax: number; invoiceCount: number }>();
+  const byRate = new Map<string, { ratePct: number; taxable: number; tax: number; invoiceCount: number; exempt: boolean }>();
+  const lines: SalesTaxLine[] = [];
 
   for (const doc of documents) {
-    if (doc.type !== 'invoice') continue;
-    if (!inPeriod(doc.documentDate || doc.createdAt, start, end)) continue;
+    if (doc.type !== 'invoice' && doc.type !== 'credit_memo') continue;
+    const when =
+      basis === 'cash' && doc.type === 'invoice'
+        ? doc.paidAt || doc.documentDate || doc.createdAt
+        : doc.documentDate || doc.createdAt;
+    if (!inPeriod(when, start, end)) continue;
+    const ratio = basis === 'cash' && doc.type === 'invoice' ? cashIncomeRatio(doc) : 1;
+    if (ratio <= 0) continue;
+    const parts = documentIncomeParts(doc);
+    const base = (parts.subtotal - parts.discount) * ratio;
+    const tax = parts.tax * ratio;
+    const taxed = Math.abs(tax) > 0.009;
     invoiceCount += 1;
-    const tax = doc.salesTax || 0;
-    const rate = doc.taxRate || 0;
-    const taxable = Math.max(0, (doc.subtotal || 0) - (doc.discount || 0));
-    taxableSales += taxable;
     salesTaxCollected += tax;
-    const row = byRate.get(rate) || { taxable: 0, tax: 0, invoiceCount: 0 };
-    row.taxable += taxable;
+    if (taxed) taxableSales += base;
+    else exemptSales += base;
+    const rate = taxed ? doc.taxRate || 0 : 0;
+    const key = taxed ? `tax:${rate}` : 'exempt';
+    const row = byRate.get(key) || { ratePct: rate, taxable: 0, tax: 0, invoiceCount: 0, exempt: !taxed };
+    row.taxable += base;
     row.tax += tax;
     row.invoiceCount += 1;
-    byRate.set(rate, row);
+    byRate.set(key, row);
+    lines.push({
+      date: String(when).slice(0, 10),
+      num: doc.documentNumber,
+      name: doc.customerName,
+      kind: doc.type === 'credit_memo' ? 'credit' : taxed ? 'taxable' : 'exempt',
+      ratePct: rate,
+      taxable: roundMoney(base),
+      tax: roundMoney(tax)
+    });
   }
+
+  lines.sort((a, b) => b.date.localeCompare(a.date) || a.num.localeCompare(b.num));
 
   return {
     periodLabel: label,
-    taxableSales,
-    salesTaxCollected,
+    basis,
+    taxableSales: roundMoney(taxableSales),
+    exemptSales: roundMoney(exemptSales),
+    salesTaxCollected: roundMoney(salesTaxCollected),
     invoiceCount,
-    byRate: [...byRate.entries()]
-      .map(([ratePct, row]) => ({ ratePct, ...row }))
-      .sort((a, b) => b.tax - a.tax)
+    byRate: [...byRate.values()].sort((a, b) => Number(a.exempt) - Number(b.exempt) || b.tax - a.tax),
+    lines
   };
 }
 
@@ -461,13 +580,13 @@ export function buildCashMovement(
 
   for (const doc of documents) {
     if (doc.type !== 'invoice') continue;
-    if ((doc.paymentStatus || 'unpaid') !== 'paid') continue;
+    const recorded =
+      typeof doc.stripePaidAmountCents === 'number' ? doc.stripePaidAmountCents / 100 : null;
+    const status = doc.paymentStatus || 'unpaid';
+    if (status !== 'paid' && !(recorded && recorded > 0)) continue;
     const paidRaw = doc.paidAt || doc.documentDate || doc.createdAt;
     if (!inPeriod(paidRaw, start, end)) continue;
-    const amount =
-      doc.stripePaidAmountCents != null
-        ? doc.stripePaidAmountCents / 100
-        : doc.grandTotal || 0;
+    const amount = recorded != null ? recorded : doc.grandTotal || 0;
     if (amount <= 0) continue;
     cashIn += amount;
     const method = methodLabel(doc.paymentMethod);
@@ -485,11 +604,10 @@ export function buildCashMovement(
   }
 
   for (const bill of bills) {
-    if (bill.status !== 'paid') continue;
+    const amount = billAmountPaid(bill);
+    if (amount <= 0.009) continue;
     const paidRaw = bill.paidAt || bill.billDate || bill.createdAt;
     if (!inPeriod(paidRaw, start, end)) continue;
-    const amount = bill.grandTotal || 0;
-    if (amount <= 0) continue;
     cashOut += amount;
     const method = methodLabel(bill.paymentMethod);
     const m = outByMethod.get(method) || { amount: 0, count: 0 };
@@ -519,24 +637,35 @@ export function buildCashMovement(
     outByMethod: [...outByMethod.entries()]
       .map(([method, row]) => ({ method, ...row }))
       .sort((a, b) => b.amount - a.amount),
-    inRows: inRows.slice(0, 50),
-    outRows: outRows.slice(0, 50)
+    inRows,
+    outRows
   };
 }
 
 export function buildExpenseReport(
   bills: VendorBill[],
   period: AccountingPeriod,
-  now = new Date()
+  now = new Date(),
+  basis: AccountingBasis = 'accrual'
 ): ExpenseReport {
   const { start, end, label } = periodBounds(period, now);
   const byCategory = new Map<string, { amount: number; count: number }>();
   const byVendor = new Map<string, { amount: number; count: number }>();
+  const linesOut: ExpenseReport['lines'] = [];
   let total = 0;
 
   for (const bill of bills) {
-    if (!inPeriod(bill.billDate || bill.createdAt, start, end)) continue;
-    const billTotal = bill.grandTotal || billLineTotal(bill);
+    const paid = billAmountPaid(bill);
+    const full = bill.grandTotal || billLineTotal(bill);
+    const ratio =
+      basis === 'cash' ? (full > 0.009 ? Math.min(Math.max(paid, 0), full) / full : 0) : 1;
+    if (basis === 'cash' && ratio <= 0) continue;
+    const when =
+      basis === 'cash'
+        ? bill.paidAt || bill.billDate || bill.createdAt
+        : bill.billDate || bill.createdAt;
+    if (!inPeriod(when, start, end)) continue;
+    const billTotal = (full || 0) * ratio;
     total += billTotal;
     const vendor = bill.vendorName || 'Unknown vendor';
     const v = byVendor.get(vendor) || { amount: 0, count: 0 };
@@ -544,43 +673,45 @@ export function buildExpenseReport(
     v.count += 1;
     byVendor.set(vendor, v);
 
+    const date = String(when).slice(0, 10);
+    const num = bill.vendorInvoiceNumber || bill.billNumber;
+    const push = (category: string, amount: number) => {
+      if (Math.abs(amount) <= 0.0001) return;
+      const c = byCategory.get(category) || { amount: 0, count: 0 };
+      c.amount += amount;
+      c.count += 1;
+      byCategory.set(category, c);
+      linesOut.push({ date, vendor, num, category, amount: roundMoney(amount) });
+    };
+
     const lines = bill.items || [];
     if (lines.length === 0) {
-      const c = byCategory.get('Other') || { amount: 0, count: 0 };
-      c.amount += billTotal;
-      c.count += 1;
-      byCategory.set('Other', c);
+      push('Other', billTotal);
       continue;
     }
-    const factor = billDiscountFactor(bill);
+    const factor = billDiscountFactor(bill) * ratio;
     for (const line of lines) {
-      const amt = (line.quantity || 0) * (line.unitCost || 0) * factor;
       const category = purchaseCategoryLabel(
         line.category || (line.lineType === 'plant' ? 'Plants' : 'Other')
       );
-      const c = byCategory.get(category) || { amount: 0, count: 0 };
-      c.amount += amt;
-      c.count += 1;
-      byCategory.set(category, c);
+      push(category, (line.quantity || 0) * (line.unitCost || 0) * factor);
     }
-    if (bill.freightCharge) {
-      const c = byCategory.get('Freight') || { amount: 0, count: 0 };
-      c.amount += bill.freightCharge * factor;
-      c.count += 1;
-      byCategory.set('Freight', c);
-    }
+    if (bill.freightCharge) push('Freight', bill.freightCharge * factor);
   }
+
+  linesOut.sort((a, b) => b.date.localeCompare(a.date) || a.vendor.localeCompare(b.vendor));
 
   return {
     periodLabel: label,
-    total,
+    basis,
+    total: roundMoney(total),
     byCategory: [...byCategory.entries()]
-      .map(([category, row]) => ({ category, ...row }))
+      .map(([category, row]) => ({ category, amount: roundMoney(row.amount), count: row.count }))
       .sort((a, b) => b.amount - a.amount),
     byVendor: [...byVendor.entries()]
-      .map(([vendor, row]) => ({ vendor, ...row }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 25)
+      .map(([vendor, row]) => ({ vendor, amount: roundMoney(row.amount), count: row.count }))
+      .sort((a, b) => b.amount - a.amount),
+    lines: linesOut
   };
 }
 
@@ -695,8 +826,8 @@ export function buildBalanceSheet(
 
   let salesTaxPayable = 0;
   for (const doc of documents) {
-    if (doc.type !== 'invoice') continue;
-    salesTaxPayable += doc.salesTax || 0;
+    if (doc.type === 'invoice') salesTaxPayable += doc.salesTax || 0;
+    else if (doc.type === 'credit_memo') salesTaxPayable -= Math.abs(doc.salesTax || 0);
   }
 
   const cashEstimated = cash.net;
@@ -770,6 +901,296 @@ export function downloadCsv(filename: string, rows: CsvRow[]) {
   URL.revokeObjectURL(url);
 }
 
+export interface SalesCustomerRow {
+  customer: string;
+  invoices: number;
+  netSales: number;
+  salesTax: number;
+  total: number;
+  balance: number;
+}
+
+export interface SalesByCustomerReport {
+  periodLabel: string;
+  basis: AccountingBasis;
+  rows: SalesCustomerRow[];
+  netSales: number;
+  salesTax: number;
+  balance: number;
+}
+
+export function buildSalesByCustomer(
+  documents: CustomerDocument[],
+  period: AccountingPeriod,
+  now = new Date(),
+  basis: AccountingBasis = 'accrual'
+): SalesByCustomerReport {
+  const { start, end, label } = periodBounds(period, now);
+  const map = new Map<string, SalesCustomerRow>();
+
+  function rowFor(name: string): SalesCustomerRow {
+    const key = name || 'Unknown customer';
+    const existing = map.get(key);
+    if (existing) return existing;
+    const created: SalesCustomerRow = {
+      customer: key,
+      invoices: 0,
+      netSales: 0,
+      salesTax: 0,
+      total: 0,
+      balance: 0
+    };
+    map.set(key, created);
+    return created;
+  }
+
+  for (const doc of documents) {
+    if (doc.type !== 'invoice' && doc.type !== 'credit_memo') continue;
+    const row = rowFor(doc.customerName);
+    if (doc.type === 'invoice') row.balance = roundMoney(row.balance + invoiceBalanceDue(doc));
+    else row.balance = roundMoney(row.balance - Math.abs(doc.grandTotal || 0));
+
+    const when =
+      basis === 'cash' && doc.type === 'invoice'
+        ? doc.paidAt || doc.documentDate || doc.createdAt
+        : doc.documentDate || doc.createdAt;
+    if (!inPeriod(when, start, end)) continue;
+    const ratio = basis === 'cash' && doc.type === 'invoice' ? cashIncomeRatio(doc) : 1;
+    if (ratio <= 0) continue;
+    const parts = documentIncomeParts(doc);
+    const net = (parts.subtotal - parts.discount + parts.freight) * ratio;
+    const tax = parts.tax * ratio;
+    row.invoices += 1;
+    row.netSales = roundMoney(row.netSales + net);
+    row.salesTax = roundMoney(row.salesTax + tax);
+    row.total = roundMoney(row.netSales + row.salesTax);
+  }
+
+  const rows = [...map.values()]
+    .filter((row) => row.invoices > 0 || Math.abs(row.balance) > 0.009)
+    .sort((a, b) => b.netSales - a.netSales || a.customer.localeCompare(b.customer));
+
+  return {
+    periodLabel: label,
+    basis,
+    rows,
+    netSales: roundMoney(rows.reduce((s, r) => s + r.netSales, 0)),
+    salesTax: roundMoney(rows.reduce((s, r) => s + r.salesTax, 0)),
+    balance: roundMoney(rows.reduce((s, r) => s + r.balance, 0))
+  };
+}
+
+export interface LedgerTxn {
+  date: string;
+  type: string;
+  num: string;
+  name: string;
+  account: string;
+  amount: number;
+}
+
+export function buildTransactionList(
+  documents: CustomerDocument[],
+  bills: VendorBill[],
+  period: AccountingPeriod,
+  now = new Date()
+): { periodLabel: string; rows: LedgerTxn[] } {
+  const { start, end, label } = periodBounds(period, now);
+  const rows: LedgerTxn[] = [];
+
+  for (const doc of documents) {
+    if (doc.type !== 'invoice' && doc.type !== 'credit_memo') continue;
+    const docDate = doc.documentDate || doc.createdAt;
+    if (inPeriod(docDate, start, end)) {
+      const sign = doc.type === 'credit_memo' ? -1 : 1;
+      rows.push({
+        date: String(docDate).slice(0, 10),
+        type: doc.type === 'credit_memo' ? 'Credit memo' : 'Invoice',
+        num: doc.documentNumber,
+        name: doc.customerName,
+        account: 'Accounts receivable',
+        amount: roundMoney(Math.abs(doc.grandTotal || 0) * sign)
+      });
+    }
+    if (doc.type === 'invoice') {
+      const paid = invoiceAmountPaid(doc);
+      const paidAt = doc.paidAt || doc.documentDate || doc.createdAt;
+      if (paid > 0.009 && inPeriod(paidAt, start, end)) {
+        rows.push({
+          date: String(paidAt).slice(0, 10),
+          type: 'Payment',
+          num: doc.paymentReference || doc.documentNumber,
+          name: doc.customerName,
+          account: methodLabel(doc.paymentMethod),
+          amount: roundMoney(paid)
+        });
+      }
+    }
+  }
+
+  for (const bill of bills) {
+    const billDate = bill.billDate || bill.createdAt;
+    if (inPeriod(billDate, start, end)) {
+      rows.push({
+        date: String(billDate).slice(0, 10),
+        type: 'Bill',
+        num: bill.vendorInvoiceNumber || bill.billNumber,
+        name: bill.vendorName,
+        account: 'Accounts payable',
+        amount: roundMoney(-(bill.grandTotal || 0))
+      });
+    }
+    const paid = billAmountPaid(bill);
+    const paidAt = bill.paidAt || bill.billDate || bill.createdAt;
+    if (paid > 0.009 && inPeriod(paidAt, start, end)) {
+      rows.push({
+        date: String(paidAt).slice(0, 10),
+        type: 'Bill payment',
+        num: bill.paymentReference || bill.billNumber,
+        name: bill.vendorName,
+        account: methodLabel(bill.paymentMethod),
+        amount: roundMoney(-paid)
+      });
+    }
+  }
+
+  rows.sort((a, b) => b.date.localeCompare(a.date) || a.type.localeCompare(b.type) || a.num.localeCompare(b.num));
+  return { periodLabel: label, rows };
+}
+
+export interface OpenItemRow {
+  name: string;
+  num: string;
+  date: string;
+  due: string;
+  bucket: AgingBucketId;
+  total: number;
+  paid: number;
+  balance: number;
+}
+
+export function buildArOpenItems(documents: CustomerDocument[], asOf = new Date()): OpenItemRow[] {
+  const rows: OpenItemRow[] = [];
+  for (const doc of documents) {
+    if (doc.type === 'credit_memo') {
+      const credit = Math.abs(doc.grandTotal || 0);
+      if (credit <= 0.009) continue;
+      rows.push({
+        name: doc.customerName || 'Unknown customer',
+        num: doc.documentNumber,
+        date: String(doc.documentDate || doc.createdAt).slice(0, 10),
+        due: '',
+        bucket: 'current',
+        total: roundMoney(-credit),
+        paid: 0,
+        balance: roundMoney(-credit)
+      });
+      continue;
+    }
+    if (doc.type !== 'invoice') continue;
+    const balance = invoiceBalanceDue(doc);
+    if (balance <= 0.009) continue;
+    const due = parseDate(doc.dueDate) || parseDate(doc.documentDate) || parseDate(doc.createdAt);
+    rows.push({
+      name: doc.customerName || 'Unknown customer',
+      num: doc.documentNumber,
+      date: String(doc.documentDate || doc.createdAt).slice(0, 10),
+      due: doc.dueDate ? String(doc.dueDate).slice(0, 10) : '',
+      bucket: due ? bucketForDays(daysPastDue(asOf, due)) : 'current',
+      total: roundMoney(doc.grandTotal || 0),
+      paid: roundMoney(invoiceAmountPaid(doc)),
+      balance: roundMoney(balance)
+    });
+  }
+  return rows.sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date));
+}
+
+export function buildApOpenItems(bills: VendorBill[], asOf = new Date()): OpenItemRow[] {
+  const rows: OpenItemRow[] = [];
+  for (const bill of bills) {
+    const balance = billBalanceDue(bill);
+    if (balance <= 0.009) continue;
+    const due = parseDate(bill.dueDate) || parseDate(bill.billDate) || parseDate(bill.createdAt);
+    rows.push({
+      name: bill.vendorName || 'Unknown vendor',
+      num: bill.vendorInvoiceNumber || bill.billNumber,
+      date: String(bill.billDate || bill.createdAt).slice(0, 10),
+      due: bill.dueDate ? String(bill.dueDate).slice(0, 10) : '',
+      bucket: due ? bucketForDays(daysPastDue(asOf, due)) : 'current',
+      total: roundMoney(bill.grandTotal || 0),
+      paid: roundMoney(billAmountPaid(bill)),
+      balance: roundMoney(balance)
+    });
+  }
+  return rows.sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date));
+}
+
+export interface TrialBalanceRow {
+  account: string;
+  debit: number;
+  credit: number;
+}
+
+export interface TrialBalanceReport {
+  asOf: string;
+  rows: TrialBalanceRow[];
+  totalDebit: number;
+  totalCredit: number;
+  balanced: boolean;
+}
+
+/**
+ * All-time operating accounts in debit/credit form.
+ * Owner's equity is the amount that makes the trial balance tie to the balance sheet
+ * after current earnings are left in the income and expense accounts.
+ */
+export function buildTrialBalance(
+  documents: CustomerDocument[],
+  bills: VendorBill[],
+  inventory: Array<{ plantName: string; containerSize: string; quantityAvailable: number }>,
+  asOf = new Date()
+): TrialBalanceReport {
+  const pnl = buildProfitAndLoss(documents, bills, 'all', asOf, 'accrual');
+  const bs = buildBalanceSheet(documents, bills, inventory, asOf);
+  const equityBeforeEarnings = roundMoney(bs.equity - pnl.netOperating);
+  const rows: TrialBalanceRow[] = [];
+
+  function debit(account: string, amount: number) {
+    const n = roundMoney(amount);
+    if (Math.abs(n) < 0.005) return;
+    if (n > 0) rows.push({ account, debit: n, credit: 0 });
+    else rows.push({ account, debit: 0, credit: roundMoney(-n) });
+  }
+  function credit(account: string, amount: number) {
+    const n = roundMoney(amount);
+    if (Math.abs(n) < 0.005) return;
+    if (n > 0) rows.push({ account, debit: 0, credit: n });
+    else rows.push({ account, debit: roundMoney(-n), credit: 0 });
+  }
+
+  debit('Cash', bs.cashEstimated);
+  debit('Accounts receivable', bs.accountsReceivable);
+  debit('Inventory', bs.inventoryAtCost);
+  debit('Cost of goods sold', pnl.cogs);
+  debit('Discounts', pnl.discounts);
+  for (const expense of pnl.expensesByCategory) debit(expense.category, expense.amount);
+  credit('Product sales', pnl.productSales);
+  credit('Freight income', pnl.freightIncome);
+  credit('Accounts payable', bs.accountsPayable);
+  credit('Sales tax payable', bs.salesTaxPayable);
+  credit("Owner's equity", equityBeforeEarnings);
+
+  const totalDebit = roundMoney(rows.reduce((s, r) => s + r.debit, 0));
+  const totalCredit = roundMoney(rows.reduce((s, r) => s + r.credit, 0));
+  return {
+    asOf: asOf.toISOString().slice(0, 10),
+    rows,
+    totalDebit,
+    totalCredit,
+    balanced: Math.abs(totalDebit - totalCredit) < 0.02
+  };
+}
+
 export function exportProfitAndLossCsv(
   pnl: PlReport,
   labels: {
@@ -790,31 +1211,26 @@ export function exportProfitAndLossCsv(
   }
 ): CsvRow[] {
   const rows: CsvRow[] = [
-    { [labels.section]: 'Period', [labels.line]: labels.period, [labels.amount]: '' },
+    { [labels.section]: 'Period', [labels.line]: `${labels.period} · ${pnl.basis}`, [labels.amount]: '' },
     {
       [labels.section]: 'Income',
       [labels.line]: labels.grossRevenue,
-      [labels.amount]: Number(pnl.revenue.toFixed(2))
-    },
-    {
-      [labels.section]: 'Income',
-      [labels.line]: labels.salesTax,
-      [labels.amount]: Number((-pnl.salesTax).toFixed(2))
-    },
-    {
-      [labels.section]: 'Income',
-      [labels.line]: labels.netSales,
-      [labels.amount]: Number((pnl.revenue - pnl.salesTax).toFixed(2))
-    },
-    {
-      [labels.section]: 'Income',
-      [labels.line]: labels.freight,
-      [labels.amount]: Number(pnl.freightIncome.toFixed(2))
+      [labels.amount]: pnl.productSales
     },
     {
       [labels.section]: 'Income',
       [labels.line]: labels.discounts,
       [labels.amount]: Number((-pnl.discounts).toFixed(2))
+    },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.freight,
+      [labels.amount]: pnl.freightIncome
+    },
+    {
+      [labels.section]: 'Income',
+      [labels.line]: labels.netSales,
+      [labels.amount]: pnl.netSales
     },
     {
       [labels.section]: 'COGS',
@@ -824,7 +1240,7 @@ export function exportProfitAndLossCsv(
     {
       [labels.section]: 'Profit',
       [labels.line]: labels.grossProfit,
-      [labels.amount]: Number(pnl.grossProfit.toFixed(2))
+      [labels.amount]: pnl.grossProfit
     },
     {
       [labels.section]: 'Expenses',
@@ -834,7 +1250,12 @@ export function exportProfitAndLossCsv(
     {
       [labels.section]: 'Profit',
       [labels.line]: labels.netOperating,
-      [labels.amount]: Number(pnl.netOperating.toFixed(2))
+      [labels.amount]: pnl.netOperating
+    },
+    {
+      [labels.section]: 'Liability — not income',
+      [labels.line]: labels.salesTax,
+      [labels.amount]: pnl.salesTax
     }
   ];
   for (const row of pnl.expensesByCategory) {

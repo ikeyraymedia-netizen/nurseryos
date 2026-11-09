@@ -884,6 +884,7 @@ function NurseryApp({
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
             onTenantUpdated={onRefreshTenant}
+            canManageStripe={permissions.canManageStripe}
             onOpenWeights={
               permissions.canEditWeights
                 ? () => {
@@ -1002,6 +1003,7 @@ function NurseryApp({
             onClose={() => setShowTeamManager(false)}
             onMemberUpdated={setMemberState}
             onTenantUpdated={onRefreshTenant}
+            canManageStripe={permissions.canManageStripe}
             onOpenWeights={
               permissions.canEditWeights
                 ? () => {
@@ -1471,6 +1473,7 @@ function NurseryApp({
           onClose={() => setShowTeamManager(false)}
           onMemberUpdated={setMemberState}
           onTenantUpdated={onRefreshTenant}
+          canManageStripe={permissions.canManageStripe}
           onOpenWeights={
             permissions.canEditWeights
               ? () => {

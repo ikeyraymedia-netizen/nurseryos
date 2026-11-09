@@ -360,28 +360,10 @@ async function readBearerUid(req: Request): Promise<string> {
   return decoded.uid;
 }
 
-async function assertAdminOrOwner(tenantId: string, uid: string) {
+async function assertStripeOwner(tenantId: string, uid: string) {
   const roles = await getMemberRoles(tenantId, uid);
-  if (!hasAnyRole(roles, ['owner', 'admin'])) {
-    throw Object.assign(new Error('Only owners and admins can manage Stripe Connect.'), {
-      status: 403
-    });
-  }
-}
-
-async function assertCanCreatePayLink(tenantId: string, uid: string) {
-  const roles = await getMemberRoles(tenantId, uid);
-  if (!hasAnyRole(roles, ['owner', 'admin', 'office', 'sales'])) {
-    throw Object.assign(new Error('You do not have permission to create payment links.'), {
-      status: 403
-    });
-  }
-}
-
-async function assertCanPayVendorBills(tenantId: string, uid: string) {
-  const roles = await getMemberRoles(tenantId, uid);
-  if (!hasAnyRole(roles, ['owner', 'admin', 'office'])) {
-    throw Object.assign(new Error('You do not have permission to pay vendor bills.'), {
+  if (!hasAnyRole(roles, ['owner'])) {
+    throw Object.assign(new Error('Only the nursery owner can use Stripe.'), {
       status: 403
     });
   }
@@ -881,7 +863,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertAdminOrOwner(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
 
       let integration = await loadIntegration(tenantId);
       if (integration?.accountId && isStripeConfigured()) {
@@ -945,7 +927,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertCanPayVendorBills(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
       const integration = await loadIntegration(tenantId);
       res.json({
         treasuryReady:
@@ -963,7 +945,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertAdminOrOwner(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
       if (!isFirebaseAdminConfigured()) {
         throw Object.assign(new Error('Firebase Admin is not configured on the server.'), {
           status: 503
@@ -1103,7 +1085,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertAdminOrOwner(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
       const existing = await loadIntegration(tenantId);
       if (existing?.accountId && isStripeConfigured()) {
         try {
@@ -1129,7 +1111,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertAdminOrOwner(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
       if (!isFirebaseAdminConfigured()) {
         throw Object.assign(new Error('Firebase Admin is not configured on the server.'), {
           status: 503
@@ -1224,7 +1206,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
-      await assertAdminOrOwner(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
       if (!isFirebaseAdminConfigured()) {
         throw Object.assign(new Error('Firebase Admin is not configured on the server.'), {
           status: 503
@@ -1352,7 +1334,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId and documentId are required.' });
         return;
       }
-      await assertCanCreatePayLink(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
       if (!integration?.accountId) {
@@ -1493,7 +1475,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId and documentId are required.' });
         return;
       }
-      await assertCanCreatePayLink(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
       if (!integration?.accountId) {
@@ -1583,7 +1565,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId and billId(s) are required.' });
         return;
       }
-      await assertCanPayVendorBills(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
       if (!integration?.accountId) {
@@ -1818,7 +1800,7 @@ export function registerStripeRoutes(app: Express) {
         res.status(400).json({ error: 'tenantId and billId are required.' });
         return;
       }
-      await assertCanPayVendorBills(tenantId, uid);
+      await assertStripeOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
       if (!integration?.accountId) {

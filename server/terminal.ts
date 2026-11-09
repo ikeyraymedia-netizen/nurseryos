@@ -2,6 +2,8 @@ import type { Express, Request, Response } from 'express';
 import Stripe from 'stripe';
 import {
   getAdminDb,
+  getMemberRoles,
+  hasAnyRole,
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
@@ -58,6 +60,13 @@ interface StripeIntegration {
   chargesEnabled: boolean;
 }
 
+async function assertStripeOwner(tenantId: string, uid: string) {
+  const roles = await getMemberRoles(tenantId, uid);
+  if (!hasAnyRole(roles, ['owner'])) {
+    throw Object.assign(new Error('Only the nursery owner can use Stripe.'), { status: 403 });
+  }
+}
+
 async function loadIntegration(tenantId: string): Promise<StripeIntegration | null> {
   const snap = await getAdminDb().doc(`tenants/${tenantId}/integrations/stripe`).get();
   if (!snap.exists) return null;
@@ -71,12 +80,13 @@ export function registerTerminalRoutes(app: Express) {
    * The SDK needs a fresh token each time it connects to a reader.
    */
   app.post('/api/terminal/connection-token', (req, res) =>
-    withAuth(req, res, async () => {
+    withAuth(req, res, async (uid) => {
       const tenantId = String(req.body?.tenantId || '');
       if (!tenantId) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
+      await assertStripeOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
       if (!integration?.accountId) {
@@ -99,12 +109,13 @@ export function registerTerminalRoutes(app: Express) {
    * Creates a PaymentIntent for an in-person card_present payment.
    */
   app.post('/api/terminal/create-payment-intent', (req, res) =>
-    withAuth(req, res, async () => {
+    withAuth(req, res, async (uid) => {
       const { tenantId, amountCents, customerName, cartSummary } = req.body || {};
       if (!tenantId) {
         res.status(400).json({ error: 'tenantId is required.' });
         return;
       }
+      await assertStripeOwner(tenantId, uid);
       if (!amountCents || typeof amountCents !== 'number' || amountCents < 50) {
         res.status(400).json({ error: 'amountCents must be at least 50 ($0.50).' });
         return;
@@ -147,12 +158,13 @@ export function registerTerminalRoutes(app: Express) {
    * For automatic capture this is a no-op confirmation check.
    */
   app.post('/api/terminal/capture-payment', (req, res) =>
-    withAuth(req, res, async () => {
+    withAuth(req, res, async (uid) => {
       const { tenantId, paymentIntentId } = req.body || {};
       if (!tenantId || !paymentIntentId) {
         res.status(400).json({ error: 'tenantId and paymentIntentId are required.' });
         return;
       }
+      await assertStripeOwner(tenantId, uid);
 
       const integration = await loadIntegration(tenantId);
       if (!integration?.accountId) {

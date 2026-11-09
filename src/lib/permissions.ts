@@ -144,7 +144,8 @@ export function primaryRole(roles: MemberRole[]): MemberRole {
 export function getPermissionsForRole(role: MemberRole): AppPermissions {
   switch (role) {
     case 'owner':
-    case 'admin':
+    case 'admin': {
+      const ownerOnly = role === 'owner';
       return {
         canViewDirectShipOrders: true,
         canViewOrders: true,
@@ -165,8 +166,8 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canTextVendors: true,
         canViewProfit: true,
         canEditCost: true,
-        canManageStripe: true,
-        canCollectPayments: true,
+        canManageStripe: ownerOnly,
+        canCollectPayments: ownerOnly,
         canUseQuickbooks: true,
         canEditWeights: true,
         canViewInventory: true,
@@ -185,11 +186,12 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canReceivePurchases: true,
         canManageVendorBills: true,
         canManageBillPay: true,
-        canPayVendorBills: true,
+        canPayVendorBills: ownerOnly,
         canPayVendorBillsMelio: true,
-        canUseRetailPOS: true,
+        canUseRetailPOS: ownerOnly,
         canAskYardAi: false
       };
+    }
     case 'supervisor':
       // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
       // Purchasing is sourcing only. No pricing, invoices, customers, uploads, deletes, or team/billing admin.
@@ -261,7 +263,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewProfit: true,
         canEditCost: true,
         canManageStripe: false,
-        canCollectPayments: true,
+        canCollectPayments: false,
         canUseQuickbooks: true,
         canEditWeights: false,
         canViewInventory: false,
@@ -280,9 +282,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canReceivePurchases: true,
         canManageVendorBills: true,
         canManageBillPay: false,
-        canPayVendorBills: true,
+        canPayVendorBills: false,
         canPayVendorBillsMelio: true,
-        canUseRetailPOS: true,
+        canUseRetailPOS: false,
         canAskYardAi: false
       };
     case 'sales':
@@ -308,7 +310,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewProfit: true,
         canEditCost: false,
         canManageStripe: false,
-        canCollectPayments: true,
+        canCollectPayments: false,
         canUseQuickbooks: true,
         canEditWeights: false,
         canViewInventory: true,
@@ -329,7 +331,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canManageBillPay: false,
         canPayVendorBills: false,
         canPayVendorBillsMelio: false,
-        canUseRetailPOS: true,
+        canUseRetailPOS: false,
         canAskYardAi: false
       };
     case 'loader':

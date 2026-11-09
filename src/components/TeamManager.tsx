@@ -61,6 +61,8 @@ interface TeamManagerProps {
   onOpenWeights?: () => void;
   /** Reload the nursery after a setting such as the remittance address is saved. */
   onTenantUpdated?: () => Promise<void>;
+  /** Stripe Connect, pay links, and Stripe bill pay stay on the owner account. */
+  canManageStripe?: boolean;
 }
 
 const ASSIGNABLE = getAssignableRoles();
@@ -73,7 +75,8 @@ export function TeamManager({
   onClose,
   onMemberUpdated,
   onOpenWeights,
-  onTenantUpdated
+  onTenantUpdated,
+  canManageStripe = false
 }: TeamManagerProps) {
   const t = useT();
   const { roleLabel } = useRoleLabel();
@@ -254,7 +257,7 @@ export function TeamManager({
         setQbError(null);
       }
 
-      if (!paymentsEnabled) {
+      if (!paymentsEnabled || !canManageStripe) {
         setStripeStatus(null);
         setStripeError(null);
       } else {
@@ -303,7 +306,7 @@ export function TeamManager({
 
       await refreshEmail();
     })();
-  }, [tenant.id, paymentsEnabled, quickbooksEnabled]);
+  }, [tenant.id, paymentsEnabled, canManageStripe, quickbooksEnabled]);
 
   async function handleConnectStripe() {
     setStripeBusy(true);
@@ -979,7 +982,7 @@ export function TeamManager({
           </div>
           )}
 
-          {paymentsEnabled && (
+          {paymentsEnabled && canManageStripe && (
             <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 space-y-2">
               <p className="text-xs font-bold uppercase text-violet-900">{t('teamExtra.stripe')}</p>
               <p className="text-[11px] text-violet-950/80 leading-relaxed">

@@ -289,7 +289,16 @@ export function MelioPayModal({
         )}
 
         <p className="text-xs leading-relaxed text-gray-800">
-          Payment services provided by Melio Solutions Inc. (NMLS ID 2376858).{' '}
+          Payment services provided by{' '}
+          <a
+            href="https://melio.com/licenses/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold underline"
+          >
+            Melio Solutions Inc.
+          </a>{' '}
+          (NMLS ID 2376858).{' '}
           <a
             href="https://melio.com/terms-of-service/"
             target="_blank"

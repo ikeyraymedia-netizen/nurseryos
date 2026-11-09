@@ -1133,6 +1133,21 @@ const extra = {
     emailQbSyncFailed: 'Correo enviado, pero falló la sincronización con QuickBooks: {{error}}',
     includePayHint:
       'Envía la factura a QuickBooks (si hace falta) e incluye el enlace de pago de QuickBooks en el correo.',
+    includePayHintStripe:
+      'Incluye un enlace de pago de Stripe en el correo. La factura igual se sincroniza con QuickBooks.',
+    payLinkChoiceLabel: 'Enlace de pago del cliente',
+    payLinkChoiceQuickbooks: 'QuickBooks',
+    payLinkChoiceStripe: 'Stripe',
+    stripeNotReady:
+      'Conecte Stripe en Equipo antes de enviar un enlace de Stripe. La factura igual se sincroniza con QuickBooks.',
+    stripePayLinkFailed: 'No se pudo crear el enlace de pago de Stripe.',
+    createStripePayLink: 'Copiar enlace de pago de Stripe',
+    creatingStripePayLink: 'Obteniendo enlace de Stripe…',
+    stripePayLinkReady: 'Enlace de pago de Stripe listo',
+    stripePayLinkReadyCustomer:
+      'Enlace de Stripe listo — no lo abra usted mismo a menos que vaya a pagar. Quédese en NurseryOS y actualice el pago después.',
+    stripePayLinkCopied:
+      'Enlace de Stripe copiado. Péguelo en un mensaje o correo — no lo abra usted mismo a menos que vaya a pagar.',
     createPayLink: 'Copiar enlace de pago de QuickBooks',
     creatingPayLink: 'Obteniendo enlace de QuickBooks…',
     payLinkReady: 'Enlace de pago de QuickBooks listo',

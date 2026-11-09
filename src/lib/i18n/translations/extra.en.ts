@@ -1120,6 +1120,21 @@ const extra = {
     emailQbSyncFailed: 'Email sent, but QuickBooks sync failed: {{error}}',
     includePayHint:
       'Pushes the invoice to QuickBooks (if needed) and puts the QuickBooks pay link in the email.',
+    includePayHintStripe:
+      'Puts a Stripe pay link in the email. The invoice still syncs to QuickBooks.',
+    payLinkChoiceLabel: 'Customer pay link',
+    payLinkChoiceQuickbooks: 'QuickBooks',
+    payLinkChoiceStripe: 'Stripe',
+    stripeNotReady:
+      'Connect Stripe in Team before a Stripe link can be sent. The invoice still syncs to QuickBooks.',
+    stripePayLinkFailed: 'Could not create the Stripe pay link.',
+    createStripePayLink: 'Copy Stripe pay link',
+    creatingStripePayLink: 'Getting Stripe pay link…',
+    stripePayLinkReady: 'Stripe pay link ready',
+    stripePayLinkReadyCustomer:
+      'Stripe pay link ready — do not open it yourself unless you intend to pay. Stay in NurseryOS and refresh payment after they pay.',
+    stripePayLinkCopied:
+      'Stripe pay link copied. Paste it into a text or email — do not open it yourself unless you intend to pay.',
     createPayLink: 'Copy QuickBooks pay link',
     creatingPayLink: 'Getting QuickBooks pay link…',
     payLinkReady: 'QuickBooks pay link ready',

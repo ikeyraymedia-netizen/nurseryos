@@ -248,6 +248,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [payLinkUrl, setPayLinkUrl] = useState<string | null>(
     existingDocument?.qboInvoiceLink || existingDocument?.stripeCheckoutUrl || null
   );
+  const [payLinkUrlProvider, setPayLinkUrlProvider] = useState<'quickbooks' | 'stripe' | null>(
+    existingDocument?.qboInvoiceLink
+      ? 'quickbooks'
+      : existingDocument?.stripeCheckoutUrl
+        ? 'stripe'
+        : null
+  );
+  /** Owner can pick Stripe instead of the QuickBooks link. Everyone else stays on QuickBooks. */
+  const [payLinkProvider, setPayLinkProvider] = useState<'quickbooks' | 'stripe'>('quickbooks');
+  const payProviderRef = useRef<'quickbooks' | 'stripe' | null>('quickbooks');
   const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
   /** Optimistic paid flag after Refresh payment status / confirm. */
   const [localMarkedPaid, setLocalMarkedPaid] = useState(false);
@@ -676,10 +686,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    setPayLinkProvider('quickbooks');
     if (canUseQuickbooks && documentType === 'invoice') {
       setIncludePayLinkInEmail(true);
     }
-  }, [isOpen, canUseQuickbooks, documentType]);
+  }, [isOpen, canUseQuickbooks, documentType, existingDocument?.id, order?.id]);
 
   useEffect(() => {
     if (!isOpen || !savedDocumentId) {
@@ -696,8 +707,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       }
       if (storedNumber) lastSeenNumber = storedNumber;
       if (doc?.paymentStatus === 'paid') setLocalMarkedPaid(true);
-      if (doc?.qboInvoiceLink) setPayLinkUrl(doc.qboInvoiceLink);
-      else if (doc?.stripeCheckoutUrl) setPayLinkUrl(doc.stripeCheckoutUrl);
+      if (payProviderRef.current === 'stripe') {
+        if (doc?.stripeCheckoutUrl) {
+          setPayLinkUrl(doc.stripeCheckoutUrl);
+          setPayLinkUrlProvider('stripe');
+        }
+      } else if (doc?.qboInvoiceLink) {
+        setPayLinkUrl(doc.qboInvoiceLink);
+        setPayLinkUrlProvider('quickbooks');
+      } else if (doc?.stripeCheckoutUrl) {
+        setPayLinkUrl(doc.stripeCheckoutUrl);
+        setPayLinkUrlProvider('stripe');
+      }
     });
   }, [isOpen, savedDocumentId]);
 
@@ -1188,16 +1209,32 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       ? Math.max(0, Number((grandTotal - amountPaid).toFixed(2)))
       : grandTotal;
   const isFullyPaid = documentType === 'invoice' && balanceDue < 0.009 && amountPaid > 0.009;
+  /**
+   * QuickBooks stays the pay link for every role that can use it.
+   * The owner is the only role that can collect Stripe payments, so only the owner
+   * can switch the customer link to Stripe. The invoice still syncs to QuickBooks.
+   */
+  const ownerChoosesPayLink = Boolean(canUseQuickbooks && canCollectPayments);
+  const payProvider: 'quickbooks' | 'stripe' | null = ownerChoosesPayLink
+    ? payLinkProvider
+    : canUseQuickbooks
+      ? 'quickbooks'
+      : canCollectPayments
+        ? 'stripe'
+        : null;
+  payProviderRef.current = payProvider;
+  const useQboPayLinks = payProvider === 'quickbooks';
+  const useStripePayLinks = payProvider === 'stripe';
+  const storedPayUrl =
+    payProvider === 'stripe'
+      ? paymentDocument?.stripeCheckoutUrl || null
+      : payProvider === 'quickbooks'
+        ? paymentDocument?.qboInvoiceLink || null
+        : null;
   const activePayLinkUrl =
     !isFullyPaid && documentType === 'invoice'
-      ? payLinkUrl ||
-        paymentDocument?.qboInvoiceLink ||
-        paymentDocument?.stripeCheckoutUrl ||
-        null
+      ? (payLinkUrlProvider === payProvider ? payLinkUrl : null) || storedPayUrl
       : null;
-  /** Prefer QuickBooks for customer pay links; Stripe stays available only when QBO is off. */
-  const useQboPayLinks = Boolean(canUseQuickbooks);
-  const useStripePayLinks = Boolean(canCollectPayments && stripePaymentsReady && !useQboPayLinks);
 
   /**
    * Selling price the user actually entered or saved.
@@ -1575,22 +1612,33 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       }
       if (qbSync.note) setEmailQbNote(qbSync.note);
 
-      // Pay links are optional — never block sending. Use the URL returned here
-      // (not React state) so a just-synced QuickBooks invoiceLink makes it into HTML.
-      let emailPayUrl: string | null = qbSync.qboInvoiceLink || activePayLinkUrl;
+      // The chosen link is created here so the email uses that URL, not a stale one.
+      // QuickBooks sync above still runs. A Stripe choice must not fall back to the QuickBooks link.
+      let emailPayUrl: string | null = null;
       const wantPayLink =
         includePayLinkInEmail &&
         documentType === 'invoice' &&
         !isFullyPaid &&
-        Boolean(useQboPayLinks || useStripePayLinks);
+        Boolean(payProvider);
+      if (wantPayLink && payProvider === 'stripe' && !stripePaymentsReady) {
+        setEmailSentStatus('error_general');
+        setEmailErrorMessage(t('invoice.stripeNotReady'));
+        return;
+      }
       if (wantPayLink) {
         try {
           emailPayUrl = await ensurePayLink(saved.id);
         } catch (payErr) {
+          if (payProvider === 'stripe') {
+            setEmailSentStatus('error_general');
+            setEmailErrorMessage(
+              payErr instanceof Error ? payErr.message : t('invoice.stripePayLinkFailed')
+            );
+            return;
+          }
           console.warn('Invoice email continuing without pay link:', payErr);
+          emailPayUrl = qbSync.qboInvoiceLink || null;
         }
-      } else {
-        emailPayUrl = null;
       }
 
       const subject =
@@ -1683,7 +1731,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
   };
 
   // Fallback: Open Default Mail Client
-  const handleOpenMailClient = () => {
+  const handleOpenMailClient = async () => {
     if (!looksLikeEmail(customerEmail)) {
       setEmailSentStatus('error_general');
       setEmailErrorMessage(t('invoice.emailFirstRequired'));
@@ -1703,7 +1751,31 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     void syncToQuickbooksOnEmail().then((qbSync) => {
       if (qbSync.note) setEmailQbNote(qbSync.note);
     });
-    const textBody = generateEmailText();
+    let mailPayUrl: string | null | undefined;
+    if (payProvider === 'stripe') {
+      if (!includePayLinkInEmail || isFullyPaid || documentType !== 'invoice') {
+        mailPayUrl = null;
+      } else if (!stripePaymentsReady) {
+        setEmailSentStatus('error_general');
+        setEmailErrorMessage(t('invoice.stripeNotReady'));
+        return;
+      } else if (!savedDocumentId) {
+        setEmailSentStatus('error_general');
+        setEmailErrorMessage(t('invoice.saveInvoiceFirst'));
+        return;
+      } else {
+        try {
+          mailPayUrl = await ensurePayLink(savedDocumentId);
+        } catch (payErr) {
+          setEmailSentStatus('error_general');
+          setEmailErrorMessage(
+            payErr instanceof Error ? payErr.message : t('invoice.stripePayLinkFailed')
+          );
+          return;
+        }
+      }
+    }
+    const textBody = generateEmailText(mailPayUrl);
     window.open(
       mailtoUrl({
         to: customerEmail,
@@ -1851,17 +1923,17 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         if (cancelled) return;
         const ready = Boolean(status.connected && status.chargesEnabled);
         setStripePaymentsReady(ready);
-        setIncludePayLinkInEmail(ready);
+        if (!canUseQuickbooks) setIncludePayLinkInEmail(ready);
       })
       .catch(() => {
         if (cancelled) return;
         setStripePaymentsReady(false);
-        setIncludePayLinkInEmail(false);
+        if (!canUseQuickbooks) setIncludePayLinkInEmail(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, tenantId, canCollectPayments]);
+  }, [isOpen, tenantId, canCollectPayments, canUseQuickbooks]);
 
   useEffect(() => {
     if (!isOpen || !tenantId || !savedDocumentId || !canCollectPayments) return;
@@ -2651,8 +2723,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         setInvoiceNumber(nextNum);
       }
     }
-    if (result.qboInvoiceLink) {
+    if (result.qboInvoiceLink && payProviderRef.current !== 'stripe') {
       setPayLinkUrl(result.qboInvoiceLink);
+      setPayLinkUrlProvider('quickbooks');
       setPayLinkMessage(t('invoice.payLinkReady'));
     }
     setQbPushMessage(`Synced to ${where}${companyBit} · ${docBit}`);
@@ -2791,12 +2864,17 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       throw new Error(t('invoice.saveInvoiceFirst'));
     }
 
+    if (useStripePayLinks && !stripePaymentsReady) {
+      throw new Error(t('invoice.stripeNotReady'));
+    }
+
     if (useQboPayLinks) {
       const result = await ensureQboPayLink({
         tenantId,
         documentId: id
       });
       setPayLinkUrl(result.url);
+      setPayLinkUrlProvider('quickbooks');
       setPayLinkMessage(t('invoice.payLinkReady'));
       setLiveDocument((prev) =>
         prev
@@ -2823,7 +2901,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       throw new Error('Stripe did not return a pay link URL.');
     }
     setPayLinkUrl(result.url);
-    setPayLinkMessage(t('invoice.payLinkReady'));
+    setPayLinkUrlProvider('stripe');
+    setPayLinkMessage(t('invoice.stripePayLinkReady'));
     await logAuditEvent({
       action: 'stripe.checkout_created',
       summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
@@ -2851,7 +2930,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       const url = await ensurePayLink();
       try {
         await navigator.clipboard.writeText(url);
-        alert(useQboPayLinks ? t('invoice.qbPayLinkCopied') : t('invoice.payLinkCopied'));
+        alert(useStripePayLinks ? t('invoice.stripePayLinkCopied') : useQboPayLinks ? t('invoice.qbPayLinkCopied') : t('invoice.payLinkCopied'));
       } catch {
         alert(t('invoice.payLinkReadyAlert', { url }));
       }
@@ -2869,12 +2948,48 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
     setIsRefreshingPayment(true);
     try {
+      if (useStripePayLinks) {
+        if (!stripePaymentsReady && !paymentDocument?.stripeCheckoutSessionId) {
+          if (!opts?.silent) alert(t('invoice.stripeNotReady'));
+          return;
+        }
+        const result = await confirmInvoicePayment({
+          tenantId,
+          documentId: savedDocumentId,
+          sessionId: paymentDocument?.stripeCheckoutSessionId
+        });
+        if (result.paid) {
+          setLocalMarkedPaid(true);
+          const qbMsg = await syncPaymentToQuickbooksIfPossible(savedDocumentId, {
+            quiet: true
+          });
+          if (!opts?.silent) {
+            alert(
+              qbMsg
+                ? `${t('invoice.paymentConfirmed')}\n\n${qbMsg}`
+                : t('invoice.paymentConfirmed')
+            );
+          }
+        } else if (!opts?.silent) {
+          alert(
+            result.hint ||
+              t('invoice.stripeStillPending', {
+                status: result.paymentStatus || 'unpaid'
+              })
+          );
+        }
+        return;
+      }
+
       if (useQboPayLinks || paymentDocument?.qboInvoiceId) {
         const result = await refreshQboPaymentStatus({
           tenantId,
           documentId: savedDocumentId
         });
-        if (result.qboInvoiceLink) setPayLinkUrl(result.qboInvoiceLink);
+        if (result.qboInvoiceLink) {
+          setPayLinkUrl(result.qboInvoiceLink);
+          setPayLinkUrlProvider('quickbooks');
+        }
         if (result.paid) {
           setLocalMarkedPaid(true);
           if (!opts?.silent) alert(t('invoice.paymentConfirmed'));
@@ -3944,6 +4059,46 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               </button>
             )}
 
+            {tenantId &&
+              ownerChoosesPayLink &&
+              documentType === 'invoice' &&
+              !isFullyPaid && (
+              <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-2.5 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-wide text-violet-950">
+                  {t('invoice.payLinkChoiceLabel')}
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPayLinkProvider('quickbooks')}
+                    className={`rounded-lg px-2 py-1.5 text-[10px] font-black ${
+                      payProvider === 'quickbooks'
+                        ? 'bg-violet-800 text-white'
+                        : 'bg-white text-violet-950 border border-violet-200'
+                    }`}
+                  >
+                    {t('invoice.payLinkChoiceQuickbooks')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayLinkProvider('stripe')}
+                    className={`rounded-lg px-2 py-1.5 text-[10px] font-black ${
+                      payProvider === 'stripe'
+                        ? 'bg-violet-800 text-white'
+                        : 'bg-white text-violet-950 border border-violet-200'
+                    }`}
+                  >
+                    {t('invoice.payLinkChoiceStripe')}
+                  </button>
+                </div>
+                {payProvider === 'stripe' && !stripePaymentsReady && (
+                  <p className="text-[10px] leading-relaxed text-violet-950">
+                    {t('invoice.stripeNotReady')}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Email Invoice Panel */}
             <div className="border-t border-gray-200 pt-3">
               <button
@@ -4063,7 +4218,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       <span className="text-[10px] font-bold text-sky-900 leading-relaxed">
                         {t('invoice.includePay')}
                         <span className="block font-medium text-sky-700">
-                          {t('invoice.includePayHint')}
+                          {useStripePayLinks
+                            ? t('invoice.includePayHintStripe')
+                            : t('invoice.includePayHint')}
                         </span>
                       </span>
                     </label>
@@ -4131,9 +4288,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
                 <span>
                   {isRefreshingPayment
-                    ? useQboPayLinks || paymentDocument?.qboInvoiceId
-                      ? t('invoice.checkingQbPayment')
-                      : t('invoice.checkingStripe')
+                    ? useStripePayLinks
+                      ? t('invoice.checkingStripe')
+                      : t('invoice.checkingQbPayment')
                     : t('invoice.refreshPayment')}
                 </span>
               </button>
@@ -4152,7 +4309,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     isFullyPaid
                       ? t('invoice.alreadyPaidTitle')
                       : savedDocumentId
-                        ? t('invoice.createPayLink')
+                        ? useStripePayLinks
+                          ? t('invoice.createStripePayLink')
+                          : t('invoice.createPayLink')
                         : t('invoice.saveFirst')
                   }
                 >
@@ -4161,15 +4320,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     {isFullyPaid
                       ? t('invoice.invoicePaidBtn')
                       : isCreatingPayLink
-                        ? t('invoice.creatingPayLink')
-                        : payLinkMessage || t('invoice.createPayLink')}
+                        ? useStripePayLinks
+                          ? t('invoice.creatingStripePayLink')
+                          : t('invoice.creatingPayLink')
+                        : payLinkMessage ||
+                          (useStripePayLinks
+                            ? t('invoice.createStripePayLink')
+                            : t('invoice.createPayLink'))}
                   </span>
                 </button>
               )}
 
               {activePayLinkUrl && !isFullyPaid && (
                 <p className="text-[10px] text-sky-800 bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-2 leading-relaxed break-all">
-                  {t('invoice.payLinkReadyCustomer')}
+                  {useStripePayLinks
+                    ? t('invoice.stripePayLinkReadyCustomer')
+                    : t('invoice.payLinkReadyCustomer')}
                 </p>
               )}
 

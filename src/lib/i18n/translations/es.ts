@@ -77,7 +77,7 @@ const es: TranslationDict = {
     alreadyHaveAccountInvite: '¿Ya tiene cuenta? Inicie sesión con su invitación',
     newNurseryRequest: '¿Vivero nuevo? Solicitar acceso',
     forgotPassword:
-      '¿Olvidó su contraseña? Pida al dueño o administrador que envíe un restablecimiento desde Equipo.',
+      '¿Olvidó su contraseña? Pida al dueño o administrador que envíe un restablecimiento desde Ajustes → Equipo.',
     resetPassword: 'Restablecer contraseña',
     questions: '¿Preguntas?',
     atLeast6Chars: 'Al menos 6 caracteres',
@@ -126,6 +126,7 @@ const es: TranslationDict = {
     localActive: 'Modo local',
     weights: 'Pesos',
     team: 'Equipo',
+    settings: 'Ajustes',
     notifications: 'Alertas',
     sellerHome: 'Consola vendedor',
     packages: 'Paquetes',

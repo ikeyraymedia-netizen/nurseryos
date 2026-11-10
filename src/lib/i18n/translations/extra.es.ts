@@ -394,7 +394,7 @@ const extra = {
     statementSent: 'Estado de cuenta enviado a {{email}}',
     statementValidEmail: 'Ingrese un correo válido del cliente.',
     statementEmailNotConfigured:
-      'El correo saliente no está configurado. Abra Equipo → Correo saliente, o use Abrir app de correo.',
+      'El correo saliente no está configurado. Abra Ajustes → Vivero, o use Abrir app de correo.',
     statementFirebaseAdminMissing:
       'Este servidor aún no puede enviar correo (Firebase Admin no configurado). Use Abrir app de correo, o configure FIREBASE_SERVICE_ACCOUNT_BASE64 en Railway / en su .env local.',
     statementNurseryMissing: 'Falta el contexto del vivero. Actualice e intente de nuevo.',
@@ -1206,7 +1206,7 @@ const extra = {
     validEmailRequired: 'Ingrese un correo válido del cliente.',
     emailFirstRequired: 'Ingrese primero el correo del cliente.',
     emailNotConfiguredResend:
-      'El correo no está configurado. Abra Equipo → Correo saliente y asegúrese de que RESEND_API_KEY esté en Railway.',
+      'El correo no está configurado. Abra Ajustes → Vivero y asegúrese de que RESEND_API_KEY esté en Railway.',
     firebaseAdminMissing:
       'Este servidor aún no puede enviar correo (Firebase Admin no configurado). Use Abrir en el cliente de correo, o configure FIREBASE_SERVICE_ACCOUNT_BASE64 en Railway / en su .env local.',
     dispatchEmailFailed: 'Error al enviar correo.',
@@ -1435,7 +1435,7 @@ const extra = {
     sentTo: 'Enviado a {{email}}',
     couldNotSendEmail: 'No se pudo enviar el correo.',
     emailNotConfigured:
-      'El correo no está configurado. Abra Equipo → Correo saliente y configure RESEND_API_KEY en Railway.',
+      'El correo no está configurado. Abra Ajustes → Vivero y configure RESEND_API_KEY en Railway.',
     sendPo: 'Enviar OC',
     invPrefix: 'Fact.',
     somethingWentWrong: 'Algo salió mal.',
@@ -1904,14 +1904,14 @@ const extra = {
     qbUserConnectedAlert:
       'Tu inicio de sesión de QuickBooks está conectado. Las facturas y cotizaciones donde eres el vendedor ahora mostrarán tu nombre en el historial de auditoría de QuickBooks.',
     qbConnectedAlert:
-      'QuickBooks conectado. Abra Equipo para confirmar el estado, luego envíe facturas desde la pantalla de factura.',
+      'QuickBooks conectado. Abra Ajustes → Cuentas por pagar y cobrar para confirmar el estado, luego envíe facturas desde la pantalla de factura.',
     qbFailed: 'Error al conectar QuickBooks:',
     stripeReturned: 'Onboarding de Stripe regresó a NurseryOS.',
     stripeReturnedAlert:
-      'Onboarding de Stripe regresó. Abra Equipo para confirmar que los cobros están habilitados, luego cree un enlace de pago desde una factura.',
+      'Onboarding de Stripe regresó. Abra Ajustes → Cuentas por pagar y cobrar para confirmar que los cobros están habilitados, luego cree un enlace de pago desde una factura.',
     stripeRefreshed: 'Onboarding de Stripe fue actualizado.',
     stripeRefreshedAlert:
-      'Onboarding de Stripe fue actualizado. Abra Equipo y continúe Connect si es necesario.',
+      'Onboarding de Stripe fue actualizado. Abra Ajustes → Cuentas por pagar y cobrar y continúe Connect si es necesario.',
     paymentReceived: 'Pago recibido — factura marcada como pagada.',
     paymentReceivedAlert:
       'Pago recibido. Abra la factura desde Clientes — debería mostrar Pagada con saldo $0.00.',
@@ -2033,6 +2033,21 @@ const extra = {
   },
   teamExtra: {
     title: 'Equipo y roles',
+    settingsTitle: 'Ajustes',
+    settingsIntro: 'Elija qué desea cambiar para este vivero.',
+    back: 'Volver',
+    teamSection: 'Equipo',
+    teamSectionHint: 'Personas, roles e invitaciones.',
+    nurserySection: 'Vivero',
+    nurserySectionHint: 'Idioma, pesos de contenedores, dirección de remesa y correo.',
+    booksSection: 'Cuentas por pagar y cobrar',
+    booksSectionHint: 'QuickBooks, Stripe y Melio para este vivero.',
+    booksIntro:
+      'Las cuentas por cobrar son lo que los clientes le pagan. Las cuentas por pagar son las facturas de este vivero. Conecte cada servicio aquí.',
+    qboOff: 'QuickBooks no está activado para este vivero.',
+    stripeOff: 'Stripe no está activado para este vivero.',
+    stripeOwnerOnly: 'Stripe se configura desde la cuenta del dueño.',
+    melioOff: 'Los pagos a proveedores con Melio no están activados para este vivero.',
     workspacePackage: 'Paquete del espacio de trabajo',
     workspaceEnabledHint: 'Los espacios de trabajo se habilitan en NurseryOS desde la consola vendedor.',
     workspaceLegacy: ' Este vivero está en un plan heredado (todos los módulos estándar).',

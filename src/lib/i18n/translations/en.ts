@@ -74,7 +74,7 @@ const en = {
     alreadyHaveAccountInvite: 'Already have an account? Sign in with your invite',
     newNurseryRequest: 'New nursery? Request access',
     forgotPassword:
-      'Forgot your password? Ask your nursery owner or admin — they can send a reset from Team.',
+      'Forgot your password? Ask your nursery owner or admin — they can send a reset from Settings → Team.',
     resetPassword: 'Reset password',
     questions: 'Questions?',
     atLeast6Chars: 'At least 6 characters',
@@ -120,6 +120,7 @@ const en = {
     localActive: 'Local Active',
     weights: 'Weights',
     team: 'Team',
+    settings: 'Settings',
     notifications: 'Alerts',
     sellerHome: 'Seller home',
     packages: 'Packages',

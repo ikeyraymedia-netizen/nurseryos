@@ -390,7 +390,7 @@ const extra = {
     statementSent: 'Statement sent to {{email}}',
     statementValidEmail: 'Enter a valid customer email.',
     statementEmailNotConfigured:
-      'Outbound email is not configured. Open Team → Outbound email, or use Open mail app.',
+      'Outbound email is not configured. Open Settings → Nursery, or use Open mail app.',
     statementFirebaseAdminMissing:
       'This server cannot send email yet (Firebase Admin not configured). Use Open mail app, or set FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway / in your local .env.',
     statementNurseryMissing: 'Nursery context missing. Refresh and try again.',
@@ -1194,7 +1194,7 @@ const extra = {
     validEmailRequired: 'Please enter a valid customer email address.',
     emailFirstRequired: 'Please enter a customer email address first.',
     emailNotConfiguredResend:
-      'Email is not configured. Open Team → Outbound email, and make sure RESEND_API_KEY is set in Railway.',
+      'Email is not configured. Open Settings → Nursery, and make sure RESEND_API_KEY is set in Railway.',
     firebaseAdminMissing:
       'This server cannot send email yet (Firebase Admin not configured). Use Open in Default Mail Client, or set FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway / in your local .env.',
     dispatchEmailFailed: 'Failed to dispatch email.',
@@ -1420,7 +1420,7 @@ const extra = {
     sentTo: 'Sent to {{email}}',
     couldNotSendEmail: 'Could not send email.',
     emailNotConfigured:
-      'Email is not configured. Open Team → Outbound email, and set RESEND_API_KEY in Railway.',
+      'Email is not configured. Open Settings → Nursery, and set RESEND_API_KEY in Railway.',
     sendPo: 'Send PO',
     invPrefix: 'Inv',
     somethingWentWrong: 'Something went wrong.',
@@ -1887,14 +1887,14 @@ const extra = {
     qbUserConnectedAlert:
       'Your QuickBooks login is connected. Invoices and estimates where you are the sales rep will now show your name in QuickBooks audit history.',
     qbConnectedAlert:
-      'QuickBooks connected. Open Team to confirm status, then push invoices from the invoice screen.',
+      'QuickBooks connected. Open Settings → Accounts payable & receivable to confirm status, then push invoices from the invoice screen.',
     qbFailed: 'QuickBooks connect failed:',
     stripeReturned: 'Stripe onboarding returned to NurseryOS.',
     stripeReturnedAlert:
-      'Stripe onboarding returned. Open Team to confirm charges are enabled, then create a pay link from an invoice.',
+      'Stripe onboarding returned. Open Settings → Accounts payable & receivable to confirm charges are enabled, then create a pay link from an invoice.',
     stripeRefreshed: 'Stripe onboarding was refreshed.',
     stripeRefreshedAlert:
-      'Stripe onboarding was refreshed. Open Team and continue Connect if needed.',
+      'Stripe onboarding was refreshed. Open Settings → Accounts payable & receivable and continue Connect if needed.',
     paymentReceived: 'Payment received — invoice marked paid.',
     paymentReceivedAlert:
       'Payment received. Open the invoice from Customers — it should show Paid with $0.00 balance due.',
@@ -2014,6 +2014,21 @@ const extra = {
   },
   teamExtra: {
     title: 'Team & Roles',
+    settingsTitle: 'Settings',
+    settingsIntro: 'Choose what you want to change for this nursery.',
+    back: 'Back',
+    teamSection: 'Team',
+    teamSectionHint: 'People, roles, and invites.',
+    nurserySection: 'Nursery',
+    nurserySectionHint: 'Language, container weights, remittance address, and email.',
+    booksSection: 'Accounts payable & receivable',
+    booksSectionHint: 'QuickBooks, Stripe, and Melio for this nursery.',
+    booksIntro:
+      'Receivables are money customers pay you. Payables are bills this nursery pays. Connect each service here.',
+    qboOff: 'QuickBooks is not turned on for this nursery.',
+    stripeOff: 'Stripe is not turned on for this nursery.',
+    stripeOwnerOnly: 'Stripe is set up from the owner account.',
+    melioOff: 'Melio vendor payments are not turned on for this nursery.',
     workspacePackage: 'Workspace package',
     workspaceEnabledHint: 'Workspaces are enabled by NurseryOS in the seller console.',
     workspaceLegacy: ' This nursery is on a legacy plan (all standard modules).',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, CheckCircle2, LogOut, CloudUpload, RefreshCw, Bell } from 'lucide-react';
+import { Clock, CheckCircle2, LogOut, CloudUpload, RefreshCw, Bell, Settings } from 'lucide-react';
 import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
 import { BrandLogo } from './BrandLogo';
@@ -154,7 +154,8 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={onManageTeam}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-white/20"
                 >
-                  {t('header.team')}
+                  <Settings className="h-3.5 w-3.5 shrink-0" />
+                  {t('header.settings')}
                 </button>
               )}
               {onBackToSeller && (

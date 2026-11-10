@@ -229,7 +229,7 @@ export default function MelioPanel({
       <div className="rounded-lg border border-indigo-100 bg-white px-2.5 py-2 space-y-1">
         <p className="text-sm font-black text-indigo-950">{nursery}</p>
         <p className="text-[11px] leading-relaxed text-indigo-950/80">
-          Only an owner or admin of this nursery can open Team and see this. Someone signing up
+          Only an owner or admin of this nursery can open Settings and see this. Someone signing up
           for NurseryOS does not see it, and the rest of the staff cannot open it.
         </p>
         <p className="text-[11px] leading-relaxed text-indigo-950/80">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight, Plus } from 'lucide-react';
+import { Users, Copy, Check, UserPlus, Trash2, KeyRound, Shield, Link2, Unlink, Mail, Weight, Plus, Settings } from 'lucide-react';
 import { MemberRole, Tenant, TenantInvite, TenantMember } from '../types';
 import {
   createTeamInvite,
@@ -88,6 +88,7 @@ export function TeamManager({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [settingsPage, setSettingsPage] = useState<'home' | 'team' | 'nursery' | 'books'>('home');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
@@ -727,11 +728,32 @@ export function TeamManager({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-ink-700" />
-            <h3 className="font-bold text-gray-900">{t('teamExtra.title')}</h3>
+      <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            {settingsPage !== 'home' && (
+              <button
+                type="button"
+                onClick={() => setSettingsPage('home')}
+                className="text-xs font-bold text-ink-700 shrink-0"
+              >
+                {t('teamExtra.back')}
+              </button>
+            )}
+            {settingsPage === 'team' ? (
+              <Users className="h-5 w-5 text-ink-700 shrink-0" />
+            ) : (
+              <Settings className="h-5 w-5 text-ink-700 shrink-0" />
+            )}
+            <h3 className="font-bold text-gray-900 truncate">
+              {settingsPage === 'team'
+                ? t('teamExtra.teamSection')
+                : settingsPage === 'nursery'
+                  ? t('teamExtra.nurserySection')
+                  : settingsPage === 'books'
+                    ? t('teamExtra.booksSection')
+                    : t('teamExtra.settingsTitle')}
+            </h3>
           </div>
           <button type="button" onClick={onClose} className="text-xs font-bold text-gray-500">
             Close
@@ -739,6 +761,32 @@ export function TeamManager({
         </div>
 
         <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          {message && <p className="text-xs text-ink-800 font-semibold">{message}</p>}
+          {settingsPage === 'home' && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-gray-500 leading-relaxed">{t('teamExtra.settingsIntro')}</p>
+              {(
+                [
+                  ['team', t('teamExtra.teamSection'), t('teamExtra.teamSectionHint')],
+                  ['nursery', t('teamExtra.nurserySection'), t('teamExtra.nurserySectionHint')],
+                  ['books', t('teamExtra.booksSection'), t('teamExtra.booksSectionHint')]
+                ] as const
+              ).map(([id, label, hint]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setSettingsPage(id)}
+                  className="w-full text-left rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-3"
+                >
+                  <p className="text-sm font-bold text-gray-900">{label}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">{hint}</p>
+                </button>
+              ))}
+            </div>
+          )}
+          {settingsPage === 'nursery' && (
+          <>
           <div className="rounded-xl border border-ink-100 bg-ink-50/50 px-3 py-3">
             <p className="text-xs font-bold uppercase text-ink-800">{t('team.languageTitle')}</p>
             <p className="text-[11px] text-gray-600 mb-2">{t('language.hint')}</p>
@@ -873,7 +921,17 @@ export function TeamManager({
               })}
             </div>
           </div>
+          </>
+          )}
 
+          {settingsPage === 'books' && (
+          <>
+          <p className="text-[11px] text-gray-600 leading-relaxed">{t('teamExtra.booksIntro')}</p>
+          {!quickbooksEnabled && (
+            <p className="text-[11px] text-slate-600 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              {t('teamExtra.qboOff')}
+            </p>
+          )}
           {quickbooksEnabled && (
           <div className="rounded-xl border border-sky-100 bg-sky-50/50 px-3 py-3 space-y-2">
             <p className="text-xs font-bold uppercase text-sky-900">{t('teamExtra.qbo')}</p>
@@ -980,6 +1038,16 @@ export function TeamManager({
               </p>
             )}
           </div>
+          )}
+          {!paymentsEnabled && (
+            <p className="text-[11px] text-slate-600 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              {t('teamExtra.stripeOff')}
+            </p>
+          )}
+          {paymentsEnabled && !canManageStripe && (
+            <p className="text-[11px] text-slate-600 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              {t('teamExtra.stripeOwnerOnly')}
+            </p>
           )}
 
           {paymentsEnabled && canManageStripe && (
@@ -1138,8 +1206,16 @@ export function TeamManager({
             </div>
           )}
 
+          {!melioEnabled && (
+            <p className="text-[11px] text-slate-600 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              {t('teamExtra.melioOff')}
+            </p>
+          )}
           {melioEnabled && <MelioPanel tenantId={tenant.id} nurseryName={tenant.name} />}
+          </>
+          )}
 
+          {settingsPage === 'nursery' && (
           <div className="rounded-xl border border-ink-100 bg-ink-50/40 px-3 py-3 space-y-2">
             <p className="text-xs font-bold uppercase text-ink-900 flex items-center gap-1.5">
               <Mail className="h-3.5 w-3.5" />
@@ -1298,7 +1374,10 @@ export function TeamManager({
               <p className="text-[11px] text-red-700 leading-relaxed">{emailError}</p>
             )}
           </div>
+          )}
 
+          {settingsPage === 'team' && (
+          <>
           <div>
             <p className="text-xs font-bold uppercase text-gray-500 mb-2">{t('teamExtra.currentMembers')}</p>
             <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">
@@ -1460,8 +1539,6 @@ export function TeamManager({
               <UserPlus className="h-4 w-4" />
               Create invite ({rolesLabel(inviteRoles)})
             </button>
-            {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-            {message && <p className="text-xs text-ink-800 font-semibold mt-2">{message}</p>}
           </div>
 
           {invites.length > 0 && (
@@ -1502,6 +1579,8 @@ export function TeamManager({
                 ))}
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

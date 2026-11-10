@@ -4179,7 +4179,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       <p className="font-bold flex items-center mb-1 text-amber-900"><AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" /> Nursery Email Not Configured</p>
                       <p className="text-[9px] text-amber-700 mb-2 leading-relaxed">
                         {emailErrorMessage ||
-                          'Open Team → Outbound email and add this nursery’s reply-to address. Make sure RESEND_API_KEY is set in Railway.'}
+                          'Open Settings → Nursery and add this nursery’s reply-to address. Make sure RESEND_API_KEY is set in Railway.'}
                       </p>
                       <button
                         onClick={handleOpenMailClient}

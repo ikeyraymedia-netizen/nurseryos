@@ -210,9 +210,9 @@ export default function MelioPanel({
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase text-indigo-900">
           Vendor payments
-          {status && (
+          {status?.environment === 'production' && (
             <span className="ml-2 rounded bg-white px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
-              {status.environment === 'production' ? 'Live' : 'Test mode'}
+              Live
             </span>
           )}
         </p>
@@ -233,9 +233,9 @@ export default function MelioPanel({
           for NurseryOS does not see it, and the rest of the staff cannot open it.
         </p>
         <p className="text-[11px] leading-relaxed text-indigo-950/80">
-          Vendor payments for {nursery} connect to NurseryOS&apos;s Melio account. This nursery does
-          not get its own Melio login. NurseryOS registers {nursery} under that Melio account so
-          this nursery can pay its vendors.
+          {nursery} pays its vendors through NurseryOS&apos;s Melio account. Link the bank that sends
+          those payments. This nursery does not get its own Melio login, and this does not create a
+          Melio business.
         </p>
       </div>
       {status && !sonarKey && (
@@ -259,11 +259,12 @@ export default function MelioPanel({
       {status && !status.connected && (
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-indigo-950">
-            Connect {nursery} to NurseryOS&apos;s Melio
+            Link a bank to pay vendors
           </p>
           <p className="text-[11px] leading-relaxed text-indigo-950/80">
-            This sends {nursery}&apos;s legal details to NurseryOS&apos;s Melio account. It does not
-            open a separate Melio account for this nursery, and it does not create a new nursery.
+            Confirm {nursery}&apos;s details so NurseryOS can attach its bank to NurseryOS&apos;s
+            Melio account. Then link the bank. This does not create a Melio business or a Melio
+            login.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {ENTITY_FIELDS.map((field) => (
@@ -300,14 +301,14 @@ export default function MelioPanel({
                     const token = await sonarToken(null);
                     const result = await createMelioEntity(tenantId, entity, token);
                     setEntity({ ...EMPTY_ENTITY, legalName: nurseryName.trim() });
-                    return `${nursery} is connected to NurseryOS's Melio for vendor payments${
+                    return `${nursery} is set up with NurseryOS's Melio. Link the bank that pays vendors${
                       result.kycStatus ? ` (${result.kycStatus})` : ''
                     }.`;
                   })
                 }
                 className={primaryBtn}
               >
-                Connect {nursery}
+                Continue to link a bank
               </button>
             </div>
           </div>
@@ -318,13 +319,13 @@ export default function MelioPanel({
         <div className="space-y-2">
           <MelioTermsNotice />
           <p className="text-xs font-semibold text-ink-800">
-            {nursery} is connected to NurseryOS&apos;s Melio
-            {status.entityName ? ` as ${status.entityName}` : ''}
+            {nursery} pays vendors through NurseryOS&apos;s Melio
+            {status.entityName ? ` · ${status.entityName}` : ''}
             {status.kycStatus ? ` · verification: ${status.kycStatus}` : ''}
           </p>
 
           <p className="text-[11px] font-semibold text-indigo-950">
-            Bank account that pays this nursery&apos;s vendors
+            Link the bank that pays vendors through NurseryOS&apos;s Melio
           </p>
           {status.fundingAccountId ? (
             <p className="text-[11px] text-emerald-800 font-semibold">
@@ -406,7 +407,7 @@ export default function MelioPanel({
               className={primaryBtn}
             >
               <Link2 className="h-3.5 w-3.5" />
-              Link a bank
+              Link bank to NurseryOS&apos;s Melio
             </button>
             <button
               type="button"

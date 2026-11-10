@@ -1189,6 +1189,8 @@ const extra = {
       'Sincronizado con QuickBooks. Use Copiar enlace de pago o Incluir botón en el correo — quédese en NurseryOS.',
     pushQb: 'Enviar a QuickBooks',
     pushingQb: 'Enviando a QuickBooks…',
+    qbSavingTitle: 'Guardando en QuickBooks…',
+    qbSavingHint: 'Mantenga esta ventana abierta hasta que termine.',
     syncPaymentToQb: 'Sincronizar pago a QuickBooks',
     qbPaymentSynced: 'Pago sincronizado a QuickBooks (Receive Payment).',
     qbPaymentAlreadySynced: 'El pago ya está registrado en QuickBooks.',

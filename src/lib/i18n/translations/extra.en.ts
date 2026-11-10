@@ -1177,6 +1177,8 @@ const extra = {
       'Synced to QuickBooks. Use Copy pay link or Include pay button in email — stay in NurseryOS.',
     pushQb: 'Push to QuickBooks',
     pushingQb: 'Pushing to QuickBooks…',
+    qbSavingTitle: 'Saving to QuickBooks…',
+    qbSavingHint: 'Keep this window open until this finishes.',
     syncPaymentToQb: 'Sync payment to QuickBooks',
     qbPaymentSynced: 'Payment synced to QuickBooks (Receive Payment).',
     qbPaymentAlreadySynced: 'Payment already recorded in QuickBooks.',

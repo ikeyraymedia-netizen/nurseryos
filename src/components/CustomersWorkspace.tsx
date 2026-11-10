@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { pushPaymentToQuickbooks, syncQboPayments } from '../lib/quickbooks';
+import { QuickbooksSavingShield } from './QuickbooksSavingShield';
 import {
   Upload,
   Users,
@@ -152,6 +153,7 @@ export function CustomersWorkspace({
   const NET_TERM_OPTIONS = ['NET 10', 'NET 15', 'NET 30', 'NET 45', 'NET 60', 'NET 90'] as const;
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  const [qboSaving, setQboSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -670,6 +672,7 @@ export function CustomersWorkspace({
       : [doc];
     const ids = (siblings.length > 0 ? siblings : [doc]).map((other) => other.id);
     setBusy(true);
+    setQboSaving(true);
     setMessage(null);
     try {
       await pushPaymentToQuickbooks({ tenantId, documentIds: ids });
@@ -678,6 +681,7 @@ export function CustomersWorkspace({
       setMessage(err instanceof Error ? err.message : t('invoice.qbPaymentSyncFailed'));
     } finally {
       setBusy(false);
+      setQboSaving(false);
     }
   }
 
@@ -1118,6 +1122,7 @@ export function CustomersWorkspace({
 
   return (
     <div className="space-y-6">
+      <QuickbooksSavingShield open={qboSaving} />
       {selectedCustomer ? (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-ink-100 p-5">
@@ -2315,6 +2320,7 @@ export function CustomersWorkspace({
           onConfirm={async (payment) => {
             const targets = markingPaidInvoices;
             setBusy(true);
+            if (tenantId && permissions.canUseQuickbooks) setQboSaving(true);
             try {
               const qboErrors: string[] = [];
               for (const doc of targets) {
@@ -2361,6 +2367,7 @@ export function CustomersWorkspace({
               setMessage(err instanceof Error ? err.message : t('invoice.markPaidFailed'));
             } finally {
               setBusy(false);
+              setQboSaving(false);
             }
           }}
         />

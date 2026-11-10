@@ -34,6 +34,7 @@ import {
   Info,
   Download,
   Link2,
+  Loader2,
   TrendingUp,
   Plus,
   Trash2,
@@ -42,6 +43,7 @@ import {
   GripVertical
 } from 'lucide-react';
 import { updateCustomerOrder, addCustomerOrder, subscribeToWeights, updateOrderItemCosts } from '../lib/db';
+import { QuickbooksSavingShield } from './QuickbooksSavingShield';
 import {
   addCustomerDocument,
   updateCustomerDocument,
@@ -242,6 +244,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showFreightAllocation, setShowFreightAllocation] = useState(false);
   const [isPushingQb, setIsPushingQb] = useState(false);
+  const [qboSaving, setQboSaving] = useState(false);
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
   const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
   const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
@@ -1748,9 +1751,15 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       setEmailErrorMessage(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
-    void syncToQuickbooksOnEmail().then((qbSync) => {
-      if (qbSync.note) setEmailQbNote(qbSync.note);
-    });
+    if (canUseQuickbooks) {
+      setQboSaving(true);
+      try {
+        const qbSync = await syncToQuickbooksOnEmail();
+        if (qbSync.note) setEmailQbNote(qbSync.note);
+      } finally {
+        setQboSaving(false);
+      }
+    }
     let mailPayUrl: string | null | undefined;
     if (payProvider === 'stripe') {
       if (!includePayLinkInEmail || isFullyPaid || documentType !== 'invoice') {
@@ -2141,6 +2150,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     freightMethod?: FreightAllocationMethod,
     totalFreight?: number
   ): Promise<{ id: string; documentNumber: string } | null> => {
+    setQboSaving(true);
     setIsSaving(true);
     setSaveSuccess(false);
 
@@ -2645,6 +2655,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       return null;
     } finally {
       setIsSaving(false);
+      setQboSaving(false);
     }
   };
 
@@ -3466,8 +3477,25 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
   };
 
+  const qboShield =
+    qboSaving ||
+    isSaving ||
+    isPushingQb ||
+    markingPaidBusy ||
+    isCreatingPayLink ||
+    isSendingEmail ||
+    isRefreshingPayment;
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-8 z-50 print:p-0 print:bg-white print:backdrop-blur-none">
+      <QuickbooksSavingShield
+        open={qboShield}
+        title={
+          isPushingQb || (isCreatingPayLink && useQboPayLinks) || canUseQuickbooks
+            ? t('invoice.qbSavingTitle')
+            : t('invoice.saving')
+        }
+      />
       {pdfSheet && (
         <PdfShareSheet
           url={pdfSheet.url}
@@ -3598,8 +3626,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               {docLabel} Settings
             </h3>
             <button
-              onClick={onClose}
-              className="md:hidden p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-900 transition-colors"
+              onClick={() => {
+                if (!qboShield) onClose();
+              }}
+              disabled={qboShield}
+              className="md:hidden p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-900 transition-colors disabled:opacity-40"
             >
               <X className="h-4 w-4" />
             </button>
@@ -4033,9 +4064,13 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4" />
+                  {isSaving || qboSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
                   <span>
-                    {isSaving
+                    {isSaving || qboSaving
                       ? t('invoice.saving')
                       : savedDocumentId
                         ? t('invoice.updateDoc', { docLabel })
@@ -4351,7 +4386,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       : 'Save to customer first'
                   }
                 >
-                  <Link2 className="h-4 w-4" />
+                  {isPushingQb ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Link2 className="h-4 w-4" />
+                  )}
                   <span>
                     {isPushingQb
                       ? t('invoice.pushingQb')
@@ -4519,8 +4558,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
             )}
 
             <button
-              onClick={onClose}
-              className="w-full py-2 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center"
+              onClick={() => {
+                if (!qboShield) onClose();
+              }}
+              disabled={qboShield}
+              className="w-full py-2 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center disabled:opacity-40"
             >
               Close Window
             </button>
@@ -4558,8 +4600,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <Download className="h-4 w-4" />
               </button>
               <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors"
+                onClick={() => {
+                  if (!qboShield) onClose();
+                }}
+                disabled={qboShield}
+                className="p-2 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-40"
                 title={t('invoice.closeWindowTitle')}
               >
                 <X className="h-4 w-4" />

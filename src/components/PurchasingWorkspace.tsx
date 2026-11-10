@@ -87,6 +87,7 @@ import {
   refreshVendorBillMelioPayment
 } from '../lib/melio';
 import { pushBillPaymentToQuickbooks, pushVendorBillToQuickbooks } from '../lib/quickbooks';
+import { QuickbooksSavingShield } from './QuickbooksSavingShield';
 import { logAuditEvent } from '../lib/audit';
 import { BankFeedPanel } from './BankFeedPanel';
 import { SourcingPanel } from './SourcingPanel';
@@ -226,6 +227,7 @@ export function PurchasingWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [qboSaving, setQboSaving] = useState(false);
   const [showInvoiceScanner, setShowInvoiceScanner] = useState(false);
 
   // Email PO
@@ -560,6 +562,16 @@ export function PurchasingWorkspace({
       setError(err instanceof Error ? err.message : t('purchasing.somethingWentWrong'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function withQboSaving<T>(work: () => Promise<T>): Promise<T> {
+    if (!permissions.canUseQuickbooks) return work();
+    setQboSaving(true);
+    try {
+      return await work();
+    } finally {
+      setQboSaving(false);
     }
   }
 
@@ -1005,7 +1017,7 @@ export function PurchasingWorkspace({
       setError(t('purchasing.addLineRequired'));
       return;
     }
-    await run(async () => {
+    await run(() => withQboSaving(async () => {
       if (billVendorId === CREATE_NEW_VENDOR) {
         const name = billNewVendorName.trim();
         const id = await addVendor({ name });
@@ -1034,13 +1046,14 @@ export function PurchasingWorkspace({
       });
       closeBillForm();
       await syncBillToQuickbooksOnSave(billId);
-    });
+    }));
   }
 
   async function handleSaveEditedBill(updated: VendorBill) {
     setBusy(true);
     setError(null);
     try {
+      await withQboSaving(async () => {
       let vendorId = updated.vendorId;
       let vendorName = updated.vendorName;
       if (vendorId === CREATE_NEW_VENDOR) {
@@ -1059,6 +1072,7 @@ export function PurchasingWorkspace({
       });
       setEditingBill(null);
       await syncBillToQuickbooksOnSave(updated.id);
+      });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t('purchasing.somethingWentWrong');
@@ -1426,7 +1440,7 @@ export function PurchasingWorkspace({
                     window.open(bill.qboOpenUrl, '_blank', 'noopener,noreferrer');
                     return;
                   }
-                  void run(async () => {
+                  void run(() => withQboSaving(async () => {
                     const result = await pushVendorBillToQuickbooks({
                       tenantId,
                       billId: bill.id
@@ -1457,7 +1471,7 @@ export function PurchasingWorkspace({
                     if (result.openUrl) {
                       window.open(result.openUrl, '_blank', 'noopener,noreferrer');
                     }
-                  });
+                  }));
                 }}
                 className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-900"
                 title={t('purchasing.pushBillToQbHint')}
@@ -1473,18 +1487,20 @@ export function PurchasingWorkspace({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const result = await pushBillPaymentToQuickbooks({ tenantId, billId: bill.id });
-                      setStatus(
-                        !result.synced
-                          ? t('purchasing.qbBillPaymentSyncFailed', { error: result.reason || '' })
-                          : result.reason === 'already_paid_in_qbo'
-                            ? t('purchasing.qbBillPaymentAlreadySynced')
-                            : t('purchasing.qbBillPaymentSynced')
-                      );
-                    })
-                  }
+                  onClick={() => {
+                    void run(() =>
+                      withQboSaving(async () => {
+                        const result = await pushBillPaymentToQuickbooks({ tenantId, billId: bill.id });
+                        setStatus(
+                          !result.synced
+                            ? t('purchasing.qbBillPaymentSyncFailed', { error: result.reason || '' })
+                            : result.reason === 'already_paid_in_qbo'
+                              ? t('purchasing.qbBillPaymentAlreadySynced')
+                              : t('purchasing.qbBillPaymentSynced')
+                        );
+                      })
+                    );
+                  }}
                   className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900"
                 >
                   <Link2 className="h-3 w-3" />
@@ -1527,6 +1543,7 @@ export function PurchasingWorkspace({
 
   return (
     <div className="bg-white rounded-2xl border border-ink-100 p-5 space-y-4">
+      <QuickbooksSavingShield open={qboSaving} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-ink-50 flex items-center justify-center">
@@ -3115,7 +3132,7 @@ export function PurchasingWorkspace({
           busy={busy}
           onCancel={() => setMarkingPaidBills(null)}
           onConfirm={async (payment) => {
-            await run(async () => {
+            await run(() => withQboSaving(async () => {
               const targets = markingPaidBills;
               const singleBalance =
                 targets.length === 1 ? billBalanceDue(targets[0]) : 0;
@@ -3170,7 +3187,7 @@ export function PurchasingWorkspace({
               } else if (qboAlready > 0) {
                 setStatus(t('purchasing.qbBillPaymentAlreadySynced'));
               }
-            });
+            }));
           }}
         />
       )}

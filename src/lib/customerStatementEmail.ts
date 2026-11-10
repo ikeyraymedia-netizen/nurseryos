@@ -1,4 +1,5 @@
 import { Customer, CustomerDocument } from '../types';
+import { invoiceBalanceDue } from './documents';
 
 export type StatementLineKind = 'invoice' | 'credit_memo';
 
@@ -50,6 +51,11 @@ function startOfDay(d: Date): Date {
 
 function parseDocDate(raw?: string): Date | null {
   if (!raw) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+  if (dateOnly) {
+    const d = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -61,7 +67,7 @@ function formatShortDate(raw?: string): string {
 }
 
 function isInvoicePastDue(doc: CustomerDocument, now = new Date()): boolean {
-  if (doc.type !== 'invoice' || doc.paymentStatus === 'paid') return false;
+  if (doc.type !== 'invoice' || invoiceBalanceDue(doc) <= 0.009) return false;
   const today = startOfDay(now);
   const dueRaw = doc.dueDate || doc.documentDate || doc.createdAt;
   const due = parseDocDate(dueRaw);
@@ -98,8 +104,8 @@ export function buildCustomerStatementModel(params: {
       continue;
     }
     if (doc.type !== 'invoice') continue;
-    if (doc.paymentStatus === 'paid') continue;
-    const amount = doc.grandTotal || 0;
+    const amount = invoiceBalanceDue(doc);
+    if (amount <= 0.009) continue;
     invoicesOpen += amount;
     const overdue = isInvoicePastDue(doc, asOf);
     if (overdue) pastDue += amount;

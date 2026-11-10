@@ -49,9 +49,13 @@ import {
   buildCustomerStatementEmailHtml,
   buildCustomerStatementEmailText,
   buildCustomerStatementModel,
-  defaultCustomerStatementSubject
+  defaultCustomerStatementSubject,
+  type CustomerStatementModel
 } from '../lib/customerStatementEmail';
+import { buildCustomerStatementPdf } from '../lib/customerStatementPdf';
+import { deliverPdfBlob } from '../lib/downloadPdf';
 import { formatPaymentRecord, MarkPaidModal } from './MarkPaidModal';
+import { PdfShareSheet } from './PdfShareSheet';
 import { MergeCustomersModal } from './MergeCustomersModal';
 
 type InvoicePeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
@@ -195,6 +199,11 @@ export function CustomersWorkspace({
   const [statementEmailMessage, setStatementEmailMessage] = useState('');
   const [statementEmailSending, setStatementEmailSending] = useState(false);
   const [statementEmailStatus, setStatementEmailStatus] = useState<string | null>(null);
+  const [statementPdfSheet, setStatementPdfSheet] = useState<{
+    url: string;
+    fileName: string;
+    blob: Blob;
+  } | null>(null);
   const [statementReplyTo, setStatementReplyTo] = useState('');
 
   const invoicePeriodLabels = useMemo(
@@ -557,6 +566,29 @@ export function CustomersWorkspace({
       message: statementEmailMessage
     });
     window.location.href = mailtoUrl({ to, cc, subject, body });
+  }
+
+  async function handleExportStatementPdf() {
+    if (!customerStatement) return;
+    try {
+      const { blob, fileName } = await buildCustomerStatementPdf({
+        nurseryName,
+        statement: customerStatement,
+        message: statementEmailMessage
+      });
+      const result = await deliverPdfBlob(blob, fileName);
+      if (result.method === 'preview') {
+        setStatementPdfSheet({
+          url: result.url,
+          fileName: result.fileName,
+          blob: result.blob
+        });
+      }
+    } catch (err: unknown) {
+      setStatementEmailStatus(
+        err instanceof Error ? err.message : t('customers.statementPdfFailed')
+      );
+    }
   }
 
   const filteredInvoices = useMemo(() => {
@@ -1177,6 +1209,11 @@ export function CustomersWorkspace({
                         n: customerStatement.lines.length
                       })}
                     </p>
+                    <StatementPreview
+                      nurseryName={nurseryName}
+                      statement={customerStatement}
+                      message={statementEmailMessage}
+                    />
                     <input
                       type="email"
                       value={statementEmailTo}
@@ -1231,6 +1268,15 @@ export function CustomersWorkspace({
                         {statementEmailSending
                           ? t('customers.sendingStatement')
                           : t('customers.sendStatement')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleExportStatementPdf()}
+                        disabled={statementEmailSending}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-ink-200 bg-white text-ink-800 text-xs font-bold hover:bg-ink-50 disabled:opacity-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {t('customers.exportStatementPdf')}
                       </button>
                       <button
                         type="button"
@@ -2345,6 +2391,166 @@ export function CustomersWorkspace({
           }}
         />
       )}
+      {statementPdfSheet && (
+        <PdfShareSheet
+          url={statementPdfSheet.url}
+          fileName={statementPdfSheet.fileName}
+          blob={statementPdfSheet.blob}
+          title={t('customers.exportStatementPdf')}
+          onClose={() => {
+            try {
+              URL.revokeObjectURL(statementPdfSheet.url);
+            } catch {
+              /* ignore */
+            }
+            setStatementPdfSheet(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function statementDate(raw?: string): string {
+  if (!raw) return '—';
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(raw);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+}
+
+function StatementPreview({
+  nurseryName,
+  statement,
+  message
+}: {
+  nurseryName: string;
+  statement: CustomerStatementModel;
+  message: string;
+}) {
+  const t = useT();
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="px-3 py-2 bg-slate-900 text-white">
+        <p className="text-[9px] font-black uppercase tracking-wider text-white/70">
+          {t('customers.statementPreviewTitle')}
+        </p>
+        <p className="text-sm font-black leading-tight">{nurseryName || 'Nursery'}</p>
+        <p className="text-[11px] text-white/80">As of {statementDate(statement.asOf)}</p>
+      </div>
+      <div className="p-3 space-y-2">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Bill to</p>
+          <p className="text-sm font-bold text-slate-900">{statement.billToName}</p>
+          {statement.billToAddress ? (
+            <p className="text-[11px] text-slate-600 whitespace-pre-line">{statement.billToAddress}</p>
+          ) : null}
+          {statement.paymentTerms ? (
+            <p className="text-[11px] text-slate-600">Terms: {statement.paymentTerms}</p>
+          ) : null}
+        </div>
+        {message.trim() ? (
+          <p className="text-[11px] text-slate-700 bg-slate-50 rounded-lg px-2.5 py-2 whitespace-pre-line">
+            {message.trim()}
+          </p>
+        ) : null}
+        <div className="overflow-x-auto max-h-64 overflow-y-auto">
+          <table className="w-full text-[11px]">
+            <thead className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 sticky top-0 bg-white">
+              <tr>
+                <th className="text-left font-bold py-1.5 pr-2">Date</th>
+                <th className="text-left font-bold py-1.5 pr-2">Document</th>
+                <th className="text-left font-bold py-1.5 pr-2">Type</th>
+                <th className="text-left font-bold py-1.5 pr-2">Due</th>
+                <th className="text-right font-bold py-1.5 pr-2">Amount</th>
+                <th className="text-right font-bold py-1.5">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {statement.lines.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-3 text-center text-slate-500">
+                    {t('customers.statementNoActivity')}
+                  </td>
+                </tr>
+              ) : (
+                statement.lines.map((line) => (
+                  <tr key={line.id} className="border-b border-slate-100">
+                    <td className="py-1.5 pr-2 whitespace-nowrap">{statementDate(line.documentDate)}</td>
+                    <td className="py-1.5 pr-2">
+                      <span className="font-bold text-slate-900">{line.documentNumber}</span>
+                      {line.poNumber || line.referencedInvoiceNumber ? (
+                        <span className="block text-[10px] text-slate-500">
+                          {[
+                            line.poNumber ? `PO ${line.poNumber}` : '',
+                            line.referencedInvoiceNumber ? `Ref ${line.referencedInvoiceNumber}` : ''
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-1.5 pr-2">
+                      {line.kind === 'credit_memo' ? 'Credit memo' : 'Invoice'}
+                    </td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap">{statementDate(line.dueDate)}</td>
+                    <td
+                      className={`py-1.5 pr-2 text-right font-bold tabular-nums ${
+                        line.kind === 'credit_memo' ? 'text-rose-800' : 'text-slate-900'
+                      }`}
+                    >
+                      {line.kind === 'credit_memo'
+                        ? `-${formatMoney(line.amount)}`
+                        : formatMoney(line.amount)}
+                    </td>
+                    <td
+                      className={`py-1.5 text-right font-bold ${
+                        line.kind === 'credit_memo'
+                          ? 'text-rose-800'
+                          : line.pastDue
+                            ? 'text-rose-700'
+                            : 'text-teal-800'
+                      }`}
+                    >
+                      {line.kind === 'credit_memo' ? 'Credit' : line.pastDue ? 'Past due' : 'Open'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="ml-auto max-w-[220px] text-[11px] space-y-1">
+          <div className="flex justify-between text-slate-600">
+            <span>Invoices open</span>
+            <span className="font-bold text-slate-900 tabular-nums">
+              {formatMoney(statement.invoicesOpen)}
+            </span>
+          </div>
+          <div className="flex justify-between text-rose-800">
+            <span>Credits</span>
+            <span className="font-bold tabular-nums">
+              {statement.creditsTotal > 0.009
+                ? `-${formatMoney(statement.creditsTotal)}`
+                : formatMoney(0)}
+            </span>
+          </div>
+          <div className="flex justify-between border-t border-slate-900 pt-1 text-sm font-black text-slate-900">
+            <span>Amount due</span>
+            <span className="tabular-nums">{formatMoney(statement.totalDue)}</span>
+          </div>
+          <div
+            className={`flex justify-between font-bold ${
+              statement.totalPastDue > 0 ? 'text-rose-700' : 'text-slate-500'
+            }`}
+          >
+            <span>Past due</span>
+            <span className="tabular-nums">{formatMoney(statement.totalPastDue)}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -233,8 +233,9 @@ export default function MelioPanel({
           for NurseryOS does not see it, and the rest of the staff cannot open it.
         </p>
         <p className="text-[11px] leading-relaxed text-indigo-950/80">
-          This nursery pays its own vendors. Nobody here needs a Melio login. NurseryOS registers{' '}
-          {nursery} for those payments. The business is {nursery}, not a separate account.
+          Vendor payments for {nursery} connect to NurseryOS&apos;s Melio account. This nursery does
+          not get its own Melio login. NurseryOS registers {nursery} under that Melio account so
+          this nursery can pay its vendors.
         </p>
       </div>
       {status && !sonarKey && (
@@ -258,11 +259,11 @@ export default function MelioPanel({
       {status && !status.connected && (
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-indigo-950">
-            Register {nursery} for vendor payments
+            Connect {nursery} to NurseryOS&apos;s Melio
           </p>
           <p className="text-[11px] leading-relaxed text-indigo-950/80">
-            The nursery already exists. This form sends {nursery}&apos;s legal details so its
-            vendor bills can be paid. It does not create a new nursery.
+            This sends {nursery}&apos;s legal details to NurseryOS&apos;s Melio account. It does not
+            open a separate Melio account for this nursery, and it does not create a new nursery.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {ENTITY_FIELDS.map((field) => (
@@ -299,14 +300,14 @@ export default function MelioPanel({
                     const token = await sonarToken(null);
                     const result = await createMelioEntity(tenantId, entity, token);
                     setEntity({ ...EMPTY_ENTITY, legalName: nurseryName.trim() });
-                    return `${nursery} is registered for vendor payments${
+                    return `${nursery} is connected to NurseryOS's Melio for vendor payments${
                       result.kycStatus ? ` (${result.kycStatus})` : ''
                     }.`;
                   })
                 }
                 className={primaryBtn}
               >
-                Register {nursery}
+                Connect {nursery}
               </button>
             </div>
           </div>
@@ -317,7 +318,7 @@ export default function MelioPanel({
         <div className="space-y-2">
           <MelioTermsNotice />
           <p className="text-xs font-semibold text-ink-800">
-            {nursery} is registered for vendor payments
+            {nursery} is connected to NurseryOS&apos;s Melio
             {status.entityName ? ` as ${status.entityName}` : ''}
             {status.kycStatus ? ` · verification: ${status.kycStatus}` : ''}
           </p>

@@ -2041,9 +2041,9 @@ const extra = {
     nurserySection: 'Vivero',
     nurserySectionHint: 'Idioma, pesos de contenedores, dirección de remesa y correo.',
     booksSection: 'Cuentas por pagar y cobrar',
-    booksSectionHint: 'QuickBooks, Stripe y Melio para este vivero.',
+    booksSectionHint: 'QuickBooks, Stripe y el Melio de NurseryOS para este vivero.',
     booksIntro:
-      'Las cuentas por cobrar son lo que los clientes le pagan. Las cuentas por pagar son las facturas de este vivero. Conecte cada servicio aquí.',
+      'Las cuentas por cobrar son lo que los clientes le pagan. Las cuentas por pagar son las facturas de este vivero. Conecte cada servicio aquí. Los pagos a proveedores con Melio usan la cuenta Melio de NurseryOS. Este vivero no recibe su propio acceso a Melio.',
     qboOff: 'QuickBooks no está activado para este vivero.',
     stripeOff: 'Stripe no está activado para este vivero.',
     stripeOwnerOnly: 'Stripe se configura desde la cuenta del dueño.',

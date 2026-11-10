@@ -2022,9 +2022,9 @@ const extra = {
     nurserySection: 'Nursery',
     nurserySectionHint: 'Language, container weights, remittance address, and email.',
     booksSection: 'Accounts payable & receivable',
-    booksSectionHint: 'QuickBooks, Stripe, and Melio for this nursery.',
+    booksSectionHint: 'QuickBooks, Stripe, and NurseryOS’s Melio for this nursery.',
     booksIntro:
-      'Receivables are money customers pay you. Payables are bills this nursery pays. Connect each service here.',
+      'Receivables are money customers pay you. Payables are bills this nursery pays. Connect each service here. Melio vendor payments use NurseryOS’s Melio account. This nursery does not get its own Melio login.',
     qboOff: 'QuickBooks is not turned on for this nursery.',
     stripeOff: 'Stripe is not turned on for this nursery.',
     stripeOwnerOnly: 'Stripe is set up from the owner account.',

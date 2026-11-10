@@ -416,10 +416,10 @@ function NurseryApp({
 
     if (qb === 'connected') {
       alert(t('appExtra.qbConnectedAlert'));
-      setShowTeamManager(true);
+      if (permissions.canManageTeam) setShowTeamManager(true);
     } else if (qb === 'user-connected') {
       alert(t('appExtra.qbUserConnectedAlert'));
-      setShowTeamManager(true);
+      if (permissions.canManageTeam) setShowTeamManager(true);
     } else if (qb === 'error') {
       alert(`${t('appExtra.qbFailed')} ${params.get('message') || t('invoice.unknownError')}`);
     }
@@ -428,7 +428,7 @@ function NurseryApp({
       alert(
         stripe === 'return' ? t('appExtra.stripeReturnedAlert') : t('appExtra.stripeRefreshedAlert')
       );
-      setShowTeamManager(true);
+      if (permissions.canManageTeam) setShowTeamManager(true);
     }
 
     const documentId = params.get('documentId');
@@ -472,7 +472,7 @@ function NurseryApp({
     url.searchParams.delete('documentId');
     url.searchParams.delete('session_id');
     window.history.replaceState({}, '', url.pathname + url.search);
-  }, [tenant.id, t]);
+  }, [tenant.id, t, permissions.canManageTeam]);
 
   useEffect(() => {
     // While a restored tab is still pending authorization, never write a
@@ -875,7 +875,7 @@ function NurseryApp({
             <p className="mt-3 text-xs text-gray-500">{t('app.workspaceNotActivatedHint')}</p>
           </div>
         </div>
-        {showTeamManager && (
+        {showTeamManager && permissions.canManageTeam && (
           <TeamManager
             tenant={tenant}
             currentUserId={userId}
@@ -994,7 +994,7 @@ function NurseryApp({
           onDismiss={dismissPaymentNotice}
           onDismissAll={dismissAllPaymentNotices}
         />
-        {showTeamManager && (
+        {showTeamManager && permissions.canManageTeam && (
           <TeamManager
             tenant={tenant}
             currentUserId={userId}
@@ -1464,7 +1464,7 @@ function NurseryApp({
         />
       )}
 
-      {showTeamManager && (
+      {showTeamManager && permissions.canManageTeam && (
         <TeamManager
           tenant={tenant}
           currentUserId={userId}

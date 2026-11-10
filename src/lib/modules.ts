@@ -102,7 +102,7 @@ export const TENANT_MODULE_DEFS: TenantModuleDef[] = [
     id: 'billPay',
     label: 'Vendor ACH Bill Pay',
     description:
-      'Pay vendor bills by ACH via Stripe Treasury from Purchasing. Requires Purchasing and Stripe Connect with Treasury.',
+      'Older vendor ACH toggle. Nurseries pay vendors with Melio, not Stripe Treasury.',
     group: 'addon'
   },
   {

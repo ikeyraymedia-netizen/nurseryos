@@ -2109,7 +2109,7 @@ const extra = {
     addQbEnvFirst: 'Agregue variables de QuickBooks y Firebase Admin en el servidor primero',
     stripe: 'Stripe Connect',
     stripeIntro:
-      'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta y (con Treasury) paguen proveedores por ACH. Los fondos van al vivero. Solo dueño/admin.',
+      'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta. Opcional: muchos viveros cobran ACH en QuickBooks y marcan pagado aquí. Solo dueño/admin.',
     stripeSandboxEinHint:
       'Sandbox: Connect omite el formulario SSN de Stripe (rechaza IDs de prueba). NurseryOS crea una cuenta de prueba verificada al instante — pulse Conectar / Continuar y debería ver Listo para cobrar.',
     stripeSandboxReady: 'Stripe sandbox conectado — listo para cobros de prueba.',

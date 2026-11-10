@@ -976,30 +976,13 @@ export function registerStripeRoutes(app: Express) {
 
       if (!accountId) {
         if (isTestMode) {
-          const treasuryOk = await platformHasTreasuryAccess(stripe);
-          // Skip Express hosted KYC entirely — Custom + API test tokens.
-          let account: Stripe.Account;
-          try {
-            account = await createSandboxReadyAccount(stripe, {
-              tenantId,
-              tenantName,
-              email: email || undefined,
-              ip: clientIp(req),
-              withTreasury: treasuryOk
-            });
-          } catch (err) {
-            if (isUnknownTreasuryCapabilityError(err)) {
-              account = await createSandboxReadyAccount(stripe, {
-                tenantId,
-                tenantName,
-                email: email || undefined,
-                ip: clientIp(req),
-                withTreasury: false
-              });
-            } else {
-              throw err;
-            }
-          }
+          const account = await createSandboxReadyAccount(stripe, {
+            tenantId,
+            tenantName,
+            email: email || undefined,
+            ip: clientIp(req),
+            withTreasury: false
+          });
           accountId = account.id;
           integration = await refreshAccountStatus(tenantId, accountId, uid);
           if (!integration.chargesEnabled) {
@@ -1018,45 +1001,27 @@ export function registerStripeRoutes(app: Express) {
             onboardingUrl: null,
             chargesEnabled: true,
             detailsSubmitted: Boolean(integration.detailsSubmitted),
-            treasuryReady:
-              integration.treasuryCapability === 'active' &&
-              Boolean(integration.financialAccountId),
-            treasuryPlatformAccess: treasuryOk,
+            treasuryReady: false,
+            treasuryPlatformAccess: false,
             testMode: true
           });
           return;
         }
 
-        // Live: Custom + Account Links (platform-managed; required for Treasury).
+        // Live: Custom + Account Links. Card payments only — no Treasury.
         // Do not prefill business_profile.url with the platform origin — Stripe
         // crawls that URL for verification, and bot-blocking CDNs often 403 it.
-        let account: Stripe.Account;
-        try {
-          account = await stripe.accounts.create({
-            type: 'custom',
-            country: 'US',
-            email: email || undefined,
-            capabilities: { ...CONNECT_CAPABILITIES },
-            business_profile: {
-              name: tenantName,
-              product_description: `${tenantName} nursery wholesale and plant orders`
-            },
-            metadata: { tenantId, nurseryos: '1' }
-          });
-        } catch (err) {
-          if (!isUnknownTreasuryCapabilityError(err)) throw err;
-          account = await stripe.accounts.create({
-            type: 'custom',
-            country: 'US',
-            email: email || undefined,
-            capabilities: { ...BASE_CONNECT_CAPABILITIES },
-            business_profile: {
-              name: tenantName,
-              product_description: `${tenantName} nursery wholesale and plant orders`
-            },
-            metadata: { tenantId, nurseryos: '1' }
-          });
-        }
+        const account = await stripe.accounts.create({
+          type: 'custom',
+          country: 'US',
+          email: email || undefined,
+          capabilities: { ...BASE_CONNECT_CAPABILITIES },
+          business_profile: {
+            name: tenantName,
+            product_description: `${tenantName} nursery wholesale and plant orders`
+          },
+          metadata: { tenantId, nurseryos: '1' }
+        });
         accountId = account.id;
         integration = await refreshAccountStatus(tenantId, accountId, uid);
       }

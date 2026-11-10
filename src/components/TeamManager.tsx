@@ -29,9 +29,7 @@ import {
 } from '../lib/quickbooks';
 import {
   disconnectStripe,
-  enableStripeTreasury,
   fetchStripeStatus,
-  sandboxOnboardTreasury,
   startStripeConnect,
   StripeStatus
 } from '../lib/stripe';
@@ -350,64 +348,6 @@ export function TeamManager({
       await refreshStripe();
     } catch (err: any) {
       setStripeError(err?.message || t('teamExtra.stripeDisconnectFailed'));
-    } finally {
-      setStripeBusy(false);
-    }
-  }
-
-  async function handleEnableTreasury() {
-    setStripeBusy(true);
-    setStripeError(null);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = await enableStripeTreasury(tenant.id);
-      void logAuditEvent({
-        action: 'stripe.treasury_enable_started',
-        summary: result.treasuryReady
-          ? 'Stripe Treasury financial account ready'
-          : 'Started Stripe Treasury onboarding'
-      });
-      if (result.onboardingUrl) {
-        window.location.href = result.onboardingUrl;
-        return;
-      }
-      setMessage(
-        result.treasuryReady
-          ? t('teamExtra.treasuryReady')
-          : t('teamExtra.treasuryPending')
-      );
-      await refreshStripe();
-    } catch (err: any) {
-      setStripeError(err?.message || t('teamExtra.treasuryEnableFailed'));
-    } finally {
-      setStripeBusy(false);
-    }
-  }
-
-  async function handleSandboxOnboardTreasury() {
-    const ok = confirm(t('teamExtra.sandboxOnboardConfirm'));
-    if (!ok) return;
-    setStripeBusy(true);
-    setStripeError(null);
-    setError(null);
-    setMessage(null);
-    try {
-      const result = await sandboxOnboardTreasury(tenant.id);
-      void logAuditEvent({
-        action: 'stripe.sandbox_treasury_onboarded',
-        summary: 'Onboarded sandbox nursery with Stripe Treasury'
-      });
-      setMessage(
-        result.treasuryReady
-          ? t('teamExtra.sandboxOnboardSuccess', {
-              funded: ((result.fundedCents || 0) / 100).toFixed(0)
-            })
-          : t('teamExtra.treasuryPending')
-      );
-      await refreshStripe();
-    } catch (err: any) {
-      setStripeError(err?.message || t('teamExtra.sandboxOnboardFailed'));
     } finally {
       setStripeBusy(false);
     }
@@ -1070,28 +1010,6 @@ export function TeamManager({
                   })}
                 </p>
               )}
-              {stripeStatus?.testMode && stripeStatus.treasuryPlatformAccess === false && (
-                <div className="text-[11px] text-rose-950 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-2 leading-relaxed space-y-1.5">
-                  <p className="font-bold">{t('teamExtra.treasuryPlatformBlockedTitle')}</p>
-                  <p>{t('teamExtra.treasuryPlatformBlockedBody')}</p>
-                  <p className="font-semibold">
-                    {t('teamExtra.treasuryPlatformBlockedMatch', {
-                      id: stripeStatus.platformAccountId || 'acct_…'
-                    })}
-                  </p>
-                  <a
-                    href={
-                      stripeStatus.treasuryActivateUrl ||
-                      'https://dashboard.stripe.com/setup/treasury/activate'
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex font-bold text-rose-800 underline"
-                  >
-                    {t('teamExtra.treasuryActivateLink')}
-                  </a>
-                </div>
-              )}
               {stripeStatus?.connected ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-ink-800">
@@ -1107,15 +1025,6 @@ export function TeamManager({
                       {stripeStatus.accountId}
                     </p>
                   )}
-                  <p className="text-[11px] text-violet-950/80 leading-relaxed">
-                    {stripeStatus.treasuryReady
-                      ? t('teamExtra.treasuryReady')
-                      : stripeStatus.accountKind === 'express'
-                        ? t('teamExtra.treasuryNeedsReconnect')
-                        : stripeStatus.treasuryCapability === 'active'
-                          ? t('teamExtra.treasuryPending')
-                          : t('teamExtra.treasuryNotEnabled')}
-                  </p>
                   <div className="flex flex-wrap gap-2">
                     {!stripeStatus.chargesEnabled && (
                       <button
@@ -1126,34 +1035,6 @@ export function TeamManager({
                       >
                         <Link2 className="h-3.5 w-3.5" />
                         {stripeBusy ? 'Opening Stripe…' : 'Continue onboarding'}
-                      </button>
-                    )}
-                    {stripeStatus.testMode && (
-                      <button
-                        type="button"
-                        disabled={stripeBusy || busy}
-                        onClick={() => void handleSandboxOnboardTreasury()}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
-                      >
-                        <Link2 className="h-3.5 w-3.5" />
-                        {stripeBusy
-                          ? t('teamExtra.openingStripe')
-                          : t('teamExtra.sandboxOnboardTreasury')}
-                      </button>
-                    )}
-                    {!stripeStatus.treasuryReady &&
-                      !stripeStatus.testMode &&
-                      stripeStatus.accountKind !== 'express' && (
-                      <button
-                        type="button"
-                        disabled={stripeBusy || busy}
-                        onClick={() => void handleEnableTreasury()}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold disabled:opacity-50"
-                      >
-                        <Link2 className="h-3.5 w-3.5" />
-                        {stripeBusy
-                          ? t('teamExtra.openingStripe')
-                          : t('teamExtra.enableTreasury')}
                       </button>
                     )}
                     <button
@@ -1169,19 +1050,6 @@ export function TeamManager({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {stripeStatus?.testMode && (
-                    <button
-                      type="button"
-                      disabled={stripeBusy || busy || stripeStatus?.configured === false}
-                      onClick={() => void handleSandboxOnboardTreasury()}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
-                    >
-                      <Link2 className="h-3.5 w-3.5" />
-                      {stripeBusy
-                        ? t('teamExtra.openingStripe')
-                        : t('teamExtra.sandboxOnboardTreasury')}
-                    </button>
-                  )}
                   <button
                     type="button"
                     disabled={stripeBusy || busy || stripeStatus?.configured === false}

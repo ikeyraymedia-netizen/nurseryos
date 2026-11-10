@@ -7,7 +7,6 @@ import {
   disconnectMelio,
   fetchMelioConfig,
   fetchMelioStatus,
-  linkMelioEntity,
   MelioEntityInput,
   MelioStatus,
   selectMelioFunding
@@ -85,15 +84,23 @@ function MelioTermsNotice() {
   );
 }
 
-export default function MelioPanel({ tenantId }: { tenantId: string }) {
+export default function MelioPanel({
+  tenantId,
+  nurseryName
+}: {
+  tenantId: string;
+  nurseryName: string;
+}) {
+  const nursery = nurseryName.trim() || 'This nursery';
   const [status, setStatus] = useState<MelioStatus | null>(null);
   const [configMessage, setConfigMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [entityIdInput, setEntityIdInput] = useState('me');
-  const [showCreate, setShowCreate] = useState(false);
-  const [entity, setEntity] = useState<MelioEntityInput>(EMPTY_ENTITY);
+  const [entity, setEntity] = useState<MelioEntityInput>({
+    ...EMPTY_ENTITY,
+    legalName: nurseryName.trim()
+  });
   const [fundingChoice, setFundingChoice] = useState('');
   const [sonarKey, setSonarKey] = useState<string | null>(null);
   const [sonarEnv, setSonarEnv] = useState<'sandbox' | 'production'>('sandbox');
@@ -103,7 +110,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
   async function sonarToken(entityId?: string | null) {
     if (!sonarKey) {
       throw new Error(
-        'Melio Sonar is required. Add MELIO_SONAR_PUBLISHABLE_KEY and restart the server.'
+        'Vendor payments are not available yet.'
       );
     }
     return mintMelioSonarToken({
@@ -138,13 +145,13 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
       if (data?.type !== 'melio:accounts:internal') return;
       if (data.status === 'success') {
         setHosted(null);
-        setNotice('Account updated in Melio.');
+        setNotice('Bank account updated.');
         void refresh();
       } else if (data.status === 'cancelled') {
         setHosted(null);
-        setNotice('The Melio window was closed before it finished.');
+        setNotice('The window was closed before it finished.');
       } else if (data.status === 'error') {
-        setError(data.message || 'Melio could not finish that step.');
+        setError(data.message || 'That step could not be finished.');
       }
     }
     window.addEventListener('message', onMessage);
@@ -158,11 +165,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
       const cfg = await fetchMelioConfig();
       if (!cfg.configured) {
         setStatus(null);
-        setConfigMessage(
-          !cfg.melio
-            ? 'Add MELIO_API_KEY (and MELIO_ENV=sandbox) to the server environment, then restart.'
-            : 'Firebase Admin is not configured on the server.'
-        );
+        setConfigMessage('Vendor payments are not available yet.');
         return;
       }
       setConfigMessage(null);
@@ -178,7 +181,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
       );
       setError(null);
     } catch (err: any) {
-      setError(err?.message || 'Could not load Melio status.');
+      setError(err?.message || 'Could not load vendor payments.');
     }
   }
 
@@ -196,7 +199,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
       if (message) setNotice(message);
       await refresh();
     } catch (err: any) {
-      setError(err?.message || 'Melio request failed.');
+      setError(err?.message || 'Vendor payments could not be updated.');
     } finally {
       setBusy(false);
     }
@@ -206,10 +209,10 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase text-indigo-900">
-          Melio bill pay
+          Vendor payments
           {status && (
             <span className="ml-2 rounded bg-white px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-100">
-              {status.environment === 'production' ? 'Live' : 'Sandbox'}
+              {status.environment === 'production' ? 'Live' : 'Test mode'}
             </span>
           )}
         </p>
@@ -223,13 +226,20 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
       </div>
-      <p className="text-[11px] text-indigo-950/80 leading-relaxed">
-        Pay vendor bills by ACH through Melio. Vendors don’t need a Melio account.
-      </p>
+      <div className="rounded-lg border border-indigo-100 bg-white px-2.5 py-2 space-y-1">
+        <p className="text-sm font-black text-indigo-950">{nursery}</p>
+        <p className="text-[11px] leading-relaxed text-indigo-950/80">
+          Only an owner or admin of this nursery can open Team and see this. Someone signing up
+          for NurseryOS does not see it, and the rest of the staff cannot open it.
+        </p>
+        <p className="text-[11px] leading-relaxed text-indigo-950/80">
+          This nursery pays its own vendors. Nobody here needs a Melio login. NurseryOS registers{' '}
+          {nursery} for those payments. The business is {nursery}, not a separate account.
+        </p>
+      </div>
       {status && !sonarKey && (
         <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
-          Sonar is required before a business, bank, card, or payment can be sent to Melio.
-          Add MELIO_SONAR_PUBLISHABLE_KEY from the Melio dashboard, then restart.
+          Vendor payments are not available yet.
         </p>
       )}
 
@@ -239,120 +249,89 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
         </p>
       )}
 
-      {status && (
-        <p className="text-[11px] text-indigo-950/80">
-          {status.apiOk
-            ? `API key works${status.partnerName ? ` · partner: ${status.partnerName}` : ''}`
-            : `Melio API not reachable: ${status.apiError || 'unknown error'}`}
+      {status && !status.apiOk && (
+        <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+          Vendor payments could not be reached. Try again in a moment.
         </p>
       )}
 
       {status && !status.connected && (
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-indigo-950">
-            Step 1: link your Melio business
+            Register {nursery} for vendor payments
           </p>
-          <MelioTermsNotice />
-          <div className="flex gap-2">
-            <input
-              value={entityIdInput}
-              onChange={(e) => setEntityIdInput(e.target.value)}
-              placeholder="ent_… or me"
-              className={inputClass}
-            />
-            <button
-              type="button"
-              disabled={busy || !entityIdInput.trim() || !status.apiOk}
-              onClick={() =>
-                void run(async () => {
-                  await linkMelioEntity(tenantId, entityIdInput.trim());
-                  return 'Melio business linked.';
-                })
-              }
-              className={primaryBtn}
-            >
-              <Link2 className="h-3.5 w-3.5" />
-              Link
-            </button>
-          </div>
-          <p className="text-[10px] text-indigo-950/70">
-            Use the entity ID Melio gave you, or “me” if your key has one business.
+          <p className="text-[11px] leading-relaxed text-indigo-950/80">
+            The nursery already exists. This form sends {nursery}&apos;s legal details so its
+            vendor bills can be paid. It does not create a new nursery.
           </p>
-          <button
-            type="button"
-            onClick={() => setShowCreate((v) => !v)}
-            className="text-[11px] font-bold text-indigo-800 underline"
-          >
-            {showCreate ? 'Hide' : 'Or create a new business in Melio'}
-          </button>
-          {showCreate && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {ENTITY_FIELDS.map((field) => (
-                <label key={field.key} className="text-[10px] font-semibold text-indigo-950/80">
-                  {field.label}
-                  <input
-                    type={field.type || 'text'}
-                    value={entity[field.key] || ''}
-                    onChange={(e) => setEntity((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                    className={inputClass}
-                  />
-                </label>
-              ))}
-              <label className="text-[10px] font-semibold text-indigo-950/80">
-                Business type
-                <select
-                  value={entity.businessType}
-                  onChange={(e) => setEntity((prev) => ({ ...prev, businessType: e.target.value }))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {ENTITY_FIELDS.map((field) => (
+              <label key={field.key} className="text-[10px] font-semibold text-indigo-950/80">
+                {field.label}
+                <input
+                  type={field.type || 'text'}
+                  value={entity[field.key] || ''}
+                  onChange={(e) => setEntity((prev) => ({ ...prev, [field.key]: e.target.value }))}
                   className={inputClass}
-                >
-                  <option value="llc">LLC</option>
-                  <option value="corporation">Corporation</option>
-                  <option value="sole-proprietorship">Sole proprietorship</option>
-                  <option value="partnership">Partnership</option>
-                </select>
+                />
               </label>
-              <div className="sm:col-span-2 space-y-2">
-                <MelioTermsNotice />
-                <button
-                  type="button"
-                  disabled={busy || !status.apiOk || !sonarKey}
-                  onClick={() =>
-                    void run(async () => {
-                      const token = await sonarToken(null);
-                      const result = await createMelioEntity(tenantId, entity, token);
-                      setShowCreate(false);
-                      setEntity(EMPTY_ENTITY);
-                      return `Business created in Melio (${result.kycStatus || 'pending review'}).`;
-                    })
-                  }
-                  className={primaryBtn}
-                >
-                  Create business in Melio
-                </button>
-              </div>
+            ))}
+            <label className="text-[10px] font-semibold text-indigo-950/80">
+              Business type
+              <select
+                value={entity.businessType}
+                onChange={(e) => setEntity((prev) => ({ ...prev, businessType: e.target.value }))}
+                className={inputClass}
+              >
+                <option value="llc">LLC</option>
+                <option value="corporation">Corporation</option>
+                <option value="sole-proprietorship">Sole proprietorship</option>
+                <option value="partnership">Partnership</option>
+              </select>
+            </label>
+            <div className="sm:col-span-2 space-y-2">
+              <MelioTermsNotice />
+              <button
+                type="button"
+                disabled={busy || !status.apiOk || !sonarKey}
+                onClick={() =>
+                  void run(async () => {
+                    const token = await sonarToken(null);
+                    const result = await createMelioEntity(tenantId, entity, token);
+                    setEntity({ ...EMPTY_ENTITY, legalName: nurseryName.trim() });
+                    return `${nursery} is registered for vendor payments${
+                      result.kycStatus ? ` (${result.kycStatus})` : ''
+                    }.`;
+                  })
+                }
+                className={primaryBtn}
+              >
+                Register {nursery}
+              </button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
       {status?.connected && (
         <div className="space-y-2">
+          <MelioTermsNotice />
           <p className="text-xs font-semibold text-ink-800">
-            {status.entityName || 'Melio business'}
+            {nursery} is registered for vendor payments
+            {status.entityName ? ` as ${status.entityName}` : ''}
             {status.kycStatus ? ` · verification: ${status.kycStatus}` : ''}
           </p>
-          <p className="text-[11px] text-indigo-950/80 font-mono truncate">{status.entityId}</p>
 
           <p className="text-[11px] font-semibold text-indigo-950">
-            Step 2: bank account that pays vendors
+            Bank account that pays this nursery&apos;s vendors
           </p>
           {status.fundingAccountId ? (
             <p className="text-[11px] text-emerald-800 font-semibold">
               Paying from{' '}
               {status.fundingAccountName ||
                 (status.fundingAccountType === 'card' ? 'card' : 'bank')}
-              {status.fundingAccountLast4 ? ` ••••${status.fundingAccountLast4}` : ''}. Pay via
-              Melio is on in Purchasing → Bills.
+              {status.fundingAccountLast4 ? ` ••••${status.fundingAccountLast4}` : ''}. Vendor
+              payments are on in Purchasing → Bills.
             </p>
           ) : (
             <p className="text-[11px] text-amber-900">No funding account chosen yet.</p>
@@ -382,7 +361,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                       const token = await sonarToken(status?.entityId);
                       const link = await createMelioVerifyLink(tenantId, selectedAccount.id, token);
                       setHosted({ url: link.url, title: 'Verify bank' });
-                      return 'Finish verifying the bank in the Melio window.';
+                      return 'Finish verifying the bank in the window.';
                     })
                   }
                   className={primaryBtn}
@@ -408,8 +387,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
           )}
           {selectedAccount && !selectedAccount.isVerified && (
             <p className="text-[10px] text-amber-900">
-              Melio needs to verify this bank before it can pay vendors. Tap Verify to finish in
-              Melio.
+              This bank has to be verified before it can pay vendors. Tap Verify to finish.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -421,13 +399,13 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                   const token = await sonarToken(status?.entityId);
                   const link = await createMelioFundingLink(tenantId, token, 'plaid');
                   setHosted({ url: link.url, title: 'Link a bank' });
-                  return 'Finish linking the bank in the Melio window.';
+                  return 'Finish linking the bank in the window.';
                 })
               }
               className={primaryBtn}
             >
               <Link2 className="h-3.5 w-3.5" />
-              Link a bank (Plaid)
+              Link a bank
             </button>
             <button
               type="button"
@@ -437,7 +415,7 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
                   const token = await sonarToken(status?.entityId);
                   const link = await createMelioFundingLink(tenantId, token, 'card');
                   setHosted({ url: link.url, title: 'Add a card' });
-                  return 'Finish adding the card in the Melio window.';
+                  return 'Finish adding the card in the window.';
                 })
               }
               className={secondaryBtn}
@@ -448,10 +426,10 @@ export default function MelioPanel({ tenantId }: { tenantId: string }) {
               type="button"
               disabled={busy}
               onClick={() => {
-                if (!confirm('Disconnect Melio from this nursery?')) return;
+                if (!confirm(`Stop vendor payments for ${nursery}?`)) return;
                 void run(async () => {
                   await disconnectMelio(tenantId);
-                  return 'Melio disconnected.';
+                  return `Vendor payments stopped for ${nursery}.`;
                 });
               }}
               className={secondaryBtn}

@@ -1138,7 +1138,7 @@ export function TeamManager({
             </div>
           )}
 
-          {melioEnabled && <MelioPanel tenantId={tenant.id} />}
+          {melioEnabled && <MelioPanel tenantId={tenant.id} nurseryName={tenant.name} />}
 
           <div className="rounded-xl border border-ink-100 bg-ink-50/40 px-3 py-3 space-y-2">
             <p className="text-xs font-bold uppercase text-ink-900 flex items-center gap-1.5">

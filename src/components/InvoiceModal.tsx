@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import {
   CustomerOrder,
   PlantOrderItem,
@@ -81,6 +82,7 @@ import {
   subscribeToVendorAvailabilityLines
 } from '../lib/vendorAvailability';
 import { uploadEstimateLinePhoto } from '../lib/estimatePhotos';
+import { InventoryPlantPicker, type InventoryPlantPick } from './InventoryPlantPicker';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { logAuditEvent } from '../lib/audit';
 import {
@@ -291,6 +293,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     } ${existingDocument?.documentNumber || defaultDocumentNumber(initialDocumentType)}`
   );
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isOpeningMail, setIsOpeningMail] = useState(false);
   const [emailSentStatus, setEmailSentStatus] = useState<'idle' | 'success' | 'error_smtp' | 'error_general'>('idle');
   const [emailErrorMessage, setEmailErrorMessage] = useState('');
   const [emailQbNote, setEmailQbNote] = useState<string | null>(null);
@@ -452,6 +455,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         includePhotoLink?: boolean;
         photoUrl?: string | null;
         vendor?: string;
+        inventoryItemId?: string;
       }): PlantOrderItem => ({
         id: item.id,
         plantName: item.plantName,
@@ -465,6 +469,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         unavailable: item.unavailable,
         includePhotoLink: item.includePhotoLink,
         photoUrl: item.photoUrl,
+        inventoryItemId:
+          item.inventoryItemId ||
+          liveOrderItems.find((live) => live.id === item.id)?.inventoryItemId,
         vendor:
           item.vendor ||
           liveOrderItems.find((live) => live.id === item.id)?.vendor
@@ -801,6 +808,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       prev.map((line) => {
         if (line.id !== id) return line;
         const next = { ...line, ...patch };
+        if (patch.inventoryItemId === undefined && Object.prototype.hasOwnProperty.call(patch, 'inventoryItemId')) {
+          delete next.inventoryItemId;
+        }
         if (patch.includePhotoLink === false) {
           next.photoUrl = null;
         }
@@ -835,6 +845,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         [id]: nextPrice
       }));
     }
+  };
+
+  const applyPlantPick = (id: string, next: InventoryPlantPick) => {
+    updateDraftLine(id, {
+      plantName: next.plantName,
+      ...(next.containerSize !== undefined ? { containerSize: next.containerSize } : {}),
+      inventoryItemId: next.inventoryItemId
+    });
   };
 
   const priceForItem = (item: PlantOrderItem): number =>
@@ -1593,10 +1611,12 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       return;
     }
 
-    setIsSendingEmail(true);
-    setEmailSentStatus('idle');
-    setEmailErrorMessage('');
-    setEmailQbNote(null);
+    flushSync(() => {
+      setIsSendingEmail(true);
+      setEmailSentStatus('idle');
+      setEmailErrorMessage('');
+      setEmailQbNote(null);
+    });
 
     try {
       // Persist first so QuickBooks can issue a pay link for this exact invoice.
@@ -1751,65 +1771,65 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       setEmailErrorMessage(t('invoice.ccTooMany', { n: MAX_CC_RECIPIENTS }));
       return;
     }
-    if (canUseQuickbooks) {
-      setQboSaving(true);
-      try {
+    flushSync(() => setIsOpeningMail(true));
+    try {
+      if (canUseQuickbooks) {
         const qbSync = await syncToQuickbooksOnEmail();
         if (qbSync.note) setEmailQbNote(qbSync.note);
-      } finally {
-        setQboSaving(false);
       }
-    }
-    let mailPayUrl: string | null | undefined;
-    if (payProvider === 'stripe') {
-      if (!includePayLinkInEmail || isFullyPaid || documentType !== 'invoice') {
-        mailPayUrl = null;
-      } else if (!stripePaymentsReady) {
-        setEmailSentStatus('error_general');
-        setEmailErrorMessage(t('invoice.stripeNotReady'));
-        return;
-      } else if (!savedDocumentId) {
-        setEmailSentStatus('error_general');
-        setEmailErrorMessage(t('invoice.saveInvoiceFirst'));
-        return;
-      } else {
-        try {
-          mailPayUrl = await ensurePayLink(savedDocumentId);
-        } catch (payErr) {
+      let mailPayUrl: string | null | undefined;
+      if (payProvider === 'stripe') {
+        if (!includePayLinkInEmail || isFullyPaid || documentType !== 'invoice') {
+          mailPayUrl = null;
+        } else if (!stripePaymentsReady) {
           setEmailSentStatus('error_general');
-          setEmailErrorMessage(
-            payErr instanceof Error ? payErr.message : t('invoice.stripePayLinkFailed')
-          );
+          setEmailErrorMessage(t('invoice.stripeNotReady'));
           return;
+        } else if (!savedDocumentId) {
+          setEmailSentStatus('error_general');
+          setEmailErrorMessage(t('invoice.saveInvoiceFirst'));
+          return;
+        } else {
+          try {
+            mailPayUrl = await ensurePayLink(savedDocumentId);
+          } catch (payErr) {
+            setEmailSentStatus('error_general');
+            setEmailErrorMessage(
+              payErr instanceof Error ? payErr.message : t('invoice.stripePayLinkFailed')
+            );
+            return;
+          }
         }
       }
+      const textBody = generateEmailText(mailPayUrl);
+      window.open(
+        mailtoUrl({
+          to: customerEmail,
+          cc,
+          subject: emailSubject,
+          body: textBody
+        }),
+        '_blank'
+      );
+
+      // Save email only tracking
+      const saveEmailTracking = async () => {
+        try {
+          const updatedOrder: CustomerOrder = {
+            ...order,
+            customerEmail,
+            customerEmailCc: cc.join(', ') || undefined,
+            emailSentAt: new Date().toISOString() + ' (opened in mail client)',
+          };
+          await updateCustomerOrder(updatedOrder);
+        } catch (e) {
+          console.error('Error tracking email event:', e);
+        }
+      };
+      saveEmailTracking();
+    } finally {
+      setIsOpeningMail(false);
     }
-    const textBody = generateEmailText(mailPayUrl);
-    window.open(
-      mailtoUrl({
-        to: customerEmail,
-        cc,
-        subject: emailSubject,
-        body: textBody
-      }),
-      '_blank'
-    );
-    
-    // Save email only tracking
-    const saveEmailTracking = async () => {
-      try {
-        const updatedOrder: CustomerOrder = {
-          ...order,
-          customerEmail,
-          customerEmailCc: cc.join(', ') || undefined,
-          emailSentAt: new Date().toISOString() + ' (opened in mail client)',
-        };
-        await updateCustomerOrder(updatedOrder);
-      } catch (e) {
-        console.error('Error tracking email event:', e);
-      }
-    };
-    saveEmailTracking();
   };
 
   // Must stay above the !isOpen early return — hooks cannot run conditionally.
@@ -2150,9 +2170,12 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     freightMethod?: FreightAllocationMethod,
     totalFreight?: number
   ): Promise<{ id: string; documentNumber: string } | null> => {
-    setQboSaving(true);
-    setIsSaving(true);
-    setSaveSuccess(false);
+    const saveStartedAt = Date.now();
+    flushSync(() => {
+      setQboSaving(true);
+      setIsSaving(true);
+      setSaveSuccess(false);
+    });
 
     const creatingNewDocument = !savedDocumentId;
     const enteredNumber = invoiceNumber.trim();
@@ -2422,6 +2445,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           isEstimate && item.includePhotoLink
             ? item.photoUrl || null
             : undefined,
+        inventoryItemId: isEstimate ? item.inventoryItemId || undefined : undefined,
         vendor: isEstimate ? item.vendor : undefined
       }));
 
@@ -2654,6 +2678,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       }
       return null;
     } finally {
+      const remaining = 700 - (Date.now() - saveStartedAt);
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
       setIsSaving(false);
       setQboSaving(false);
     }
@@ -3484,6 +3510,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     markingPaidBusy ||
     isCreatingPayLink ||
     isSendingEmail ||
+    isOpeningMail ||
     isRefreshingPayment;
 
   return (
@@ -3491,9 +3518,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       <QuickbooksSavingShield
         open={qboShield}
         title={
-          isPushingQb || (isCreatingPayLink && useQboPayLinks) || canUseQuickbooks
-            ? t('invoice.qbSavingTitle')
-            : t('invoice.saving')
+          isSendingEmail || isOpeningMail
+            ? t('invoice.sending')
+            : isPushingQb || (isCreatingPayLink && useQboPayLinks) || canUseQuickbooks
+              ? t('invoice.qbSavingTitle')
+              : t('invoice.saving')
         }
       />
       {pdfSheet && (
@@ -4267,16 +4296,25 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       disabled={isSendingEmail}
                       className="py-2 px-2.5 bg-ink-800 hover:bg-ink-900 text-white rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
                     >
-                      <Send className="h-3 w-3" />
+                      {isSendingEmail ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3" />
+                      )}
                       <span>{isSendingEmail ? t('invoice.sending') : t('invoice.sendDirect')}</span>
                     </button>
 
                     <button
                       onClick={handleOpenMailClient}
-                      className="py-2 px-2.5 bg-white border border-gray-200 hover:bg-slate-100 text-gray-700 rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1"
+                      disabled={isOpeningMail}
+                      className="py-2 px-2.5 bg-white border border-gray-200 hover:bg-slate-100 text-gray-700 rounded-xl text-[10px] font-black shadow-sm transition-all flex items-center justify-center space-x-1 disabled:opacity-60"
                     >
-                      <Mail className="h-3 w-3" />
-                      <span>{t('invoice.useMailApp')}</span>
+                      {isOpeningMail ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Mail className="h-3 w-3" />
+                      )}
+                      <span>{isOpeningMail ? t('invoice.sending') : t('invoice.useMailApp')}</span>
                     </button>
                   </div>
                 </div>
@@ -4845,7 +4883,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                             </span>
                           )}
                           <div className="min-w-0 flex-1">
-                            {canEditLines ? (
+                            {canEditLines && isEstimate ? (
+                              <InventoryPlantPicker
+                                plants={inventoryPlants}
+                                plantName={item.plantName}
+                                containerSize={item.containerSize}
+                                inventoryItemId={item.inventoryItemId}
+                                containerWeights={containerWeights}
+                                placeholder={t('invoice.plantVarietyName')}
+                                inputClassName={`w-full font-black bg-transparent border-b border-gray-200 focus:border-ink-600 focus:outline-none py-0.5 break-words ${
+                                  unavailable
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-gray-950'
+                                }`}
+                                onChange={(next) => applyPlantPick(item.id, next)}
+                              />
+                            ) : canEditLines ? (
                               <input
                                 type="text"
                                 value={item.plantName}
@@ -5131,7 +5184,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                             </td>
                           )}
                           <td className="py-1.5">
-                            {canEditLines ? (
+                            {canEditLines && isEstimate ? (
+                              <InventoryPlantPicker
+                                plants={inventoryPlants}
+                                plantName={item.plantName}
+                                containerSize={item.containerSize}
+                                inventoryItemId={item.inventoryItemId}
+                                containerWeights={containerWeights}
+                                placeholder={t('invoice.plantVarietyName')}
+                                inputClassName={`w-full font-black bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                  unavailable
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-gray-950'
+                                }`}
+                                onChange={(next) => applyPlantPick(item.id, next)}
+                              />
+                            ) : canEditLines ? (
                               <input
                                 type="text"
                                 value={item.plantName}

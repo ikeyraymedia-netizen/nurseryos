@@ -233,6 +233,8 @@ export interface CustomerDocumentLineItem {
   photoUrl?: string | null;
   /** Quoted source vendor — estimates/internal only; never on customer PDF/email. */
   vendor?: string;
+  /** Linked live-inventory plant, when the estimate line was matched. Optional. */
+  inventoryItemId?: string;
 }
 
 /** Estimate, invoice, or credit memo saved under a customer record. */

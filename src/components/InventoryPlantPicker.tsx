@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Link2, X } from 'lucide-react';
 import { ContainerWeight, InventoryPlant } from '../types';
 
@@ -77,7 +78,10 @@ export function InventoryPlantPicker({
   applySizeOnSelect = true
 }: InventoryPlantPickerProps) {
   const [open, setOpen] = useState(false);
+  const [menuBox, setMenuBox] = useState<{ top: number; left: number; width: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const linkedPlant = inventoryItemId
     ? plants.find((p) => p.id === inventoryItemId)
     : undefined;
@@ -89,13 +93,29 @@ export function InventoryPlantPicker({
 
   useEffect(() => {
     const onDocMouseDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuBox({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, plantName, matches.length]);
 
   const handleTextChange = (value: string) => {
     const stillLinked =
@@ -132,6 +152,7 @@ export function InventoryPlantPicker({
   return (
     <div ref={rootRef} className={`relative ${className}`}>
       <input
+        ref={inputRef}
         type="text"
         value={plantName}
         onChange={(e) => handleTextChange(e.target.value)}
@@ -147,7 +168,7 @@ export function InventoryPlantPicker({
       />
 
       {linkedPlant && (
-        <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-800">
+        <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-800 print:hidden">
           <Link2 className="h-3 w-3 shrink-0" />
           <span className="truncate">
             Linked · {linkedPlant.plantName} ({linkedPlant.containerSize})
@@ -167,13 +188,24 @@ export function InventoryPlantPicker({
       )}
 
       {!linkedPlant && plantName.trim() && open && (
-        <p className="mt-1 text-[10px] text-gray-400">
+        <p className="mt-1 text-[10px] text-gray-400 print:hidden">
           Optional — pick a match to link inventory, or save without one.
         </p>
       )}
 
-      {open && plants.length > 0 && (
-        <div className="absolute z-30 mt-1 w-full max-h-52 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+      {open && plants.length > 0 && menuBox && typeof document !== 'undefined' &&
+        createPortal(
+        <div
+          ref={menuRef}
+          className="max-h-52 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg print:hidden"
+          style={{
+            position: 'fixed',
+            top: menuBox.top,
+            left: menuBox.left,
+            width: menuBox.width,
+            zIndex: 80
+          }}
+        >
           {matches.length === 0 ? (
             <div className="px-3 py-2 text-xs text-gray-500">No inventory matches</div>
           ) : (
@@ -206,8 +238,9 @@ export function InventoryPlantPicker({
               );
             })
           )}
-        </div>
-      )}
+        </div>,
+        document.body
+        )}
     </div>
   );
 }

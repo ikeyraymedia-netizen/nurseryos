@@ -150,7 +150,7 @@ export function InventoryPlantPicker({
   };
 
   return (
-    <div ref={rootRef} className={`relative ${className}`}>
+    <div ref={rootRef} className={`relative min-w-0 max-w-full ${className}`}>
       <input
         ref={inputRef}
         type="text"
@@ -168,9 +168,9 @@ export function InventoryPlantPicker({
       />
 
       {linkedPlant && (
-        <div className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-800 print:hidden">
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-emerald-800 print:hidden">
           <Link2 className="h-3 w-3 shrink-0" />
-          <span className="truncate">
+          <span className="min-w-0 truncate">
             Linked · {linkedPlant.plantName} ({linkedPlant.containerSize})
             {typeof linkedPlant.quantityAvailable === 'number'
               ? ` · ${linkedPlant.quantityAvailable} avail`
@@ -188,7 +188,7 @@ export function InventoryPlantPicker({
       )}
 
       {!linkedPlant && plantName.trim() && open && (
-        <p className="mt-1 text-[10px] text-gray-400 print:hidden">
+        <p className="mt-1 break-words text-[10px] text-gray-400 print:hidden">
           Optional — pick a match to link inventory, or save without one.
         </p>
       )}

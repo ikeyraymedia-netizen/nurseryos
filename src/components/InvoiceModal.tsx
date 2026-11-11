@@ -4608,7 +4608,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         </div>
 
         {/* Right Side / Document Preview (Becomes full-page on print) */}
-        <div className="flex-none md:flex-1 bg-white p-4 md:p-10 flex flex-col md:min-h-0 print:p-0 order-1 md:order-2">
+        <div className="flex-none md:flex-1 md:min-w-0 bg-white p-4 md:p-10 flex flex-col md:min-h-0 print:p-0 order-1 md:order-2">
           
           {/* Action header inside modal (Hidden during print) */}
           <div className="flex justify-between items-center pb-3 mb-4 border-b border-gray-150 print:hidden">
@@ -4651,7 +4651,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           </div>
 
           {/* Printable Document Sheet — natural height on mobile; scroll pane on desktop */}
-          <div className="md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-2 print:overflow-visible print:pr-0">
+          <div className="md:flex-1 md:min-h-0 md:min-w-0 md:overflow-y-auto md:pr-2 print:overflow-visible print:pr-0">
             <div
               ref={printRef}
               className="border border-gray-300 p-3 sm:p-6 rounded-lg bg-white shadow-inner max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 text-gray-900 font-sans leading-normal md:overflow-x-auto print:overflow-visible"
@@ -4834,8 +4834,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               </div>
 
               {/* Line items — stacked cards on mobile, table on desktop/print */}
-              <div className="py-3 md:overflow-x-auto -mx-1 px-1">
-                <div className="md:hidden print:hidden space-y-2.5">
+              <div className="min-w-0 py-3 md:overflow-x-auto -mx-1 px-1">
+                <div className="lg:hidden print:hidden space-y-2.5">
                   {workingItems.map((item) => {
                     const qty = getItemQty(item);
                     const price = priceForItem(item);
@@ -4891,7 +4891,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 inventoryItemId={item.inventoryItemId}
                                 containerWeights={containerWeights}
                                 placeholder={t('invoice.plantVarietyName')}
-                                inputClassName={`w-full font-black bg-transparent border-b border-gray-200 focus:border-ink-600 focus:outline-none py-0.5 break-words ${
+                                className="min-w-0 w-full"
+                                inputClassName={`w-full min-w-0 font-black bg-transparent border-b border-gray-200 focus:border-ink-600 focus:outline-none py-0.5 break-words ${
                                   unavailable
                                     ? 'text-slate-400 line-through'
                                     : 'text-gray-950'
@@ -4959,6 +4960,42 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
                           <label className="block min-w-0">
                             <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              {t('invoice.unitPrice')}
+                            </span>
+                            <div
+                              className={`mt-0.5 inline-flex w-full items-center bg-ink-50/40 border border-gray-200 rounded px-2 py-1 ${
+                                unavailable ? 'opacity-40' : ''
+                              }`}
+                            >
+                              <span className="text-[10px] text-slate-400 font-mono font-bold mr-1">
+                                $
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={enteredSellingPrice(item) == null ? '' : enteredSellingPrice(item)}
+                                placeholder="0.00"
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                                className="w-full min-w-0 font-mono font-bold text-ink-800 bg-transparent focus:outline-none"
+                              />
+                            </div>
+                          </label>
+                          <div className="block min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              Total
+                            </span>
+                            <p
+                              className={`mt-0.5 font-mono font-black text-right pr-1 ${
+                                unavailable ? 'text-slate-400' : 'text-gray-950'
+                              }`}
+                            >
+                              {unavailable ? '—' : `$${total.toFixed(2)}`}
+                            </p>
+                          </div>
+                          <label className="block min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
                               {t('invoice.potSize')}
                             </span>
                             {canEditLines ? (
@@ -5004,42 +5041,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               </p>
                             )}
                           </label>
-                          <label className="block min-w-0">
-                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
-                              {t('invoice.unitPrice')}
-                            </span>
-                            <div
-                              className={`mt-0.5 inline-flex w-full items-center bg-ink-50/40 border border-gray-200 rounded px-2 py-1 ${
-                                unavailable ? 'opacity-40' : ''
-                              }`}
-                            >
-                              <span className="text-[10px] text-slate-400 font-mono font-bold mr-1">
-                                $
-                              </span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={enteredSellingPrice(item) == null ? '' : enteredSellingPrice(item)}
-                                placeholder="0.00"
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                                className="w-full min-w-0 font-mono font-bold text-ink-800 bg-transparent focus:outline-none"
-                              />
-                            </div>
-                          </label>
-                          <div className="block min-w-0">
-                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
-                              Total
-                            </span>
-                            <p
-                              className={`mt-0.5 font-mono font-black text-right pr-1 ${
-                                unavailable ? 'text-slate-400' : 'text-gray-950'
-                              }`}
-                            >
-                              {unavailable ? '—' : `$${total.toFixed(2)}`}
-                            </p>
-                          </div>
                         </div>
 
                         {documentType === 'estimate' && canEditLines && (
@@ -5122,18 +5123,18 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   )}
                 </div>
 
-                <table className="hidden md:table print:table w-full text-left border-collapse">
+                <table className="hidden lg:table print:table w-full table-fixed text-left border-collapse">
                   <thead>
                     <tr className="border-b-2 border-gray-300 text-gray-500 text-[9px] font-black font-mono uppercase tracking-widest">
                       {canEditLines && (
-                        <th className="pb-1 w-8 print:hidden" aria-label="Reorder" />
+                        <th className="pb-1 w-6 print:hidden" aria-label="Reorder" />
                       )}
                       <th className="pb-1 text-left">{t('invoice.plantVarietyName')}</th>
-                      <th className="pb-1 text-center w-28">{t('invoice.potSize')}</th>
-                      <th className="pb-1 text-center w-20">Quantity</th>
-                      <th className="pb-1 text-right w-28">{t('invoice.unitPrice')}</th>
-                      <th className="pb-1 text-right w-24">Total</th>
-                      {canRemoveLines && <th className="pb-1 w-10 print:hidden" />}
+                      <th className="pb-1 text-center w-20">{t('invoice.potSize')}</th>
+                      <th className="pb-1 text-center w-14">Quantity</th>
+                      <th className="pb-1 text-right w-24">{t('invoice.unitPrice')}</th>
+                      <th className="pb-1 text-right w-20">Total</th>
+                      {canRemoveLines && <th className="pb-1 w-8 print:hidden" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -5183,7 +5184,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                               </span>
                             </td>
                           )}
-                          <td className="py-1.5">
+                          <td className="min-w-0 py-1.5">
                             {canEditLines && isEstimate ? (
                               <InventoryPlantPicker
                                 plants={inventoryPlants}
@@ -5192,7 +5193,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 inventoryItemId={item.inventoryItemId}
                                 containerWeights={containerWeights}
                                 placeholder={t('invoice.plantVarietyName')}
-                                inputClassName={`w-full font-black bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                className="min-w-0 w-full"
+                                inputClassName={`w-full min-w-0 font-black bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
                                   unavailable
                                     ? 'text-slate-400 line-through'
                                     : 'text-gray-950'
@@ -5537,7 +5539,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                   updateDraftLine(item.id, { containerSize: e.target.value })
                                 }
                                 placeholder={t('invoice.potSize')}
-                                className={`w-24 mx-auto text-center font-mono font-bold bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                className={`w-full max-w-full text-center font-mono font-bold bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
                                   unavailable ? 'text-slate-400' : 'text-gray-700'
                                 }`}
                               />
@@ -5557,7 +5559,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                     quantity: Math.max(0, Number(e.target.value) || 0)
                                   })
                                 }
-                                className={`w-16 mx-auto text-center font-mono font-bold bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
+                                className={`w-full max-w-full text-center font-mono font-bold bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
                                   unavailable ? 'text-slate-400' : 'text-gray-900'
                                 }`}
                               />
@@ -5577,7 +5579,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                 placeholder="0.00"
                                 onFocus={(e) => e.target.select()}
                                 onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                                className="price-input w-20 font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
+                                className="price-input w-full max-w-[5.5rem] font-mono font-bold text-right text-ink-800 focus:text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-600 bg-ink-50/40 hover:bg-ink-100/40 px-1 py-0.5 rounded transition-all focus:bg-white"
                               />
                             </div>
                           </td>
@@ -5606,7 +5608,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   <button
                     type="button"
                     onClick={addDraftLine}
-                    className="mt-3 hidden md:inline-flex print:hidden items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900"
+                    className="mt-3 hidden lg:inline-flex print:hidden items-center gap-1 text-xs font-bold text-ink-700 hover:text-ink-900"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     {isCreditMemo ? t('invoice.addCreditLine') : t('invoice.addEstimateLine')}

@@ -2171,7 +2171,18 @@ const extra = {
     emailDisconnected: 'Correo saliente desconectado.',
     currentMembers: 'Miembros actuales',
     membersHint:
-      'Las personas pueden tener más de un rol (por ejemplo Inventario + Cargador). Use Editar roles para cambiar acceso. Restablecer contraseña es solo dueño/admin.',
+      'Las personas pueden tener más de un rol (por ejemplo Inventario + Cargador). Use Editar roles para cambiar acceso. Restablecer contraseña y el autenticador es solo dueño o administrador.',
+    resetAuthenticator: 'Restablecer autenticador',
+    resetAuthenticatorTitle: 'Borrar su autenticador para configurarlo en un teléfono nuevo',
+    resetAuthenticatorConfirm:
+      '¿Borrar el autenticador de {{name}}? Se cerrará su sesión. La próxima vez que inicie sesión, NurseryOS le pedirá configurar la aplicación de autenticación otra vez. Use esto si perdió el teléfono con el código.',
+    resetAuthenticatorDone:
+      '{{name}} cerró sesión. Puede iniciar sesión y configurar el autenticador en el teléfono nuevo.',
+    resetAuthenticatorFresh:
+      'Cierre sesión, vuelva a entrar con su código del autenticador y luego restablezca el de ellos.',
+    resetAuthenticatorFailed: 'No se pudo restablecer el autenticador.',
+    cannotResetOwnAuthenticator:
+      'No puede restablecer su propio autenticador. Otro dueño o administrador debe hacerlo.',
     editRoles: 'Editar roles',
     assignRoles: 'Asignar roles',
     saveRoles: 'Guardar roles',

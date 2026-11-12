@@ -20,6 +20,7 @@ import {
 } from '../lib/permissions';
 import { TENANT_MODULE_DEFS, resolveEnabledModules } from '../lib/modules';
 import { logAuditEvent } from '../lib/audit';
+import { SecurityRequestError, securityResetAuthenticator } from '../lib/securityClient';
 import {
   disconnectQuickbooks,
   fetchQuickbooksStatus,
@@ -89,6 +90,7 @@ export function TeamManager({
   const [settingsPage, setSettingsPage] = useState<'home' | 'team' | 'nursery' | 'books'>('home');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [resettingAuthUserId, setResettingAuthUserId] = useState<string | null>(null);
   const [qbStatus, setQbStatus] = useState<QuickbooksStatus | null>(null);
   const [qbBusy, setQbBusy] = useState(false);
   const [qbError, setQbError] = useState<string | null>(null);
@@ -628,6 +630,44 @@ export function TeamManager({
       setError(err?.message || t('teamExtra.removeMemberFailed'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleResetAuthenticator(member: TenantMember) {
+    if (member.userId === currentUserId) {
+      setError(t('teamExtra.cannotResetOwnAuthenticator'));
+      return;
+    }
+    const label = member.displayName || member.email;
+    const ok = window.confirm(t('teamExtra.resetAuthenticatorConfirm', { name: label }));
+    if (!ok) return;
+
+    setBusy(true);
+    setResettingAuthUserId(member.userId);
+    setError(null);
+    setMessage(null);
+    try {
+      await securityResetAuthenticator(tenant.id, member.userId);
+      await logAuditEvent({
+        action: 'team.authenticator_reset',
+        summary: `Authenticator reset for ${member.email || label}`,
+        meta: {
+          memberUserId: member.userId,
+          memberEmail: member.email || null,
+          roles: rolesLabel(getMemberRoles(member))
+        }
+      });
+      setMessage(t('teamExtra.resetAuthenticatorDone', { name: label }));
+    } catch (err: unknown) {
+      if (err instanceof SecurityRequestError && err.code === 'mfa_fresh') {
+        setError(t('teamExtra.resetAuthenticatorFresh'));
+      } else {
+        const message = err instanceof Error ? err.message : '';
+        setError(message || t('teamExtra.resetAuthenticatorFailed'));
+      }
+    } finally {
+      setBusy(false);
+      setResettingAuthUserId(null);
     }
   }
 
@@ -1249,8 +1289,7 @@ export function TeamManager({
           <div>
             <p className="text-xs font-bold uppercase text-gray-500 mb-2">{t('teamExtra.currentMembers')}</p>
             <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">
-              People can hold more than one role (for example Inventory + Loader). Use Edit roles to
-              change access. Password resets are owner/admin only.
+              {t('teamExtra.membersHint')}
             </p>
             <div className="space-y-2">
               {members.map((m) => {
@@ -1350,6 +1389,20 @@ export function TeamManager({
                           <KeyRound className="h-3.5 w-3.5" />
                           {resettingUserId === m.userId ? t('teamExtra.sending') : t('teamExtra.resetPassword')}
                         </button>
+                        {m.userId !== currentUserId && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleResetAuthenticator(m)}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            title={t('teamExtra.resetAuthenticatorTitle')}
+                          >
+                            <Shield className="h-3.5 w-3.5" />
+                            {resettingAuthUserId === m.userId
+                              ? t('teamExtra.sending')
+                              : t('teamExtra.resetAuthenticator')}
+                          </button>
+                        )}
                         {m.userId !== currentUserId && !isOwner && (
                           <button
                             type="button"

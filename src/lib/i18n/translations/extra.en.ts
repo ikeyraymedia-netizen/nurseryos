@@ -2151,7 +2151,18 @@ const extra = {
     emailDisconnected: 'Outbound email disconnected.',
     currentMembers: 'Current members',
     membersHint:
-      'People can hold more than one role (for example Inventory + Loader). Use Edit roles to change access. Password resets are owner/admin only.',
+      'People can hold more than one role (for example Inventory + Loader). Use Edit roles to change access. Password resets and authenticator resets are owner or admin only.',
+    resetAuthenticator: 'Reset authenticator',
+    resetAuthenticatorTitle: 'Clear their authenticator so they can set it up on a new phone',
+    resetAuthenticatorConfirm:
+      'Clear the authenticator for {{name}}? They will be signed out. The next time they sign in, NurseryOS will ask them to set up an authenticator app again. Use this when they lost the phone that had the code.',
+    resetAuthenticatorDone:
+      '{{name}} is signed out. They can sign in and set up an authenticator on the new phone.',
+    resetAuthenticatorFresh:
+      'Sign out and sign back in with your authenticator code, then reset theirs.',
+    resetAuthenticatorFailed: 'Could not reset the authenticator.',
+    cannotResetOwnAuthenticator:
+      'You cannot reset your own authenticator. Another owner or admin has to do it.',
     editRoles: 'Edit roles',
     assignRoles: 'Assign roles',
     saveRoles: 'Save roles',

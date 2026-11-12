@@ -146,6 +146,10 @@ export async function securityCompleteReset(token: string, password: string, fax
   await send('/api/security/password-reset/complete', 'POST', { token, password, fax_number: faxNumber });
 }
 
+export async function securityResetAuthenticator(tenantId: string, memberUserId: string): Promise<void> {
+  await send('/api/security/mfa-reset', 'POST', { tenantId, memberUserId }, true);
+}
+
 export async function securityRevokeMember(tenantId: string, memberUserId: string): Promise<void> {
   try {
     await send('/api/security/revoke-member', 'POST', { tenantId, memberUserId }, true);

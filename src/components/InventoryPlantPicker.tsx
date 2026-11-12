@@ -25,6 +25,52 @@ interface InventoryPlantPickerProps {
   applySizeOnSelect?: boolean;
 }
 
+export type PlantMenuBox = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
+/** Place the plant list on the visual viewport, including the iOS keyboard offset. */
+export function placePlantMenu(
+  rect: { top: number; bottom: number; left: number; width: number },
+  viewport: { offsetTop: number; offsetLeft: number; width: number; height: number }
+): PlantMenuBox {
+  const gap = 4;
+  const margin = 8;
+  const preferredHeight = 208;
+  const width = Math.min(
+    Math.max(rect.width, 220),
+    Math.max(160, viewport.width - margin * 2)
+  );
+  const minLeft = viewport.offsetLeft + margin;
+  const maxLeft = viewport.offsetLeft + viewport.width - width - margin;
+  const left = Math.min(Math.max(rect.left + viewport.offsetLeft, minLeft), Math.max(minLeft, maxLeft));
+
+  const inputTop = rect.top + viewport.offsetTop;
+  const inputBottom = rect.bottom + viewport.offsetTop;
+  const viewTop = viewport.offsetTop;
+  const viewBottom = viewport.offsetTop + viewport.height;
+  const spaceBelow = viewBottom - inputBottom - gap - margin;
+  const spaceAbove = inputTop - viewTop - gap - margin;
+  const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow;
+
+  if (openAbove) {
+    const maxHeight = Math.max(96, Math.min(preferredHeight, spaceAbove));
+    return { top: Math.max(viewTop + margin, inputTop - gap - maxHeight), left, width, maxHeight };
+  }
+
+  const maxHeight = Math.max(96, Math.min(preferredHeight, Math.max(spaceBelow, 96)));
+  const top = inputBottom + gap;
+  return {
+    top: Math.min(top, Math.max(viewTop + margin, viewBottom - margin - maxHeight)),
+    left,
+    width,
+    maxHeight
+  };
+}
+
 function resolveContainerSizeId(size: string, weights: ContainerWeight[]): string {
   const raw = size.trim();
   if (!raw) return '';
@@ -78,7 +124,7 @@ export function InventoryPlantPicker({
   applySizeOnSelect = true
 }: InventoryPlantPickerProps) {
   const [open, setOpen] = useState(false);
-  const [menuBox, setMenuBox] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuBox, setMenuBox] = useState<PlantMenuBox | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -106,14 +152,31 @@ export function InventoryPlantPicker({
     const place = () => {
       const rect = inputRef.current?.getBoundingClientRect();
       if (!rect) return;
-      setMenuBox({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 220) });
+      const visual = window.visualViewport;
+      setMenuBox(
+        placePlantMenu(rect, {
+          offsetTop: visual?.offsetTop ?? 0,
+          offsetLeft: visual?.offsetLeft ?? 0,
+          width: visual?.width ?? window.innerWidth,
+          height: visual?.height ?? window.innerHeight
+        })
+      );
     };
     place();
+    const raf = window.requestAnimationFrame(place);
+    const afterKeyboard = window.setTimeout(place, 350);
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
+    const visual = window.visualViewport;
+    visual?.addEventListener('resize', place);
+    visual?.addEventListener('scroll', place);
     return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(afterKeyboard);
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
+      visual?.removeEventListener('resize', place);
+      visual?.removeEventListener('scroll', place);
     };
   }, [open, plantName, matches.length]);
 
@@ -197,13 +260,14 @@ export function InventoryPlantPicker({
         createPortal(
         <div
           ref={menuRef}
-          className="max-h-52 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg print:hidden"
+          className="overflow-auto overscroll-contain rounded-lg border border-gray-200 bg-white shadow-lg print:hidden"
           style={{
             position: 'fixed',
             top: menuBox.top,
             left: menuBox.left,
             width: menuBox.width,
-            zIndex: 80
+            maxHeight: menuBox.maxHeight,
+            zIndex: 240
           }}
         >
           {matches.length === 0 ? (
@@ -215,9 +279,9 @@ export function InventoryPlantPicker({
                 <button
                   key={plant.id}
                   type="button"
-                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={(e) => e.preventDefault()}
                   onClick={() => handleSelect(plant)}
-                  className={`w-full text-left px-3 py-2 text-xs border-b border-gray-50 last:border-0 hover:bg-ink-50 ${
+                  className={`w-full text-left px-3 py-3 sm:py-2 text-xs border-b border-gray-50 last:border-0 hover:bg-ink-50 touch-manipulation ${
                     selected ? 'bg-emerald-50' : ''
                   }`}
                 >

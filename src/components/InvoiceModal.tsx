@@ -2170,6 +2170,10 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     freightMethod?: FreightAllocationMethod,
     totalFreight?: number
   ): Promise<{ id: string; documentNumber: string } | null> => {
+    if (isCreditMemo && !salesRep.trim()) {
+      alert(t('invoice.creditMemoSalesRepRequired'));
+      return null;
+    }
     const saveStartedAt = Date.now();
     flushSync(() => {
       setQboSaving(true);
@@ -3840,15 +3844,19 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
               )}
             </div>
 
-            {/* Sales Rep (profit attribution) */}
+            {/* Sales Rep (profit attribution). Required on credit memos. */}
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
-                Sales Rep
+                {t('invoice.salesRep')}
+                {isCreditMemo ? ' *' : ''}
               </label>
               <select
                 value={salesRep}
                 onChange={(e) => setSalesRep(e.target.value)}
-                className="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800"
+                required={isCreditMemo}
+                className={`w-full px-3 py-1.5 border rounded-xl focus:outline-none focus:border-ink-500 bg-white font-semibold text-gray-800 ${
+                  isCreditMemo && !salesRep.trim() ? 'border-amber-400' : 'border-gray-200'
+                }`}
               >
                 <option value="">{t('invoice.unassigned')}</option>
                 {salesRepOptions.map((name) => (
@@ -3860,9 +3868,14 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                   <option value={salesRep}>{salesRep}</option>
                 )}
               </select>
-              <p className="text-[10px] text-gray-400 mt-1 leading-snug">
-                Credits this {docLabel.toLowerCase()}&apos;s profit to the rep in Reports. Options are Owners, Admins,
-                and team members with the Sales role.
+              <p
+                className={`text-[10px] mt-1 leading-snug ${
+                  isCreditMemo ? 'text-amber-800' : 'text-gray-400'
+                }`}
+              >
+                {isCreditMemo
+                  ? t('invoice.creditMemoSalesRepRequired')
+                  : `Credits this ${docLabel.toLowerCase()}'s profit to the rep in Reports. Options are Owners, Admins, and team members with the Sales role.`}
               </p>
             </div>
 

@@ -939,6 +939,8 @@ const extra = {
     addEstimateLine: 'Add plant line',
     removeLine: 'Remove line',
     creditMemoLinesRequired: 'Add at least one plant line with a name before saving the credit memo.',
+    creditMemoSalesRepRequired:
+      'Select a sales rep before saving this credit memo. The credit counts against that rep\'s sales.',
     estimateLinesRequired: 'Add at least one plant line with a name before saving the estimate.',
     invoiceLinesRequired: 'Add at least one plant line with a name before saving the invoice.',
     linkCustomer: 'Link a customer on the order to save this under their account.',

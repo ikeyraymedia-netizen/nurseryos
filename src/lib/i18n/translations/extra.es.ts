@@ -948,6 +948,8 @@ const extra = {
     removeLine: 'Quitar línea',
     creditMemoLinesRequired:
       'Agregue al menos una línea de planta con nombre antes de guardar la nota de crédito.',
+    creditMemoSalesRepRequired:
+      'Seleccione un representante de ventas antes de guardar esta nota de crédito. El crédito se resta de las ventas de ese representante.',
     estimateLinesRequired:
       'Agregue al menos una línea de planta con nombre antes de guardar el presupuesto.',
     invoiceLinesRequired:

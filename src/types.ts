@@ -48,8 +48,8 @@ export interface Tenant {
   /** URL slug for public availability, e.g. bayou-state → /a/bayou-state */
   publicAvailabilitySlug?: string;
   /**
-   * Bayou State only. Line-item “Called in” checkoff next to Pulled and Loaded.
-   * Omit or true = on for that nursery. false = hidden.
+   * Seller console. Line-item “Called in” checkoff next to Pulled and Loaded.
+   * Off unless explicitly enabled for this nursery.
    */
   calledInEnabled?: boolean;
   /** Include qty on the public availability page/API. Default true. */

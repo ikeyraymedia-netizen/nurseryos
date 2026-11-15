@@ -2044,7 +2044,7 @@ const extra = {
     remittanceTitle: 'Remit payments to',
     calledInTitle: 'Called in',
     calledInHint:
-      'Shows a Called in toggle next to Pulled and Loaded on orders and trucks. It is not printed on pull sheets.',
+      'Shows a Called in toggle next to Pulled and Loaded on orders and trucks for this nursery only. It is not printed on pull sheets.',
     calledInOn: 'On',
     calledInOff: 'Off',
     remittanceHint:

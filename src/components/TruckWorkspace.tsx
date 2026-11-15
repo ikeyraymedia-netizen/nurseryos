@@ -92,7 +92,7 @@ interface TruckWorkspaceProps {
   nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
-  /** Bayou State: Called in toggle beside Pulled and Loaded. */
+  /** Seller console: Called in toggle beside Pulled and Loaded. */
   showCalledIn?: boolean;
   onEditTruck: () => void;
   onSelectOrder: (orderId: string) => void;

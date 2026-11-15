@@ -14,6 +14,7 @@ import {
   listAllTenants,
   updateTenantModules,
   updateTenantShippingAddress,
+  updateTenantCalledInEnabled,
   updateTenantLogoUrl,
   resolveNurseryShippingAddress
 } from '../lib/tenants';
@@ -65,6 +66,7 @@ export function PlatformDashboard({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [savingCalledIn, setSavingCalledIn] = useState(false);
   const [savingLogo, setSavingLogo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -362,6 +364,25 @@ export function PlatformDashboard({
       setError(err?.message || 'Failed to save ship-from address.');
     } finally {
       setSavingAddress(false);
+    }
+  }
+
+  async function handleToggleCalledIn() {
+    if (!selected) return;
+    const next = selected.calledInEnabled !== true;
+    setSavingCalledIn(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await updateTenantCalledInEnabled(selected.id, next);
+      setTenants((prev) =>
+        prev.map((t) => (t.id === selected.id ? { ...t, calledInEnabled: next } : t))
+      );
+      setMessage(next ? 'Called in is on for this nursery.' : 'Called in is off for this nursery.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save Called in.');
+    } finally {
+      setSavingCalledIn(false);
     }
   }
 
@@ -780,6 +801,36 @@ export function PlatformDashboard({
                     );
                   })}
                 </div>
+
+                <button
+                  type="button"
+                  disabled={savingCalledIn}
+                  aria-pressed={selected.calledInEnabled === true}
+                  onClick={() => void handleToggleCalledIn()}
+                  className={`w-full text-left rounded-xl border px-3 py-3 flex items-start gap-3 transition-colors disabled:opacity-50 ${
+                    selected.calledInEnabled === true
+                      ? 'border-amber-600/50 bg-amber-950/30'
+                      : 'border-slate-700 bg-slate-950/40 hover:bg-slate-800/40'
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
+                      selected.calledInEnabled === true
+                        ? 'bg-amber-600 border-amber-500 text-white'
+                        : 'border-slate-600'
+                    }`}
+                  >
+                    {selected.calledInEnabled === true && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-white">Called in</span>
+                    <span className="block text-[11px] text-slate-400 mt-0.5">
+                      Adds a Called in check next to Pulled and Loaded on this nursery’s orders and
+                      trucks. Off for every nursery until you turn it on here. Not printed on pull
+                      sheets.
+                    </span>
+                  </span>
+                </button>
 
                 <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">

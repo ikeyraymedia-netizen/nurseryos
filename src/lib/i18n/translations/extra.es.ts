@@ -2063,7 +2063,7 @@ const extra = {
     remittanceTitle: 'Enviar pagos a',
     calledInTitle: 'Llamado',
     calledInHint:
-      'Muestra un interruptor de Llamado junto a Extraído y Cargado en pedidos y camiones. No se imprime en las hojas de extracción.',
+      'Muestra un interruptor de Llamado junto a Extraído y Cargado solo en este vivero. No se imprime en las hojas de extracción.',
     calledInOn: 'Activado',
     calledInOff: 'Apagado',
     remittanceHint:

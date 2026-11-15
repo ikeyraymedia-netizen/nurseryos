@@ -1315,24 +1315,11 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
 
           {(uploadKind === 'order' || uploadKind === 'estimate') && (
           <div className="border-t border-ink-200/80 pt-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <Sprout className="h-4 w-4 text-ink-700 shrink-0" />
-                <p className="text-sm font-bold text-gray-900">
-                  {isManualDraft ? 'Plant lines' : t('upload.linkInventory')}
-                </p>
-              </div>
-              {isManualDraft && (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={addManualDraftLine}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50 shrink-0"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add line
-                </button>
-              )}
+            <div className="flex items-center gap-2 min-w-0">
+              <Sprout className="h-4 w-4 text-ink-700 shrink-0" />
+              <p className="text-sm font-bold text-gray-900">
+                {isManualDraft ? 'Plant lines' : t('upload.linkInventory')}
+              </p>
             </div>
             <p className="text-[11px] text-gray-500 leading-relaxed">
               {isManualDraft
@@ -1704,6 +1691,17 @@ export const OrderUploader: React.FC<OrderUploaderProps> = ({
                 );
               })}
             </div>
+            {isManualDraft && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={addManualDraftLine}
+                className="w-full inline-flex items-center justify-center gap-1 px-2.5 py-2 rounded-lg border border-ink-200 bg-white text-ink-900 text-[11px] font-bold hover:bg-ink-50 disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add line
+              </button>
+            )}
           </div>
           )}
 

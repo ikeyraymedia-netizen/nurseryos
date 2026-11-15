@@ -641,7 +641,7 @@ const extra = {
       'P&L, balance sheet, trial balance, sales, sales tax, cash flow, expenses, and a transaction list. Every report exports to CSV.',
     acctIntroTitle: 'Accounting pack',
     acctIntroBody:
-      'These are the books a nursery keeps for the year: profit and loss on accrual or cash, balance sheet, trial balance, sales by customer, sales tax split into taxable and exempt, cash flow, vendor expenses, receivables, payables, and a transaction list. Each one exports to CSV. Payroll, bank reconciliation, and journal entries on a custom chart of accounts stay in QuickBooks — NurseryOS does not store those.',
+      'These are the books a nursery keeps for the year: profit and loss on accrual or cash, balance sheet, trial balance, sales by customer, sales tax split into taxable and exempt, cash flow, vendor expenses, receivables, payables, and a transaction list. Each one exports to CSV.',
     acctPeriod: 'Period',
     acctPeriodMonth: 'This month',
     acctPeriodQuarter: 'This quarter',

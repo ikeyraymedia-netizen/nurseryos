@@ -646,7 +646,7 @@ const extra = {
       'P&G, balance, balanza de comprobación, ventas, impuesto, flujo de efectivo, gastos y lista de transacciones. Cada reporte se exporta a CSV.',
     acctIntroTitle: 'Paquete contable',
     acctIntroBody:
-      'Estos son los libros del año: estado de resultados en base devengado o de efectivo, balance general, balanza de comprobación, ventas por cliente, impuesto dividido en gravable y exento, flujo de efectivo, gastos de proveedores, cuentas por cobrar, por pagar y una lista de transacciones. Cada uno se exporta a CSV. La nómina, la conciliación bancaria y los asientos en un catálogo de cuentas propio siguen en QuickBooks — NurseryOS no guarda eso.',
+      'Estos son los libros del año: estado de resultados en base devengado o de efectivo, balance general, balanza de comprobación, ventas por cliente, impuesto dividido en gravable y exento, flujo de efectivo, gastos de proveedores, cuentas por cobrar, por pagar y una lista de transacciones. Cada uno se exporta a CSV.',
     acctPeriod: 'Período',
     acctPeriodMonth: 'Este mes',
     acctPeriodQuarter: 'Este trimestre',

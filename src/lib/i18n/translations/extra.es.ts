@@ -519,7 +519,11 @@ const extra = {
     notAvailable: 'Los reportes están disponibles para dueños, administradores y personal de oficina.',
     title: 'Reportes',
     subtitle:
-      'Números sólidos de facturas guardadas bajo un cliente. Pregunte a la IA abajo para información narrativa.',
+      'Números sólidos de facturas guardadas bajo un cliente.',
+    sectionOverview: 'Resumen',
+    sectionSales: 'Ventas',
+    sectionPayments: 'Pagos',
+    sectionReps: 'Representantes',
     refresh: 'Actualizar',
     loadFailed: 'No se pudieron cargar documentos:',
     docsLoadFailed: 'No se pudieron cargar facturas/presupuestos guardados.',
@@ -637,6 +641,7 @@ const extra = {
     askAiOptional: 'Preguntar a IA (opcional)',
     tabSales: 'Ventas',
     tabAccounting: 'Contabilidad',
+    tabAi: 'Reporte con IA',
     subtitleAccounting:
       'P&G, balance, balanza de comprobación, ventas, impuesto, flujo de efectivo, gastos y lista de transacciones. Cada reporte se exporta a CSV.',
     acctIntroTitle: 'Paquete contable',

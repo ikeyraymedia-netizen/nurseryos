@@ -11,7 +11,6 @@ import {
   Users,
   Sprout,
   Calendar,
-  DollarSign,
   FileText
 } from 'lucide-react';
 import {
@@ -799,7 +798,7 @@ export function ReportsWorkspace({
   const [auditError, setAuditError] = useState<string | null>(null);
   const [vendorBills, setVendorBills] = useState<VendorBill[]>([]);
   const [containerWeights, setContainerWeights] = useState<ContainerWeight[]>([]);
-  const [viewMode, setViewMode] = useState<'sales' | 'accounting'>('sales');
+  const [viewMode, setViewMode] = useState<'sales' | 'accounting' | 'ai'>('sales');
 
   useEffect(() => {
     if (!permissions.canViewInventory) {
@@ -886,12 +885,10 @@ export function ReportsWorkspace({
     [orders, trucks, customers, inventory, reportDocuments]
   );
   const invoiceCount = salesSnapshot.invoiceCount;
-  const estimateCount = salesSnapshot.estimateCount;
   const profitByRep = useMemo(
     () => buildProfitByRep(reportDocuments, orders),
     [reportDocuments, orders]
   );
-  const paymentStatus = useMemo(() => buildPaymentStatus(reportDocuments), [reportDocuments]);
   const periodSales = useMemo(
     () => buildPeriodSalesOverview(reportDocuments, orders),
     [reportDocuments, orders]
@@ -1073,7 +1070,9 @@ export function ReportsWorkspace({
                 ? t('reports.subtitleYard')
                 : viewMode === 'accounting'
                   ? t('reports.subtitleAccounting')
-                  : t('reports.subtitle')}
+                  : viewMode === 'ai'
+                    ? t('reports.askAiSubtitle')
+                    : t('reports.subtitle')}
             </p>
           </div>
         </div>
@@ -1117,6 +1116,17 @@ export function ReportsWorkspace({
           >
             {t('reports.tabAccounting')}
           </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('ai')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border ${
+              viewMode === 'ai'
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t('reports.tabAi')}
+          </button>
         </div>
         )}
 
@@ -1129,7 +1139,7 @@ export function ReportsWorkspace({
           />
         ) : (
           <>
-        {!yardOnly && (
+        {viewMode === 'sales' && !yardOnly && (
         <>
         {docsError && (
           <p className="text-xs text-red-700 font-semibold bg-red-50 border border-red-100 rounded-xl px-3 py-2">
@@ -1142,6 +1152,10 @@ export function ReportsWorkspace({
           </p>
         )}
 
+        <section className="space-y-3">
+          <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+            {t('reports.sectionOverview')}
+          </h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-2xl border border-ink-200 bg-ink-50/50 px-3.5 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-ink-700/80">
@@ -1179,129 +1193,24 @@ export function ReportsWorkspace({
               {t('reports.invoiceCount', { n: periodSales.month.invoiceCount })}
             </p>
           </div>
-          <div className="rounded-2xl border border-teal-200 bg-teal-50/50 px-3.5 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800/80">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
               {t('reports.salesWeek')}
             </p>
             <p className="text-xl font-black text-gray-900 font-mono mt-1 tabular-nums">
               {money(periodSales.week.salesTotal)}
             </p>
-            <p className="text-[11px] text-teal-900/70 mt-0.5">
+            <p className="text-[11px] text-slate-500 mt-0.5">
               {t('reports.sunToday', { n: periodSales.week.invoiceCount })}
             </p>
           </div>
         </div>
+        </section>
 
-        <div className="border border-indigo-200 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-indigo-200 bg-indigo-50/60">
-            <Users className="h-4 w-4 text-indigo-700 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">
-                {t('reports.repYtd')}
-              </p>
-              <p className="text-xs font-semibold text-gray-800">
-                {t('reports.repTotals', { year: now.getFullYear() })}
-              </p>
-            </div>
-          </div>
-          {periodSales.repYear.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-gray-500">
-              {t('reports.noInvoicesYear')}
-            </p>
-          ) : (
-            <div className="overflow-x-auto max-h-72 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                    <th className="text-left font-bold px-4 py-2">{t('reports.salesRep')}</th>
-                    <th className="text-right font-bold px-3 py-2">{t('reports.repWeek')}</th>
-                    <th className="text-right font-bold px-3 py-2">{t('reports.repMonth')}</th>
-                    <th className="text-right font-bold px-3 py-2">
-                      {t('reports.repQuarter', { q: quarterNum })}
-                    </th>
-                    <th className="text-right font-bold px-4 py-2">
-                      {t('reports.repYear', { year: now.getFullYear() })}
-                    </th>
-                    <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {periodSales.repYear.map((row) => (
-                    <tr
-                      key={row.rep}
-                      className={row.rep === NO_SALES_REP_LABEL ? 'bg-slate-50' : 'bg-white'}
-                    >
-                      <td
-                        className={`text-left font-bold px-4 py-2 ${
-                          row.rep === NO_SALES_REP_LABEL
-                            ? 'text-slate-500 italic'
-                            : 'text-gray-900'
-                        }`}
-                      >
-                        {displayRep(row.rep)}
-                      </td>
-                      <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
-                        {money(row.weekTotal)}
-                      </td>
-                      <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
-                        {money(row.monthTotal)}
-                      </td>
-                      <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
-                        {money(row.quarterTotal)}
-                      </td>
-                      <td className="text-right font-mono font-black text-indigo-800 px-4 py-2 tabular-nums">
-                        {money(row.salesTotal)}
-                      </td>
-                      <td className="text-right font-mono text-gray-500 px-3 py-2">
-                        {row.invoiceCount}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="sticky bottom-0 bg-indigo-50/90 border-t border-indigo-200">
-                  <tr className="font-bold">
-                    <td className="text-left px-4 py-2 text-indigo-900">{t('reports.repAllTotal')}</td>
-                    <td className="text-right font-mono px-3 py-2 tabular-nums">
-                      {money(periodSales.week.salesTotal)}
-                    </td>
-                    <td className="text-right font-mono px-3 py-2 tabular-nums">
-                      {money(periodSales.month.salesTotal)}
-                    </td>
-                    <td className="text-right font-mono px-3 py-2 tabular-nums">
-                      {money(periodSales.quarter.salesTotal)}
-                    </td>
-                    <td className="text-right font-mono font-black text-indigo-900 px-4 py-2 tabular-nums">
-                      {money(periodSales.year.salesTotal)}
-                    </td>
-                    <td className="text-right font-mono text-gray-600 px-3 py-2">
-                      {periodSales.year.invoiceCount}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3.5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800/80">
-              {t('reports.outstanding')}
-            </p>
-            <p className="text-[11px] text-amber-900/70 mt-0.5">
-              {t('reports.outstandingSummary', {
-                unpaid: paymentStatus.unpaidCount,
-                pending: paymentStatus.pendingCount,
-                invoices: invoiceCount,
-                estimates: estimateCount
-              })}
-            </p>
-          </div>
-          <p className="text-xl font-black text-gray-900 font-mono tabular-nums shrink-0">
-            {money(paymentStatus.outstandingTotal)}
-          </p>
-        </div>
-
+        <section className="space-y-3">
+          <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+            {t('reports.sectionSales')}
+          </h3>
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
@@ -1389,8 +1298,8 @@ export function ReportsWorkspace({
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-4">
-          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+
+        <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
               <Calendar className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
@@ -1431,50 +1340,108 @@ export function ReportsWorkspace({
               </div>
             )}
           </div>
+        </section>
 
+        <section className="space-y-3">
+          <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+            {t('reports.sectionReps')}
+          </h3>
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
-              <DollarSign className="h-4 w-4 text-ink-700 shrink-0" />
+              <Users className="h-4 w-4 text-ink-700 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                  {t('reports.payments')}
+                  {t('reports.repYtd')}
                 </p>
-                <p className="text-xs font-semibold text-gray-800">{t('reports.paidVsOwed')}</p>
+                <p className="text-xs font-semibold text-gray-800">
+                  {t('reports.repTotals', { year: now.getFullYear() })}
+                </p>
               </div>
             </div>
-            <div className="p-4 space-y-2.5 bg-slate-50/40">
-              <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-emerald-100 px-3 py-2.5">
-                <span className="text-xs font-bold text-emerald-900">{t('customers.paid')}</span>
-                <span className="text-xs font-mono font-black text-emerald-800">
-                  {paymentStatus.paidCount} · {money(paymentStatus.paidTotal)}
-                </span>
+            {periodSales.repYear.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">{t('reports.noInvoicesYear')}</p>
+            ) : (
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
+                      <th className="text-left font-bold px-4 py-2">{t('reports.salesRep')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.repWeek')}</th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.repMonth')}</th>
+                      <th className="text-right font-bold px-3 py-2">
+                        {t('reports.repQuarter', { q: quarterNum })}
+                      </th>
+                      <th className="text-right font-bold px-4 py-2">
+                        {t('reports.repYear', { year: now.getFullYear() })}
+                      </th>
+                      <th className="text-right font-bold px-3 py-2">{t('reports.invoices')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {periodSales.repYear.map((row) => (
+                      <tr
+                        key={row.rep}
+                        className={row.rep === NO_SALES_REP_LABEL ? 'bg-slate-50' : 'bg-white'}
+                      >
+                        <td
+                          className={`text-left font-bold px-4 py-2 ${
+                            row.rep === NO_SALES_REP_LABEL
+                              ? 'text-slate-500 italic'
+                              : 'text-gray-900'
+                          }`}
+                        >
+                          {displayRep(row.rep)}
+                        </td>
+                        <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
+                          {money(row.weekTotal)}
+                        </td>
+                        <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
+                          {money(row.monthTotal)}
+                        </td>
+                        <td className="text-right font-mono text-gray-800 px-3 py-2 tabular-nums">
+                          {money(row.quarterTotal)}
+                        </td>
+                        <td className="text-right font-mono font-black text-gray-900 px-4 py-2 tabular-nums">
+                          {money(row.salesTotal)}
+                        </td>
+                        <td className="text-right font-mono text-gray-500 px-3 py-2">
+                          {row.invoiceCount}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="sticky bottom-0 bg-slate-50 border-t border-slate-200">
+                    <tr className="font-bold">
+                      <td className="text-left px-4 py-2 text-gray-900">{t('reports.repAllTotal')}</td>
+                      <td className="text-right font-mono px-3 py-2 tabular-nums">
+                        {money(periodSales.week.salesTotal)}
+                      </td>
+                      <td className="text-right font-mono px-3 py-2 tabular-nums">
+                        {money(periodSales.month.salesTotal)}
+                      </td>
+                      <td className="text-right font-mono px-3 py-2 tabular-nums">
+                        {money(periodSales.quarter.salesTotal)}
+                      </td>
+                      <td className="text-right font-mono font-black text-gray-900 px-4 py-2 tabular-nums">
+                        {money(periodSales.year.salesTotal)}
+                      </td>
+                      <td className="text-right font-mono text-gray-600 px-3 py-2">
+                        {periodSales.year.invoiceCount}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
-              <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-amber-100 px-3 py-2.5">
-                <span className="text-xs font-bold text-amber-900">{t('reports.payLinkPending')}</span>
-                <span className="text-xs font-mono font-black text-amber-800">
-                  {paymentStatus.pendingCount}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2.5">
-                <span className="text-xs font-bold text-slate-700">{t('reports.unpaidNoLink')}</span>
-                <span className="text-xs font-mono font-black text-slate-800">
-                  {paymentStatus.unpaidCount}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
-                {t('reports.outstandingFootnote', { amount: money(paymentStatus.outstandingTotal) })}
-              </p>
-            </div>
+            )}
           </div>
-        </div>
 
         {permissions.canViewProfit && (
-          <div className="border border-indigo-200 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-indigo-200 bg-indigo-50/60">
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
               <div className="flex items-center gap-2 min-w-0">
-                <BarChart3 className="h-4 w-4 text-indigo-700 shrink-0" />
+                <BarChart3 className="h-4 w-4 text-ink-700 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
                     {t('reports.profitRep')}
                   </p>
                   <p className="text-xs font-semibold text-gray-800 truncate">
@@ -1482,7 +1449,7 @@ export function ReportsWorkspace({
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold uppercase text-indigo-400 tracking-wide shrink-0">
+              <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wide shrink-0">
                 {t('reports.internalOnly')}
               </span>
             </div>
@@ -1545,9 +1512,11 @@ export function ReportsWorkspace({
             )}
           </div>
         )}
+        </section>
         </>
         )}
 
+        {(viewMode === 'ai' || yardOnly) && (
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50">
             <div className="flex items-center gap-2 min-w-0">
@@ -1702,8 +1671,9 @@ export function ReportsWorkspace({
             )}
           </div>
         </div>
+        )}
 
-        {!yardOnly && (
+        {viewMode === 'sales' && !yardOnly && (
         <div className="border border-slate-200 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-200 bg-white">
             <div className="flex items-center gap-2 min-w-0">

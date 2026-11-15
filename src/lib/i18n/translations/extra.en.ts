@@ -515,7 +515,11 @@ const extra = {
     notAvailable: 'Reports are available to owners, admins, and office staff.',
     title: 'Reports',
     subtitle:
-      'Solid numbers from invoices you saved under a customer. Ask AI below for narrative insights.',
+      'Solid numbers from invoices you saved under a customer.',
+    sectionOverview: 'Overview',
+    sectionSales: 'Sales',
+    sectionPayments: 'Payments',
+    sectionReps: 'Sales reps',
     refresh: 'Refresh',
     loadFailed: 'Could not load documents:',
     docsLoadFailed: 'Could not load saved invoices/estimates.',
@@ -632,6 +636,7 @@ const extra = {
     askAiOptional: 'Ask AI (optional)',
     tabSales: 'Sales',
     tabAccounting: 'Accounting',
+    tabAi: 'Run AI report',
     subtitleAccounting:
       'P&L, balance sheet, trial balance, sales, sales tax, cash flow, expenses, and a transaction list. Every report exports to CSV.',
     acctIntroTitle: 'Accounting pack',

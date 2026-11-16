@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildDayRecap, welcomeFirstName } from './dayRecap.ts';
+import { buildDayRecap, dayRecapIsEmpty, welcomeFirstName } from './dayRecap.ts';
 import type { CustomerDocument, CustomerOrder, InventoryPlant, Truck, VendorBill } from '../types.ts';
 
 const day = '2026-11-15';
@@ -20,6 +20,7 @@ test('the morning recap is trucks today, recent payments, overdue customers, due
     includeAlerts: true,
     includePayments: true,
     includeTrucks: true,
+    includeOrders: false,
     includeOverdue: true,
     includeBills: true,
     includeInventory: true,
@@ -182,6 +183,8 @@ test('the morning recap is trucks today, recent payments, overdue customers, due
     recap.trucks.map((row) => row.name),
     ['Lafayette']
   );
+  assert.equal(recap.showOrders, false);
+  assert.deepEqual(recap.orders, []);
   assert.deepEqual(
     recap.overdue.map((row) => row.documentNumber),
     ['900', '901']
@@ -197,4 +200,112 @@ test('the morning recap is trucks today, recent payments, overdue customers, due
     recap.unavailable.map((row) => row.plantName),
     ['Holly']
   );
+});
+
+test('orders this week follow truck loading dates and direct-ship dates', () => {
+  const recap = buildDayRecap({
+    dayKey: day,
+    includeAlerts: false,
+    includePayments: false,
+    includeTrucks: true,
+    includeOrders: true,
+    includeOverdue: false,
+    includeBills: false,
+    includeInventory: false,
+    orders: [
+      {
+        id: 'week-order',
+        customerName: 'Week Co',
+        orderNumber: '200',
+        truckId: 'truck-mon'
+      },
+      {
+        id: 'next-week-order',
+        customerName: 'Later Co',
+        orderNumber: '201',
+        truckId: 'truck-next'
+      },
+      {
+        id: 'direct-week',
+        customerName: 'Ship Co',
+        orderNumber: '202',
+        directShip: true,
+        directShipDate: '2026-11-18'
+      },
+      {
+        id: 'direct-later',
+        customerName: 'Later Ship',
+        orderNumber: '203',
+        directShip: true,
+        directShipDate: '2026-11-22'
+      },
+      {
+        id: 'unscheduled',
+        customerName: 'Loose Co',
+        orderNumber: '204'
+      }
+    ] as CustomerOrder[],
+    trucks: [
+      {
+        id: 'truck-mon',
+        name: 'Monday',
+        status: 'pending',
+        loadingDate: '2026-11-16',
+        dateCreated: '2026-11-01T12:00:00.000Z',
+        orderIds: ['week-order']
+      },
+      {
+        id: 'truck-next',
+        name: 'Next Sunday',
+        status: 'pending',
+        loadingDate: '2026-11-22',
+        dateCreated: '2026-11-01T12:00:00.000Z',
+        orderIds: ['next-week-order']
+      }
+    ] as Truck[],
+    documents: [] as CustomerDocument[],
+    plants: [] as InventoryPlant[],
+    bills: [] as VendorBill[]
+  });
+
+  assert.deepEqual(
+    recap.orders.map((row) => ({
+      orderNumber: row.orderNumber,
+      customerName: row.customerName,
+      date: row.date
+    })),
+    [
+      { orderNumber: '200', customerName: 'Week Co', date: '2026-11-16' },
+      { orderNumber: '202', customerName: 'Ship Co', date: '2026-11-18' }
+    ]
+  );
+  assert.equal(recap.showOrders, true);
+  assert.equal(dayRecapIsEmpty(recap), false);
+
+  const hidden = buildDayRecap({
+    dayKey: day,
+    includeAlerts: false,
+    includePayments: false,
+    includeTrucks: false,
+    includeOrders: false,
+    includeOverdue: false,
+    includeBills: false,
+    includeInventory: false,
+    orders: [
+      {
+        id: 'direct-week',
+        customerName: 'Ship Co',
+        orderNumber: '202',
+        directShip: true,
+        directShipDate: '2026-11-18'
+      }
+    ] as CustomerOrder[],
+    trucks: [] as Truck[],
+    documents: [] as CustomerDocument[],
+    plants: [] as InventoryPlant[],
+    bills: [] as VendorBill[]
+  });
+  assert.equal(hidden.showOrders, false);
+  assert.deepEqual(hidden.orders, []);
+  assert.equal(dayRecapIsEmpty(hidden), true);
 });

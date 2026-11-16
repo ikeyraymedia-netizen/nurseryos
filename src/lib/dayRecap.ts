@@ -21,6 +21,13 @@ export interface DayRecapTruck {
   loadingDate: string;
 }
 
+export interface DayRecapOrder {
+  id: string;
+  customerName: string;
+  orderNumber: string;
+  date: string;
+}
+
 export type DayRecapAlertKind = 'order' | 'plant' | 'truck' | 'inventory';
 
 export interface DayRecapAlert {
@@ -59,6 +66,8 @@ export interface DayRecap {
   payments: DayRecapPayment[];
   trucks: DayRecapTruck[];
   showTrucks: boolean;
+  orders: DayRecapOrder[];
+  showOrders: boolean;
   overdue: DayRecapOverdue[];
   bills: DayRecapBill[];
   unavailable: DayRecapUnavailable[];
@@ -123,6 +132,7 @@ export function dayRecapIsEmpty(recap: DayRecap): boolean {
     recap.alerts.length === 0 &&
     recap.payments.length === 0 &&
     recap.trucks.length === 0 &&
+    recap.orders.length === 0 &&
     recap.overdue.length === 0 &&
     recap.bills.length === 0 &&
     recap.unavailable.length === 0
@@ -130,6 +140,23 @@ export function dayRecapIsEmpty(recap: DayRecap): boolean {
 }
 
 const ALERT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Truck loading day this week, otherwise a direct-ship date this week. */
+function orderGoesOutThisWeek(order: CustomerOrder, trucks: Truck[], weekDays: Set<string>): string {
+  let truckDate = '';
+  for (const truck of trucks) {
+    const day = (truck.loadingDate || '').trim().slice(0, 10);
+    if (!weekDays.has(day)) continue;
+    const onTruck =
+      (truck.orderIds || []).includes(order.id) || (!!order.truckId && order.truckId === truck.id);
+    if (!onTruck) continue;
+    if (!truckDate || day < truckDate) truckDate = day;
+  }
+  if (truckDate) return truckDate;
+  if (!order.directShip) return '';
+  const directDate = (order.directShipDate || '').trim().slice(0, 10);
+  return weekDays.has(directDate) ? directDate : '';
+}
 
 function alertSince(since: string | null | undefined, dayKey: string): string {
   const floor = new Date(Date.now() - ALERT_LOOKBACK_MS).toISOString();
@@ -149,6 +176,7 @@ export function buildDayRecap(params: {
   includeAlerts: boolean;
   includePayments: boolean;
   includeTrucks: boolean;
+  includeOrders: boolean;
   includeOverdue: boolean;
   includeBills: boolean;
   includeInventory: boolean;
@@ -252,6 +280,26 @@ export function buildDayRecap(params: {
     trucks.sort((a, b) => a.loadingDate.localeCompare(b.loadingDate) || a.name.localeCompare(b.name));
   }
 
+  const orders: DayRecapOrder[] = [];
+  if (params.includeOrders) {
+    for (const order of params.orders) {
+      const date = orderGoesOutThisWeek(order, params.trucks, weekDays);
+      if (!date) continue;
+      orders.push({
+        id: order.id,
+        customerName: order.customerName || 'Customer',
+        orderNumber: order.orderNumber || '',
+        date
+      });
+    }
+    orders.sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        a.customerName.localeCompare(b.customerName) ||
+        a.orderNumber.localeCompare(b.orderNumber)
+    );
+  }
+
   const overdue: DayRecapOverdue[] = [];
   if (params.includeOverdue) {
     for (const doc of params.documents) {
@@ -308,6 +356,8 @@ export function buildDayRecap(params: {
     payments,
     trucks,
     showTrucks: params.includeTrucks,
+    orders,
+    showOrders: params.includeOrders,
     overdue,
     bills,
     unavailable

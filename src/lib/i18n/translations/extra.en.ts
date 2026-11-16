@@ -1778,6 +1778,8 @@ const extra = {
     payments: 'Payments received',
     trucks: 'Trucks this week',
     noTrucks: 'None scheduled this week',
+    orders: 'Orders this week',
+    noOrders: 'None going out this week',
     overdue: 'Overdue invoices',
     bills: 'Vendor bills due',
     billsOverdue: 'Vendor bills overdue',

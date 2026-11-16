@@ -800,6 +800,7 @@ function NurseryApp({
             source.permissions.canViewInventory,
           includePayments: source.permissions.canViewInvoices,
           includeTrucks: source.permissions.canViewTrucks,
+          includeOrders: source.permissions.canViewOrders,
           includeOverdue: source.permissions.canViewInvoices,
           includeBills: source.permissions.canViewPurchasing,
           includeInventory: source.permissions.canViewInventory

@@ -46,6 +46,7 @@ import {
   watchAuth
 } from '../lib/tenants';
 import { setActiveTenant } from '../lib/db';
+import { reloadAppForUpdates } from '../lib/reloadApp';
 import { setInventoryTenant } from '../lib/inventory';
 import { setCustomersTenant } from '../lib/customers';
 import { setDocumentsTenant } from '../lib/documents';
@@ -206,13 +207,13 @@ export function AuthGate({ children }: AuthGateProps) {
     setSecurityBlocked(false);
   }
 
-  async function hydrateSession(nextUser: User, rotate = false): Promise<void> {
+  async function hydrateSession(nextUser: User, rotate = false): Promise<boolean> {
     const loadGen = ++authLoadGenRef.current;
     setBootError(null);
     setUser(nextUser);
 
     const nextProfile = await getUserProfile(nextUser.uid);
-    if (loadGen !== authLoadGenRef.current) return;
+    if (loadGen !== authLoadGenRef.current) return false;
 
     const isPlatformAdmin = !!nextProfile?.isPlatformAdmin;
 
@@ -223,7 +224,7 @@ export function AuthGate({ children }: AuthGateProps) {
       setMember(null);
       clearTenantContexts();
       setAuthReady(true);
-      return;
+      return false;
     }
 
     // Seller / platform admin can sign in without a nursery membership.
@@ -238,9 +239,11 @@ export function AuthGate({ children }: AuthGateProps) {
         } catch (err) {
           setBootError(err instanceof Error ? err.message : 'Sign in again.');
           setSecurityBlocked(true);
+          setAuthReady(true);
+          return false;
         }
         setAuthReady(true);
-        return;
+        return true;
       }
       setBootError(translate(effectiveLocale, 'auth.noWorkspace'));
       setProfile(null);
@@ -248,12 +251,12 @@ export function AuthGate({ children }: AuthGateProps) {
       setMember(null);
       clearTenantContexts();
       setAuthReady(true);
-      return;
+      return false;
     }
 
     const nextTenant = await getTenant(nextProfile.activeTenantId);
     const nextMember = await getTenantMembership(nextProfile.activeTenantId, nextUser.uid);
-    if (loadGen !== authLoadGenRef.current) return;
+    if (loadGen !== authLoadGenRef.current) return false;
 
     if (!nextTenant || !nextMember) {
       if (isPlatformAdmin) {
@@ -266,9 +269,11 @@ export function AuthGate({ children }: AuthGateProps) {
         } catch (err) {
           setBootError(err instanceof Error ? err.message : 'Sign in again.');
           setSecurityBlocked(true);
+          setAuthReady(true);
+          return false;
         }
         setAuthReady(true);
-        return;
+        return true;
       }
       setBootError(translate(effectiveLocale, 'auth.workspaceNotFound'));
       setProfile(null);
@@ -276,11 +281,11 @@ export function AuthGate({ children }: AuthGateProps) {
       setMember(null);
       clearTenantContexts();
       setAuthReady(true);
-      return;
+      return false;
     }
 
     let resolvedTenant = nextTenant;
-    if (loadGen !== authLoadGenRef.current) return;
+    if (loadGen !== authLoadGenRef.current) return false;
 
     setProfile(nextProfile);
     setTenant(resolvedTenant);
@@ -291,8 +296,11 @@ export function AuthGate({ children }: AuthGateProps) {
     } catch (err) {
       setBootError(err instanceof Error ? err.message : 'Sign in again.');
       setSecurityBlocked(true);
+      setAuthReady(true);
+      return false;
     }
     setAuthReady(true);
+    return true;
   }
 
   useEffect(() => {
@@ -512,7 +520,8 @@ export function AuthGate({ children }: AuthGateProps) {
       }
       suppressAuthLoadRef.current = false;
       if (nextUser) {
-        await hydrateSession(nextUser, true);
+        const ready = await hydrateSession(nextUser, true);
+        if (ready) await reloadAppForUpdates();
       }
     } catch (err: any) {
       if (isMfaRequiredError(err)) {
@@ -579,7 +588,8 @@ export function AuthGate({ children }: AuthGateProps) {
       }
       suppressAuthLoadRef.current = false;
       setMfaResolver(null);
-      await hydrateSession(signedInUser, true);
+      const ready = await hydrateSession(signedInUser, true);
+      if (ready) await reloadAppForUpdates();
     } catch (err: any) {
       if (securityStrict && ticketRef.current) {
         await securityLoginResult({

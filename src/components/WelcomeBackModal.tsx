@@ -1,8 +1,6 @@
-import { AlertCircle, Bell, DollarSign, Receipt, Sprout, Truck as TruckIcon } from 'lucide-react';
+import { AlertCircle, Bell, ClipboardList, DollarSign, Receipt, Sprout, Truck as TruckIcon } from 'lucide-react';
 import { DayRecap, dayKeyOf, dayRecapIsEmpty } from '../lib/dayRecap';
 import { useT } from '../lib/i18n';
-
-const PREVIEW = 3;
 
 interface WelcomeBackModalProps {
   nurseryName: string;
@@ -132,7 +130,24 @@ export function WelcomeBackModal({
               extra={0}
             />
           )}
-          {dayRecapIsEmpty(recap) && !recap.showTrucks ? (
+          {recap.showOrders && (
+            <RecapSection
+              icon={ClipboardList}
+              title={t('welcomeBack.orders')}
+              scroll={recap.orders.length > 0}
+              rows={
+                recap.orders.length > 0
+                  ? recap.orders.map((row) => ({
+                      id: row.id,
+                      primary: row.customerName,
+                      secondary: [row.orderNumber, shortDate(row.date)].filter(Boolean).join(' · ')
+                    }))
+                  : [{ id: 'no-orders', primary: t('welcomeBack.noOrders'), secondary: '' }]
+              }
+              extra={0}
+            />
+          )}
+          {dayRecapIsEmpty(recap) && !recap.showTrucks && !recap.showOrders ? (
             <p className="text-sm text-slate-500 text-center py-4">{t('welcomeBack.quiet')}</p>
           ) : (
             <>
@@ -140,12 +155,13 @@ export function WelcomeBackModal({
                 <RecapSection
                   icon={DollarSign}
                   title={t('welcomeBack.payments')}
-                  rows={recap.payments.slice(0, PREVIEW).map((row) => ({
+                  scroll
+                  rows={recap.payments.map((row) => ({
                     id: row.id,
                     primary: row.customerName,
                     secondary: `${row.documentNumber} · ${money(row.amount)} · ${shortDate(row.paidAt)}`
                   }))}
-                  extra={Math.max(0, recap.payments.length - PREVIEW)}
+                  extra={0}
                 />
               )}
               {recap.overdue.length > 0 && (

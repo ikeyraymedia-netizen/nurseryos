@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Clock, CheckCircle2, LogOut, CloudUpload, RefreshCw, Bell, Settings } from 'lucide-react';
 import { CustomerOrder, MemberRole, TenantMember } from '../types';
 import { getFallbackReason, isUsingFallback, reconnectAndSyncToCloud } from '../lib/db';
+import { reloadAppForUpdates } from '../lib/reloadApp';
 import { BrandLogo } from './BrandLogo';
 import { getMemberRoles } from '../lib/permissions';
 import { useRoleLabel, useT } from '../lib/i18n';
@@ -19,34 +20,6 @@ interface HeaderProps {
   onManagePackages?: () => void;
   onBackToSeller?: () => void;
   onSelectOrder?: (orderId: string) => void;
-}
-
-async function hardReloadApp(): Promise<void> {
-  // Home-screen / standalone web apps often keep a stale shell; clear what we can, then reload.
-  try {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(
-        regs.map((reg) => {
-          const scriptUrl =
-            reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || '';
-          if (scriptUrl.includes('firebase-messaging-sw')) return Promise.resolve(false);
-          return reg.unregister();
-        })
-      );
-    }
-  } catch {
-    // ignore
-  }
-  window.location.reload();
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -90,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await hardReloadApp();
+      await reloadAppForUpdates();
     } catch {
       setRefreshing(false);
     }

@@ -18,6 +18,7 @@ import { ReportsWorkspace } from './components/ReportsWorkspace';
 import { TasksWorkspace } from './components/TasksWorkspace';
 import { PurchasingWorkspace } from './components/PurchasingWorkspace';
 import { RetailWorkspace } from './components/RetailWorkspace';
+import { WelcomeBackModal } from './components/WelcomeBackModal';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import {
@@ -39,6 +40,16 @@ import {
   setLastSeenAt,
   WhatsNewItem
 } from './lib/whatsNew';
+import {
+  buildDayRecap,
+  DayRecap,
+  getWelcomeSeenDay,
+  localDayKey,
+  setWelcomeSeenDay,
+  welcomeFirstName
+} from './lib/dayRecap';
+import { subscribeToInventory } from './lib/inventory';
+import { subscribeToVendorBills } from './lib/purchasing';
 import { PaymentToast } from './components/PaymentToast';
 import {
   getLastSeenPaymentAt,
@@ -66,7 +77,9 @@ import {
   TenantMember,
   Customer,
   CustomerDocumentType,
-  CustomerDocument
+  CustomerDocument,
+  InventoryPlant,
+  VendorBill
 } from './types';
 import { Upload, Truck as TruckIcon, FileText, Plus, Sprout, ArrowLeft, BarChart3, Users, ClipboardList, PackagePlus, ShoppingCart } from 'lucide-react';
 import {
@@ -112,6 +125,36 @@ function canAccessWorkspaceTab(
     case 'retail':
       return permissions.canUseRetailPOS;
   }
+}
+
+function readInventoryOnce(): Promise<InventoryPlant[]> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (plants: InventoryPlant[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsub();
+      resolve(plants);
+    };
+    const unsub = subscribeToInventory((plants) => finish(plants));
+    const timer = window.setTimeout(() => finish([]), 4000);
+  });
+}
+
+function readBillsOnce(): Promise<VendorBill[]> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (bills: VendorBill[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsub();
+      resolve(bills);
+    };
+    const unsub = subscribeToVendorBills((bills) => finish(bills));
+    const timer = window.setTimeout(() => finish([]), 4000);
+  });
 }
 
 function useWhatsNewDigest(params: {
@@ -719,6 +762,62 @@ function NurseryApp({
     [trucks, permissions.canViewDirectShipOrders]
   );
 
+  const [welcomeRecap, setWelcomeRecap] = useState<DayRecap | null>(null);
+  const welcomeSourceRef = useRef({ visibleOrders, yardTrucks, permissions });
+  welcomeSourceRef.current = { visibleOrders, yardTrucks, permissions };
+
+  useEffect(() => {
+    if (loading) return;
+    const day = localDayKey();
+    if (getWelcomeSeenDay(tenant.id, userId) === day) return;
+    let cancelled = false;
+    void (async () => {
+      const source = welcomeSourceRef.current;
+      const [documents, plants, bills] = await Promise.all([
+        source.permissions.canViewInvoices
+          ? listAllDocuments().catch(() => [] as CustomerDocument[])
+          : Promise.resolve([] as CustomerDocument[]),
+        source.permissions.canViewInventory
+          ? readInventoryOnce()
+          : Promise.resolve([] as InventoryPlant[]),
+        source.permissions.canViewPurchasing
+          ? readBillsOnce().catch(() => [] as VendorBill[])
+          : Promise.resolve([] as VendorBill[])
+      ]);
+      if (cancelled) return;
+      setWelcomeRecap(
+        buildDayRecap({
+          dayKey: day,
+          since: getLastSeenAt(tenant.id, userId),
+          orders: source.permissions.canViewOrders ? source.visibleOrders : [],
+          trucks: source.permissions.canViewTrucks ? source.yardTrucks : [],
+          documents,
+          plants,
+          bills,
+          includeAlerts:
+            source.permissions.canViewOrders ||
+            source.permissions.canViewTrucks ||
+            source.permissions.canViewInventory,
+          includePayments: source.permissions.canViewInvoices,
+          includeTrucks: source.permissions.canViewTrucks,
+          includeOverdue: source.permissions.canViewInvoices,
+          includeBills: source.permissions.canViewPurchasing,
+          includeInventory: source.permissions.canViewInventory
+        })
+      );
+    })().catch((err) => console.warn('Welcome recap failed:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, tenant.id, userId]);
+
+  function dismissWelcome() {
+    setWelcomeSeenDay(tenant.id, userId, localDayKey());
+    setWelcomeRecap(null);
+  }
+
+  const welcomeFirst = welcomeFirstName(memberState);
+
   const boardTrucks = useMemo(() => {
     if (!permissions.canViewDirectShipOrders) return yardTrucks;
     return [...yardTrucks, ...directShipBoardTrucks(dynamicOrders, t('upload.directShipBadge'))];
@@ -979,6 +1078,15 @@ function NurseryApp({
             )}
           </main>
         </div>
+        {welcomeRecap && (
+          <WelcomeBackModal
+            nurseryName={tenant.name}
+            logoSrc={nurseryLogoSrc}
+            firstName={welcomeFirst}
+            recap={welcomeRecap}
+            onContinue={dismissWelcome}
+          />
+        )}
         {whatsNewItems.length > 0 && (
           <WhatsNewModal
             items={whatsNewItems}
@@ -1499,6 +1607,15 @@ function NurseryApp({
         />
       )}
 
+      {welcomeRecap && (
+        <WelcomeBackModal
+          nurseryName={tenant.name}
+          logoSrc={nurseryLogoSrc}
+          firstName={welcomeFirst}
+          recap={welcomeRecap}
+          onContinue={dismissWelcome}
+        />
+      )}
       {whatsNewItems.length > 0 && (
         <WhatsNewModal
           items={whatsNewItems}

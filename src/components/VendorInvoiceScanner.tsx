@@ -9,10 +9,12 @@ import {
   Trash2,
   Upload
 } from 'lucide-react';
-import { Vendor } from '../types';
+import { InventoryPlant, Vendor } from '../types';
 import { AppPermissions } from '../lib/permissions';
 import { inferUploadMimeType, isAllowedOrderUploadMime } from '../lib/uploadMime';
-import { findMatchingVendors } from '../lib/vendorMatch';
+import { findMatchingVendors, resolveInvoiceVendorName } from '../lib/vendorMatch';
+import { findMatchingInventoryPlants, normalizeContainerSize, plantNameMatchScore } from '../lib/inventoryMatch';
+import { listInventoryPlants } from '../lib/inventory';
 import { createVendorBill } from '../lib/purchasing';
 import { addVendor } from '../lib/vendors';
 import { uploadVendorInvoiceAttachment } from '../lib/vendorInvoicePhotos';
@@ -55,6 +57,7 @@ interface ParsedInvoiceDraft {
 
 interface VendorInvoiceScannerProps {
   tenantId: string;
+  nurseryName: string;
   vendors: Vendor[];
   permissions: AppPermissions;
   onSaved?: (billId: string) => void;
@@ -87,8 +90,39 @@ function resolveDueDate(
   return dueDateFromPaymentTerms(billDate || toDateKey(new Date()), paymentTerms) || '';
 }
 
+function snapLineToInventory(line: DraftLine, plants: InventoryPlant[]): DraftLine {
+  if (!isPlantPurchaseCategory(line.category) || plants.length === 0) return line;
+  const size = normalizeContainerSize(line.containerSize) || line.containerSize;
+  const matches = findMatchingInventoryPlants(plants, line.plantName, size);
+  const top = matches[0];
+  if (!top) return { ...line, containerSize: size || 'Other' };
+  const topScore = plantNameMatchScore(line.plantName, top.plantName);
+  const second = matches[1];
+  if (second && plantNameMatchScore(line.plantName, second.plantName) === topScore) {
+    return { ...line, containerSize: size || 'Other' };
+  }
+  return {
+    ...line,
+    plantName: top.plantName,
+    containerSize: top.containerSize
+  };
+}
+
+async function readPdfText(file: File): Promise<string> {
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return '';
+  try {
+    const { extractText } = await import('unpdf');
+    const result = await extractText(new Uint8Array(await file.arrayBuffer()), { mergePages: true });
+    const raw = result.text as string | string[] | undefined;
+    return (typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.join('\n') : '').slice(0, 20000);
+  } catch {
+    return '';
+  }
+}
+
 export function VendorInvoiceScanner({
   tenantId,
+  nurseryName,
   vendors,
   permissions,
   onSaved
@@ -186,6 +220,7 @@ export function VendorInvoiceScanner({
         setPendingFile(file);
       }
 
+      const documentText = invoiceText || (await readPdfText(file));
       setStatusMessage(
         invoiceText ? t('scanner.parsingPaste') : t('scanner.parsingLong')
       );
@@ -203,7 +238,10 @@ export function VendorInvoiceScanner({
             ...(base64Data ? { base64Data } : {}),
             mimeType,
             fileName: file.name,
-            ...(invoiceText ? { invoiceText } : {})
+            buyerName: nurseryName,
+            vendorNames: vendors.map((vendor) => vendor.name),
+            ...(invoiceText ? { invoiceText } : {}),
+            ...(documentText && !invoiceText ? { documentText } : {})
           })
         });
       } catch (fetchErr: unknown) {
@@ -279,8 +317,24 @@ export function VendorInvoiceScanner({
         throw new Error(t('scanner.noLinesDetail'));
       }
 
-      const vendorName = String(result.vendorName || '').trim() || t('scanner.unknownVendor');
+      const parsedVendorName = String(result.vendorName || '').trim();
+      const vendorName =
+        resolveInvoiceVendorName(
+          parsedVendorName,
+          [documentText, String(result.documentText || '')].filter(Boolean).join('\n'),
+          vendors.map((vendor) => vendor.name),
+          nurseryName
+        ) ||
+        parsedVendorName ||
+        t('scanner.unknownVendor');
       const match = findMatchingVendors(vendorName, vendors);
+      let inventory: InventoryPlant[] = [];
+      try {
+        inventory = await listInventoryPlants();
+      } catch {
+        inventory = [];
+      }
+      const matchedItems = items.map((line) => snapLineToInventory(line, inventory));
       const billDate = normalizeDate(result.billDate) || toDateKey(new Date());
       const invoiceDue = normalizeDate(result.dueDate);
       const dueDate = resolveDueDate(billDate, invoiceDue, match.best?.paymentTerms);
@@ -294,7 +348,7 @@ export function VendorInvoiceScanner({
         billDate,
         dueDate,
         notes: String(result.notes || '').trim(),
-        items,
+        items: matchedItems,
         discountAmount,
         matchConfidence: match.confidence,
         matchSuggestions: match.suggestions

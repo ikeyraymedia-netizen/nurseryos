@@ -286,6 +286,16 @@ function sanitizeForFirestore<T>(data: T): T {
   return data;
 }
 
+export async function listInventoryPlants(): Promise<InventoryPlant[]> {
+  if (!activeTenantId) return [];
+  const snap = await getDocs(query(inventoryCol(activeTenantId), orderBy('plantName', 'asc')));
+  const plants: InventoryPlant[] = [];
+  snap.forEach((docSnap) => {
+    plants.push({ id: docSnap.id, ...(docSnap.data() as Omit<InventoryPlant, 'id'>) });
+  });
+  return plants;
+}
+
 export function subscribeToInventory(callback: (plants: InventoryPlant[]) => void) {
   if (!activeTenantId) {
     callback([]);

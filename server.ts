@@ -40,6 +40,7 @@ import {
 } from './server/orderTextParse';
 import { chunkPdfText, extractPdfText } from './server/pdfTextExtract';
 import { getPermissionsForRoles } from './src/lib/permissions';
+import { resolveInvoiceVendorName } from './src/lib/vendorMatch';
 import { applyModuleGates } from './src/lib/modules';
 import type { MemberRole } from './src/types';
 import {
@@ -1443,13 +1444,35 @@ app.post('/api/parse-vendor-invoice', async (req, res) => {
       providedText ||
       (looksLikeText && cleanBase64 ? decodeBase64Text(base64Data) : undefined);
 
+    let extractedPdfText = '';
+    if (resolvedMime === 'application/pdf' && cleanBase64) {
+      try {
+        const { text } = await extractPdfText(Buffer.from(cleanBase64, 'base64'));
+        extractedPdfText = text.slice(0, 20000);
+      } catch (extractErr) {
+        console.warn('Vendor invoice PDF text extract failed:', extractErr);
+      }
+    }
+    const documentText = [invoiceTextForAi, extractedPdfText, String(req.body?.documentText || '')]
+      .filter((part) => typeof part === 'string' && part.trim())
+      .join('\n')
+      .slice(0, 20000);
+    const buyerName = String(req.body?.buyerName || '').trim();
+    const vendorNames = Array.isArray(req.body?.vendorNames)
+      ? req.body.vendorNames.map((name: unknown) => String(name || '').trim()).filter(Boolean).slice(0, 500)
+      : [];
+
     const prompt = `Analyze this vendor invoice / packing list / purchase receipt (${fileName || 'document'}).
-This is an ACCOUNTS-PAYABLE purchase FROM a vendor TO our nursery (we are the buyer).
+This is an ACCOUNTS-PAYABLE purchase FROM a vendor TO our nursery (we are the buyer${buyerName ? `: ${buyerName}` : ''}).
 It may include plants, soil, pots, chemicals, fertilizer, tools, freight, or mixed nursery supplies.
 It is NOT a customer sales order.
 
 Extract:
-1. Vendor Name — the seller (From, Sold By, Remit To, store/letterhead). Not the Bill-To if that is us.
+1. Vendor Name — the seller (From, Sold By, Remit To, logo, or website). NEVER the Bill To or Ship To customer${buyerName ? ` (${buyerName})` : ''}. If the seller name is only a logo, use the website (jackrabbitnursery.com is Jack Rabbit Nursery).${
+      vendorNames.length
+        ? ` When the seller is one of these vendors, use that exact name: ${vendorNames.join('; ')}.`
+        : ''
+    }
 2. Vendor Invoice Number (Invoice #, Inv #, receipt #). Use "N/A" if missing.
 3. billDate and dueDate as YYYY-MM-DD when clearly shown; otherwise empty string.
 4. Do NOT put freight in a separate freightCharge field — if shipping/freight appears, add it as a normal line item with category Freight (quantity 1, unitCost = freight amount). Set freightCharge to 0.
@@ -1464,7 +1487,9 @@ Extract:
    - notes for grade/spec if present
 
 Ignore sales tax unless it is the only total available.
-Return structured JSON matching the schema.`;
+Return structured JSON matching the schema.${
+      documentText ? `\n\n--- TEXT FROM THE DOCUMENT ---\n${documentText}` : ''
+    }`;
 
     const response = await parseVendorInvoiceWithFallback(
       ai,
@@ -1490,6 +1515,12 @@ Return structured JSON matching the schema.`;
     } catch {
       throw new Error('AI returned invalid JSON. Please try uploading again.');
     }
+    parsedData.vendorName = resolveInvoiceVendorName(
+      String(parsedData.vendorName || ''),
+      documentText,
+      vendorNames,
+      buyerName
+    );
     res.json(parsedData);
   } catch (error: any) {
     if (authErrorResponse(res, error)) return;

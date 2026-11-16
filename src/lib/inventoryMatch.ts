@@ -18,18 +18,38 @@ function normalizeToken(token: string): string {
   const cleaned = token.replace(/[^a-z0-9]/g, '');
   if (!cleaned) return '';
   if (WORD_EQUIVALENTS[cleaned]) return WORD_EQUIVALENTS[cleaned];
-  if (cleaned.endsWith('es') && cleaned.length > 4) return cleaned.slice(0, -2);
-  if (cleaned.endsWith('s') && cleaned.length > 3) return cleaned.slice(0, -1);
+  if (/(?:ss|sh|ch|x|z)es$/.test(cleaned) && cleaned.length > 4) return cleaned.slice(0, -2);
+  if (cleaned.endsWith('s') && !cleaned.endsWith('ss') && cleaned.length > 3) {
+    return cleaned.slice(0, -1);
+  }
   return cleaned;
 }
 
+function plantTokens(name: string): string[] {
+  return normalizePlantName(name).split(' ').map(normalizeToken).filter(Boolean);
+}
+
 function normalizedWordSet(name: string): Set<string> {
-  return new Set(
-    normalizePlantName(name)
-      .split(' ')
-      .map(normalizeToken)
-      .filter(Boolean)
-  );
+  return new Set(plantTokens(name));
+}
+
+/** "Switch Grass" and "Switchgrass" are the same word on invoices vs inventory. */
+function fuseCompoundTokens(tokens: string[], other: Set<string>): string[] {
+  const fused: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const pair = i + 1 < tokens.length ? tokens[i] + tokens[i + 1] : '';
+    if (pair && other.has(pair)) {
+      fused.push(pair);
+      i += 1;
+    } else {
+      fused.push(tokens[i]);
+    }
+  }
+  return fused;
+}
+
+function matchWordSet(name: string, otherName: string): Set<string> {
+  return new Set(fuseCompoundTokens(plantTokens(name), new Set(plantTokens(otherName))));
 }
 
 /** Too generic to auto-expand into a longer inventory name on their own. */
@@ -124,8 +144,8 @@ export function plantNamesMatch(
   if (!a || !b) return false;
   if (a === b) return true;
 
-  const orderWords = normalizedWordSet(orderName);
-  const inventoryWords = normalizedWordSet(inventoryName);
+  const orderWords = matchWordSet(orderName, inventoryName);
+  const inventoryWords = matchWordSet(inventoryName, orderName);
   if (orderWords.size === 0 || inventoryWords.size === 0) return false;
 
   // Order is an abbreviated form of the inventory name.
@@ -157,8 +177,8 @@ export function plantNameMatchScore(
 
   if (!plantNamesMatch(orderName, inventoryName, context)) return 0;
 
-  const orderWords = normalizedWordSet(orderName);
-  const inventoryWords = normalizedWordSet(inventoryName);
+  const orderWords = matchWordSet(orderName, inventoryName);
+  const inventoryWords = matchWordSet(inventoryName, orderName);
   if (isSoloCultivarMatch(orderWords, inventoryWords, context)) return 200;
   let overlap = 0;
   orderWords.forEach((w) => {
@@ -218,6 +238,12 @@ export function normalizeContainerSize(
 ): string {
   const raw = size.trim().toLowerCase().replace(/"/g, '').replace(/\s+/g, ' ');
   if (SIZE_ALIASES[raw]) return SIZE_ALIASES[raw];
+
+  const gallons = raw.match(/^#?(\d{1,3})\s*-?\s*gal(?:lon)?s?\.?$/);
+  if (gallons) {
+    const key = `#${gallons[1]}`;
+    return SIZE_ALIASES[key] || key;
+  }
 
   for (const w of weights) {
     const id = w.id.toLowerCase();

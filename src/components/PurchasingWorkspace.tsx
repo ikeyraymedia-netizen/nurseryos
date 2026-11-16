@@ -1869,6 +1869,7 @@ export function PurchasingWorkspace({
                 {showInvoiceScanner && permissions.canManageVendorBills && (
                   <VendorInvoiceScanner
                     tenantId={tenantId}
+                    nurseryName={nurseryName}
                     vendors={vendors}
                     permissions={permissions}
                     onSaved={(billId) => {
@@ -2481,6 +2482,7 @@ export function PurchasingWorkspace({
           {showInvoiceScanner && permissions.canManageVendorBills && (
             <VendorInvoiceScanner
               tenantId={tenantId}
+              nurseryName={nurseryName}
               vendors={vendors}
               permissions={permissions}
               onSaved={(billId) => {

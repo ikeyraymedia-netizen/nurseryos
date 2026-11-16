@@ -193,8 +193,7 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
       };
     }
     case 'supervisor':
-      // Yard lead: full ops visibility + edit truck order lines / loading, BOL print.
-      // Purchasing is sourcing only. No pricing, invoices, customers, uploads, deletes, or team/billing admin.
+      // Yard lead: orders, trucks, inventory, and tasks. No purchasing, pricing, invoices, customers, uploads, deletes, or team/billing admin.
       return {
         canViewDirectShipOrders: false,
         canViewOrders: true,
@@ -227,9 +226,9 @@ export function getPermissionsForRole(role: MemberRole): AppPermissions {
         canViewTasks: true,
         canAssignTasks: true,
                 canCompleteTasks: true,
-        canViewPurchasing: true,
+        canViewPurchasing: false,
         canViewPurchasingDesk: false,
-        canUploadVendorAvailability: true,
+        canUploadVendorAvailability: false,
         canEditVendors: false,
         canEditPurchaseOrders: false,
         canReceivePurchases: false,

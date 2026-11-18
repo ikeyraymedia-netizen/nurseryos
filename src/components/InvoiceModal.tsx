@@ -4896,7 +4896,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                             </span>
                           )}
                           <div className="min-w-0 flex-1">
-                            {canEditLines && isEstimate ? (
+                            {canEditLines ? (
                               <InventoryPlantPicker
                                 plants={inventoryPlants}
                                 plantName={item.plantName}
@@ -4911,20 +4911,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                     : 'text-gray-950'
                                 }`}
                                 onChange={(next) => applyPlantPick(item.id, next)}
-                              />
-                            ) : canEditLines ? (
-                              <input
-                                type="text"
-                                value={item.plantName}
-                                onChange={(e) =>
-                                  updateDraftLine(item.id, { plantName: e.target.value })
-                                }
-                                placeholder={t('invoice.plantVarietyName')}
-                                className={`w-full font-black bg-transparent border-b border-gray-200 focus:border-ink-600 focus:outline-none py-0.5 break-words ${
-                                  unavailable
-                                    ? 'text-slate-400 line-through'
-                                    : 'text-gray-950'
-                                }`}
                               />
                             ) : (
                               <p
@@ -5198,7 +5184,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                             </td>
                           )}
                           <td className="min-w-0 py-1.5">
-                            {canEditLines && isEstimate ? (
+                            {canEditLines ? (
                               <InventoryPlantPicker
                                 plants={inventoryPlants}
                                 plantName={item.plantName}
@@ -5213,20 +5199,6 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                                     : 'text-gray-950'
                                 }`}
                                 onChange={(next) => applyPlantPick(item.id, next)}
-                              />
-                            ) : canEditLines ? (
-                              <input
-                                type="text"
-                                value={item.plantName}
-                                onChange={(e) =>
-                                  updateDraftLine(item.id, { plantName: e.target.value })
-                                }
-                                placeholder={t('invoice.plantVarietyName')}
-                                className={`w-full font-black bg-transparent hover:bg-slate-50 border-b border-transparent focus:border-ink-600 focus:outline-none print:border-none ${
-                                  unavailable
-                                    ? 'text-slate-400 line-through'
-                                    : 'text-gray-950'
-                                }`}
                               />
                             ) : (
                               <span

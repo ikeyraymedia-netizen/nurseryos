@@ -783,6 +783,9 @@ const extra = {
     blindBolOn: 'Activa',
     blindBolHint:
       'Oculta el nombre del receptor / cliente en el BOL impreso. La dirección de entrega sí se imprime — para envíos directos desde otros viveros.',
+    blankBol: 'BOL en blanco',
+    blankBolHint: 'Imprime solo la lista de plantas y la dirección de entrega.',
+    blankPlantList: 'Lista de plantas',
     deliveryDestination: 'Destino de entrega',
     deliveryAddressOnly: 'Dirección de entrega',
     blindDeliverInstruction:

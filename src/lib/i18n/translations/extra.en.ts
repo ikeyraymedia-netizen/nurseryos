@@ -776,6 +776,9 @@ const extra = {
     blindBolOn: 'On',
     blindBolHint:
       'Hides the receiver / customer name on the printed BOL. Delivery address still prints — for drop-ships from other nurseries.',
+    blankBol: 'Blank BOL',
+    blankBolHint: 'Prints only the plant list and the delivery address.',
+    blankPlantList: 'Plant list',
     deliveryDestination: 'Delivery destination',
     deliveryAddressOnly: 'Delivery address',
     blindDeliverInstruction:

@@ -84,6 +84,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
   const [selectedBOLType, setSelectedBOLType] = useState<string>('');
   /** Hide consignee / customer name on printed BOL — address only (drop-ships). */
   const [blindBol, setBlindBol] = useState(false);
+  const [blankBol, setBlankBol] = useState(false);
 
   // State for customizable document fields
   const [shipperAddress, setShipperAddress] = useState(
@@ -233,6 +234,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
 
     setSelectedBOLType(nextType);
     setBlindBol(Boolean(draft?.blindBol));
+    setBlankBol(Boolean(draft?.blankBol));
     setShipperAddress(
       draft?.shipperAddress?.trim() ||
         defaultShipperAddress(nurseryName, nurseryAddress, t('bol.defaultShipperSuffix'))
@@ -354,6 +356,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         sealNumber: sealNumber.trim() || undefined,
         specialInstructions: specialInstructions.trim() || undefined,
         blindBol,
+        blankBol,
         selectedBOLType,
         receiverAddresses,
         receiverContacts,
@@ -547,6 +550,87 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
         pdf.roundedRect(x, top, w, h, 6, 6);
       };
 
+      const drawPlantTable = (): void => {
+        drawSectionTitle(blankBol ? t('bol.blankPlantList') : t('bol.pdfCargoManifest'));
+        ensureSpace(26);
+        const xPlant = margin + 6;
+        const xSize = margin + 300;
+        const xQty = margin + 400;
+        const xCheck = margin + 480;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(80, 80, 80);
+        pdf.text(t('bol.pdfPlantName'), xPlant, y);
+        pdf.text(t('bol.pdfSize'), xSize, y);
+        pdf.text(t('bol.pdfQty'), xQty, y);
+        pdf.text(t('bol.pdfReceived'), xCheck, y);
+        y += 8;
+        pdf.setDrawColor(185, 185, 185);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 12;
+
+        consolidatedItems.forEach((item) => {
+          const noteLines = item.notes ? pdf.splitTextToSize(item.notes, xSize - xPlant - 8) : [];
+          ensureSpace(16 + noteLines.length * 10);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+          pdf.setTextColor(25, 25, 25);
+          const plant = item.plantName.length > 38 ? `${item.plantName.slice(0, 38)}...` : item.plantName;
+          pdf.text(plant, xPlant, y);
+          pdf.text(item.containerSize, xSize, y);
+          pdf.text(String(item.totalQty), xQty, y);
+          pdf.setDrawColor(90, 90, 90);
+          pdf.setLineWidth(0.8);
+          pdf.rect(xCheck + 4, y - 7, 10, 10);
+          pdf.setLineWidth(0.2);
+          if (noteLines.length > 0) {
+            y += 11;
+            pdf.setFontSize(8);
+            pdf.setTextColor(90, 90, 90);
+            noteLines.forEach((line: string) => {
+              pdf.text(line, xPlant, y);
+              y += 10;
+            });
+            y += 2;
+          } else {
+            y += 14;
+          }
+        });
+        ensureSpace(16);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 12;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(18, 65, 46);
+        pdf.text(t('bol.pdfTotalPlants', { n: totalPlants.toLocaleString(locale) }), margin + 4, y);
+        y += 12;
+      };
+
+      if (blankBol) {
+        drawSectionTitle(t('bol.deliveryAddressOnly'));
+        const addresses = currentBOLOrders.map((order) => stopDeliveryAddress(order)).filter(Boolean);
+        writeWrapped(
+          addresses.join('\n\n') || t('bol.na'),
+          margin + 4,
+          pageWidth - margin * 2 - 8,
+          11,
+          false,
+          14
+        );
+        y += 8;
+        drawPlantTable();
+        const blankFile = `${bolNumber}-blank.pdf`;
+        const blankResult = await deliverPdfBlob(pdf.output('blob'), blankFile);
+        if (blankResult.method === 'preview') {
+          setPdfSheet({
+            url: blankResult.url,
+            fileName: blankResult.fileName,
+            blob: blankResult.blob
+          });
+        }
+        return;
+      }
+
       // Header with nursery logo (when available)
       const headerTop = y;
       let textX = margin;
@@ -669,62 +753,7 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
       });
       y += 4;
 
-      drawSectionTitle(t('bol.pdfCargoManifest'));
-      ensureSpace(26);
-      const xPlant = margin + 6;
-      const xSize = margin + 300;
-      const xQty = margin + 400;
-      const xCheck = margin + 480;
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(9);
-      pdf.setTextColor(80, 80, 80);
-      pdf.text(t('bol.pdfPlantName'), xPlant, y);
-      pdf.text(t('bol.pdfSize'), xSize, y);
-      pdf.text(t('bol.pdfQty'), xQty, y);
-      pdf.text(t('bol.pdfReceived'), xCheck, y);
-      y += 8;
-      pdf.setDrawColor(185, 185, 185);
-      pdf.line(margin, y, pageWidth - margin, y);
-      y += 12;
-
-      consolidatedItems.forEach((item) => {
-        const noteLines = item.notes
-          ? pdf.splitTextToSize(item.notes, xSize - xPlant - 8)
-          : [];
-        ensureSpace(16 + noteLines.length * 10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(9);
-        pdf.setTextColor(25, 25, 25);
-        const plant = item.plantName.length > 38 ? `${item.plantName.slice(0, 38)}...` : item.plantName;
-        pdf.text(plant, xPlant, y);
-        pdf.text(item.containerSize, xSize, y);
-        pdf.text(String(item.totalQty), xQty, y);
-        // Empty checkbox for customer to check off received material
-        pdf.setDrawColor(90, 90, 90);
-        pdf.setLineWidth(0.8);
-        pdf.rect(xCheck + 4, y - 7, 10, 10);
-        pdf.setLineWidth(0.2);
-        if (noteLines.length > 0) {
-          y += 11;
-          pdf.setFontSize(8);
-          pdf.setTextColor(90, 90, 90);
-          noteLines.forEach((line: string) => {
-            pdf.text(line, xPlant, y);
-            y += 10;
-          });
-          y += 2;
-        } else {
-          y += 14;
-        }
-      });
-      ensureSpace(16);
-      pdf.line(margin, y, pageWidth - margin, y);
-      y += 12;
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.setTextColor(18, 65, 46);
-      pdf.text(t('bol.pdfTotalPlants', { n: totalPlants.toLocaleString(locale) }), margin + 4, y);
-      y += 12;
+      drawPlantTable();
 
       drawSectionTitle(t('bol.pdfSpecialInstructions'));
       writeWrapped(specialInstructions || t('bol.na'), margin + 4, pageWidth - margin * 2 - 8, 10, false, 13);
@@ -835,6 +864,30 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               </span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => setBlankBol((v) => !v)}
+              className={`w-full flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                blankBol
+                  ? 'border-ink-400 bg-ink-100/70 text-ink-950'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-ink-200'
+              }`}
+              aria-pressed={blankBol}
+            >
+              <FileText
+                className={`h-4 w-4 mt-0.5 shrink-0 ${blankBol ? 'text-ink-800' : 'text-gray-400'}`}
+              />
+              <span className="min-w-0">
+                <span className="block font-black uppercase tracking-wider text-[10px] font-mono">
+                  {t('bol.blankBol')}
+                  {blankBol ? ` · ${t('bol.blindBolOn')}` : ''}
+                </span>
+                <span className="block mt-0.5 text-[10px] font-medium leading-snug text-gray-600">
+                  {t('bol.blankBolHint')}
+                </span>
+              </span>
+            </button>
+
             {/* Stop / order selection (multi-stop trucks only) */}
             {!directShipBol && sortedOrders.length > 1 && (
               <div>
@@ -859,6 +912,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               </div>
             )}
 
+            {!blankBol && (
+            <>
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                 {t('bol.shipDate')}
@@ -1045,6 +1100,9 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               />
             </div>
 
+            </>
+            )}
+
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                 {t('bol.receiverAddress')}
@@ -1058,6 +1116,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
               />
             </div>
 
+            {!blankBol && (
+            <>
             <div>
               <label className="block font-bold text-gray-700 font-mono mb-1 uppercase tracking-wider text-[10px]">
                 {t('bol.pointOfContact')}
@@ -1082,6 +1142,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-ink-500 bg-white font-medium"
               />
             </div>
+            </>
+            )}
           </div>
 
           {/* Sticky on mobile so Download stays reachable after scrolling the long form. */}
@@ -1159,6 +1221,12 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                     {t('bol.blindBol')}
                   </span>
                 )}
+                {blankBol && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-ink-100 text-ink-900 border border-ink-200">
+                    <FileText className="h-3 w-3" />
+                    {t('bol.blankBol')}
+                  </span>
+                )}
               </h2>
               <p className="text-[10px] text-gray-500 mt-0.5 font-sans">{t('bol.previewBody')}</p>
             </div>
@@ -1207,6 +1275,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 }
               `}} />
 
+              {!blankBol && (
+              <>
               {/* Document Header */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-6 border-b border-gray-300">
                 <div className="flex items-start gap-3">
@@ -1398,20 +1468,38 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   </div>
                 </div>
               )}
+              </>
+              )}
+
+              {blankBol && (
+                <div className="pb-6 border-b border-gray-300">
+                  <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-2">
+                    {t('bol.deliveryAddressOnly')}
+                  </h3>
+                  <p className="text-sm font-semibold text-gray-950 whitespace-pre-wrap leading-relaxed">
+                    {currentBOLOrders.map((order) => stopDeliveryAddress(order)).filter(Boolean).join('\n\n') ||
+                      t('bol.na')}
+                  </p>
+                </div>
+              )}
 
               {/* Plant Load Table */}
               <div className="py-6 border-b border-gray-300">
                 <div className="flex justify-between items-baseline mb-3">
                   <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider">
-                    {selectedBOLType === 'consolidated'
-                      ? t('bol.consolidatedManifest')
-                      : t('bol.orderManifest', { num: orderStopRef(singleOrder) })}
+                    {blankBol
+                      ? t('bol.blankPlantList')
+                      : selectedBOLType === 'consolidated'
+                        ? t('bol.consolidatedManifest')
+                        : t('bol.orderManifest', { num: orderStopRef(singleOrder) })}
                   </h3>
-                  <span className="text-[10px] font-mono font-bold text-gray-400">
-                    {selectedBOLType === 'consolidated'
-                      ? t('bol.groupedTotals')
-                      : t('bol.orderTotals')}
-                  </span>
+                  {!blankBol && (
+                    <span className="text-[10px] font-mono font-bold text-gray-400">
+                      {selectedBOLType === 'consolidated'
+                        ? t('bol.groupedTotals')
+                        : t('bol.orderTotals')}
+                    </span>
+                  )}
                 </div>
                 
                 <table className="w-full text-left border-collapse font-sans">
@@ -1462,6 +1550,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                 </table>
               </div>
 
+              {!blankBol && (
+              <>
               {/* Special Instructions */}
               <div className="py-6 border-b border-gray-300 text-xs">
                 <h3 className="text-xs font-bold font-mono uppercase text-gray-500 tracking-wider mb-2">
@@ -1581,6 +1671,8 @@ export const BillOfLadingModal: React.FC<BillOfLadingModalProps> = ({
                   ? t('bol.footerConsolidated', { name: nurseryName })
                   : t('bol.footerIndividual', { name: nurseryName, num: orderStopRef(singleOrder) })}
               </div>
+              </>
+              )}
 
             </div>
           </div>

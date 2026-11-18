@@ -334,6 +334,8 @@ export interface TruckBolDraft {
   receiverContact?: string;
   specialInstructions?: string;
   blindBol?: boolean;
+  /** Plant list and delivery address only. */
+  blankBol?: boolean;
   /** Last selected stop / order id for this BOL. */
   selectedBOLType?: string;
   /** Receiver address keyed by order id. */

@@ -25,6 +25,7 @@ import {
 } from '../lib/dates';
 import { useT } from '../lib/i18n';
 import { isDirectShipBoardTruckId } from '../lib/orderVisibility';
+import { DIRECT_SHIP_TRUCK_TYPE, isDirectShipTruck } from '../lib/directShipTruck';
 
 interface TrucksListProps {
   trucks: Truck[];
@@ -548,6 +549,11 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                         <h4 className="text-sm font-black text-gray-900 font-sans pr-4 flex items-center flex-wrap gap-1.5">
                           <TruckIcon className="h-4 w-4 text-ink-850 shrink-0" />
                           <span className="truncate">{truck.name}</span>
+                          {isDirectShipTruck(truck) && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-sky-100 text-sky-800 border border-sky-200">
+                              {t('upload.directShipBadge')}
+                            </span>
+                          )}
                           {truck.owner && (
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black border ${getOwnerBadgeStyle(truck.owner)}`}
@@ -560,7 +566,7 @@ export const TrucksList: React.FC<TrucksListProps> = ({
                           {truck.carrier && (
                             <p className="text-xs text-gray-500 font-medium">Carrier: {truck.carrier}</p>
                           )}
-                          {truck.truckType && (
+                          {truck.truckType && truck.truckType !== DIRECT_SHIP_TRUCK_TYPE && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-ink-50 text-ink-800 font-mono text-[10px] border border-ink-100/30 font-bold">
                               {truck.truckType}
                             </span>

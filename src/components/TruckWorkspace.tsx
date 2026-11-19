@@ -52,6 +52,7 @@ import { InventoryPlantPicker } from './InventoryPlantPicker';
 import { buildVendorPullListsForTrucks, collectVendorOrderItems, trucksLoadingOnDate, vendorItemsFullyPulled, downloadTruckPullSheetPdf, VendorPullList } from '../lib/pullSheet';
 import { VendorPullListPreview, vendorCallCounts } from './VendorPullListPreview';
 import { dropNumber, loadNumber, truckCustomerOrders, truckOrderIds } from '../lib/loadSequence';
+import { DIRECT_SHIP_TRUCK_TYPE, isDirectShipTruck } from '../lib/directShipTruck';
 import { useT } from '../lib/i18n';
 import { usePlantDisplay } from '../lib/usePlantDisplay';
 import { DEFAULT_VENDORS } from '../data/vendors';
@@ -116,6 +117,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
 }) => {
   const t = useT();
   const dp = usePlantDisplay();
+  const directShipTruck = isDirectShipTruck(truck);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [isBOLOpen, setIsBOLOpen] = useState(false);
@@ -806,10 +808,15 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
               <TruckIcon className="h-6 w-6" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center flex-wrap gap-2">
                 <h2 className="text-xl font-bold tracking-tight font-sans text-white">
                   {truck.name}
                 </h2>
+                {directShipTruck ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-sky-200 text-sky-950">
+                    {t('upload.directShipBadge')}
+                  </span>
+                ) : null}
                 {overallPercentage >= 100 ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-white border border-white/30 font-mono">
                     FULLY LOADED
@@ -831,7 +838,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                     Owner: {truck.owner}
                   </span>
                 )}
-                {truck.truckType && (
+                {truck.truckType && truck.truckType !== DIRECT_SHIP_TRUCK_TYPE && (
                   <span className="flex items-center font-bold text-white bg-white/10 px-2 py-0.5 rounded border border-white/30 shadow-sm shrink-0">
                     Type: {truck.truckType}
                   </span>
@@ -1293,6 +1300,11 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
                       <h4 className="text-sm font-bold text-gray-900 break-words leading-snug mt-1">
                         {order.customerName}
                       </h4>
+                      {directShipTruck ? (
+                        <span className="inline-flex mt-1 items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-sky-100 text-sky-800 border border-sky-200">
+                          {t('upload.directShipBadge')}
+                        </span>
+                      ) : null}
                       <div className="flex items-center flex-wrap gap-1.5 mt-0.5">
                         {orderRefLabel(order) && (
                           <span className="text-[10px] font-mono font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">

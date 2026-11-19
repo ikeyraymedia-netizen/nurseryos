@@ -63,6 +63,11 @@ const extra = {
     carrierPlaceholder: 'e.g. Cajun Freight / driver Bobby',
     truckType: 'Truck Type *',
     selectType: 'Select Type...',
+    directShipOption: 'Direct ship',
+    directShipTruckHint:
+      'Vendor ships these orders straight to the customers. Check every order that belongs on this one truck. The yard does not see it.',
+    directShipNoLimit: 'no trailer weight limit',
+    movingFromDirectShip: 'Moves off {{name}}',
     ordersAvailable: '{{n}} Available',
     noOrders: 'No available orders found',
     noOrdersHint: 'All pending orders may already be assigned to trucks.',

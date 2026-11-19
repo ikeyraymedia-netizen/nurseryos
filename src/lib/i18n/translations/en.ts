@@ -252,7 +252,7 @@ const en = {
     directShipRemovingFromTruck: 'Saving will remove this order from its truck.',
     directShipDateLabel: 'Ship date',
     directShipDateHint:
-      'Shows on Trucks by day for this date. Only owners and admins can see it.',
+      'Shows on Trucks by day for this date. Every order on this direct ship uses the same date. Only owners and admins can see it.',
     directShipDateSave: 'Save and open truck',
     directShipDateCancel: 'Cancel',
     stagingLocation: 'Order Staging Location',

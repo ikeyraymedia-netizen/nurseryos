@@ -22,6 +22,11 @@ import { syncInvoicesFromOrder } from './documents';
 import { orderInvoiceContentChanged } from './invoicing';
 import { parseDateKey } from './dates';
 import { orderRefLabel } from './orderLabels';
+import {
+  applyOrderTruckPatches,
+  directShipTruckOrderIds,
+  planTruckOrderAssignment
+} from './directShipTruck';
 
 let activeTenantId: string | null = null;
 
@@ -1140,7 +1145,8 @@ function directShipTruckName(order: CustomerOrder): string {
 
 /**
  * Mark or clear direct ship.
- * Enabling requires a ship date and puts the order on its own truck for that day.
+ * Enabling requires a ship date and puts the order on a direct-ship truck for that day.
+ * A direct-ship truck can hold several orders. Saving the date keeps the others on it.
  * Returns the direct-ship truck id when enabled.
  */
 export async function setOrderDirectShip(
@@ -1170,17 +1176,21 @@ export async function setOrderDirectShip(
       return { ...t, orderIds: (t.orderIds || []).filter((id) => id !== existing.id) };
     });
 
+    const keptOrderIds = currentDirect
+      ? directShipTruckOrderIds(currentDirect, existing.id)
+      : [existing.id];
+    const sharesTruck = keptOrderIds.length > 1;
     let truckId = currentDirect?.id;
     if (currentDirect) {
       nextTrucks = nextTrucks.map((t) =>
         t.id === currentDirect.id
           ? {
               ...t,
-              name,
+              name: sharesTruck ? t.name : name,
               loadingDate: date,
               truckType: t.truckType || 'Direct ship',
               directShip: true,
-              orderIds: [existing.id]
+              orderIds: keptOrderIds
             }
           : t
       );
@@ -1201,32 +1211,34 @@ export async function setOrderDirectShip(
       nextTrucks = [created, ...nextTrucks];
     }
 
-    const updatedOrder: CustomerOrder = {
-      ...existing,
-      directShip: true,
-      directShipDate: date,
-      truckId
-    };
-    saveLocalOrders(orders.map((o) => (o.id === existing.id ? updatedOrder : o)));
+    saveLocalOrders(
+      orders.map((o) =>
+        keptOrderIds.includes(o.id)
+          ? { ...o, directShip: true, directShipDate: date, truckId }
+          : o
+      )
+    );
     saveLocalTrucks(nextTrucks);
 
     if (!fallbackActive) {
       try {
         const batch = writeBatch(db);
-        batch.set(
-          orderDoc(tenantId, existing.id),
-          { directShip: true, directShipDate: date, truckId },
-          { merge: true }
-        );
+        for (const id of keptOrderIds) {
+          batch.set(
+            orderDoc(tenantId, id),
+            { directShip: true, directShipDate: date, truckId },
+            { merge: true }
+          );
+        }
         if (currentDirect) {
           batch.set(
             truckDoc(tenantId, currentDirect.id),
             {
-              name,
+              name: sharesTruck ? currentDirect.name : name,
               loadingDate: date,
               truckType: currentDirect.truckType || 'Direct ship',
               directShip: true,
-              orderIds: [existing.id]
+              orderIds: keptOrderIds
             },
             { merge: true }
           );
@@ -1359,6 +1371,45 @@ export async function deleteCustomerOrder(orderId: string): Promise<void> {
   }
 }
 
+function writeTruckOrderPlan(
+  batch: ReturnType<typeof writeBatch>,
+  tenantId: string,
+  truckId: string,
+  plan: ReturnType<typeof planTruckOrderAssignment>,
+  previousTrucks: Truck[],
+  activeOrderIds: Set<string>
+) {
+  for (const patch of plan.orderPatches) {
+    if (!activeOrderIds.has(patch.id)) continue;
+    const fields: {
+      truckId: string | null;
+      directShip?: boolean | null;
+      directShipDate?: string | null;
+    } = { truckId: patch.truckId };
+    if (patch.directShip === true) {
+      fields.directShip = true;
+      fields.directShipDate = patch.directShipDate || '';
+    } else if (patch.directShip === null) {
+      fields.directShip = null;
+      fields.directShipDate = null;
+    }
+    batch.update(orderDoc(tenantId, patch.id), fields);
+  }
+  for (const other of plan.trucks) {
+    if (other.id === truckId) continue;
+    const before = previousTrucks.find((truck) => truck.id === other.id);
+    if (!before) continue;
+    const beforeIds = (before.orderIds || []).join('\0');
+    const afterIds = (other.orderIds || []).join('\0');
+    if (beforeIds !== afterIds) {
+      batch.update(truckDoc(tenantId, other.id), { orderIds: other.orderIds || [] });
+    }
+  }
+  for (const id of plan.emptiedDirectShipTruckIds) {
+    batch.delete(truckDoc(tenantId, id));
+  }
+}
+
 export async function addTruck(truck: Omit<Truck, 'id' | 'dateCreated' | 'status'>): Promise<string> {
   const tenantId = requireTenantId();
   const newId = `truck-${Date.now()}`;
@@ -1371,16 +1422,13 @@ export async function addTruck(truck: Omit<Truck, 'id' | 'dateCreated' | 'status
   };
 
   const localTrucks = getLocalTrucks();
-  saveLocalTrucks([fullTruck, ...localTrucks]);
-
-  const orders = getLocalOrders();
-  const updatedOrders = orders.map((o) => {
-    if (truck.orderIds.includes(o.id)) {
-      return { ...o, truckId: newId };
-    }
-    return o;
+  const plan = planTruckOrderAssignment({
+    trucks: localTrucks,
+    truck: fullTruck,
+    previousOrderIds: []
   });
-  saveLocalOrders(updatedOrders);
+  saveLocalTrucks(plan.trucks);
+  saveLocalOrders(applyOrderTruckPatches(getLocalOrders(), plan.orderPatches));
 
   // Always attempt cloud write so loaders on other devices can see the truck.
   try {
@@ -1398,12 +1446,7 @@ export async function addTruck(truck: Omit<Truck, 'id' | 'dateCreated' | 'status
       status: 'pending',
       orderIds: truck.orderIds
     });
-
-    for (const orderId of truck.orderIds) {
-      if (activeOrderIds.has(orderId)) {
-        batch.update(orderDoc(tenantId, orderId), { truckId: newId });
-      }
-    }
+    writeTruckOrderPlan(batch, tenantId, newId, plan, localTrucks, activeOrderIds);
 
     await batch.commit();
     fallbackActive = false;
@@ -1426,36 +1469,19 @@ export async function updateTruck(truck: Truck): Promise<void> {
   const oldTruck = oldTrucks.find((t) => t.id === truck.id);
   const oldOrderIds = oldTruck ? oldTruck.orderIds : [];
 
-  const updatedTrucks = oldTrucks.map((t) => (t.id === truck.id ? truck : t));
-  saveLocalTrucks(updatedTrucks);
-
-  const orders = getLocalOrders();
-  const updatedOrders = orders.map((o) => {
-    if (truck.orderIds.includes(o.id)) {
-      return { ...o, truckId: truck.id };
-    } else if (oldOrderIds.includes(o.id)) {
-      return { ...o, truckId: null };
-    }
-    return o;
+  const plan = planTruckOrderAssignment({
+    trucks: oldTrucks,
+    truck,
+    previousOrderIds: oldOrderIds
   });
-  saveLocalOrders(updatedOrders);
+  saveLocalTrucks(plan.trucks);
+  saveLocalOrders(applyOrderTruckPatches(getLocalOrders(), plan.orderPatches));
 
   try {
     const activeOrderIds = new Set(getLocalOrders().map((o) => o.id));
     const batch = writeBatch(db);
     batch.set(truckDoc(tenantId, truck.id), truck, { merge: true });
-
-    for (const orderId of truck.orderIds) {
-      if (!oldOrderIds.includes(orderId) && activeOrderIds.has(orderId)) {
-        batch.update(orderDoc(tenantId, orderId), { truckId: truck.id });
-      }
-    }
-
-    for (const orderId of oldOrderIds) {
-      if (!truck.orderIds.includes(orderId) && activeOrderIds.has(orderId)) {
-        batch.update(orderDoc(tenantId, orderId), { truckId: null });
-      }
-    }
+    writeTruckOrderPlan(batch, tenantId, truck.id, plan, oldTrucks, activeOrderIds);
 
     await batch.commit();
     fallbackActive = false;

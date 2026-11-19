@@ -258,7 +258,7 @@ const es: TranslationDict = {
     directShipRemovingFromTruck: 'Al guardar se quitará este pedido del camión.',
     directShipDateLabel: 'Fecha de envío',
     directShipDateHint:
-      'Aparece en Camiones por día en esta fecha. Solo propietarios y administradores lo ven.',
+      'Aparece en Camiones por día en esta fecha. Todos los pedidos de este envío directo usan la misma fecha. Solo propietarios y administradores lo ven.',
     directShipDateSave: 'Guardar y abrir camión',
     directShipDateCancel: 'Cancelar',
     stagingLocation: 'Ubicación de preparación',

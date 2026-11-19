@@ -63,6 +63,11 @@ const extra = {
     carrierPlaceholder: 'ej. Cajun Freight / conductor Bobby',
     truckType: 'Tipo de camión *',
     selectType: 'Seleccionar tipo...',
+    directShipOption: 'Envío directo',
+    directShipTruckHint:
+      'El proveedor envía estos pedidos directo a los clientes. Marque cada pedido que va en este camión. El patio no lo ve.',
+    directShipNoLimit: 'sin límite de peso del remolque',
+    movingFromDirectShip: 'Sale de {{name}}',
     ordersAvailable: '{{n}} disponibles',
     noOrders: 'No se encontraron pedidos disponibles',
     noOrdersHint: 'Todos los pedidos pendientes pueden estar ya asignados a camiones.',

@@ -9,11 +9,12 @@ import { dropNumber, loadNumber } from '../lib/loadSequence';
 import { useSalesRepOptions } from '../lib/salesReps';
 import { useT } from '../lib/i18n';
 import { orderRefLabel } from '../lib/orderLabels';
-import { isDirectShipOrder } from '../lib/orderVisibility';
+import { DIRECT_SHIP_TRUCK_TYPE, isDirectShipTruck, ordersSelectableForTruck } from '../lib/directShipTruck';
 
 interface TruckBuilderProps {
   truckToEdit?: Truck | null;
   orders: CustomerOrder[];
+  trucks?: Truck[];
   tenantId?: string;
   onCancel: () => void;
   onSuccess: (truckId: string) => void;
@@ -22,6 +23,7 @@ interface TruckBuilderProps {
 export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   truckToEdit,
   orders,
+  trucks = [],
   tenantId,
   onCancel,
   onSuccess
@@ -43,7 +45,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
     if (truckToEdit) {
       setName(truckToEdit.name);
       setCarrier(truckToEdit.carrier || '');
-      setTruckType(truckToEdit.truckType || '');
+      setTruckType(
+        truckToEdit.truckType || (truckToEdit.directShip ? DIRECT_SHIP_TRUCK_TYPE : '')
+      );
       setNotes(truckToEdit.notes || '');
       setLoadingDate(truckToEdit.loadingDate || toDateKey(new Date()));
       setOwner(truckToEdit.owner || '');
@@ -60,14 +64,13 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
     setError(null);
   }, [truckToEdit]);
 
-  // Orders available for selection:
-  // Show unassigned orders OR orders assigned to this active truck
-  const selectableOrders = orders.filter((order) => {
-    if (isDirectShipOrder(order)) return false;
-    if (!order.truckId) return true;
-    if (truckToEdit && order.truckId === truckToEdit.id) return true;
-    return false;
-  });
+  const directShipTruck = truckType === DIRECT_SHIP_TRUCK_TYPE;
+  const selectableOrders = ordersSelectableForTruck(
+    orders,
+    trucks,
+    truckToEdit?.id || null,
+    directShipTruck
+  );
 
   const handleToggleOrder = (orderId: string) => {
     setSelectedOrderIds((prev) => {
@@ -125,7 +128,8 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           notes: notes.trim(),
           loadingDate: loadingDate,
           owner: owner,
-          orderIds: selectedOrderIds
+          orderIds: selectedOrderIds,
+          directShip: directShipTruck
         };
         await updateTruck(updatedTruck);
         onSuccess(truckToEdit.id);
@@ -137,7 +141,8 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           notes: notes.trim(),
           loadingDate: loadingDate,
           owner: owner,
-          orderIds: selectedOrderIds
+          orderIds: selectedOrderIds,
+          directShip: directShipTruck
         });
         if (tenantId) {
           void notifyPushEvent({
@@ -281,6 +286,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 required
               >
                 <option value="">{t('truckBuilder.selectType')}</option>
+                <option value={DIRECT_SHIP_TRUCK_TYPE}>{t('truckBuilder.directShipOption')}</option>
                 <option value="28' Gooseneck">28' Gooseneck</option>
                 <option value="30' Gooseneck">30' Gooseneck</option>
                 <option value="32' Gooseneck">32' Gooseneck</option>
@@ -295,6 +301,11 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 <option value="Semi Flatbed">Semi Flatbed</option>
                 <option value="Flatbed Gooseneck">Flatbed Gooseneck</option>
               </select>
+              {directShipTruck ? (
+                <p className="text-[10px] text-gray-500 mt-1 leading-snug">
+                  {t('truckBuilder.directShipTruckHint')}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -334,6 +345,12 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 {selectableOrders.map((order) => {
                   const isChecked = selectedOrderIds.includes(order.id);
                   const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
+                  const otherDirectShip = trucks.find(
+                    (candidate) =>
+                      candidate.id === order.truckId &&
+                      candidate.id !== truckToEdit?.id &&
+                      isDirectShipTruck(candidate)
+                  );
 
                   return (
                     <div
@@ -360,6 +377,11 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                               ? `${orderRefLabel(order)} • ${totalItems} plants`
                               : `${totalItems} plants`}
                           </p>
+                          {otherDirectShip ? (
+                            <p className="text-[10px] font-semibold text-ink-700">
+                              {t('truckBuilder.movingFromDirectShip', { name: otherDirectShip.name })}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
@@ -513,7 +535,9 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                     })
                   : t('truckBuilder.weightNoCapacity', {
                       current: totalWeightSelected.toLocaleString(),
-                      hint: t('truckBuilder.selectTypeCapacity')
+                      hint: directShipTruck
+                        ? t('truckBuilder.directShipNoLimit')
+                        : t('truckBuilder.selectTypeCapacity')
                     })}
               </span>
             </div>

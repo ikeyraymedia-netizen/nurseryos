@@ -15,6 +15,8 @@ interface TruckBuilderProps {
   truckToEdit?: Truck | null;
   orders: CustomerOrder[];
   trucks?: Truck[];
+  /** Owners and admins can mark the truck as a direct ship. */
+  allowDirectShip?: boolean;
   tenantId?: string;
   onCancel: () => void;
   onSuccess: (truckId: string) => void;
@@ -24,6 +26,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   truckToEdit,
   orders,
   trucks = [],
+  allowDirectShip = false,
   tenantId,
   onCancel,
   onSuccess
@@ -37,6 +40,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
   const [loadingDate, setLoadingDate] = useState(() => toDateKey(new Date()));
   const [owner, setOwner] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [directShip, setDirectShip] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,13 +49,15 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
     if (truckToEdit) {
       setName(truckToEdit.name);
       setCarrier(truckToEdit.carrier || '');
-      setTruckType(
-        truckToEdit.truckType || (truckToEdit.directShip ? DIRECT_SHIP_TRUCK_TYPE : '')
-      );
+      const savedType = truckToEdit.truckType || '';
+      setTruckType(savedType === DIRECT_SHIP_TRUCK_TYPE ? '' : savedType);
       setNotes(truckToEdit.notes || '');
       setLoadingDate(truckToEdit.loadingDate || toDateKey(new Date()));
       setOwner(truckToEdit.owner || '');
       setSelectedOrderIds(truckToEdit.orderIds || []);
+      setDirectShip(
+        Boolean(truckToEdit.directShip) || savedType === DIRECT_SHIP_TRUCK_TYPE
+      );
     } else {
       setName('');
       setCarrier('');
@@ -60,11 +66,12 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
       setLoadingDate(toDateKey(new Date()));
       setOwner('');
       setSelectedOrderIds([]);
+      setDirectShip(false);
     }
     setError(null);
   }, [truckToEdit]);
 
-  const directShipTruck = truckType === DIRECT_SHIP_TRUCK_TYPE;
+  const directShipTruck = allowDirectShip && directShip;
   const selectableOrders = ordersSelectableForTruck(
     orders,
     trucks,
@@ -129,7 +136,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
           loadingDate: loadingDate,
           owner: owner,
           orderIds: selectedOrderIds,
-          directShip: directShipTruck
+          directShip: allowDirectShip ? directShip : Boolean(truckToEdit.directShip)
         };
         await updateTruck(updatedTruck);
         onSuccess(truckToEdit.id);
@@ -209,6 +216,36 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
             </div>
           )}
 
+          {allowDirectShip ? (
+            <label className="flex items-start gap-2.5 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={directShip}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setDirectShip(on);
+                  if (on) return;
+                  const allowed = new Set(
+                    ordersSelectableForTruck(orders, trucks, truckToEdit?.id || null, false).map(
+                      (order) => order.id
+                    )
+                  );
+                  setSelectedOrderIds((prev) => prev.filter((id) => allowed.has(id)));
+                }}
+                disabled={saving}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-700 focus:ring-sky-500"
+              />
+              <span>
+                <span className="block text-sm font-bold text-gray-900">
+                  {t('upload.directShipLabel')}
+                </span>
+                <span className="block text-[10px] text-gray-600 leading-snug mt-0.5">
+                  {t('truckBuilder.directShipTruckHint')}
+                </span>
+              </span>
+            </label>
+          ) : null}
+
           {/* Logistics Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
             <div>
@@ -286,7 +323,6 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 required
               >
                 <option value="">{t('truckBuilder.selectType')}</option>
-                <option value={DIRECT_SHIP_TRUCK_TYPE}>{t('truckBuilder.directShipOption')}</option>
                 <option value="28' Gooseneck">28' Gooseneck</option>
                 <option value="30' Gooseneck">30' Gooseneck</option>
                 <option value="32' Gooseneck">32' Gooseneck</option>
@@ -301,11 +337,6 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                 <option value="Semi Flatbed">Semi Flatbed</option>
                 <option value="Flatbed Gooseneck">Flatbed Gooseneck</option>
               </select>
-              {directShipTruck ? (
-                <p className="text-[10px] text-gray-500 mt-1 leading-snug">
-                  {t('truckBuilder.directShipTruckHint')}
-                </p>
-              ) : null}
             </div>
           </div>
 
@@ -535,9 +566,7 @@ export const TruckBuilder: React.FC<TruckBuilderProps> = ({
                     })
                   : t('truckBuilder.weightNoCapacity', {
                       current: totalWeightSelected.toLocaleString(),
-                      hint: directShipTruck
-                        ? t('truckBuilder.directShipNoLimit')
-                        : t('truckBuilder.selectTypeCapacity')
+                      hint: t('truckBuilder.selectTypeCapacity')
                     })}
               </span>
             </div>

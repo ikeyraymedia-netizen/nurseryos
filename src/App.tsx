@@ -1435,6 +1435,7 @@ function NurseryApp({
             <TruckBuilder
               orders={visibleOrders}
               trucks={trucks}
+              allowDirectShip={permissions.canViewDirectShipOrders}
               tenantId={tenant.id}
               onCancel={() => {
                 setSelectedTruckId(null);
@@ -1451,6 +1452,7 @@ function NurseryApp({
               truckToEdit={activeTruck}
               orders={visibleOrders}
               trucks={trucks}
+              allowDirectShip={permissions.canViewDirectShipOrders}
               tenantId={tenant.id}
               onCancel={() => setIsEditingTruck(false)}
               onSuccess={() => {

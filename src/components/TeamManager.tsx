@@ -9,6 +9,7 @@ import {
   resolveNurseryRemittanceAddress,
   sendMemberPasswordReset,
   updateMemberRoles,
+  updateTenantCardFeePercent,
   updateTenantRemittanceAddress
 } from '../lib/tenants';
 import {
@@ -33,6 +34,7 @@ import {
   startStripeConnect,
   StripeStatus
 } from '../lib/stripe';
+import { cardFeePilotTenant } from '../lib/cardFee';
 import MelioPanel from './MelioPanel';
 import QuickbooksUserLoginsPanel from './QuickbooksUserLoginsPanel';
 import {
@@ -106,6 +108,16 @@ export function TeamManager({
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeError, setStripeError] = useState<string | null>(null);
+  const [cardFeeDraft, setCardFeeDraft] = useState(
+    tenant.cardFeePercent != null && tenant.cardFeePercent > 0 ? String(tenant.cardFeePercent) : ''
+  );
+  const [cardFeeBusy, setCardFeeBusy] = useState(false);
+  const [cardFeeNote, setCardFeeNote] = useState<string | null>(null);
+  useEffect(() => {
+    setCardFeeDraft(
+      tenant.cardFeePercent != null && tenant.cardFeePercent > 0 ? String(tenant.cardFeePercent) : ''
+    );
+  }, [tenant.cardFeePercent]);
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -306,6 +318,32 @@ export function TeamManager({
       await refreshEmail();
     })();
   }, [tenant.id, paymentsEnabled, canManageStripe, quickbooksEnabled]);
+
+  async function handleSaveCardFee() {
+    const raw = cardFeeDraft.trim();
+    let value: number | null = null;
+    if (raw) {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0.1 || n > 10) {
+        setCardFeeNote(null);
+        setStripeError(t('teamExtra.cardFeeInvalid'));
+        return;
+      }
+      value = Math.round(n * 100) / 100;
+    }
+    setCardFeeBusy(true);
+    setStripeError(null);
+    setCardFeeNote(null);
+    try {
+      await updateTenantCardFeePercent(tenant.id, value);
+      await onTenantUpdated?.();
+      setCardFeeNote(value == null ? t('teamExtra.cardFeeCleared') : t('teamExtra.cardFeeSaved'));
+    } catch (err: any) {
+      setStripeError(err?.message || t('teamExtra.cardFeeInvalid'));
+    } finally {
+      setCardFeeBusy(false);
+    }
+  }
 
   async function handleConnectStripe() {
     setStripeBusy(true);
@@ -994,6 +1032,40 @@ export function TeamManager({
               <p className="text-[11px] text-violet-950/80 leading-relaxed">
                 {t('teamExtra.stripeIntro')}
               </p>
+              {cardFeePilotTenant(tenant) && (
+              <div className="rounded-lg border border-violet-100 bg-white px-2.5 py-2 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-violet-900">
+                  {t('teamExtra.cardFeeTitle')}
+                </p>
+                <p className="text-[11px] text-violet-950/80 leading-relaxed">
+                  {t('teamExtra.cardFeeHint')}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="10"
+                    step="0.1"
+                    value={cardFeeDraft}
+                    onChange={(e) => setCardFeeDraft(e.target.value)}
+                    placeholder={t('teamExtra.cardFeePlaceholder')}
+                    className="w-28 px-2.5 py-2 border border-violet-200 rounded-lg text-sm"
+                    disabled={cardFeeBusy || stripeBusy || busy}
+                  />
+                  <button
+                    type="button"
+                    disabled={cardFeeBusy || stripeBusy || busy}
+                    onClick={() => void handleSaveCardFee()}
+                    className="px-3 py-2 rounded-lg bg-violet-700 text-white text-xs font-bold disabled:opacity-50"
+                  >
+                    {cardFeeBusy ? t('teamExtra.cardFeeSaving') : t('teamExtra.cardFeeSave')}
+                  </button>
+                </div>
+                {cardFeeNote && (
+                  <p className="text-[11px] text-ink-800">{cardFeeNote}</p>
+                )}
+              </div>
+              )}
               {stripeStatus?.testMode && (
                 <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 leading-relaxed">
                   {t('teamExtra.stripeSandboxEinHint')}

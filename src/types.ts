@@ -35,6 +35,8 @@ export interface Tenant {
    * Empty string means the nursery cleared it. Omit to use a built-in default.
    */
   remittanceAddress?: string;
+  /** Percent added only when a customer pays an invoice by card. Blank means bank only. */
+  cardFeePercent?: number;
   /** Optional nursery logo URL (HTTPS or data URL) for BOL/invoice headers. */
   logoUrl?: string;
   /**
@@ -294,6 +296,10 @@ export interface CustomerDocument {
   qboPaymentSyncedAt?: string;
   qboPaymentSyncedByUserId?: string;
   qboPaymentNote?: string | null;
+  /** When on, this invoice can be paid by card and the percent below is added only to that card charge. */
+  cardFeeEnabled?: boolean;
+  /** Card fee for this invoice, such as 3 for 3%. Bank payments do not include it. */
+  cardFeePercent?: number | null;
   /** Stripe Connect payment collection status for this invoice. */
   paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed';
   paidAt?: string;
@@ -305,6 +311,11 @@ export interface CustomerDocument {
   paymentReference?: string;
   stripeCheckoutSessionId?: string;
   stripeCheckoutUrl?: string;
+  /** Card checkout, separate from the bank link so the fee is not charged on ACH. */
+  stripeCardCheckoutSessionId?: string;
+  stripeCardCheckoutUrl?: string;
+  stripeCardFeeCents?: number;
+  stripeAppliedSessionIds?: string[];
   stripePaymentIntentId?: string;
   stripePaidAmountCents?: number;
   /** Connected account id used when the pay link was created (direct or destination). */

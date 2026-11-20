@@ -1165,6 +1165,8 @@ const extra = {
       'Pushes the invoice to QuickBooks (if needed) and puts the QuickBooks pay link in the email.',
     includePayHintStripe:
       'Puts a Stripe pay link in the email. The invoice still syncs to QuickBooks.',
+    includePayHintStripeBank:
+      'Puts a bank pay link in the email. A card link is added only when the credit card fee is turned on at the bottom of this invoice. The invoice still syncs to QuickBooks.',
     payLinkChoiceLabel: 'Customer pay link',
     payLinkChoiceQuickbooks: 'QuickBooks',
     payLinkChoiceStripe: 'Stripe',
@@ -1172,6 +1174,22 @@ const extra = {
       'Connect Stripe in Team before a Stripe link can be sent. The invoice still syncs to QuickBooks.',
     stripePayLinkFailed: 'Could not create the Stripe pay link.',
     createStripePayLink: 'Copy Stripe pay link',
+    copyBankPayLink: 'Copy bank pay link',
+    creatingBankPayLink: 'Getting bank pay link…',
+    bankPayLinkCopied:
+      'Bank pay link copied. Paste it into a text or email — do not open it yourself unless you intend to pay.',
+    copyCardPayLink: 'Copy card pay link',
+    creatingCardPayLink: 'Getting card pay link…',
+    cardPayLinkCopied:
+      'Card pay link copied. The card fee is included. Paste it into a text or email.',
+    payByBankButton: 'Pay by bank — ${{amount}}',
+    payByCardButton: 'Pay by card — ${{amount}}',
+    cardFeeEmailNote: 'Includes a {{percent}}% card fee (${{fee}}). Paying by bank has no card fee.',
+    cardFeeToggle: 'Credit card fee',
+    cardFeePercentInvalid: 'Set the card fee percent in Settings.',
+    cardFeeOnInvoice:
+      'Card payments add {{percent}}% (${{fee}}). Bank payments stay ${{balance}}.',
+    cardFeePdfNote: 'Credit card payments include a {{percent}}% fee (${{fee}}).',
     creatingStripePayLink: 'Getting Stripe pay link…',
     stripePayLinkReady: 'Stripe pay link ready',
     stripePayLinkReadyCustomer:
@@ -1233,6 +1251,8 @@ const extra = {
     paymentConfirmed: 'Payment confirmed. This invoice is now marked Paid with $0.00 balance due.',
     stripeStillPending:
       'Stripe still shows this checkout as "{{status}}". Create a new pay link, complete payment, then Refresh again.',
+    stripeAchProcessing:
+      'Stripe has the bank payment, and it is still processing. The invoice stays unpaid until the bank clears it, usually a few business days. QuickBooks will not show it as paid until then. Refresh again after it clears.',
     refreshPaymentFailed: 'Failed to refresh payment status.',
     pushQbFailed: 'Failed to push to QuickBooks.',
     pdfExportFailed: 'PDF export failed: {{message}}',
@@ -2137,6 +2157,15 @@ const extra = {
     stripe: 'Stripe Connect',
     stripeIntro:
       "Connect this nursery's Stripe account so customers can pay invoices by card. Optional — many nurseries collect ACH in QuickBooks and Mark paid here. Owner/admin only.",
+    cardFeeTitle: 'Card fee',
+    cardFeeHint:
+      'This is the only card fee percent. Turn the fee on at the bottom of an invoice to add it to that invoice’s card payment.',
+    cardFeePlaceholder: '3',
+    cardFeeSave: 'Save card fee',
+    cardFeeSaving: 'Saving…',
+    cardFeeSaved: 'Card fee saved. Turn it on at the bottom of an invoice to use it.',
+    cardFeeCleared: 'Card fee removed. Pay links are bank account only.',
+    cardFeeInvalid: 'Enter a card fee from 0.1% to 10%, or leave it blank for bank only.',
     stripeSandboxEinHint:
       'Sandbox: Connect skips Stripe’s hosted SSN form (it rejects test IDs). NurseryOS creates a verified test account instantly — click Connect Stripe / Continue onboarding and you should see Ready to collect payments.',
     stripeSandboxReady: 'Sandbox Stripe connected — ready to collect test payments.',

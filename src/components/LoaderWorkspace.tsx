@@ -74,6 +74,8 @@ interface LoaderWorkspaceProps {
   nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
+  cardFeePercent?: number | null;
+  cardFeePilot?: boolean;
   /** Seller console: Called in toggle beside Pulled and Loaded. */
   showCalledIn?: boolean;
   onOpenDirectShipTruck?: (truckId: string) => void;
@@ -90,6 +92,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
   nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId,
+  cardFeePercent = null,
+  cardFeePilot = false,
   showCalledIn = false,
   onOpenDirectShipTruck
 }) => {
@@ -1859,6 +1863,8 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         canViewProfit={permissions.canViewProfit}
         canCollectPayments={permissions.canCollectPayments}
         canUseQuickbooks={permissions.canUseQuickbooks}
+        cardFeePercent={cardFeePercent}
+        cardFeePilot={cardFeePilot}
       />
       )}
 

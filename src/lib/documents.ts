@@ -204,6 +204,22 @@ export async function stampCustomerDocumentEmailed(
   );
 }
 
+/** Save the invoice card-fee switch. The percent lives on the nursery settings. */
+export async function stampInvoiceCardFee(
+  documentId: string,
+  fields: { cardFeeEnabled: boolean }
+): Promise<void> {
+  const tenantId = requireTenantId();
+  await updateDoc(
+    documentDoc(tenantId, documentId),
+    sanitizeForFirestore({
+      cardFeeEnabled: fields.cardFeeEnabled,
+      cardFeePercent: null,
+      updatedAt: new Date().toISOString()
+    })
+  );
+}
+
 export async function updateCustomerDocument(document: CustomerDocument): Promise<void> {
   const tenantId = requireTenantId();
   const { id, ...rest } = document;

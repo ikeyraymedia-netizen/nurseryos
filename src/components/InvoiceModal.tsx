@@ -47,6 +47,7 @@ import { updateCustomerOrder, addCustomerOrder, subscribeToWeights, updateOrderI
 import { QuickbooksSavingShield } from './QuickbooksSavingShield';
 import {
   addCustomerDocument,
+  stampInvoiceCardFee,
   updateCustomerDocument,
   stampCustomerDocumentEmailed,
   deleteCustomerDocument,
@@ -95,6 +96,7 @@ import { blobToBase64, looksLikeEmail, mailtoUrl, MAX_CC_RECIPIENTS, parseCcEmai
 import { OutboundReplySelect } from './OutboundReplySelect';
 import { EmailCcSection } from './EmailCcSection';
 import { createInvoiceCheckout, confirmInvoicePayment, fetchStripeStatus } from '../lib/stripe';
+import { cardFeeCents, cardPaymentsEnabled, normalizeCardFeePercent } from '../lib/cardFee';
 import { prepareEstimateAcceptLink } from '../lib/estimateAccept';
 import { deliverPdfBlob } from '../lib/downloadPdf';
 import { PdfShareSheet } from './PdfShareSheet';
@@ -138,6 +140,10 @@ interface InvoiceModalProps {
   canViewProfit?: boolean;
   /** Create Stripe Checkout pay links (gated by payments module). */
   canCollectPayments?: boolean;
+  /** Card fee percent from Settings. The invoice toggle uses this rate. */
+  cardFeePercent?: number | null;
+  /** Bayou State owner test. Other nurseries keep one card-and-bank pay link. */
+  cardFeePilot?: boolean;
   /** Push to QuickBooks Online (gated by quickbooks module). */
   canUseQuickbooks?: boolean;
 }
@@ -157,7 +163,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   tenantId,
   canViewProfit = false,
   canCollectPayments = false,
-  canUseQuickbooks = false
+  canUseQuickbooks = false,
+  cardFeePercent = null,
+  cardFeePilot = false
 }) => {
   const initialDocumentType: CustomerDocumentType =
     (initialDocumentTypeProp as CustomerDocumentType) || 'invoice';
@@ -222,6 +230,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [freightCharge, setFreightCharge] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
   const [invoiceNotes, setInvoiceNotes] = useState(t('invoice.defaultNotesInvoice'));
+  const [cardFeeOn, setCardFeeOn] = useState(false);
 
   // Store editable item prices
   const [itemPrices, setItemPrices] = useState<Record<string, number>>({});
@@ -249,6 +258,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [qboSaving, setQboSaving] = useState(false);
   const [qbPushMessage, setQbPushMessage] = useState<string | null>(null);
   const [isCreatingPayLink, setIsCreatingPayLink] = useState(false);
+  const [isCreatingCardPayLink, setIsCreatingCardPayLink] = useState(false);
   const [payLinkMessage, setPayLinkMessage] = useState<string | null>(null);
   const [payLinkUrl, setPayLinkUrl] = useState<string | null>(
     existingDocument?.qboInvoiceLink || existingDocument?.stripeCheckoutUrl || null
@@ -424,6 +434,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           ? details.discount
           : 0
     );
+    setCardFeeOn(type === 'invoice' && Boolean(doc?.cardFeeEnabled));
     const storedNotes = doc?.notes || details?.notes || '';
     const notesForType =
       type === 'estimate' ? storedNotes : notesWithoutUnconvertedEstimate(storedNotes);
@@ -1229,6 +1240,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     documentType === 'invoice'
       ? Math.max(0, Number((grandTotal - amountPaid).toFixed(2)))
       : grandTotal;
+  const invoiceCardFeePercent = normalizeCardFeePercent(cardFeePercent);
+  const cardAllowed =
+    cardFeePilot &&
+    documentType === 'invoice' &&
+    cardPaymentsEnabled(cardFeeOn, invoiceCardFeePercent);
+  const cardFeeAmount = cardAllowed
+    ? cardFeeCents(Math.round(Math.max(0, balanceDue) * 100), invoiceCardFeePercent || 0) / 100
+    : 0;
+  const cardPayTotal = Number((balanceDue + cardFeeAmount).toFixed(2));
   const isFullyPaid = documentType === 'invoice' && balanceDue < 0.009 && amountPaid > 0.009;
   /**
    * QuickBooks stays the pay link for every role that can use it.
@@ -1289,9 +1309,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // HTML Email Layout Builder
   const generateEmailHTML = (
     payUrlOverride?: string | null,
-    acceptUrlOverride?: string | null
+    acceptUrlOverride?: string | null,
+    cardPayUrlOverride?: string | null
   ): string => {
     const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
+    const cardPayUrl = cardPayUrlOverride || null;
     const acceptUrl = isEstimate ? acceptUrlOverride || null : null;
     const itemsRows = workingItems.map((item) => {
       const qty = getItemQty(item);
@@ -1451,12 +1473,27 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ? `
         <div style="margin-top: 28px; text-align: center; font-family: Arial, sans-serif;">
           <a href="${payUrl}" style="display: inline-block; background-color: #5b21b6; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 28px; border-radius: 10px;">
-            ${t('invoice.payOnlineButton', { amount: balanceDue.toFixed(2) })}
+            ${
+              cardPayUrl
+                ? t('invoice.payByBankButton', { amount: balanceDue.toFixed(2) })
+                : t('invoice.payOnlineButton', { amount: balanceDue.toFixed(2) })
+            }
           </a>
           <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
             ${t('invoice.payOnlineLinkFallback')}<br/>
             <a href="${payUrl}" style="color: #5b21b6; word-break: break-all;">${payUrl}</a>
           </p>
+          ${
+            cardPayUrl
+              ? `<a href="${cardPayUrl}" style="display: inline-block; margin-top: 14px; background-color: #0e7490; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 28px; border-radius: 10px;">
+            ${t('invoice.payByCardButton', { amount: cardPayTotal.toFixed(2) })}
+          </a>
+          <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+            ${t('invoice.cardFeeEmailNote', { percent: String(invoiceCardFeePercent), fee: cardFeeAmount.toFixed(2) })}<br/>
+            <a href="${cardPayUrl}" style="color: #0e7490; word-break: break-all;">${cardPayUrl}</a>
+          </p>`
+              : ''
+          }
         </div>`
             : ''
         }
@@ -1501,9 +1538,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Plain Text Email Builder
   const generateEmailText = (
     payUrlOverride?: string | null,
-    acceptUrlOverride?: string | null
+    acceptUrlOverride?: string | null,
+    cardPayUrlOverride?: string | null
   ): string => {
     const payUrl = payUrlOverride === undefined ? activePayLinkUrl : payUrlOverride;
+    const cardPayUrl = cardPayUrlOverride || null;
     const acceptUrl = isEstimate ? acceptUrlOverride || null : null;
     const itemsText = workingItems.map((item) => {
       const qty = getItemQty(item);
@@ -1575,7 +1614,11 @@ ${invoiceNotes ? `NOTES:\n${invoiceNotes}\n` : ''}${
         : ''
     }${
       payUrl
-        ? `\nPAY ONLINE:\n${payUrl}\n`
+        ? `\n${cardPayUrl || (useStripePayLinks && cardFeePilot) ? 'PAY BY BANK' : 'PAY ONLINE'}:\n${payUrl}\n`
+        : ''
+    }${
+      cardPayUrl
+        ? `\nPAY BY CARD (includes ${invoiceCardFeePercent}% fee, $${cardFeeAmount.toFixed(2)}):\n${cardPayUrl}\n`
         : ''
     }${
       acceptUrl
@@ -1648,9 +1691,13 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         setEmailErrorMessage(t('invoice.stripeNotReady'));
         return;
       }
+      let emailCardPayUrl: string | null = null;
       if (wantPayLink) {
         try {
           emailPayUrl = await ensurePayLink(saved.id);
+          if (payProvider === 'stripe' && cardAllowed) {
+            emailCardPayUrl = await ensurePayLink(saved.id, 'card');
+          }
         } catch (payErr) {
           if (payProvider === 'stripe') {
             setEmailSentStatus('error_general');
@@ -1682,8 +1729,8 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         estimateAcceptUrl = prepared.acceptUrl || null;
       }
 
-      const emailHtml = generateEmailHTML(emailPayUrl, estimateAcceptUrl);
-      const emailText = generateEmailText(emailPayUrl, estimateAcceptUrl);
+      const emailHtml = generateEmailHTML(emailPayUrl, estimateAcceptUrl, emailCardPayUrl);
+      const emailText = generateEmailText(emailPayUrl, estimateAcceptUrl, emailCardPayUrl);
       const pdfDoc = await buildDocumentPdf();
       const pdfAttachment = {
         filename: pdfDoc.fileName,
@@ -1778,6 +1825,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         if (qbSync.note) setEmailQbNote(qbSync.note);
       }
       let mailPayUrl: string | null | undefined;
+      let mailCardPayUrl: string | null = null;
       if (payProvider === 'stripe') {
         if (!includePayLinkInEmail || isFullyPaid || documentType !== 'invoice') {
           mailPayUrl = null;
@@ -1792,6 +1840,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         } else {
           try {
             mailPayUrl = await ensurePayLink(savedDocumentId);
+            if (cardAllowed) mailCardPayUrl = await ensurePayLink(savedDocumentId, 'card');
           } catch (payErr) {
             setEmailSentStatus('error_general');
             setEmailErrorMessage(
@@ -1801,7 +1850,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           }
         }
       }
-      const textBody = generateEmailText(mailPayUrl);
+      const textBody = generateEmailText(mailPayUrl, null, mailCardPayUrl);
       window.open(
         mailtoUrl({
           to: customerEmail,
@@ -2483,7 +2532,9 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
           omittedItemIds: documentType === 'invoice' ? omittedItemIds : undefined,
           subtotal,
           salesTax,
-          grandTotal: savedGrandTotal
+          grandTotal: savedGrandTotal,
+          cardFeeEnabled: documentType === 'invoice' ? cardFeeOn : false,
+          cardFeePercent: null
         };
 
       const alreadyInQbo = Boolean(
@@ -2883,21 +2934,16 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
   };
 
-  const ensurePayLink = async (documentId?: string): Promise<string> => {
+  const ensurePayLink = async (
+    documentId?: string,
+    method: 'ach' | 'card' = 'ach'
+  ): Promise<string> => {
     const id = documentId || savedDocumentId;
     if (
       !documentId &&
       activePayLinkUrl &&
       useQboPayLinks &&
       paymentDocument?.qboInvoiceLink
-    ) {
-      return activePayLinkUrl;
-    }
-    if (
-      !documentId &&
-      activePayLinkUrl &&
-      useStripePayLinks &&
-      paymentDocument?.stripeCheckoutUrl
     ) {
       return activePayLinkUrl;
     }
@@ -2934,16 +2980,22 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       return result.url;
     }
 
+    if (method === 'card') {
+      await stampInvoiceCardFee(id, { cardFeeEnabled: cardFeeOn });
+    }
     const result = await createInvoiceCheckout({
       tenantId,
-      documentId: id
+      documentId: id,
+      method
     });
     if (!result.url) {
       throw new Error('Stripe did not return a pay link URL.');
     }
-    setPayLinkUrl(result.url);
-    setPayLinkUrlProvider('stripe');
-    setPayLinkMessage(t('invoice.stripePayLinkReady'));
+    if (method === 'ach') {
+      setPayLinkUrl(result.url);
+      setPayLinkUrlProvider('stripe');
+      setPayLinkMessage(t('invoice.stripePayLinkReady'));
+    }
     await logAuditEvent({
       action: 'stripe.checkout_created',
       summary: `Created Stripe pay link for invoice ${invoiceNumber}`,
@@ -2971,7 +3023,13 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       const url = await ensurePayLink();
       try {
         await navigator.clipboard.writeText(url);
-        alert(useStripePayLinks ? t('invoice.stripePayLinkCopied') : useQboPayLinks ? t('invoice.qbPayLinkCopied') : t('invoice.payLinkCopied'));
+        alert(
+          useStripePayLinks
+            ? t(cardFeePilot ? 'invoice.bankPayLinkCopied' : 'invoice.stripePayLinkCopied')
+            : useQboPayLinks
+              ? t('invoice.qbPayLinkCopied')
+              : t('invoice.payLinkCopied')
+        );
       } catch {
         alert(t('invoice.payLinkReadyAlert', { url }));
       }
@@ -2982,6 +3040,27 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
   };
 
+  const handleCreateCardPayLink = async () => {
+    if (!tenantId || !savedDocumentId) {
+      alert(t('invoice.saveInvoiceFirst'));
+      return;
+    }
+    setIsCreatingCardPayLink(true);
+    try {
+      const url = await ensurePayLink(savedDocumentId, 'card');
+      try {
+        await navigator.clipboard.writeText(url);
+        alert(t('invoice.cardPayLinkCopied'));
+      } catch {
+        alert(t('invoice.payLinkReadyAlert', { url }));
+      }
+    } catch (err: any) {
+      alert(err?.message || t('invoice.stripePayLinkFailed'));
+    } finally {
+      setIsCreatingCardPayLink(false);
+    }
+  };
+
   const handleRefreshPaymentStatus = async (opts?: { silent?: boolean }) => {
     if (!tenantId || !savedDocumentId) {
       if (!opts?.silent) alert(t('invoice.saveInvoiceFirst'));
@@ -2989,8 +3068,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     }
     setIsRefreshingPayment(true);
     try {
-      if (useStripePayLinks) {
-        if (!stripePaymentsReady && !paymentDocument?.stripeCheckoutSessionId) {
+      const hasStripeCheckout = Boolean(
+        paymentDocument?.stripeCheckoutSessionId || paymentDocument?.stripeCardCheckoutSessionId
+      );
+      if (useStripePayLinks || hasStripeCheckout) {
+        if (!stripePaymentsReady && !hasStripeCheckout) {
           if (!opts?.silent) alert(t('invoice.stripeNotReady'));
           return;
         }
@@ -3011,15 +3093,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 : t('invoice.paymentConfirmed')
             );
           }
-        } else if (!opts?.silent) {
-          alert(
-            result.hint ||
-              t('invoice.stripeStillPending', {
-                status: result.paymentStatus || 'unpaid'
-              })
-          );
+          return;
         }
-        return;
+        if (result.paymentStatus === 'processing') {
+          if (!opts?.silent) alert(t('invoice.stripeAchProcessing'));
+          return;
+        }
+        if (!useQboPayLinks && !paymentDocument?.qboInvoiceId) {
+          if (!opts?.silent) {
+            alert(
+              result.hint ||
+                t('invoice.stripeStillPending', {
+                  status: result.paymentStatus || 'unpaid'
+                })
+            );
+          }
+          return;
+        }
       }
 
       if (useQboPayLinks || paymentDocument?.qboInvoiceId) {
@@ -3401,6 +3491,23 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       } else {
         writeTotal(totalLabel, money(balanceDue), true, true);
       }
+      if (cardAllowed && invoiceCardFeePercent) {
+        y += 4;
+        ensureSpace(24);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(14, 116, 144);
+        pdf.text(
+          t('invoice.cardFeePdfNote', {
+            percent: String(invoiceCardFeePercent),
+            fee: cardFeeAmount.toFixed(2)
+          }),
+          rightX,
+          y,
+          { align: 'right' }
+        );
+        y += 12;
+      }
 
       // Notes
       if (documentType === 'invoice' && nurseryRemittanceAddress.trim()) {
@@ -3513,6 +3620,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
     isPushingQb ||
     markingPaidBusy ||
     isCreatingPayLink ||
+    isCreatingCardPayLink ||
     isSendingEmail ||
     isOpeningMail ||
     isRefreshingPayment;
@@ -4296,7 +4404,11 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                         {t('invoice.includePay')}
                         <span className="block font-medium text-sky-700">
                           {useStripePayLinks
-                            ? t('invoice.includePayHintStripe')
+                            ? t(
+                                cardFeePilot
+                                  ? 'invoice.includePayHintStripeBank'
+                                  : 'invoice.includePayHintStripe'
+                              )
                             : t('invoice.includePayHint')}
                         </span>
                       </span>
@@ -4374,7 +4486,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                 <RefreshCw className={`h-4 w-4 ${isRefreshingPayment ? 'animate-spin' : ''}`} />
                 <span>
                   {isRefreshingPayment
-                    ? useStripePayLinks
+                    ? useStripePayLinks || paymentDocument?.stripeCheckoutSessionId
                       ? t('invoice.checkingStripe')
                       : t('invoice.checkingQbPayment')
                     : t('invoice.refreshPayment')}
@@ -4396,7 +4508,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       ? t('invoice.alreadyPaidTitle')
                       : savedDocumentId
                         ? useStripePayLinks
-                          ? t('invoice.createStripePayLink')
+                          ? t(cardFeePilot ? 'invoice.copyBankPayLink' : 'invoice.createStripePayLink')
                           : t('invoice.createPayLink')
                         : t('invoice.saveFirst')
                   }
@@ -4407,12 +4519,32 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                       ? t('invoice.invoicePaidBtn')
                       : isCreatingPayLink
                         ? useStripePayLinks
-                          ? t('invoice.creatingStripePayLink')
+                          ? t(
+                              cardFeePilot
+                                ? 'invoice.creatingBankPayLink'
+                                : 'invoice.creatingStripePayLink'
+                            )
                           : t('invoice.creatingPayLink')
                         : payLinkMessage ||
                           (useStripePayLinks
-                            ? t('invoice.createStripePayLink')
+                            ? t(cardFeePilot ? 'invoice.copyBankPayLink' : 'invoice.createStripePayLink')
                             : t('invoice.createPayLink'))}
+                  </span>
+                </button>
+              )}
+              {tenantId && useStripePayLinks && documentType === 'invoice' && cardAllowed && (
+                <button
+                  type="button"
+                  onClick={() => void handleCreateCardPayLink()}
+                  disabled={isCreatingCardPayLink || !savedDocumentId || isFullyPaid}
+                  className="w-full py-2.5 px-4 bg-ink-700 hover:bg-ink-800 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center space-x-2"
+                  title={t('invoice.copyCardPayLink')}
+                >
+                  <DollarSign className="h-4 w-4" />
+                  <span>
+                    {isCreatingCardPayLink
+                      ? t('invoice.creatingCardPayLink')
+                      : t('invoice.copyCardPayLink')}
                   </span>
                 </button>
               )}
@@ -5738,6 +5870,37 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     </span>
                     <span className="text-base font-black text-ink-950">${balanceDue.toFixed(2)}</span>
                   </div>
+
+                  {documentType === 'invoice' && cardFeePilot && (
+                    <div className="mt-2 rounded-lg border border-sky-100 bg-sky-50/60 px-2 py-2 text-left font-sans">
+                      <label className="flex items-center justify-between gap-2 print:hidden">
+                        <span className="text-[11px] font-bold text-sky-950">
+                          {t('invoice.cardFeeToggle')}
+                          {invoiceCardFeePercent ? ` ${invoiceCardFeePercent}%` : ''}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={cardFeeOn}
+                          onChange={(e) => setCardFeeOn(e.target.checked)}
+                          className="h-4 w-4 text-sky-700"
+                        />
+                      </label>
+                      {cardFeeOn && !invoiceCardFeePercent && (
+                        <p className="mt-1 text-[10px] leading-snug text-rose-700 print:hidden">
+                          {t('invoice.cardFeePercentInvalid')}
+                        </p>
+                      )}
+                      {cardAllowed && (
+                        <p className="mt-1 text-[10px] leading-snug text-sky-900">
+                          {t('invoice.cardFeeOnInvoice', {
+                            percent: String(invoiceCardFeePercent),
+                            fee: cardFeeAmount.toFixed(2),
+                            balance: balanceDue.toFixed(2)
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                 </div>
               </div>

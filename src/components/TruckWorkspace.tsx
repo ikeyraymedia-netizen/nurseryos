@@ -93,6 +93,8 @@ interface TruckWorkspaceProps {
   nurseryRemittanceAddress?: string;
   nurseryLogoSrc?: string | null;
   tenantId?: string;
+  cardFeePercent?: number | null;
+  cardFeePilot?: boolean;
   /** Seller console: Called in toggle beside Pulled and Loaded. */
   showCalledIn?: boolean;
   onEditTruck: () => void;
@@ -111,6 +113,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
   nurseryRemittanceAddress = '',
   nurseryLogoSrc = null,
   tenantId,
+  cardFeePercent = null,
+  cardFeePilot = false,
   showCalledIn = false,
   onEditTruck,
   onSelectOrder
@@ -2282,6 +2286,8 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           tenantId={tenantId}
           canViewProfit={permissions.canViewProfit}
           canCollectPayments={permissions.canCollectPayments}
+          cardFeePercent={cardFeePercent}
+          cardFeePilot={cardFeePilot}
           canUseQuickbooks={permissions.canUseQuickbooks}
         />
       )}

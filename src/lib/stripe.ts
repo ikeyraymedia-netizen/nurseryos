@@ -153,6 +153,7 @@ export async function disconnectStripe(tenantId: string): Promise<void> {
 export async function createInvoiceCheckout(params: {
   tenantId: string;
   documentId: string;
+  method?: 'ach' | 'card';
 }): Promise<{ url: string; sessionId: string }> {
   const res = await fetch('/api/stripe/create-checkout', {
     method: 'POST',

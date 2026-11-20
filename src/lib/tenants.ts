@@ -182,6 +182,20 @@ export async function updateTenantShippingAddress(
   });
 }
 
+/** Owner: percent added only on card invoice payments. Null turns cards off. */
+export async function updateTenantCardFeePercent(
+  tenantId: string,
+  cardFeePercent: number | null
+): Promise<void> {
+  const value =
+    cardFeePercent != null && Number.isFinite(cardFeePercent) && cardFeePercent > 0
+      ? Math.round(cardFeePercent * 100) / 100
+      : null;
+  await updateDoc(doc(db, 'tenants', tenantId), {
+    cardFeePercent: value
+  });
+}
+
 /** Owner/admin: where customers should mail invoice payments. */
 export async function updateTenantRemittanceAddress(
   tenantId: string,

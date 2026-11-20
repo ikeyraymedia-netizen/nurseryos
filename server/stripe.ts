@@ -8,6 +8,7 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken
 } from './firebaseAdmin';
+import { cardFeeCents, cardFeePilotTenant, normalizeCardFeePercent } from '../src/lib/cardFee';
 
 interface StripeIntegration {
   provider: 'stripe';
@@ -429,42 +430,116 @@ async function refreshAccountStatus(tenantId: string, accountId: string, uid?: s
   return doc;
 }
 
+function checkoutAmountMeta(session: Stripe.Checkout.Session): {
+  invoiceAmountCents?: number;
+  cardFeeCents?: number;
+} {
+  const invoiceRaw = session.metadata?.invoiceAmountCents;
+  const feeRaw = session.metadata?.cardFeeCents;
+  const invoice = Number(invoiceRaw);
+  const fee = Number(feeRaw);
+  return {
+    ...(invoiceRaw != null && invoiceRaw !== '' && Number.isFinite(invoice)
+      ? { invoiceAmountCents: Math.round(invoice) }
+      : {}),
+    ...(feeRaw != null && feeRaw !== '' && Number.isFinite(fee)
+      ? { cardFeeCents: Math.round(fee) }
+      : {})
+  };
+}
+
 async function markDocumentPaid(params: {
   tenantId: string;
   documentId: string;
   sessionId?: string;
   paymentIntentId?: string;
   amountTotal?: number | null;
+  /** Invoice cash only. The card fee is stored separately so it is not an overpayment. */
+  invoiceAmountCents?: number | null;
+  cardFeeCents?: number | null;
 }) {
   const ref = getAdminDb().doc(`tenants/${params.tenantId}/documents/${params.documentId}`);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    console.warn('[stripe] document not found for payment', params);
+  const written = await getAdminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    const data = snap.data() || {};
+    const applied: string[] = Array.isArray(data.stripeAppliedSessionIds)
+      ? data.stripeAppliedSessionIds.map(String)
+      : [];
+    if (params.sessionId && applied.includes(params.sessionId)) return null;
+
+    const prevPaid =
+      typeof data.stripePaidAmountCents === 'number' && Number.isFinite(data.stripePaidAmountCents)
+        ? data.stripePaidAmountCents
+        : 0;
+    const prevFee =
+      typeof data.stripeCardFeeCents === 'number' && Number.isFinite(data.stripeCardFeeCents)
+        ? data.stripeCardFeeCents
+        : 0;
+    const paidCents =
+      typeof params.invoiceAmountCents === 'number'
+        ? prevPaid + params.invoiceAmountCents
+        : typeof params.amountTotal === 'number'
+          ? params.amountTotal
+          : null;
+    const feeCents =
+      typeof params.cardFeeCents === 'number' ? prevFee + params.cardFeeCents : prevFee;
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      paymentStatus: 'paid',
+      paidAt: data.paidAt || now,
+      paymentMethod: 'stripe',
+      stripePaymentIntentId: params.paymentIntentId || data.stripePaymentIntentId || null,
+      stripePaidAmountCents: paidCents,
+      stripeCardFeeCents: feeCents > 0 ? feeCents : null,
+      updatedAt: now
+    };
+    if (params.sessionId) {
+      patch.stripeAppliedSessionIds = [...applied, params.sessionId].slice(-20);
+      if (!data.stripeCheckoutSessionId || data.stripeCheckoutSessionId === params.sessionId) {
+        patch.stripeCheckoutSessionId = params.sessionId;
+      }
+    }
+    tx.set(ref, patch, { merge: true });
+    return data;
+  });
+  if (!written) {
+    const exists = (await ref.get()).exists;
+    if (!exists) console.warn('[stripe] document not found for payment', params);
     return;
   }
-  const now = new Date().toISOString();
-  await ref.set(
-    {
-      paymentStatus: 'paid',
-      paidAt: now,
-      paymentMethod: 'stripe',
-      stripeCheckoutSessionId: params.sessionId || null,
-      stripePaymentIntentId: params.paymentIntentId || null,
-      stripePaidAmountCents:
-        typeof params.amountTotal === 'number' ? params.amountTotal : null,
-      updatedAt: now
-    },
-    { merge: true }
-  );
+  const data = written;
+
+  const bankSessionId = String(data.stripeCheckoutSessionId || '');
+  const cardSessionId = String(data.stripeCardCheckoutSessionId || '');
+  const otherSessionId =
+    params.sessionId && params.sessionId === cardSessionId
+      ? bankSessionId
+      : params.sessionId && params.sessionId === bankSessionId
+        ? cardSessionId
+        : '';
+  const connectedAccountId = String(data.stripeConnectedAccountId || '');
+  if (otherSessionId && otherSessionId !== params.sessionId && connectedAccountId) {
+    try {
+      await getStripe().checkout.sessions.expire(
+        otherSessionId,
+        {},
+        { stripeAccount: connectedAccountId }
+      );
+    } catch (err) {
+      console.warn('[stripe] could not expire the other pay link', otherSessionId, err);
+    }
+  }
 
   try {
-    const data = snap.data();
     const docNumber = String(data?.documentNumber || 'Invoice');
     const customerName = String(data?.billToName || data?.customerName || 'Customer');
     const amount =
       typeof params.amountTotal === 'number'
         ? params.amountTotal / 100
-        : Number(data?.grandTotal || 0);
+        : typeof params.invoiceAmountCents === 'number'
+          ? params.invoiceAmountCents / 100
+          : Number(data?.grandTotal || 0);
     const { sendTenantPush } = await import('./pushNotifications');
     await sendTenantPush({
       tenantId: params.tenantId,
@@ -600,18 +675,18 @@ async function retrieveCheckoutSession(
   sessionId: string,
   connectedAccountId?: string | null
 ): Promise<Stripe.Checkout.Session | null> {
+  const params = { expand: ['payment_intent'] as ['payment_intent'] };
   // Destination charges live on the platform account.
   try {
-    return await stripe.checkout.sessions.retrieve(sessionId);
+    return await stripe.checkout.sessions.retrieve(sessionId, params);
   } catch {
     // ignore — may be a direct-charge session on the connected account
   }
   if (connectedAccountId) {
     try {
-      return await stripe.checkout.sessions.retrieve(
-        sessionId,
-        { stripeAccount: connectedAccountId }
-      );
+      return await stripe.checkout.sessions.retrieve(sessionId, params, {
+        stripeAccount: connectedAccountId
+      });
     } catch {
       // ignore
     }
@@ -681,7 +756,13 @@ async function findPaidCheckoutForDocument(params: {
           amount_total: paidIntent.amount_received || paidIntent.amount,
           metadata: {
             tenantId,
-            documentId
+            documentId,
+            ...(paidIntent.metadata?.invoiceAmountCents
+              ? { invoiceAmountCents: String(paidIntent.metadata.invoiceAmountCents) }
+              : {}),
+            ...(paidIntent.metadata?.cardFeeCents
+              ? { cardFeeCents: String(paidIntent.metadata.cardFeeCents) }
+              : {})
           }
         } as unknown as Stripe.Checkout.Session;
       }
@@ -745,7 +826,8 @@ export function registerStripeWebhookRoute(app: Express) {
               documentId,
               sessionId: session.id,
               paymentIntentId: pi || undefined,
-              amountTotal: session.amount_total
+              amountTotal: session.amount_total,
+              ...checkoutAmountMeta(session)
             });
           }
         }
@@ -764,7 +846,8 @@ export function registerStripeWebhookRoute(app: Express) {
               documentId,
               sessionId: session.id,
               paymentIntentId: pi || undefined,
-              amountTotal: session.amount_total
+              amountTotal: session.amount_total,
+              ...checkoutAmountMeta(session)
             });
           }
         }
@@ -1333,11 +1416,56 @@ export function registerStripeRoutes(app: Express) {
       if (!Number.isFinite(grandTotal) || grandTotal <= 0) {
         throw Object.assign(new Error('Invoice total must be greater than $0.'), { status: 400 });
       }
-      const amountCents = Math.round(grandTotal * 100);
+      const grandCents = Math.round(grandTotal * 100);
+      const alreadyPaidCents =
+        typeof doc.stripePaidAmountCents === 'number' && Number.isFinite(doc.stripePaidAmountCents)
+          ? Math.max(0, Math.round(doc.stripePaidAmountCents))
+          : doc.paymentStatus === 'paid'
+            ? grandCents
+            : 0;
+      const amountCents = Math.max(0, grandCents - Math.min(alreadyPaidCents, grandCents));
       if (amountCents < 50) {
-        throw Object.assign(new Error('Stripe requires a minimum charge of $0.50.'), {
-          status: 400
-        });
+        throw Object.assign(
+          new Error(
+            amountCents === 0
+              ? 'This invoice is already paid.'
+              : 'Stripe requires a minimum charge of $0.50.'
+          ),
+          { status: 400 }
+        );
+      }
+
+      const tenantSnap = await getAdminDb().doc(`tenants/${tenantId}`).get();
+      const tenantData = tenantSnap.data() || {};
+      const cardFeePilot = cardFeePilotTenant({
+        id: tenantId,
+        name: tenantData.name,
+        publicAvailabilitySlug: tenantData.publicAvailabilitySlug
+      });
+      // Other nurseries keep one link that offers both a card and a bank account.
+      const payMethod: 'ach' | 'card' | 'both' = !cardFeePilot
+        ? 'both'
+        : String(req.body?.method || 'ach') === 'card'
+          ? 'card'
+          : 'ach';
+      let feeCents = 0;
+      let feePercent = 0;
+      if (payMethod === 'card') {
+        const savedPercent = normalizeCardFeePercent(Number(tenantData.cardFeePercent));
+        feePercent = savedPercent ?? 0;
+        feeCents = cardFeeCents(amountCents, feePercent);
+        if (!doc.cardFeeEnabled) {
+          throw Object.assign(
+            new Error('Turn on the credit card fee at the bottom of this invoice.'),
+            { status: 400 }
+          );
+        }
+        if (feeCents < 1) {
+          throw Object.assign(
+            new Error('Set the card fee percent in Settings before creating a card link.'),
+            { status: 400 }
+          );
+        }
       }
 
       const docNumber = String(doc.documentNumber || documentId);
@@ -1360,59 +1488,109 @@ export function registerStripeRoutes(app: Express) {
         console.warn('[stripe] could not request ACH capability', integration.accountId, err);
       }
 
+      const feeLabel =
+        feePercent % 1 === 0 ? String(feePercent) : feePercent.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+      const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: amountCents,
+            product_data: {
+              name: `Invoice ${docNumber}`,
+              description: `Payment for ${customerName}`.slice(0, 500)
+            }
+          }
+        }
+      ];
+      if (payMethod === 'card') {
+        lineItems.push({
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: feeCents,
+            product_data: {
+              name: `Card fee (${feeLabel}%)`,
+              description: `Card fee for invoice ${docNumber}`.slice(0, 500)
+            }
+          }
+        });
+      }
+
+      const payMeta = {
+        tenantId,
+        documentId,
+        documentNumber: docNumber,
+        payMethod,
+        invoiceAmountCents: String(amountCents),
+        cardFeeCents: String(payMethod === 'card' ? feeCents : 0)
+      };
+
       const session = await stripe.checkout.sessions.create(
         {
           mode: 'payment',
           // Explicit types so ACH appears for Connect direct charges (dynamic PM alone can hide it).
-          payment_method_types: ['card', 'us_bank_account'],
-          payment_method_options: {
-            us_bank_account: {
-              financial_connections: {
-                permissions: ['payment_method']
-              },
-              verification_method: 'automatic'
-            }
-          },
-          line_items: [
-            {
-              quantity: 1,
-              price_data: {
-                currency: 'usd',
-                unit_amount: amountCents,
-                product_data: {
-                  name: `Invoice ${docNumber}`,
-                  description: `Payment for ${customerName}`.slice(0, 500)
+          payment_method_types:
+            payMethod === 'card'
+              ? ['card']
+              : payMethod === 'ach'
+                ? ['us_bank_account']
+                : ['card', 'us_bank_account'],
+          ...(payMethod !== 'card'
+            ? {
+                payment_method_options: {
+                  us_bank_account: {
+                    financial_connections: {
+                      permissions: ['payment_method'] as ('payment_method' | 'balances' | 'ownership' | 'transactions')[]
+                    },
+                    verification_method: 'automatic' as const
+                  }
                 }
               }
-            }
-          ],
+            : {}),
+          line_items: lineItems,
           // {CHECKOUT_SESSION_ID} is replaced by Stripe on redirect — used to sync paid status
           // even if the webhook endpoint is delayed or misconfigured.
           success_url: `${appOrigin()}/?stripe_pay=success&documentId=${encodeURIComponent(documentId)}&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${appOrigin()}/?stripe_pay=cancel&documentId=${encodeURIComponent(documentId)}`,
           customer_email: customerEmail || undefined,
-          metadata: {
-            tenantId,
-            documentId,
-            documentNumber: docNumber
-          },
+          metadata: payMeta,
           payment_intent_data: {
-            metadata: {
-              tenantId,
-              documentId,
-              documentNumber: docNumber
-            }
+            metadata: payMeta
           }
         },
         { stripeAccount: integration.accountId }
       );
 
+      const previousSessionId =
+        payMethod === 'card'
+          ? String(doc.stripeCardCheckoutSessionId || '')
+          : String(doc.stripeCheckoutSessionId || '');
+      if (previousSessionId && previousSessionId !== session.id) {
+        try {
+          await stripe.checkout.sessions.expire(
+            previousSessionId,
+            {},
+            { stripeAccount: integration.accountId }
+          );
+        } catch (err) {
+          console.warn('[stripe] could not expire previous pay link', previousSessionId, err);
+        }
+      }
+
       const now = new Date().toISOString();
       await docRef.set(
         {
-          paymentStatus: 'pending',
-          stripeCheckoutSessionId: session.id,
-          stripeCheckoutUrl: session.url || null,
+          paymentStatus: doc.paymentStatus === 'paid' ? 'paid' : 'pending',
+          ...(payMethod === 'card'
+            ? {
+                stripeCardCheckoutSessionId: session.id,
+                stripeCardCheckoutUrl: session.url || null
+              }
+            : {
+                stripeCheckoutSessionId: session.id,
+                stripeCheckoutUrl: session.url || null
+              }),
           stripeConnectedAccountId: integration.accountId,
           updatedAt: now
         },
@@ -1466,7 +1644,10 @@ export function registerStripeRoutes(app: Express) {
 
       const connectedAccountId =
         String(doc.stripeConnectedAccountId || integration.accountId || '') || null;
-      const checkoutSessionId = sessionId || String(doc.stripeCheckoutSessionId || '');
+      const checkoutSessionId =
+        sessionId ||
+        String(doc.stripeCheckoutSessionId || '') ||
+        String(doc.stripeCardCheckoutSessionId || '');
 
       const stripe = getStripe();
       const session = await findPaidCheckoutForDocument({
@@ -1481,12 +1662,17 @@ export function registerStripeRoutes(app: Express) {
         const preferred = checkoutSessionId
           ? await retrieveCheckoutSession(stripe, checkoutSessionId, connectedAccountId)
           : null;
+        const intent = preferred?.payment_intent;
+        const intentStatus =
+          intent && typeof intent === 'object' ? intent.status : null;
+        const processing = intentStatus === 'processing';
         res.json({
           paid: false,
-          paymentStatus: preferred?.payment_status || 'unpaid',
+          paymentStatus: processing ? 'processing' : preferred?.payment_status || 'unpaid',
           sessionStatus: preferred?.status || null,
-          hint:
-            'No paid Checkout/PaymentIntent found for this invoice yet. Create a new pay link after this deploy, complete payment, then Refresh again.'
+          hint: processing
+            ? 'The bank payment is processing. Stripe has not marked it paid yet.'
+            : 'No paid Checkout/PaymentIntent found for this invoice yet. Create a new pay link after this deploy, complete payment, then Refresh again.'
         });
         return;
       }
@@ -1501,7 +1687,8 @@ export function registerStripeRoutes(app: Express) {
         documentId,
         sessionId: session.id?.startsWith('cs_') ? session.id : checkoutSessionId || session.id,
         paymentIntentId: pi || undefined,
-        amountTotal: session.amount_total
+        amountTotal: session.amount_total,
+        ...checkoutAmountMeta(session)
       });
 
       res.json({

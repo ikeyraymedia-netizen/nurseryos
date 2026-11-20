@@ -1178,6 +1178,8 @@ const extra = {
       'Envía la factura a QuickBooks (si hace falta) e incluye el enlace de pago de QuickBooks en el correo.',
     includePayHintStripe:
       'Incluye un enlace de pago de Stripe en el correo. La factura igual se sincroniza con QuickBooks.',
+    includePayHintStripeBank:
+      'Incluye un enlace de pago por banco en el correo. El enlace de tarjeta se agrega solo si la comisión de tarjeta está activa al pie de esta factura. La factura igual se sincroniza con QuickBooks.',
     payLinkChoiceLabel: 'Enlace de pago del cliente',
     payLinkChoiceQuickbooks: 'QuickBooks',
     payLinkChoiceStripe: 'Stripe',
@@ -1185,6 +1187,22 @@ const extra = {
       'Conecte Stripe en Equipo antes de enviar un enlace de Stripe. La factura igual se sincroniza con QuickBooks.',
     stripePayLinkFailed: 'No se pudo crear el enlace de pago de Stripe.',
     createStripePayLink: 'Copiar enlace de pago de Stripe',
+    copyBankPayLink: 'Copiar enlace de pago por banco',
+    creatingBankPayLink: 'Obteniendo enlace de banco…',
+    bankPayLinkCopied:
+      'Enlace de banco copiado. Péguelo en un texto o correo — no lo abra usted salvo que vaya a pagar.',
+    copyCardPayLink: 'Copiar enlace de pago con tarjeta',
+    creatingCardPayLink: 'Obteniendo enlace de tarjeta…',
+    cardPayLinkCopied:
+      'Enlace de tarjeta copiado. Incluye la comisión. Péguelo en un texto o correo.',
+    payByBankButton: 'Pagar por banco — ${{amount}}',
+    payByCardButton: 'Pagar con tarjeta — ${{amount}}',
+    cardFeeEmailNote: 'Incluye una comisión de tarjeta del {{percent}}% (${{fee}}). El pago por banco no tiene comisión.',
+    cardFeeToggle: 'Comisión de tarjeta',
+    cardFeePercentInvalid: 'Defina el porcentaje de la comisión en Ajustes.',
+    cardFeeOnInvoice:
+      'El pago con tarjeta suma {{percent}}% (${{fee}}). El pago por banco queda en ${{balance}}.',
+    cardFeePdfNote: 'Los pagos con tarjeta incluyen una comisión del {{percent}}% (${{fee}}).',
     creatingStripePayLink: 'Obteniendo enlace de Stripe…',
     stripePayLinkReady: 'Enlace de pago de Stripe listo',
     stripePayLinkReadyCustomer:
@@ -1246,6 +1264,8 @@ const extra = {
     paymentConfirmed: 'Pago confirmado. Esta factura ahora está marcada como Pagada con saldo $0.00.',
     stripeStillPending:
       'Stripe aún muestra este checkout como "{{status}}". Cree un nuevo enlace, complete el pago y actualice de nuevo.',
+    stripeAchProcessing:
+      'Stripe ya tiene el pago bancario y sigue en proceso. La factura permanece impaga hasta que el banco lo liquide, normalmente unos días hábiles. QuickBooks no lo mostrará pagado hasta entonces. Actualice de nuevo cuando se liquide.',
     refreshPaymentFailed: 'Error al actualizar estado de pago.',
     pushQbFailed: 'Error al enviar a QuickBooks.',
     pdfExportFailed: 'Error al exportar PDF: {{message}}',
@@ -2157,6 +2177,15 @@ const extra = {
     stripe: 'Stripe Connect',
     stripeIntro:
       'Conecte la cuenta Stripe de este vivero para que los clientes paguen facturas con tarjeta. Opcional: muchos viveros cobran ACH en QuickBooks y marcan pagado aquí. Solo dueño/admin.',
+    cardFeeTitle: 'Comisión de tarjeta',
+    cardFeeHint:
+      'Este es el único porcentaje de comisión. Actívela al pie de una factura para sumarla al pago con tarjeta de esa factura.',
+    cardFeePlaceholder: '3',
+    cardFeeSave: 'Guardar comisión',
+    cardFeeSaving: 'Guardando…',
+    cardFeeSaved: 'Comisión guardada. Actívela al pie de una factura para usarla.',
+    cardFeeCleared: 'Comisión quitada. Los enlaces de pago son solo por banco.',
+    cardFeeInvalid: 'Escriba una comisión de 0.1% a 10%, o déjela en blanco para solo banco.',
     stripeSandboxEinHint:
       'Sandbox: Connect omite el formulario SSN de Stripe (rechaza IDs de prueba). NurseryOS crea una cuenta de prueba verificada al instante — pulse Conectar / Continuar y debería ver Listo para cobrar.',
     stripeSandboxReady: 'Stripe sandbox conectado — listo para cobros de prueba.',

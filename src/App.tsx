@@ -58,6 +58,7 @@ import {
   setLastSeenPaymentAt
 } from './lib/paymentNotifications';
 import { confirmInvoicePayment } from './lib/stripe';
+import { cardFeePilotTenant } from './lib/cardFee';
 import { PlatformDashboard } from './components/PlatformDashboard';
 import { resolveNurseryRemittanceAddress, resolveNurseryShippingAddress } from './lib/tenants';
 import { resolveNurseryLogoSrc } from './lib/nurseryBranding';
@@ -1473,6 +1474,8 @@ function NurseryApp({
               nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
+              cardFeePercent={tenant.cardFeePercent}
+              cardFeePilot={cardFeePilotTenant(tenant) && permissions.canCollectPayments}
               showCalledIn={tenantCalledInEnabled(tenant)}
               onEditTruck={() => {
                 setActiveTab('trucks');
@@ -1498,6 +1501,8 @@ function NurseryApp({
               nurseryRemittanceAddress={nurseryRemittanceAddress}
               nurseryLogoSrc={nurseryLogoSrc}
               tenantId={tenant.id}
+              cardFeePercent={tenant.cardFeePercent}
+              cardFeePilot={cardFeePilotTenant(tenant) && permissions.canCollectPayments}
               showCalledIn={tenantCalledInEnabled(tenant)}
               onOpenDirectShipTruck={(truckId) => {
                 setActiveTab('trucks');
@@ -1574,6 +1579,8 @@ function NurseryApp({
           canViewProfit={permissions.canViewProfit}
           canCollectPayments={permissions.canCollectPayments}
           canUseQuickbooks={permissions.canUseQuickbooks}
+          cardFeePercent={tenant.cardFeePercent}
+          cardFeePilot={cardFeePilotTenant(tenant) && permissions.canCollectPayments}
         />
       )}
 

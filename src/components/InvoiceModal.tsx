@@ -207,7 +207,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   // Custom invoice properties (saved in invoiceDetails)
   const [invoiceNumber, setInvoiceNumber] = useState(
     existingDocument?.documentNumber ||
-      defaultDocumentNumber(initialDocumentType)
+      defaultDocumentNumber(initialDocumentType, undefined, tenantId)
   );
   // Save can assign a real number before React re-renders. Email and PDF read this
   // so the message matches the document that was just written.
@@ -300,7 +300,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         : initialDocumentType === 'credit_memo'
           ? 'Credit Memo'
           : 'Invoice'
-    } ${existingDocument?.documentNumber || defaultDocumentNumber(initialDocumentType)}`
+    } ${existingDocument?.documentNumber || defaultDocumentNumber(initialDocumentType, undefined, tenantId)}`
   );
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isOpeningMail, setIsOpeningMail] = useState(false);
@@ -385,13 +385,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     if (reuseExisting) {
       setInvoiceNumber(existingNumber!);
     } else {
-      setInvoiceNumber(defaultDocumentNumber(type));
+      const placeholder = defaultDocumentNumber(type, undefined, tenantId);
+      setInvoiceNumber(placeholder);
       void nextDocumentNumber(type, {
         considerQuickbooks: canUseQuickbooks,
         tenantId
       }).then((num) => {
         if (cancelled) return;
-        const placeholder = defaultDocumentNumber(type);
         setInvoiceNumber((prev) => (prev === placeholder ? num : prev));
       });
     }
@@ -639,7 +639,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           : type === 'credit_memo'
             ? t('invoice.creditMemo')
             : t('invoice.invoice')
-      } ${existingNumber || defaultDocumentNumber(type)} from ${nurseryName}`
+      } ${existingNumber || defaultDocumentNumber(type, undefined, tenantId)} from ${nurseryName}`
     );
     setEmailSentStatus('idle');
     setEmailErrorMessage('');
@@ -2243,13 +2243,16 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
       const filingEstimateAsInvoice = invoiceNumberNeedsFreshAllocation({
         type: documentType,
         enteredNumber: invoiceNumber,
-        priorType: priorDoc?.type
+        priorType: priorDoc?.type,
+        tenantId
       });
       if (filingEstimateAsInvoice) {
         invoiceNumber = await allocateFresh();
       } else if (
         creatingNewDocument &&
-        (!invoiceNumber || invoiceNumber === defaultDocumentNumber(documentType))
+        (!invoiceNumber ||
+          invoiceNumber === defaultDocumentNumber(documentType) ||
+          invoiceNumber === defaultDocumentNumber(documentType, undefined, tenantId))
       ) {
         invoiceNumber = await allocateFresh();
       } else if (await isDocumentNumberTaken(documentType, invoiceNumber, savedDocumentId)) {
@@ -3567,7 +3570,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         );
       }
     }
-    const placeholder = defaultDocumentNumber(type);
+    const placeholder = defaultDocumentNumber(type, undefined, tenantId);
     setInvoiceNumber(placeholder);
     void nextDocumentNumber(type, {
       considerQuickbooks: canUseQuickbooks,

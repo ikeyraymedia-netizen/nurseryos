@@ -18,6 +18,7 @@ import {
 } from './invoicing';
 import { deleteLinkedQuickbooksDocument, fetchHighestQuickbooksDocNumber } from './quickbooks';
 import { notifyPushEvent } from './pushNotifications';
+import { cardFeePilotTenant } from './cardFee';
 import { applyManualInvoicePayment } from './manualPayment';
 
 let activeTenantId: string | null = null;
@@ -425,6 +426,33 @@ export async function listAllDocuments(): Promise<CustomerDocument[]> {
 }
 
 export const DOCUMENT_NUMBER_START = 1000;
+/** Bayou State invoices start a short sequence here. Older long numbers are left in place. */
+export const BAYOU_INVOICE_NUMBER_START = 4000;
+/** Invoice numbers at or above this are the old long series and do not advance the short sequence. */
+const LEGACY_LONG_INVOICE_NUMBER = 100_000;
+
+export function documentNumberStart(
+  type: CustomerDocumentType,
+  tenantId?: string | null
+): number {
+  if (type === 'invoice' && cardFeePilotTenant({ id: tenantId })) return BAYOU_INVOICE_NUMBER_START;
+  return DOCUMENT_NUMBER_START;
+}
+
+/** Next number in a sequence. Numbers outside the sequence are ignored. */
+export function nextNumberInSequence(
+  used: Array<number | null | undefined>,
+  start: number,
+  ignoreAtOrAbove = Infinity
+): number {
+  let max = start - 1;
+  for (const value of used) {
+    if (value == null || !Number.isFinite(value)) continue;
+    if (value < start || value >= ignoreAtOrAbove) continue;
+    if (value > max) max = value;
+  }
+  return max + 1;
+}
 
 /** True when a number is an estimate sequence (EST-1234), not an invoice. */
 export function isEstimateDocumentNumber(
@@ -441,6 +469,7 @@ export function invoiceNumberNeedsFreshAllocation(params: {
   type: CustomerDocumentType;
   enteredNumber: string;
   priorType?: string | null;
+  tenantId?: string | null;
 }): boolean {
   if (params.type !== 'invoice') return false;
   if (params.priorType === 'invoice') return false;
@@ -448,6 +477,7 @@ export function invoiceNumberNeedsFreshAllocation(params: {
   return (
     !entered ||
     entered === defaultDocumentNumber('invoice') ||
+    entered === defaultDocumentNumber('invoice', undefined, params.tenantId) ||
     isEstimateDocumentNumber(entered)
   );
 }
@@ -477,10 +507,10 @@ export function parseSequentialDocumentNumber(
 
 /**
  * Next document number for this nursery.
- * Invoices: 1000, 1001…
+ * Invoices: 1000, 1001… (Bayou State: 4000, 4001…, leaving older long numbers in place)
  * Estimates: EST-1000…
  * Credit memos: CM-1000…
- * Continues from the highest existing number of that type (never below 1000).
+ * Continues from the highest existing number of that type (never below the start).
  * When QuickBooks is connected, also skips numbers already used in QBO
  * (e.g. invoices created only in QuickBooks).
  */
@@ -488,35 +518,38 @@ export async function nextDocumentNumber(
   type: CustomerDocumentType,
   opts?: { considerQuickbooks?: boolean; tenantId?: string }
 ): Promise<string> {
+  const tenantId = opts?.tenantId || activeTenantId;
+  const start = documentNumberStart(type, tenantId);
+  const ignoreAtOrAbove =
+    type === 'invoice' && start === BAYOU_INVOICE_NUMBER_START
+      ? LEGACY_LONG_INVOICE_NUMBER
+      : Infinity;
   const docs = await listAllDocuments();
-  let max = DOCUMENT_NUMBER_START - 1;
+  const used: number[] = [];
   for (const d of docs) {
     if (d.type !== type) continue;
     const n = parseSequentialDocumentNumber(d.documentNumber, type);
-    if (n != null && Number.isFinite(n) && n > max) max = n;
+    if (n != null) used.push(n);
     // Also honor numbers QuickBooks assigned (may be plain digits without EST-/CM-).
     const qboRaw = String(d.qboDocNumber || '').trim();
     if (qboRaw) {
       const qboN =
         parseSequentialDocumentNumber(qboRaw, type) ??
         (/^\d+$/.test(qboRaw) ? Number(qboRaw) : null);
-      if (qboN != null && Number.isFinite(qboN) && qboN > max) max = qboN;
+      if (qboN != null) used.push(qboN);
     }
   }
 
-  if (opts?.considerQuickbooks) {
-    const tenantId = opts.tenantId || activeTenantId;
-    if (tenantId) {
-      try {
-        const qboMax = await fetchHighestQuickbooksDocNumber(tenantId, type);
-        if (qboMax != null && qboMax > max) max = qboMax;
-      } catch (err) {
-        console.warn('[documents] could not read QBO doc numbers', err);
-      }
+  if (opts?.considerQuickbooks && tenantId) {
+    try {
+      const qboMax = await fetchHighestQuickbooksDocNumber(tenantId, type);
+      if (qboMax != null) used.push(qboMax);
+    } catch (err) {
+      console.warn('[documents] could not read QBO doc numbers', err);
     }
   }
 
-  const next = Math.max(max + 1, DOCUMENT_NUMBER_START);
+  const next = nextNumberInSequence(used, start, ignoreAtOrAbove);
   if (type === 'estimate') return `EST-${next}`;
   if (type === 'credit_memo') return `CM-${next}`;
   return String(next);
@@ -552,11 +585,13 @@ export async function isDocumentNumberTaken(
 /** Sync fallback before async allocation finishes. */
 export function defaultDocumentNumber(
   type: CustomerDocumentType,
-  _orderNumber?: string
+  _orderNumber?: string,
+  tenantId?: string | null
 ): string {
-  if (type === 'estimate') return `EST-${DOCUMENT_NUMBER_START}`;
-  if (type === 'credit_memo') return `CM-${DOCUMENT_NUMBER_START}`;
-  return String(DOCUMENT_NUMBER_START);
+  const start = type === 'invoice' ? documentNumberStart(type, tenantId) : DOCUMENT_NUMBER_START;
+  if (type === 'estimate') return `EST-${start}`;
+  if (type === 'credit_memo') return `CM-${start}`;
+  return String(start);
 }
 
 export function subscribeToDocuments(

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { invoiceNumberNeedsFreshAllocation } from './documents';
+import {
+  BAYOU_INVOICE_NUMBER_START,
+  invoiceNumberNeedsFreshAllocation,
+  nextNumberInSequence
+} from './documents';
 
 describe('invoice number when an estimate is filed as an invoice', () => {
   it('replaces an EST number', () => {
@@ -47,6 +51,18 @@ describe('invoice number when an estimate is filed as an invoice', () => {
     );
   });
 
+  it('treats the Bayou State starting number as a placeholder', () => {
+    assert.equal(
+      invoiceNumberNeedsFreshAllocation({
+        type: 'invoice',
+        enteredNumber: String(BAYOU_INVOICE_NUMBER_START),
+        priorType: 'estimate',
+        tenantId: 'bayou-state-plant-co-2805ux'
+      }),
+      true
+    );
+  });
+
   it('does not renumber an estimate that stays an estimate', () => {
     assert.equal(
       invoiceNumberNeedsFreshAllocation({
@@ -56,5 +72,12 @@ describe('invoice number when an estimate is filed as an invoice', () => {
       }),
       false
     );
+  });
+});
+
+describe('Bayou State invoice numbers', () => {
+  it('starts at 4000 and skips the old long numbers', () => {
+    assert.equal(nextNumberInSequence([46340110, 12], 4000, 100_000), 4000);
+    assert.equal(nextNumberInSequence([46340110, 4000, 4001], 4000, 100_000), 4002);
   });
 });

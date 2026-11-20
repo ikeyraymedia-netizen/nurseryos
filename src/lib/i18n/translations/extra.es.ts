@@ -1284,7 +1284,9 @@ const extra = {
     acceptEstimateHint: 'O abra este enlace para aceptar:',
     saveEstimateBeforeEmail:
       'Guarde la cotización primero para incluir un enlace de aceptación para el cliente.',
-    payOnlineLinkFallback: 'Si el botón no funciona, abra este enlace:',
+    payOnlineLinkFallback: '¿El botón no funciona? Abra el enlace de pago',
+    payOnlineLinkFallbackBank: '¿El botón no funciona? Abra el enlace del banco',
+    payOnlineLinkFallbackCard: 'Abra el enlace de la tarjeta',
     thankYouChoosing: '¡Gracias por elegir {{nurseryName}}!',
     estimateTotalLabel: 'Total del presupuesto',
     invoiceTotalLabel: 'Total de factura',

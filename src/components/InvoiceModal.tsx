@@ -1479,18 +1479,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 : t('invoice.payOnlineButton', { amount: balanceDue.toFixed(2) })
             }
           </a>
-          <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
-            ${t('invoice.payOnlineLinkFallback')}<br/>
-            <a href="${payUrl}" style="color: #5b21b6; word-break: break-all;">${payUrl}</a>
+          <p style="margin: 10px 0 0 0; font-size: 11px; line-height: 1.4;">
+            <a href="${payUrl}" style="color: #5b21b6;">${t(cardPayUrl ? 'invoice.payOnlineLinkFallbackBank' : 'invoice.payOnlineLinkFallback')}</a>
           </p>
           ${
             cardPayUrl
               ? `<a href="${cardPayUrl}" style="display: inline-block; margin-top: 14px; background-color: #0e7490; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 28px; border-radius: 10px;">
             ${t('invoice.payByCardButton', { amount: cardPayTotal.toFixed(2) })}
           </a>
-          <p style="margin: 12px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
-            ${t('invoice.cardFeeEmailNote', { percent: String(invoiceCardFeePercent), fee: cardFeeAmount.toFixed(2) })}<br/>
-            <a href="${cardPayUrl}" style="color: #0e7490; word-break: break-all;">${cardPayUrl}</a>
+          <p style="margin: 10px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+            ${t('invoice.cardFeeEmailNote', { percent: String(invoiceCardFeePercent), fee: cardFeeAmount.toFixed(2) })}
+            <a href="${cardPayUrl}" style="color: #0e7490;">${t('invoice.payOnlineLinkFallbackCard')}</a>
           </p>`
               : ''
           }

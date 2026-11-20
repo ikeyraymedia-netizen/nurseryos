@@ -1581,6 +1581,7 @@ function NurseryApp({
           canUseQuickbooks={permissions.canUseQuickbooks}
           cardFeePercent={tenant.cardFeePercent}
           cardFeePilot={cardFeePilotTenant(tenant) && permissions.canCollectPayments}
+          customers={customers}
         />
       )}
 

@@ -2289,6 +2289,7 @@ export const TruckWorkspace: React.FC<TruckWorkspaceProps> = ({
           cardFeePercent={cardFeePercent}
           cardFeePilot={cardFeePilot}
           canUseQuickbooks={permissions.canUseQuickbooks}
+          customers={customers}
         />
       )}
     </div>

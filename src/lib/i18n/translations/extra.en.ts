@@ -1075,6 +1075,8 @@ const extra = {
     poLabel: 'P.O. #:',
     uponReceipt: 'Upon Receipt',
     billToCustomer: 'Bill To Customer:',
+    changeCustomer: 'Customer',
+    changeCustomerHint: 'Save to move this invoice to the customer you pick. QuickBooks updates with it.',
     shippingOriginCarrier: 'Shipping Origin & Carrier:',
     shipper: 'Shipper:',
     origin: 'Origin:',

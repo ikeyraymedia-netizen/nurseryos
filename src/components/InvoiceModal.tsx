@@ -142,6 +142,8 @@ interface InvoiceModalProps {
   canCollectPayments?: boolean;
   /** Card fee percent from Settings. The invoice toggle uses this rate. */
   cardFeePercent?: number | null;
+  /** Nursery customers, so an existing invoice can be moved to another customer. */
+  customers?: Customer[];
   /** Bayou State owner test. Other nurseries keep one card-and-bank pay link. */
   cardFeePilot?: boolean;
   /** Push to QuickBooks Online (gated by quickbooks module). */
@@ -165,7 +167,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   canCollectPayments = false,
   canUseQuickbooks = false,
   cardFeePercent = null,
-  cardFeePilot = false
+  cardFeePilot = false,
+  customers = []
 }) => {
   const initialDocumentType: CustomerDocumentType =
     (initialDocumentTypeProp as CustomerDocumentType) || 'invoice';
@@ -201,6 +204,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   // Customer billing details (inline editable)
   const [billToName, setBillToName] = useState(order.customerName);
+  const [assignedCustomerId, setAssignedCustomerId] = useState(
+    existingDocument?.customerId || customer?.id || order.customerId || ''
+  );
   const [billToAddress, setBillToAddress] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
 
@@ -356,6 +362,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setRemovedLineIds(new Set());
     }
 
+    setAssignedCustomerId(doc?.customerId || customer?.id || order.customerId || '');
     setBillToName(
       doc?.billToName ||
         customer?.billingName ||
@@ -2357,7 +2364,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         owner: salesRep.trim() || order.owner || undefined
       };
 
-      const customerId = customer?.id || order.customerId;
+      const customerId = assignedCustomerId || customer?.id || order.customerId;
       if (!customerId) {
         throw new Error(t('invoice.noCustomerLinked'));
       }
@@ -2728,7 +2735,7 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
         alert(
           t('invoice.permissionDenied')
         );
-      } else if (!customer?.id && !order.customerId) {
+      } else if (!assignedCustomerId && !customer?.id && !order.customerId) {
         alert(t('invoice.saveLinkCustomer'));
       } else {
         alert(t('invoice.saveFailedGeneric', { message }));
@@ -4918,6 +4925,44 @@ A PDF copy of this ${docLabel.toLowerCase()} is attached.
                     Bill To Customer:
                   </h3>
                   <div className="text-xs text-gray-800 space-y-1">
+                    {customers.length > 0 && (
+                      <label className="print:hidden block mb-1">
+                        <span className="sr-only">{t('invoice.changeCustomer')}</span>
+                        <select
+                          value={assignedCustomerId}
+                          onChange={(e) => {
+                            const next = customers.find((c) => c.id === e.target.value);
+                            if (!next) return;
+                            setAssignedCustomerId(next.id);
+                            setBillToName(next.billingName || next.name);
+                            setBillToAddress(next.billingAddress || '');
+                            setCustomerEmail(next.contactEmail || '');
+                            setCcEmails(next.contactEmailCc || '');
+                          }}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold text-gray-950 focus:border-ink-600 focus:outline-none"
+                        >
+                          {!assignedCustomerId && (
+                            <option value="">{t('invoice.changeCustomer')}</option>
+                          )}
+                          {assignedCustomerId &&
+                            !customers.some((c) => c.id === assignedCustomerId) && (
+                              <option value={assignedCustomerId}>
+                                {billToName || order.customerName}
+                              </option>
+                            )}
+                          {[...customers]
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                        </select>
+                        <span className="mt-1 block text-[10px] font-medium text-gray-500">
+                          {t('invoice.changeCustomerHint')}
+                        </span>
+                      </label>
+                    )}
                     {/* Inline Editable Customer Name */}
                     <input
                       type="text"

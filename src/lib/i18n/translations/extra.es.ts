@@ -1088,6 +1088,8 @@ const extra = {
     poLabel: 'O.C. #:',
     uponReceipt: 'Al recibir',
     billToCustomer: 'Facturar a:',
+    changeCustomer: 'Cliente',
+    changeCustomerHint: 'Guarde para pasar esta factura al cliente que elija. QuickBooks se actualiza junto con ella.',
     shippingOriginCarrier: 'Origen de envío y transportista:',
     shipper: 'Remitente:',
     origin: 'Origen:',

@@ -1865,6 +1865,7 @@ export const LoaderWorkspace: React.FC<LoaderWorkspaceProps> = ({
         canUseQuickbooks={permissions.canUseQuickbooks}
         cardFeePercent={cardFeePercent}
         cardFeePilot={cardFeePilot}
+        customers={customers}
       />
       )}
 
